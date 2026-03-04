@@ -8568,4 +8568,67 @@ function sendRealSystemNotification(title, body, iconUrl) {
         });
     }
 }
+// ==========================================
+// 1. 后台通知测试逻辑
+// ==========================================
+function testRealNotification() {
+    if (Notification.permission !== "granted") {
+        alert("宝宝，请先点击上面的【开启系统真实通知】获取权限哦~");
+        return;
+    }
+    
+    alert("测试已启动！\n请在 5 秒内将浏览器切换到后台，或者锁屏...");
+    
+    // 注意：如果没开启保活，切后台后这个 setTimeout 会被系统冻结，直到你切回前台才会执行。
+    setTimeout(() => {
+        sendRealSystemNotification(
+            "后台通知测试", 
+            "成功啦！你能在后台收到这条消息，说明通知功能正常工作哦~", 
+            "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg"
+        );
+    }, 5000);
+}
 
+// ==========================================
+// 2. 网页后台保活 (防休眠) 逻辑
+// ==========================================
+let isKeepAliveEnabled = false;
+let keepAliveAudio = null;
+
+function toggleKeepAlive() {
+    const statusText = document.getElementById('keep-alive-status');
+    const chevronSvg = '<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>';
+
+    if (!isKeepAliveEnabled) {
+        // 开启保活
+        if (!keepAliveAudio) {
+            keepAliveAudio = new Audio();
+            // 这是一个极短的、合法的静音 MP3 base64 编码
+            keepAliveAudio.src = "data:audio/mp3;base64,//MkxAA................."; // 替换为下方提供的完整base64
+            // 必须设置为循环播放，否则播完一秒钟就停了，保活失效
+            keepAliveAudio.loop = true; 
+        }
+        
+        // 必须捕获 play() 的 Promise，防止浏览器拦截报错
+        keepAliveAudio.play().then(() => {
+            isKeepAliveEnabled = true;
+            if(statusText) statusText.innerHTML = '已开启' + chevronSvg;
+            console.log("保活音频开始循环播放，尝试阻止系统休眠");
+        }).catch(error => {
+            console.error("保活音频播放失败:", error);
+            alert("开启保活失败，浏览器限制了音频播放。请确保您是点击按钮触发的。");
+        });
+
+    } else {
+        // 关闭保活
+        if (keepAliveAudio) {
+            keepAliveAudio.pause();
+            // 重置播放进度
+            keepAliveAudio.currentTime = 0; 
+        }
+        isKeepAliveEnabled = false;
+        if(statusText) statusText.innerHTML = '未开启' + chevronSvg;
+        console.log("保活音频已停止");
+    }
+}
+ 
