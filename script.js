@@ -10950,47 +10950,24 @@ if (capArtist) capArtist.innerText = musicState.currentSong.artist;
     };
 })();
 // ==========================================================================
-// 意见反馈系统 (真实云端联机版)
+// 意见反馈系统 (真实云端联机版 - 基于 KVDB)
 // ==========================================================================
 
 const ADMIN_QQ = '1509048968'; // 你的专属管理员QQ
-let feedbackMyQQ = '';         // 当前使用者的QQ/数字ID
-let feedbackIsAdmin = false;   // 当前是否为管理员
-let feedbackCurrentChatUser = null; // 管理员当前正在回复的用户
-let feedbackRefreshInterval = null; // 自动刷新定时器
-
-// 【核心】：免注册云端数据库配置
-// 使用你的QQ号作为专属数据库桶名，确保唯一性
-const KVDB_BUCKET = 'honey_feedback_1509048968_v1'; 
-const KVDB_URL = `https://kvdb.io/bucket/${KVDB_BUCKET}/messages`;
+let feedbackMyQQ = '';         
+let feedbackIsAdmin = false;   
+let feedbackCurrentChatUser = null; 
+let feedbackServerId = localStorage.getItem('feedback_server_id') || ''; // 存储联机ID
+let feedbackAutoRefreshTimer = null; // 自动刷新定时器
 
 // 1. 打开反馈页面
 async function openFeedbackSettings() {
     document.getElementById('feedbackSettingsModal').classList.add('open');
     
-    // 获取身份标识：优先使用激活的QQ号，如果没有则生成6位数字ID
+    // 获取当前登录的QQ号
     const actStatus = await idb.get('ios_theme_activation_status');
-    if (actStatus && actStatus.qq) {
-        feedbackMyQQ = actStatus.qq;
-    } else {
-        let randomId = localStorage.getItem('feedback_random_id');
-        if (!randomId) {
-            randomId = Math.floor(100000 + Math.random() * 900000).toString(); // 生成6位数字
-            localStorage.setItem('feedback_random_id', randomId);
-        }
-        feedbackMyQQ = '游客_' + randomId;
-    }
-    
-    // 判断是否为管理员
+    feedbackMyQQ = actStatus ? actStatus.qq : ('User_' + Math.floor(Math.random()*10000));
     feedbackIsAdmin = (feedbackMyQQ === ADMIN_QQ);
-
-    if (feedbackIsAdmin) {
-        document.getElementById('feedback-header-title').innerText = "反馈管理 (管理员)";
-        await showFeedbackAdminList();
-    } else {
-        document.getElementById('feedback-header-title').innerText = "意见反馈";
-        await showFeedbackChat(feedbackMyQQ);
-    }
 
     // 自动调整输入框高度
     const input = document.getElementById('feedback-input');
@@ -10999,70 +10976,186 @@ async function openFeedbackSettings() {
         this.style.height = (this.scrollHeight) + 'px';
     });
 
-    // 开启自动刷新 (每5秒拉取一次最新消息)
-    if (feedbackRefreshInterval) clearInterval(feedbackRefreshInterval);
-    feedbackRefreshInterval = setInterval(() => {
-        if (document.getElementById('feedback-chat-view').style.display === 'flex') {
-            refreshFeedbackChat(feedbackCurrentChatUser || feedbackMyQQ);
-        } else if (document.getElementById('feedback-admin-list').style.display === 'block') {
-            showFeedbackAdminList(true); // true表示静默刷新，不显示加载中
-        }
-    }, 5000);
+    checkFeedbackConnection();
 }
 
-// 2. 关闭/返回逻辑
+// 2. 检查连接状态并分配视图
+function checkFeedbackConnection() {
+    document.getElementById('feedback-setup-view').style.display = 'none';
+    document.getElementById('feedback-admin-list').style.display = 'none';
+    document.getElementById('feedback-chat-view').style.display = 'none';
+    document.getElementById('feedback-refresh-btn').style.display = 'none';
+
+    if (!feedbackServerId) {
+        // 未配置联机ID，显示配置界面
+        document.getElementById('feedback-header-title').innerText = "配置联机";
+        document.getElementById('feedback-setup-view').style.display = 'flex';
+        
+        if (feedbackIsAdmin) {
+            document.getElementById('setup-admin-area').style.display = 'block';
+            document.getElementById('setup-user-area').style.display = 'none';
+        } else {
+            document.getElementById('setup-admin-area').style.display = 'none';
+            document.getElementById('setup-user-area').style.display = 'block';
+        }
+    } else {
+        // 已配置联机ID，进入主界面
+        document.getElementById('feedback-refresh-btn').style.display = 'block';
+        if (feedbackIsAdmin) {
+            document.getElementById('feedback-header-title').innerText = "反馈管理";
+            document.getElementById('display-server-id').innerText = feedbackServerId;
+            showFeedbackAdminList();
+        } else {
+            document.getElementById('feedback-header-title').innerText = "意见反馈";
+            showFeedbackChat(feedbackMyQQ);
+        }
+        // 开启自动刷新 (每5秒拉取一次新消息)
+        startAutoRefresh();
+    }
+}
+
+// 3. 关闭/返回逻辑
 function closeFeedbackSettings() {
+    stopAutoRefresh();
     if (feedbackIsAdmin && document.getElementById('feedback-chat-view').style.display === 'flex') {
-        // 管理员从聊天界面返回列表
+        // 管理员从聊天退回列表
         document.getElementById('feedback-chat-view').style.display = 'none';
         document.getElementById('feedback-admin-list').style.display = 'block';
-        document.getElementById('feedback-header-title').innerText = "反馈管理 (管理员)";
+        document.getElementById('feedback-header-title').innerText = "反馈管理";
         feedbackCurrentChatUser = null;
+        startAutoRefresh(); // 重新启动列表刷新
     } else {
-        // 彻底关闭弹窗
         document.getElementById('feedbackSettingsModal').classList.remove('open');
-        if (feedbackRefreshInterval) clearInterval(feedbackRefreshInterval);
     }
 }
 
-// ---------------------------------------------------------
-// 【真实网络请求区】(连接到 KVDB.io)
-// ---------------------------------------------------------
+// ==========================================
+// 【核心：云端联机 API 请求】
+// ==========================================
+
+// 管理员生成全新的联机ID (向 KVDB 申请一个 Bucket)
+async function generateFeedbackServerId() {
+    const btn = document.getElementById('btn-gen-id');
+    btn.innerText = "生成中...";
+    try {
+        const res = await fetch('https://kvdb.io/', { method: 'POST' });
+        if (res.ok) {
+            const newId = await res.text();
+            feedbackServerId = newId.trim();
+            localStorage.setItem('feedback_server_id', feedbackServerId);
+            
+            // 初始化数据库结构
+            await saveFeedbackDataToServer({});
+            alert("联机服务器创建成功！");
+            checkFeedbackConnection();
+        } else {
+            alert("生成失败，请检查网络。");
+        }
+    } catch (e) {
+        alert("网络错误: " + e.message);
+    } finally {
+        btn.innerText = "生成专属联机 ID";
+    }
+}
+
+// 用户输入ID连接服务器
+async function connectToFeedbackServer() {
+    const inputId = document.getElementById('input-server-id').value.trim();
+    if (!inputId) return alert("请输入联机ID");
+    
+    const btn = document.getElementById('btn-connect-id');
+    btn.innerText = "连接中...";
+    try {
+        // 尝试读取该ID的数据以验证是否有效
+        const res = await fetch(`https://kvdb.io/${inputId}/feedback_data`);
+        if (res.ok || res.status === 404) { // 404代表房间存在但还没数据，也是正常的
+            feedbackServerId = inputId;
+            localStorage.setItem('feedback_server_id', feedbackServerId);
+            alert("连接成功！");
+            checkFeedbackConnection();
+        } else {
+            alert("连接失败：无效的联机ID");
+        }
+    } catch (e) {
+        alert("网络错误: " + e.message);
+    } finally {
+        btn.innerText = "连接服务器";
+    }
+}
+
+// 从云端拉取数据
 async function fetchFeedbackDataFromServer() {
+    if (!feedbackServerId) return {};
     try {
-        const response = await fetch(KVDB_URL);
-        if (response.status === 404) return {}; // 数据库为空时返回空对象
-        if (!response.ok) throw new Error('Network error');
-        return await response.json();
-    } catch (error) {
-        console.error("云端获取失败，尝试读取本地缓存:", error);
-        return await idb.get('local_feedback_backup') || {};
+        const res = await fetch(`https://kvdb.io/${feedbackServerId}/feedback_data`);
+        if (res.ok) {
+            return await res.json();
+        }
+        return {};
+    } catch (e) {
+        console.error("拉取数据失败", e);
+        return {};
     }
 }
 
+// 保存数据到云端
 async function saveFeedbackDataToServer(data) {
+    if (!feedbackServerId) return;
     try {
-        await fetch(KVDB_URL, {
-            method: 'POST', // KVDB 使用 POST 更新数据
+        await fetch(`https://kvdb.io/${feedbackServerId}/feedback_data`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        // 备份到本地，防止断网丢失
-        await idb.set('local_feedback_backup', data);
-    } catch (error) {
-        console.error("云端保存失败:", error);
-        alert("网络异常，消息发送失败，请检查网络。");
+    } catch (e) {
+        console.error("保存数据失败", e);
     }
 }
-// ---------------------------------------------------------
 
-// 3. 管理员视图：渲染发来反馈的用户列表
-async function showFeedbackAdminList(isSilent = false) {
+// 复制联机ID
+function copyServerId() {
+    navigator.clipboard.writeText(feedbackServerId).then(() => {
+        alert("联机ID已复制: " + feedbackServerId);
+    });
+}
+
+// ==========================================
+// 【UI 渲染与交互】
+// ==========================================
+
+// 自动刷新机制
+function startAutoRefresh() {
+    stopAutoRefresh();
+    feedbackAutoRefreshTimer = setInterval(() => {
+        if (document.getElementById('feedback-admin-list').style.display === 'block') {
+            showFeedbackAdminList(true); // true代表静默刷新，不显示加载中
+        } else if (document.getElementById('feedback-chat-view').style.display === 'flex') {
+            const targetQQ = feedbackIsAdmin ? feedbackCurrentChatUser : feedbackMyQQ;
+            showFeedbackChat(targetQQ, true);
+        }
+    }, 5000); // 每5秒自动拉取一次新消息
+}
+
+function stopAutoRefresh() {
+    if (feedbackAutoRefreshTimer) clearInterval(feedbackAutoRefreshTimer);
+}
+
+function manualRefreshFeedback() {
+    if (document.getElementById('feedback-admin-list').style.display === 'block') {
+        showFeedbackAdminList();
+    } else if (document.getElementById('feedback-chat-view').style.display === 'flex') {
+        const targetQQ = feedbackIsAdmin ? feedbackCurrentChatUser : feedbackMyQQ;
+        showFeedbackChat(targetQQ);
+    }
+}
+
+// 渲染管理员列表
+async function showFeedbackAdminList(silent = false) {
     document.getElementById('feedback-admin-list').style.display = 'block';
     document.getElementById('feedback-chat-view').style.display = 'none';
     
     const container = document.getElementById('feedback-users-container');
-    if (!isSilent) container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">正在连接云端...</div>';
+    if (!silent) container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">正在同步云端数据...</div>';
     
     const allData = await fetchFeedbackDataFromServer();
     const users = Object.keys(allData);
@@ -11072,7 +11165,6 @@ async function showFeedbackAdminList(isSilent = false) {
         return;
     }
 
-    // 按最后一条消息的时间排序 (最新的在最上面)
     users.sort((a, b) => {
         const lastA = allData[a][allData[a].length - 1].time;
         const lastB = allData[b][allData[b].length - 1].time;
@@ -11083,23 +11175,24 @@ async function showFeedbackAdminList(isSilent = false) {
     users.forEach(userQQ => {
         const msgs = allData[userQQ];
         const lastMsg = msgs[msgs.length - 1];
+        const timeStr = new Date(lastMsg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         
-        // 格式化时间
-        const date = new Date(lastMsg.time);
-        const timeStr = `${date.getMonth()+1}-${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
-        
-        // 判断最后一条消息是不是管理员发的
-        const prefix = lastMsg.sender === ADMIN_QQ ? '<span style="color:#007aff;">[我回复]</span> ' : '';
-        
+        // 简单判断是否有未读 (如果最后一条不是我发的)
+        const isUnread = lastMsg.sender !== ADMIN_QQ;
+        const dotHtml = isUnread ? `<div style="width:8px;height:8px;background:#ff3b30;border-radius:50%;margin-right:8px;"></div>` : '';
+
         html += `
-            <div class="ios-list-item" onclick="openAdminChat('${userQQ}')">
-                <div class="ios-item-content" style="flex-direction: column; align-items: flex-start; padding: 12px 16px; gap: 4px;">
-                    <div style="display: flex; justify-content: space-between; width: 100%;">
-                        <span style="font-weight: 600; font-size: 16px; color: #000;">${userQQ}</span>
+            <div class="ios-list-item" onclick="openAdminChat('${userQQ}')" style="border-bottom: 0.5px solid #e5e5ea;">
+                <div class="ios-item-content" style="flex-direction: column; align-items: flex-start; padding: 12px 16px; gap: 4px; border:none;">
+                    <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+                        <div style="display: flex; align-items: center;">
+                            ${dotHtml}
+                            <span style="font-weight: 600; font-size: 16px; color: #000;">用户: ${userQQ}</span>
+                        </div>
                         <span style="font-size: 12px; color: #8e8e93;">${timeStr}</span>
                     </div>
                     <div style="font-size: 14px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">
-                        ${prefix}${lastMsg.content}
+                        ${lastMsg.sender === ADMIN_QQ ? '我: ' : ''}${lastMsg.content}
                     </div>
                 </div>
             </div>
@@ -11108,97 +11201,93 @@ async function showFeedbackAdminList(isSilent = false) {
     container.innerHTML = html;
 }
 
-// 管理员点击列表进入聊天
 window.openAdminChat = function(userQQ) {
     document.getElementById('feedback-header-title').innerText = `回复: ${userQQ}`;
     showFeedbackChat(userQQ);
 };
 
-// 4. 聊天视图：渲染具体的对话记录
-async function showFeedbackChat(targetQQ) {
+// 渲染聊天界面
+async function showFeedbackChat(targetQQ, silent = false) {
     feedbackCurrentChatUser = targetQQ;
     document.getElementById('feedback-admin-list').style.display = 'none';
     document.getElementById('feedback-chat-view').style.display = 'flex';
     
     const historyEl = document.getElementById('feedback-chat-history');
-    historyEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">正在同步云端消息...</div>';
     
-    await refreshFeedbackChat(targetQQ, true);
-}
+    // 记录当前滚动位置，判断是否在最底部
+    const isAtBottom = historyEl.scrollHeight - historyEl.scrollTop <= historyEl.clientHeight + 50;
 
-// 刷新聊天记录 (isFirstLoad 用于控制是否强制滚动到底部)
-async function refreshFeedbackChat(targetQQ, isFirstLoad = false) {
+    if (!silent) historyEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">正在同步云端数据...</div>';
+    
     const allData = await fetchFeedbackDataFromServer();
     const msgs = allData[targetQQ] || [];
-    
-    const historyEl = document.getElementById('feedback-chat-history');
     
     if (msgs.length === 0) {
         historyEl.innerHTML = '<div style="text-align:center; padding:30px; color:#8e8e93; font-size:13px;">发送你的反馈，开发者会尽快回复你~<br>你的反馈仅管理员可见。</div>';
         return;
     }
 
-    // 检查是否需要滚动到底部 (如果用户当前就在最底部，刷新后继续保持在底部)
-    const isAtBottom = historyEl.scrollHeight - historyEl.scrollTop <= historyEl.clientHeight + 50;
-
     let html = '';
     msgs.forEach(msg => {
         const isMe = msg.sender === feedbackMyQQ;
-        const timeStr = new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        
         const align = isMe ? 'flex-end' : 'flex-start';
         const bg = isMe ? '#007aff' : '#e5e5ea';
         const color = isMe ? '#fff' : '#000';
         const radius = isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px';
-        const margin = isMe ? 'margin-right: 4px;' : 'margin-left: 4px;';
+        const timeStr = new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
         html += `
             <div style="display: flex; flex-direction: column; align-items: ${align}; width: 100%;">
-                <div style="max-width: 75%; padding: 10px 14px; border-radius: ${radius}; font-size: 15px; line-height: 1.4; word-break: break-word; white-space: pre-wrap; background: ${bg}; color: ${color};">
+                <div style="max-width: 75%; padding: 10px 14px; border-radius: ${radius}; font-size: 15px; line-height: 1.4; word-break: break-word; white-space: pre-wrap; background: ${bg}; color: ${color}; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
                     ${msg.content}
                 </div>
-                <div style="font-size: 10px; color: #8e8e93; margin-top: 4px; ${margin}">${timeStr}</div>
+                <div style="font-size: 10px; color: #8e8e93; margin-top: 4px; margin-${isMe?'right':'left'}: 4px;">
+                    ${timeStr}
+                </div>
             </div>
         `;
     });
     
     historyEl.innerHTML = html;
     
-    if (isFirstLoad || isAtBottom) {
+    // 如果之前在最底部，或者是非静默刷新，则滚动到底部
+    if (isAtBottom || !silent) {
         setTimeout(() => { historyEl.scrollTop = historyEl.scrollHeight; }, 50);
     }
 }
 
-// 5. 发送消息
-window.sendFeedbackMessage = async function() {
+// 发送消息
+async function sendFeedbackMessage() {
     const input = document.getElementById('feedback-input');
+    const btn = document.getElementById('feedback-send-btn');
     const text = input.value.trim();
     if (!text) return;
     
-    const btn = document.querySelector('#feedback-chat-view button');
-    btn.innerText = "发送中";
     btn.disabled = true;
+    btn.style.opacity = '0.5';
     
-    // 确定房间号：管理员发消息存入对应用户的房间，普通用户存入自己的房间
     const targetRoomQQ = feedbackIsAdmin ? feedbackCurrentChatUser : feedbackMyQQ;
     
-    // 先拉取最新数据，防止覆盖别人刚发的消息
+    // 1. 先拉取最新数据，防止覆盖别人刚发的消息
     const allData = await fetchFeedbackDataFromServer();
     if (!allData[targetRoomQQ]) allData[targetRoomQQ] = [];
     
+    // 2. 追加新消息
     allData[targetRoomQQ].push({
         sender: feedbackMyQQ,
         content: text,
         time: Date.now()
     });
     
+    // 3. 推送到云端
     await saveFeedbackDataToServer(allData);
     
     input.value = '';
     input.style.height = 'auto'; 
-    btn.innerText = "发送";
     btn.disabled = false;
+    btn.style.opacity = '1';
     
-    // 立即刷新界面并滚动到底部
-    await refreshFeedbackChat(targetRoomQQ, true);
-};
+    // 4. 刷新界面
+    showFeedbackChat(targetRoomQQ);
+}
+
