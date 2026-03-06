@@ -143,7 +143,7 @@ body, input, textarea, select, button {
     align-items: center;
     justify-content: center;
     z-index: 2;
-    width: 100%;
+    width:100%;
 }
 
 .widget-avatar {
@@ -497,7 +497,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 /* --- 新增：纯正 iOS 系统提示弹窗 --- */
 .ios-alert-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.4); z-index: 99999; 
+    background: rgba(0,0,0,0.4); z-index: 100000; /* 修复：提高层级，确保在激活页面之上 */
     display: flex; align-items: center; justify-content: center;
     opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
 }
@@ -636,6 +636,12 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 }
 .wc-page.active { display: block; animation: wcFadeIn 0.2s ease; }
 
+/* 修复：补充缺失的 wcFadeIn 动画，防止页面切换生硬 */
+@keyframes wcFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 #wc-view-chat-detail {
     padding: 0; background-color: var(--wc-chat-bg); display: none; flex-direction: column;
     height: 100%; position: absolute; top: 0; left: 0; width: 100%; z-index: 1100; overflow: hidden;
@@ -663,10 +669,10 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-bubble-container { display: flex; flex-direction: column; max-width: 75%; }
 .wc-message-row.me .wc-bubble-container { align-items: flex-end; }
 
-/* 修复：普通消息过长不换行的问题 */
+/* 修复：普通消息过长不换行的问题，升级为更标准的断行属性 */
 .wc-bubble {
     padding: 8px 12px; border-radius: 10px; font-size: 16px; line-height: 1.5;
-    word-wrap: break-word; word-break: break-word; white-space: pre-wrap;
+    word-wrap: break-word; word-break: break-all; overflow-wrap: break-word; white-space: pre-wrap;
     position: relative; user-select: text; min-height: 32px;
     display: flex; flex-direction: column; align-items: flex-start;
     max-width: 100%;
@@ -766,12 +772,96 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-transfer-info { display: flex; flex-direction: column; color: #fff; }
 .wc-transfer-amount { font-size: 16px; font-weight: 500; }
 .wc-transfer-desc { font-size: 13px; opacity: 0.9; }
-
-.wc-bubble.invite { width: 200px; height: 80px; padding: 0; background: #fff; border-radius: 12px; display: flex; flex-direction: row; align-items: center; box-shadow: 0 4px 12px rgba(255, 182, 193, 0.3); overflow: hidden; border: 1px solid #FFE4E1; cursor: pointer; }
-.wc-invite-header { width: 60px; height: 100%; background: #FFF0F5; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.wc-invite-body { flex: 1; padding: 0 12px; display: flex; flex-direction: column; justify-content: center; height: 100%; }
-.wc-invite-title { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 4px; }
-.wc-invite-status { font-size: 11px; color: #FF9A9E; font-weight: 500; }
+/* ========================================== */
+/* 高级感 INS 风情侣空间邀请卡片 (180x100 迷你版) */
+/* ========================================== */
+.wc-bubble.invite {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+.ins-invite-card {
+    width: 180px !important;
+    height: 100px !important;
+    padding: 8px 12px !important;
+    background: #faf9f5; /* 奶白色背景 */
+    border-radius: 10px;
+    border: 1px solid #eaeaea;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: pointer;
+    font-family: 'Georgia', serif;
+    box-sizing: border-box;
+}
+.ins-invite-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+.ins-invite-brand {
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: #888;
+    text-transform: uppercase;
+    font-family: sans-serif;
+}
+.ins-invite-icon {
+    width: 12px;
+    height: 12px;
+    color: #d4c4b7;
+}
+.ins-invite-divider {
+    width: 100%;
+    height: 1px;
+    background: repeating-linear-gradient(to right, #d4c4b7 0, #d4c4b7 4px, transparent 4px, transparent 8px);
+    margin-bottom: 4px;
+}
+.ins-invite-main {
+    text-align: center;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.ins-invite-title {
+    font-size: 13px;
+    font-style: italic;
+    color: #4a413e;
+    margin-bottom: 2px;
+}
+.ins-invite-subtitle {
+    font-size: 9px;
+    color: #9e948f;
+    font-family: sans-serif;
+}
+.ins-invite-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: sans-serif;
+    margin-top: 2px;
+}
+.ins-invite-status {
+    font-size: 8px;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #fff;
+    border: 1px solid #eee;
+}
+.ins-invite-status.pending { color: #d4c4b7; }
+.ins-invite-status.accepted { color: #8f9e8b; }
+.ins-invite-status.rejected { color: #c28e7e; }
+.ins-invite-tap {
+    font-size: 8px;
+    color: #ccc;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
 
 .wc-system-msg-text { background: rgba(0,0,0,0.1); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; text-align: center; max-width: 80%; }
 .wc-system-msg-text.transparent { background: transparent; color: #8E8E93; }
@@ -1169,6 +1259,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     box-shadow: inset 0 0 20px rgba(0,0,0,0.02); 
 }
 
+/* 修复：背面文字长文本溢出问题 */
 .wc-lovers-widget-note-text {
     font-size: 14px;
     color: #444; 
@@ -1177,7 +1268,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     text-align: center;
     width: 100%;
     padding: 5px;
-    word-break: break-word;
+    word-break: break-all; overflow-wrap: break-word;
     display: -webkit-box;
     -webkit-line-clamp: 5;
     -webkit-box-orient: vertical;
@@ -1579,3 +1670,1271 @@ input::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
+/* ========================================== */
+/* 购物页面 (Shopping) 样式 - 韩系 INS 风格 */
+/* ========================================== */
+#wc-view-shopping { 
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #fdfbf7; 
+    z-index: 1400;
+    display: none;
+    flex-direction: column;
+}
+#wc-view-shopping.active {
+    display: flex;
+    animation: wcSlideInRight 0.3s ease;
+}
+
+.shop-tab { 
+    font-size: 15px; 
+    color: #b0a8a6; 
+    letter-spacing: 1px; 
+    transition: color 0.3s; 
+}
+.shop-tab.active::after { 
+    content: ''; 
+    position: absolute; 
+    bottom: 0; 
+    left: 50%; 
+    transform: translateX(-50%); 
+    width: 15px; 
+    height: 2px; 
+    background: #d4c4b7; 
+    border-radius: 2px; 
+}
+
+.shop-item-card { 
+    background: #fff; 
+    border-radius: 20px; 
+    padding: 15px; 
+    margin-bottom: 15px; 
+    display: flex; 
+    align-items: center; 
+    gap: 15px; 
+    box-shadow: 0 8px 20px rgba(212, 196, 183, 0.15); 
+    border: none; 
+}
+.shop-item-img { 
+    width: 80px; 
+    height: 80px; 
+    border-radius: 16px; 
+    object-fit: cover; 
+    background: #f5f0eb; 
+    flex-shrink: 0; 
+}
+.shop-item-info { 
+    flex: 1; 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: center; 
+    overflow: hidden; 
+}
+.shop-item-title { 
+    font-size: 15px; 
+    font-weight: 600; 
+    color: #4a413e; 
+    margin-bottom: 4px; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+}
+.shop-item-desc { 
+    font-size: 12px; 
+    color: #9e948f; 
+    margin-bottom: 8px; 
+    display: -webkit-box; 
+    -webkit-line-clamp: 2; 
+    -webkit-box-orient: vertical; 
+    overflow: hidden; 
+    line-height: 1.4; 
+}
+.shop-item-price { 
+    font-size: 16px; 
+    font-weight: bold; 
+    color: #c28e7e; 
+    font-family: 'Georgia', serif; 
+    font-style: italic; 
+}
+.shop-item-add { 
+    width: 32px; 
+    height: 32px; 
+    border-radius: 50%; 
+    background: #e8dfd8; 
+    color: #5d5350; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    cursor: pointer; 
+    flex-shrink: 0; 
+    font-size: 20px; 
+    box-shadow: none; 
+    transition: transform 0.1s; 
+}
+.shop-item-add:active { 
+    transform: scale(0.9); 
+}
+
+.shop-cart-btn { 
+    position: absolute; 
+    bottom: 30px; 
+    right: 20px; 
+    width: 56px; 
+    height: 56px; 
+    background: #5d5350; 
+    border-radius: 50%; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    box-shadow: 0 6px 15px rgba(93, 83, 80, 0.3); 
+    cursor: pointer; 
+    z-index: 100; 
+}
+.shop-cart-badge { 
+    position: absolute; 
+    top: -5px; 
+    right: -5px; 
+    background: #c28e7e; 
+    color: #fff; 
+    font-size: 12px; 
+    font-weight: bold; 
+    min-width: 20px; 
+    height: 20px; 
+    border-radius: 10px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    padding: 0 6px; 
+    border: 2px solid #5d5350; 
+}
+
+#wc-modal-shop-cart .wc-modal-content { background: #fdfbf7; }
+#wc-modal-shop-cart .wc-modal-header { background: #fdfbf7; }
+
+.cart-item { 
+    display: flex; 
+    align-items: center; 
+    gap: 12px; 
+    padding: 15px 0; 
+    border-bottom: 1px dashed #e8dfd8; 
+}
+.cart-item-img { 
+    width: 60px; 
+    height: 60px; 
+    border-radius: 10px; 
+    object-fit: cover; 
+    background: #f5f5f5; 
+    flex-shrink: 0; 
+}
+.cart-item-info { flex: 1; overflow: hidden; }
+.cart-item-title { 
+    font-size: 15px; 
+    font-weight: 600; 
+    color: #4a413e; 
+    margin-bottom: 4px; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+}
+.cart-item-price { 
+    font-size: 15px; 
+    font-weight: bold; 
+    color: #c28e7e; 
+    font-family: 'Georgia', serif; 
+    font-style: italic; 
+}
+.cart-item-remove { 
+    color: #999; 
+    font-size: 24px; 
+    cursor: pointer; 
+    padding: 0 10px; 
+}
+
+/* ========================================== */
+/* 新增：购物卡片样式 (180x100px) */
+/* ========================================== */
+.shopping-card {
+    width: 180px;
+    height: 100px;
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.shopping-card-icon {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    font-size: 40px;
+    opacity: 0.1;
+    transform: rotate(-15deg);
+}
+
+.shopping-card-title {
+    font-size: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.shopping-card-desc {
+    font-size: 10px;
+    font-weight: 500;
+    margin-top: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.shopping-card-price {
+    font-size: 10px;
+    font-weight: bold;
+    margin-top: auto;
+}
+
+.shopping-card-status {
+    font-size: 9px;
+    font-weight: 500;
+    text-align: right;
+    opacity: 0.7;
+}
+
+/* 礼物卡片样式 (粉色系) */
+.shopping-card.gift {
+    background: linear-gradient(135deg, #fff1f2, #ffe4e6);
+    color: #d6336c;
+    border: 1px solid #ffdeeb;
+}
+.shopping-card.gift .shopping-card-title {
+    color: #f06595;
+}
+.shopping-card.gift .shopping-card-price {
+    color: #c2255c;
+}
+
+/* 代付卡片样式 (蓝色系) */
+.shopping-card.daifu {
+    background: linear-gradient(135deg, #e7f5ff, #d0ebff);
+    color: #1864ab;
+    border: 1px solid #d0ebff;
+}
+.shopping-card.daifu .shopping-card-title {
+    color: #1c7ed6;
+}
+.shopping-card.daifu .shopping-card-price {
+    color: #1971c2;
+}
+
+/* ========================================== */
+/* 🌸 WeChat 全局 高级/萌系/韩系/日系 INS风 UI 覆盖 🌸 */
+/* ========================================== */
+
+/* 1. 全局色彩与背景重置 (奶油燕麦与干枯玫瑰色系) */
+#wechat-root {
+    --wc-bg-color: #FBF9F6 !important; /* 极柔和的奶油燕麦底色 */
+    --wc-card-color: #FFFFFF !important;
+    --wc-text-primary: #5C4D4D !important; /* 暖棕灰，比纯黑更温柔高级 */
+    --wc-text-secondary: #B8A9A9 !important; /* 浅茶色 */
+    --wc-separator: transparent !important; /* 隐藏生硬的分割线 */
+    --wc-accent-blue: #FFB6C1 !important; /* 萌系干枯玫瑰粉 */
+    --wc-accent-green: #D4C4B7 !important; /* 奶茶色 */
+}
+
+/* 2. 顶部导航栏 (Navbar) - 悬浮毛玻璃 */
+.wc-navbar {
+    background: rgba(251, 249, 246, 0.85) !important;
+    border-bottom: none !important;
+    box-shadow: 0 4px 20px rgba(255, 182, 193, 0.1) !important;
+}
+.wc-nav-title {
+    font-family: inherit !important; /* 恢复为默认系统字体 */
+    font-weight: 600 !important; /* 恢复为标准粗细 */
+    letter-spacing: normal !important; /* 恢复为默认字间距 */
+    color: #5C4D4D !important; /* 保持主题颜色 */
+    font-size: 18px !important;
+}
+
+/* 3. 底部导航栏 (Tabbar) - 萌系悬浮胶囊 */
+.wc-tabbar {
+    background: rgba(255, 255, 255, 0.95) !important;
+    box-shadow: 0 10px 35px rgba(255, 182, 193, 0.15) !important;
+    border: 2px solid #FFF !important;
+    height: 70px !important;
+    border-radius: 35px !important;
+    bottom: 25px !important;
+}
+.wc-tab-item.active {
+    color: #FFB6C1 !important; /* 激活状态为玫瑰粉 */
+    transform: translateY(-4px) scale(1.05);
+}
+.wc-tab-item {
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* 4. 聊天列表 & 通讯录列表 (Chat & Contacts) - 软萌云朵卡片 */
+.wc-chat-swipe-container, .wc-swipe-container {
+    background: #FFFFFF !important;
+    margin: 14px 16px !important;
+    border-radius: 24px !important;
+    box-shadow: 0 8px 20px rgba(212, 196, 183, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.8) !important;
+    overflow: hidden;
+    transition: transform 0.2s ease;
+}
+.wc-chat-swipe-container:active, .wc-swipe-container:active {
+    transform: scale(0.98);
+}
+.wc-chat-swipe-content, .wc-swipe-content {
+    border-bottom: none !important;
+    padding: 18px 16px !important;
+}
+.wc-avatar {
+    border-radius: 40% !important; /* 日系高级感微圆角 (Squircle) */
+    border: 2px solid #FFF !important;
+    box-shadow: 0 4px 12px rgba(255, 182, 193, 0.2) !important;
+    width: 52px !important;
+    height: 52px !important;
+}
+.wc-item-title {
+    font-weight: 700 !important;
+    color: #5C4D4D !important;
+    font-size: 16px !important;
+    letter-spacing: 0.5px;
+}
+.wc-item-subtitle {
+    color: #B8A9A9 !important;
+    margin-top: 4px;
+    font-size: 13px !important;
+}
+.wc-list-separator { display: none !important; } /* 隐藏字母分割线 */
+
+/* 🌟 5. 置顶角色专属 UI (高级萌系 INS 风) 🌟 */
+.wc-pinned-chat {
+    /* 极淡的水蜜桃粉色渐变背景 */
+    background: linear-gradient(135deg, #FFFFFF 0%, #FFF0F5 100%) !important;
+    border: 1px solid #FFE4E1 !important;
+}
+.wc-pinned-chat .wc-avatar {
+    border-color: #FFB6C1 !important; /* 头像粉色描边 */
+}
+/* 名字后面的可爱 TOP 胶囊标签 (严格遵守无颜文字) */
+.wc-pinned-chat .wc-item-title::after {
+    content: 'ㅠㅅㅠ';
+    display: inline-block;
+    background: linear-gradient(135deg, #FFC0CB 0%, #FF9A9E 100%);
+    color: #FFF;
+    font-size: 10px;
+    font-weight: 800;
+    font-family: 'Arial', sans-serif;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    vertical-align: middle;
+    letter-spacing: 1px;
+    box-shadow: 0 2px 6px rgba(255, 154, 158, 0.4);
+    transform: translateY(-1px);
+}
+
+/* 6. 朋友圈页面 (Moments) - 日系手账本风格 */
+.wc-moments-header {
+    margin-bottom: 70px !important;
+}
+.wc-moments-cover {
+    border-bottom-left-radius: 40px !important;
+    border-bottom-right-radius: 40px !important;
+    height: 290px !important;
+    box-shadow: 0 12px 25px rgba(255, 182, 193, 0.15) !important;
+}
+.wc-moments-user-avatar {
+    border-radius: 40% !important;
+    right: 28px !important;
+    bottom: -45px !important;
+    width: 90px !important;
+    height: 90px !important;
+    border: 5px solid #FBF9F6 !important;
+    box-shadow: 0 10px 25px rgba(212, 196, 183, 0.3) !important;
+}
+.wc-moment-card {
+    background: #FFFFFF !important;
+    margin: 0 16px 24px 16px !important;
+    border-radius: 28px !important;
+    padding: 24px !important;
+    box-shadow: 0 10px 30px rgba(212, 196, 183, 0.1) !important;
+    border: 1px solid #FFF !important;
+}
+.wc-moment-name {
+    color: #D88C9A !important; /* 柔和的玫瑰色 */
+    font-family: 'Georgia', serif !important;
+    font-size: 17px !important;
+    font-weight: bold !important;
+    letter-spacing: 0.5px;
+}
+.wc-moment-text {
+    color: #6D5A5A !important;
+    line-height: 1.7 !important;
+    margin-top: 8px !important;
+    font-size: 14px !important;
+}
+.wc-moment-image {
+    border-radius: 20px !important;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+}
+.wc-moment-likes-comments {
+    background: #FFF5F7 !important; /* 极淡的粉色评论区 */
+    border-radius: 20px !important;
+    padding: 16px !important;
+    border: 1px solid #FFE4E1 !important;
+}
+.wc-moment-like-row, .wc-moment-comment-name { 
+    color: #D88C9A !important; 
+}
+
+/* 7. 个人中心页面 (User) - 萌系高级设置页 */
+.wc-user-header {
+    padding: 60px 0 40px 0 !important;
+}
+.wc-user-avatar-lg {
+    border-radius: 40% !important;
+    width: 115px !important;
+    height: 115px !important;
+    box-shadow: 0 15px 35px rgba(255, 182, 193, 0.25) !important;
+    border: 5px solid #FFF !important;
+}
+#wc-user-name-display {
+    font-family: 'Georgia', serif !important;
+    color: #5C4D4D !important;
+    font-size: 28px !important;
+    font-weight: 700 !important;
+    margin-top: 16px !important;
+    letter-spacing: 1px;
+}
+.wc-list-group {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 20px !important;
+}
+.wc-list-group .wc-list-item {
+    background: #FFFFFF !important;
+    border-radius: 24px !important;
+    margin-bottom: 16px !important;
+    box-shadow: 0 8px 20px rgba(212, 196, 183, 0.12) !important;
+    border: 1px solid #FFF !important;
+    padding: 20px 24px !important;
+}
+.wc-list-group .wc-list-item .wc-icon {
+    color: #FFB6C1 !important; /* 图标统一为玫瑰粉 */
+}
+
+/* 🌟 8. 通讯录角色详情卡片 - 韩系拍立得/手账风 🌟 */
+#wc-modal-char-detail .wc-modal-content {
+    width: 320px !important;
+    height: auto !important;
+    min-height: 480px;
+    border-radius: 35px !important;
+    background: #FFFFFF !important;
+    box-shadow: 0 25px 50px rgba(255, 182, 193, 0.2), inset 0 0 0 4px #FFF5F7 !important;
+    padding: 24px !important;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* 头像区域：拍立得相纸质感 */
+.wc-contact-card-header {
+    width: 100% !important;
+    height: 290px !important;
+    position: relative;
+    border-radius: 24px !important;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+    margin-bottom: 28px;
+    background: #FFF;
+    padding: 8px; /* 制造相框留白效果 */
+}
+.wc-contact-card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 18px !important;
+}
+
+/* 悬浮按钮：高级毛玻璃 */
+.wc-contact-card-close-btn, .wc-contact-card-edit-btn {
+    background: rgba(255, 255, 255, 0.7) !important;
+    color: #D88C9A !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 15px rgba(255, 182, 193, 0.3) !important;
+    border: 1px solid rgba(255,255,255,0.9);
+    width: 36px !important;
+    height: 36px !important;
+}
+.wc-contact-card-close-btn { top: 18px !important; left: 18px !important; }
+.wc-contact-card-edit-btn { top: 18px !important; right: 18px !important; }
+
+/* 文本信息区域 */
+.wc-contact-card-info {
+    width: 100%;
+    padding: 0 !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+
+
+/* 备注：浅茶色 */
+.wc-contact-card-note {
+    font-size: 14px !important;
+    color: #B8A9A9 !important;
+    margin-bottom: 28px !important;
+    font-weight: 500 !important;
+    letter-spacing: 1px;
+    background: #FBF9F6;
+    padding: 4px 12px;
+    border-radius: 12px;
+}
+
+/* 底部按钮：萌系粉色果冻按钮 */
+#wc-modal-char-detail .wc-ios-btn-block {
+    background: linear-gradient(135deg, #FFC0CB 0%, #FF9A9E 100%) !important; 
+    color: #FFFFFF !important;
+    border-radius: 20px !important;
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    letter-spacing: 2px;
+    box-shadow: 0 8px 20px rgba(255, 154, 158, 0.4) !important;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    border: none !important;
+    padding: 16px !important;
+}
+
+/* 按钮点击时的微缩放反馈 */
+#wc-modal-char-detail .wc-ios-btn-block:active {
+    transform: scale(0.95);
+    box-shadow: 0 4px 10px rgba(255, 154, 158, 0.3) !important;
+}
+/* ========================================== */
+/* 新增：购物流程高级卡片弹窗样式 */
+/* ========================================== */
+
+/* 结算卡片 */
+.shop-checkout-card {
+    background: #fdfbf7;
+    border-radius: 24px;
+    padding: 25px;
+    width: 90%;
+    max-width: 340px;
+    box-shadow: 0 10px 30px rgba(212, 196, 183, 0.3);
+    text-align: center;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.shop-checkout-card h3 {
+    font-size: 20px;
+    color: #4a413e;
+    font-weight: 600;
+    margin: 0;
+}
+.checkout-total-display {
+    background: #fff;
+    border-radius: 16px;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #f5f0eb;
+}
+.checkout-total-display span {
+    font-size: 15px;
+    color: #9e948f;
+}
+.checkout-total-display strong {
+    font-size: 22px;
+    font-weight: bold;
+    color: #c28e7e;
+    font-family: 'Georgia', serif;
+}
+.checkout-actions {
+    display: flex;
+    gap: 15px;
+}
+.shop-card-btn {
+    flex: 1;
+    padding: 15px;
+    border-radius: 16px;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.shop-card-btn:active {
+    transform: scale(0.95);
+}
+.shop-card-btn svg {
+    width: 28px;
+    height: 28px;
+    stroke-width: 1.5;
+}
+.shop-card-btn span {
+    font-size: 15px;
+    font-weight: 600;
+}
+.shop-card-btn.gift {
+    background: #ffe4e6;
+    color: #d6336c;
+    box-shadow: 0 4px 15px rgba(240, 98, 146, 0.1);
+}
+.shop-card-btn.daifu {
+    background: #e7f5ff;
+    color: #1c7ed6;
+    box-shadow: 0 4px 15px rgba(33, 150, 243, 0.1);
+}
+
+/* 配送方式卡片 */
+.shop-delivery-card {
+    background: #fdfbf7;
+    border-radius: 24px;
+    padding: 25px;
+    width: 90%;
+    max-width: 340px;
+    box-shadow: 0 10px 30px rgba(212, 196, 183, 0.3);
+    text-align: center;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+.shop-delivery-card h3 {
+    font-size: 20px;
+    color: #4a413e;
+    font-weight: 600;
+    margin: 0;
+}
+.delivery-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.shop-card-btn.delivery {
+    flex-direction: row;
+    justify-content: flex-start;
+    background: #fff;
+    border: 1px solid #f5f0eb;
+    color: #5d5350;
+    text-align: left;
+}
+.shop-card-btn.delivery svg {
+    width: 24px;
+    height: 24px;
+    margin-right: 12px;
+    color: #d4c4b7;
+}
+.shop-card-btn.delivery small {
+    font-size: 12px;
+    color: #9e948f;
+    font-weight: normal;
+    margin-top: 2px;
+}
+.shop-card-btn.delivery div {
+    display: flex;
+    flex-direction: column;
+}
+
+/* 时间选择器卡片 */
+.time-picker-card {
+    background: #fdfbf7;
+    border-radius: 24px;
+    padding: 25px;
+    width: 90%;
+    max-width: 340px;
+    box-shadow: 0 10px 30px rgba(212, 196, 183, 0.3);
+    text-align: center;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.time-picker-card h3 {
+    font-size: 20px;
+    color: #4a413e;
+    font-weight: 600;
+    margin: 0;
+}
+.time-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.time-option-btn {
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #f5f0eb;
+    border-radius: 12px;
+    font-size: 14px;
+    color: #5d5350;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.time-option-btn:active {
+    background: #f5f0eb;
+}
+.time-options .time-option-btn:first-child {
+    grid-column: 1 / -1; /* 第一个按钮占满一行 */
+}
+.custom-time-section {
+    margin-top: 10px;
+    border-top: 1px dashed #e8dfd8;
+    padding-top: 20px;
+}
+.custom-time-section label {
+    font-size: 14px;
+    color: #9e948f;
+    margin-bottom: 10px;
+    display: block;
+}
+#custom-time-input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #e8dfd8;
+    border-radius: 12px;
+    background: #fff;
+    font-size: 16px;
+    color: #4a413e;
+    font-family: inherit;
+    -webkit-appearance: none;
+}
+/* ========================================== */
+/* App 3: INS Music Player Styles (Black & White iOS) */
+/* ========================================== */
+.ins-music-root {
+    width: 100%; height: 100%; position: relative; overflow: hidden;
+    background-color: #FFF; color: #111; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.ins-music-view {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: none; flex-direction: column; overflow-y: auto;
+}
+.ins-music-view.active { display: flex; animation: wcFadeIn 0.3s ease; }
+
+/* 强制底部留白，防止被播放器和Tabbar遮挡 */
+.ins-music-bottom-spacer { height: 180px; width: 100%; flex-shrink: 0; }
+
+/* Header & Search Bar */
+.ins-music-header { padding: 60px 20px 20px 20px; background: #FFF; position: sticky; top: 0; z-index: 10; }
+.ins-music-title { font-size: 32px; font-weight: 800; color: #111; margin-bottom: 20px; letter-spacing: -0.5px; }
+.ins-music-search-bar {
+    background: #F5F5F5; border-radius: 12px; padding: 12px 16px;
+    display: flex; align-items: center; gap: 10px; cursor: pointer;
+}
+.ins-music-search-bar svg { width: 20px; height: 20px; fill: #888; }
+.ins-music-search-bar span { color: #888; font-size: 15px; }
+
+/* Content & Char Grid */
+.ins-music-content { padding: 0 20px; flex: 1; }
+.ins-music-section-title { font-size: 13px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; }
+.ins-music-char-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+.ins-music-char-card {
+    background: #FFF; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    border: 1px solid #F0F0F0; cursor: pointer; transition: transform 0.2s;
+}
+.ins-music-char-card:active { transform: scale(0.96); }
+.ins-music-char-img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #F5F5F5; }
+.ins-music-char-info { padding: 12px; text-align: center; }
+.ins-music-char-name { font-size: 14px; font-weight: 600; color: #111; }
+.ins-music-char-action { font-size: 11px; color: #888; margin-top: 4px; }
+
+/* Profile View (半屏背景 + 白色底图) */
+.ins-music-profile-bg { 
+    position: absolute; top: 0; left: 0; width: 100%; height: 40vh; 
+    background-size: cover; background-position: center; 
+    z-index: 0; filter: brightness(0.8); 
+}
+.ins-music-profile-topbar { 
+    position: absolute; top: 0; left: 0; width: 100%;
+    padding: env(safe-area-inset-top, 50px) 20px 20px 20px; 
+    display: flex; justify-content: space-between; align-items: center; z-index: 10;
+}
+.ins-music-btn-icon { 
+    width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); 
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: center; cursor: pointer; color: #FFF; 
+}
+.ins-music-btn-icon svg { width: 20px; height: 20px; fill: currentColor; }
+
+.ins-music-profile-content {
+    position: relative; z-index: 2; margin-top: 30vh;
+    background: #FFF; border-radius: 30px 30px 0 0; min-height: 70vh;
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.1);
+}
+.ins-music-profile-info { display: flex; flex-direction: column; align-items: center; padding: 0 20px; transform: translateY(-50px); margin-bottom: -30px; }
+.ins-music-avatar-wrapper { 
+    width: 100px; height: 100px; border-radius: 50%; padding: 4px; background: #FFF; 
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1); margin-bottom: 15px; 
+}
+.ins-music-profile-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.ins-music-profile-name { font-size: 24px; font-weight: 800; color: #111; letter-spacing: -0.5px; }
+
+.ins-music-playlist-container { padding: 0 20px; }
+.ins-music-playlist-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.ins-music-playlist-card { 
+    display: flex; align-items: center; gap: 15px; background: #F9F9F9; 
+    padding: 10px; border-radius: 16px; cursor: pointer; transition: background 0.2s;
+}
+.ins-music-playlist-card:active { background: #F0F0F0; }
+.ins-music-playlist-cover { width: 60px; height: 60px; border-radius: 10px; object-fit: cover; background: #E5E5EA; }
+.ins-music-playlist-info { flex: 1; }
+.ins-music-playlist-name { font-size: 15px; font-weight: 600; color: #111; margin-bottom: 4px; }
+.ins-music-playlist-count { font-size: 12px; color: #888; }
+.ins-music-btn-create { 
+    display: flex; align-items: center; justify-content: center; gap: 8px; padding: 15px; 
+    background: #F5F5F5; border-radius: 16px; color: #111; font-weight: 600; cursor: pointer; 
+}
+.ins-music-btn-create svg { width: 20px; height: 20px; fill: currentColor; }
+
+/* Search Overlay */
+.ins-music-search-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #FFF; z-index: 20; display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1); }
+.ins-music-search-overlay.active { transform: translateY(0); }
+.ins-music-search-header { padding: 50px 20px 15px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #F0F0F0; }
+.ins-music-search-input { flex: 1; background: #F5F5F5; border: none; border-radius: 12px; padding: 10px 16px; font-size: 15px; color: #111; outline: none; }
+.ins-music-search-results { flex: 1; overflow-y: auto; padding: 20px; }
+.ins-music-empty-state { text-align: center; color: #888; margin-top: 50px; font-size: 14px; }
+.ins-music-song-item { display: flex; align-items: center; gap: 15px; padding: 10px 0; border-bottom: 1px solid #F9F9F9; cursor: pointer; }
+.ins-music-song-cover { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: #F5F5F5; }
+.ins-music-song-info { flex: 1; overflow: hidden; }
+.ins-music-song-title { font-size: 15px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.ins-music-song-artist { font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Mini Player */
+.ins-music-mini-player {
+    position: absolute; bottom: 90px; left: 15px; right: 15px; height: 60px;
+    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-radius: 16px; box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    display: flex; align-items: center; padding: 8px 12px 8px 8px; z-index: 15; border: 1px solid #F0F0F0;
+    cursor: pointer;
+}
+.ins-music-player-cover { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; background: #F5F5F5; }
+.ins-music-player-info { flex: 1; margin: 0 12px; overflow: hidden; }
+.ins-music-player-title { font-size: 14px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ins-music-player-artist { font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ins-music-player-controls { z-index: 2; }
+.ins-music-player-controls .ins-music-btn-icon { width: 32px; height: 32px; color: #111; } ========================================== */
+/* 全屏播放器 (黑白灰简约 iOS 风 + 黑胶唱片) */
+/* ========================================== */
+.ins-music-full-player {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: #FFF; z-index: 3000; display: flex; flex-direction: column;
+    transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.ins-music-full-player.active { transform: translateY(0); }
+.ins-music-fp-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: env(safe-area-inset-top, 40px) 20px 10px 20px;
+}
+.ins-music-fp-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #111; }
+.ins-music-fp-btn svg { width: 24px; height: 24px; fill: currentColor; }
+
+/* 一起听歌 Header (大头像居中版) */
+.ins-music-fp-together { 
+    display: flex; flex-direction: column; align-items: center; 
+    margin-top: 10px; margin-bottom: -10px; z-index: 10; 
+}
+.ins-music-fp-avatars { 
+    display: flex; align-items: center; gap: 15px; /* 15px 的精确间距 */
+    margin-bottom: 12px; 
+}
+.ins-music-fp-avatar { 
+    width: 80px; height: 80px; /* 80x80px 圆形头像 */
+    border-radius: 50%; object-fit: cover; 
+    border: 3px solid #FFF; box-shadow: 0 8px 25px rgba(0,0,0,0.15); 
+}
+.ins-music-fp-avatar.char { margin-left: 0; z-index: 2; } /* 移除负边距，使用 gap 控制 */
+.ins-music-fp-timer { 
+    font-size: 14px; font-weight: 700; color: #555; font-family: monospace; 
+    letter-spacing: 2px; background: #F5F5F5; padding: 6px 16px; border-radius: 16px; 
+}
+/* 黑胶唱片设计 */
+.ins-music-fp-record-container {
+    flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.ins-music-fp-record {
+    width: 260px; height: 260px; border-radius: 50%; background: #111;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.2), inset 0 0 0 8px #222, inset 0 0 0 16px #111, inset 0 0 0 17px #333;
+    animation: spin 12s linear infinite; animation-play-state: paused;
+}
+.ins-music-fp-record.playing { animation-play-state: running; }
+.ins-music-fp-cover {
+    width: 170px; height: 170px; border-radius: 50%; object-fit: cover;
+    border: 4px solid #000;
+}
+
+/* 歌曲信息 */
+.ins-music-fp-info { padding: 0 30px 15px 30px; text-align: center; }
+.ins-music-fp-song { font-size: 22px; font-weight: 800; color: #111; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.5px; }
+.ins-music-fp-artist { font-size: 14px; color: #888; font-weight: 500; }
+
+/* 滚动歌词 */
+.ins-music-fp-lyrics-container {
+    height: 60px; overflow: hidden; position: relative; margin: 0 30px 20px 30px;
+    mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+}
+.ins-music-fp-lyrics {
+    display: flex; flex-direction: column; align-items: center; transition: transform 0.3s ease-out;
+}
+.ins-music-lyric-line {
+    height: 30px; line-height: 30px; font-size: 14px; color: #CCC; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; transition: color 0.3s, font-size 0.3s;
+}
+.ins-music-lyric-line.active { color: #111; font-weight: 700; font-size: 16px; }
+
+/* 进度条 UI */
+.ins-music-fp-progress { padding: 0 30px 20px 30px; }
+.ins-music-fp-progress-bar { width: 100%; height: 4px; background: #F0F0F0; border-radius: 2px; position: relative; cursor: pointer; }
+.ins-music-fp-progress-fill { width: 0%; height: 100%; background: #111; border-radius: 2px; position: absolute; top: 0; left: 0; pointer-events: none; }
+.ins-music-fp-progress-fill::after { content: ''; position: absolute; right: -4px; top: -3px; width: 10px; height: 10px; background: #111; border-radius: 50%; }
+.ins-music-fp-time { display: flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 8px; font-weight: 600; font-family: monospace; }
+
+/* 控制栏 */
+.ins-music-fp-controls {
+    display: flex; justify-content: space-between; align-items: center; 
+    padding: 0 30px calc(env(safe-area-inset-bottom, 20px) + 20px) 30px;
+}
+.ins-music-fp-ctrl-btn { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #111; }
+.ins-music-fp-ctrl-btn svg { width: 32px; height: 32px; fill: currentColor; }
+.ins-music-fp-ctrl-btn.small svg { width: 22px; height: 22px; fill: #888; }
+.ins-music-fp-ctrl-btn.play { width: 64px; height: 64px; background: #111; color: #FFF; border-radius: 50%; box-shadow: 0 10px 20px rgba(0,0,0,0.15); }
+.ins-music-fp-ctrl-btn.play svg { width: 32px; height: 32px; }
+
+/* ========================================== */
+/* 聊天气泡：180x100px 高级黑白灰邀请卡片 */
+/* ========================================== */
+.wc-bubble.music-invite {
+    background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important;
+}
+.ins-music-chat-card {
+    width: 180px; height: 100px; background: #FFF; border-radius: 16px;
+    border: 1px solid #E5E5EA; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 12px; box-sizing: border-box; cursor: pointer; position: relative; overflow: hidden;
+}
+.ins-music-chat-card::before {
+    content: ''; position: absolute; top: -20px; right: -20px; width: 60px; height: 60px;
+    background: #F5F5F5; border-radius: 50%; z-index: 0;
+}
+.ins-music-chat-top { display: flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 1; }
+.ins-music-chat-tag { font-size: 9px; font-weight: 700; color: #111; text-transform: uppercase; letter-spacing: 1px; border: 1px solid #111; padding: 2px 6px; border-radius: 4px; }
+.ins-music-chat-icon { width: 16px; height: 16px; fill: #888; }
+.ins-music-chat-mid { position: relative; z-index: 1; margin-top: auto; margin-bottom: 4px; }
+.ins-music-chat-song { font-size: 13px; font-weight: 700; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ins-music-chat-artist { font-size: 10px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ins-music-chat-bottom { position: relative; z-index: 1; font-size: 9px; color: #CCC; text-transform: uppercase; letter-spacing: 0.5px; border-top: 1px dashed #F0F0F0; padding-top: 4px; }
+
+/* ========================================== */
+/* 邀请弹窗 (高级黑白灰 INS 风) */
+/* ========================================== */
+.ins-music-invite-card {
+    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    width: 300px; border-radius: 24px; padding: 30px 20px 20px 20px;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.1); position: relative; margin: auto;
+}
+.ins-music-invite-avatar-wrap {
+    width: 80px; height: 80px; border-radius: 50%; padding: 4px; background: #FFF;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.08); position: absolute; top: -40px;
+}
+.ins-music-invite-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.ins-music-invite-title { font-size: 20px; font-weight: 800; color: #111; margin-top: 20px; margin-bottom: 8px; letter-spacing: -0.5px; }
+.ins-music-invite-desc { font-size: 14px; color: #888; margin-bottom: 15px; }
+.ins-music-invite-song {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: #F5F5F5; padding: 10px 16px; border-radius: 12px; width: 100%; margin-bottom: 24px;
+}
+.ins-music-invite-song svg { width: 16px; height: 16px; fill: #888; }
+.ins-music-invite-song span { font-size: 13px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.ins-music-invite-actions { display: flex; width: 100%; gap: 12px; }
+.ins-music-invite-btn {
+    flex: 1; padding: 14px 0; border-radius: 14px; font-size: 15px; font-weight: 600; cursor: pointer; border: none; transition: transform 0.1s;
+}
+.ins-music-invite-btn:active { transform: scale(0.95); }
+.ins-music-invite-btn.cancel { background: #F5F5F5; color: #888; }
+.ins-music-invite-btn.confirm { background: #111; color: #FFF; box-shadow: 0 8px 15px rgba(0,0,0,0.15); }
+
+/* Tabbar */
+.ins-music-tabbar {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 80px;
+    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid #F0F0F0; display: flex; justify-content: space-around; align-items: center; padding-bottom: env(safe-area-inset-bottom); z-index: 10;
+}
+.ins-music-tab { width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; color: #B2B2B2; cursor: pointer; transition: all 0.3s; }
+.ins-music-tab svg { width: 26px; height: 26px; fill: currentColor; }
+.ins-music-tab.active { color: #111; transform: translateY(-3px); }
+
+/* Exit Button */
+.ins-music-exit-btn {
+    position: absolute; top: 50px; right: 20px; width: 36px; height: 36px;
+    background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    cursor: pointer; z-index: 15; color: #111; border: 1px solid #F0F0F0;
+}
+.ins-music-exit-btn svg { width: 20px; height: 20px; fill: currentColor; }
+        /* 音乐播放器迷你聊天弹窗样式 */
+        .music-chat-window {
+            position: absolute;
+            top: 130px; 
+            left: 20px;
+            right: 20px;
+            height: 320px; 
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .music-chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .music-chat-input-area {
+            display: flex;
+            padding: 10px;
+            background: rgba(255,255,255,0.6);
+            border-top: 1px solid rgba(0,0,0,0.05);
+            align-items: center;
+        }
+        .music-chat-input-area input {
+            flex: 1;
+            border: none;
+            background: rgba(0,0,0,0.05);
+            border-radius: 18px;
+            padding: 8px 14px;
+            font-size: 14px;
+            outline: none;
+            color: #333;
+        }
+        .music-chat-input-area button {
+            background: transparent;
+            border: none;
+            color: #007AFF;
+            font-weight: 600;
+            padding: 0 0 0 10px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+        .music-chat-msg {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        .music-chat-msg.me {
+            align-self: flex-end;
+            background: #007AFF;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .music-chat-msg.them {
+            align-self: flex-start;
+            background: #E5E5EA;
+            color: black;
+            border-bottom-left-radius: 4px;
+        }       
+            /* 韩系极简黑白灰风格邀请弹窗 CSS */
+            .ins-korean-invite-card {
+                width: 300px;
+                background: #ffffff;
+                border-radius: 20px;
+                padding: 24px;
+                box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+                display: flex;
+                flex-direction: column;
+                font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+                animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            @keyframes slideUpFade {
+                from { opacity: 0; transform: translateY(20px) scale(0.95); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            .invite-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+            .invite-tag {
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 1.5px;
+                color: #888;
+            }
+            .invite-close {
+                background: none; border: none; padding: 0; cursor: pointer; color: #111; width: 20px; height: 20px;
+            }
+            .invite-close svg { width: 100%; height: 100%; fill: currentColor; }
+            .invite-body {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+            .invite-avatar-ring {
+                width: 72px; height: 72px; border-radius: 50%; padding: 3px; border: 1px solid #E5E5EA; margin-bottom: 16px;
+            }
+            .invite-avatar {
+                width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+            }
+            .invite-name {
+                font-size: 18px; font-weight: 600; color: #111; margin: 0 0 6px 0;
+            }
+            .invite-text {
+                font-size: 14px; color: #666; margin: 0 0 20px 0; font-style: italic;
+            }
+            .invite-song-box {
+                width: 100%; background: #F9F9F9; border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 12px; margin-bottom: 24px; border: 1px solid #F0F0F0;
+            }
+            .vinyl-icon {
+                width: 32px; height: 32px; color: #111; display: flex; align-items: center; justify-content: center;
+            }
+            .vinyl-icon svg { width: 24px; height: 24px; animation: spin 4s linear infinite; }
+            @keyframes spin { 100% { transform: rotate(360deg); } }
+            .song-info { text-align: left; flex: 1; overflow: hidden; }
+            .song-name { font-size: 14px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .song-artist { font-size: 11px; color: #888; margin-top: 2px; }
+            .invite-actions {
+                display: flex; gap: 12px; width: 100%;
+            }
+            .invite-actions button {
+                flex: 1; height: 44px; border-radius: 22px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+            }
+            .btn-reject {
+                background: #FFF; color: #111; border: 1px solid #E5E5EA;
+            }
+            .btn-accept {
+                background: #111; color: #FFF; border: none;
+            }
+            .btn-reject:active { background: #F5F5F5; }
+            .btn-accept:active { transform: scale(0.96); }
+/* ========================================== */
+/* 音乐胶囊 (Music Capsule) 样式 (下拉悬浮版) */
+/* ========================================== */
+
+.ins-music-capsule-toggle {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #CCC; transition: all 0.3s ease;
+}
+.ins-music-capsule-toggle svg { width: 22px; height: 22px; fill: currentColor; }
+.ins-music-capsule-toggle.active { color: #111; transform: scale(1.1); }
+
+/* 悬浮胶囊主容器 (透明包裹层，负责定位) */
+.floating-music-capsule {
+    position: fixed;
+    top: 60px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 999999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: auto;
+}
+.floating-music-capsule.hidden { display: none; }
+
+/* 1. 收起状态 (灵动岛本体) */
+.capsule-island-view {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 6px 0 12px;
+    box-sizing: border-box;
+    min-width: 85px; height: 32px;
+    background: rgba(128, 128, 128, 0.6);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 50px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.capsule-island-view:active { transform: scale(0.95); }
+
+.capsule-wave { display: flex; align-items: center; gap: 2px; height: 12px; }
+.wave-bar { width: 2px; background: #FFF; border-radius: 1px; animation: waveAnim 1s infinite ease-in-out; }
+.wave-bar:nth-child(1) { height: 6px; animation-delay: 0s; }
+.wave-bar:nth-child(2) { height: 12px; animation-delay: 0.2s; }
+.wave-bar:nth-child(3) { height: 8px; animation-delay: 0.4s; }
+@keyframes waveAnim { 0%, 100% { height: 4px; } 50% { height: 12px; } }
+.floating-music-capsule.paused .wave-bar { animation-play-state: paused; }
+
+.capsule-island-cover { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
+
+/* 2. 下拉迷你播放器 (展开状态，固定在胶囊下方 8px) */
+.capsule-dropdown-player {
+    position: absolute;
+    top: calc(100% + 8px); /* 距离胶囊下方 8px */
+    left: 50%;
+    transform: translateX(-50%) translateY(-10px);
+    width: 280px; height: 175px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+    display: flex; flex-direction: column;
+    padding: 8px 15px; box-sizing: border-box;
+    opacity: 0; 
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.capsule-dropdown-player.active { 
+    opacity: 1; 
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+}
+.capsule-dropdown-player.hidden { display: none; }
+
+.capsule-exp-top { display: flex; justify-content: center; align-items: center; height: 40px; margin-bottom: 5px; }
+.capsule-exp-cover { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+.capsule-exp-avatars { display: flex; align-items: center; gap: 2px; }
+.capsule-exp-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+.capsule-exp-mid { display: flex; flex-direction: column; align-items: center; margin-bottom: 5px; }
+.capsule-exp-title { font-size: 14px; font-weight: 700; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%; }
+.capsule-exp-artist { font-size: 11px; color: #888; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%; }
+.capsule-exp-lyric { font-size: 12px; color: #555; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%; height: 16px; }
+.capsule-exp-progress { width: 100%; padding: 0 10px; margin-top: 5px; }
+.capsule-exp-progress-bar { width: 100%; height: 4px; background: #E5E5EA; border-radius: 2px; position: relative; cursor: pointer; }
+.capsule-exp-progress-fill { width: 0%; height: 100%; background: #111; border-radius: 2px; position: absolute; top: 0; left: 0; pointer-events: none; }
+.capsule-exp-controls { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 10px; }
+.capsule-btn { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #111; cursor: pointer; transition: transform 0.1s; }
+.capsule-btn:active { transform: scale(0.9); background: #E5E5EA; }
+.capsule-btn svg { width: 20px; height: 20px; fill: currentColor; }
+.capsule-btn.small svg { width: 16px; height: 16px; fill: #888; }
+.capsule-btn.play { width: 36px; height: 36px; background: #111; color: #FFF; }
+.capsule-btn.play svg { width: 20px; height: 20px; }

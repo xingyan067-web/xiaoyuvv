@@ -155,6 +155,9 @@ let privacyLastDate = localStorage.getItem('ios_theme_step_date') || new Date().
 let privacyLastMotionTime = 0;
 let isMotionListenerAdded = false;
 
+// 通知与后台全局变量 (新增)
+let isRealNotifEnabled = localStorage.getItem('ios_theme_real_notif_enabled') === 'true';
+
 // 检查是否是新的一天，如果是则步数清零
 function checkNewDay() {
     const today = new Date().toDateString();
@@ -257,8 +260,7 @@ const idb = {
 // --- 初始化 ---
 window.onload = async function() {
     // !!! 新增：在所有操作之前，首先检查激活状态
-    checkAndShowActivation()
-    
+        checkAndShowActivation();    
     initGrid(); 
     await loadAllData(); // 加载 IndexedDB 数据 (含布局恢复)
     startClock();
@@ -279,6 +281,10 @@ window.onload = async function() {
         await lsLoadData();
         lsInitNpcLoop(); // 启动 NPC 循环
         lsRenderWidget(); // 渲染桌面小组件
+        
+        // 【新增】：恢复一起听歌状态
+        await musicInitState();
+        
     } catch (e) {
         console.error("WeChat DB Init failed", e);
     }
@@ -373,6 +379,11 @@ window.onload = async function() {
                 if(container) container.scrollTop = container.scrollHeight;
             }, 300);
         });
+    }
+
+    // 初始化通知与后台 UI
+    if (typeof updateNotifUI === 'function') {
+        updateNotifUI();
     }
 };
 
@@ -689,6 +700,10 @@ function handleMotion(event) {
     }
 }
 
+// 新增全局变量用于存储地图实例
+let privacyMapInstance = null;
+let privacyMapMarker = null;
+
 function fetchLocation() {
     const locEl = document.getElementById('privacyLocation');
     locEl.innerText = "高精度定位中...";
@@ -713,6 +728,25 @@ function fetchLocation() {
                 }
                 
                 locEl.innerText = address || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
+                // --- 修复：在这里真正渲染 Leaflet 地图 ---
+                if (typeof L !== 'undefined') {
+                    if (!privacyMapInstance) {
+                        // 首次初始化地图
+                        privacyMapInstance = L.map('privacyMap').setView([lat, lon], 16);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '© OpenStreetMap'
+                        }).addTo(privacyMapInstance);
+                        privacyMapMarker = L.marker([lat, lon]).addTo(privacyMapInstance);
+                    } else {
+                        // 更新已有地图位置
+                        privacyMapInstance.setView([lat, lon], 16);
+                        privacyMapMarker.setLatLng([lat, lon]);
+                    }
+                    // 解决在隐藏弹窗中初始化导致地图显示不全的 Bug
+                    setTimeout(() => { privacyMapInstance.invalidateSize(); }, 300);
+                }
+
             } catch (e) {
                 locEl.innerText = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
             }
@@ -727,7 +761,6 @@ function fetchLocation() {
         locEl.innerText = "设备不支持定位";
     }
 }
-
 // 存储分析弹窗逻辑
 function openStorageAnalysis() { document.getElementById('storageModalOverlay').classList.add('active'); analyzeStorage(); }
 function closeStorageModal() { document.getElementById('storageModalOverlay').classList.remove('active'); }
@@ -864,6 +897,7 @@ async function exportAllData() {
     wechatData.cssPresets = await wcDb.get('kv_store', 'css_presets');
     wechatData.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets'); // 新增
     wechatData.phonePresets = await wcDb.get('kv_store', 'phone_presets'); // 新增
+    wechatData.shopData = await wcDb.get('kv_store', 'shop_data'); // 新增购物数据
     wechatData.characters = await wcDb.getAll('characters');
     wechatData.masks = await wcDb.getAll('masks');
     wechatData.moments = await wcDb.getAll('moments');
@@ -921,6 +955,7 @@ function importAllData(input) {
                     if (wd.cssPresets) await wcDb.put('kv_store', wd.cssPresets, 'css_presets');
                     if (wd.chatBgPresets) await wcDb.put('kv_store', wd.chatBgPresets, 'chat_bg_presets'); // 新增
                     if (wd.phonePresets) await wcDb.put('kv_store', wd.phonePresets, 'phone_presets'); // 新增
+                    if (wd.shopData) await wcDb.put('kv_store', wd.shopData, 'shop_data'); // 新增购物数据
                     
                     // 清空旧表并写入新数据
                     const stores = ['characters', 'masks', 'moments', 'chats'];
@@ -930,7 +965,7 @@ function importAllData(input) {
                     }
 
                     if (wd.characters) for (const c of wd.characters) await wcDb.put('characters', c);
-                    if (wd.masks) for (const m of wd.masks) await wcDb.put('masks', m);
+                    if (wd.masks) for (const m of wd.masks) await wcDb.put('masks', m);                 
                     if (wd.moments) for (const m of wd.moments) await wcDb.put('moments', m);
                     if (wd.chats) {
                         for (const charId in wd.chats) {
@@ -1165,9 +1200,9 @@ function initGrid() {
                 }
                 if (data.id === 'app-0') openWechat();
                 if (data.id === 'app-1') openLoversSpace();
+                if (data.id === 'app-2') openMusicApp(); // <--- 就是加上这一行！
             });
-            
-            cells[index].appendChild(appDiv);
+                        cells[index].appendChild(appDiv);
         }
     });
 }
@@ -1266,7 +1301,7 @@ function handleDragMove(e) {
             }
         }
     } else if (isDragging) {
-        e.preventDefault();
+        if (e.cancelable) { e.preventDefault(); }
         updateGhostPosition(touch.clientX, touch.clientY);
     }
 }
@@ -1611,19 +1646,23 @@ function saveWorldbookEntry() {
         worldbookEntries.push({ id: newId, title, type, keys, desc });
     }
     saveWorldbookData();
-    closeWorldbookEditor();
-    if (document.getElementById('tab-wb-all').classList.contains('active')) {
-        renderWorldbookList();
-    } else {
-        renderGroupView();
-    }
     
-    // 如果分组详情弹窗开着，同步刷新它
-    const detailModal = document.getElementById('worldbookGroupDetailModal');
-    if (detailModal && detailModal.classList.contains('open')) {
-        const currentGroup = document.getElementById('wbGroupDetailTitle').innerText;
-        openGroupDetailModal(currentGroup);
-    }
+    // 修复：加入 150ms 延迟，防止点击穿透导致误触列表项
+    setTimeout(() => {
+        closeWorldbookEditor();
+        if (document.getElementById('tab-wb-all').classList.contains('active')) {
+            renderWorldbookList();
+        } else {
+            renderGroupView();
+        }
+        
+        // 如果分组详情弹窗开着，同步刷新它
+        const detailModal = document.getElementById('worldbookGroupDetailModal');
+        if (detailModal && detailModal.classList.contains('open')) {
+            const currentGroup = document.getElementById('wbGroupDetailTitle').innerText;
+            openGroupDetailModal(currentGroup);
+        }
+    }, 150);
 }
 
 function deleteWorldbookEntry(id) {
@@ -2002,10 +2041,10 @@ function renderWallpaperGrid() {
         const item = document.createElement('div');
         item.className = 'wallpaper-item';
         item.style.backgroundImage = `url('${url}')`;
-        item.onclick = () => {
+        item.onclick = () => { // ✅ 正确写法
             document.getElementById('mainScreen').style.backgroundImage = `url('${url}')`;
             saveThemeSettings();
-        };
+        }; 
         const del = document.createElement('div');
         del.className = 'wallpaper-delete';
         del.innerText = '×';
@@ -2112,6 +2151,7 @@ const wcState = {
     cssPresets: [],
     chatBgPresets: [], // 【新增】：聊天背景图库
     phonePresets: [],  // 【新增】：手机装修预设
+    shopData: { mall: [], takeout: [], cart: [], config: { worldbookEntries: [] } }, // 【新增】：购物数据
     activeStickerCategoryIndex: 0,
     tempImage: '',
     tempImageType: '',
@@ -2135,7 +2175,8 @@ const wcState = {
     tempBgCleared: false,
     replyingToComment: null,
     unreadCounts: {}, // { charId: count }
-    proactiveInterval: null // 主动消息定时器
+    proactiveInterval: null, // 主动消息定时器
+    tempShopTransaction: null // 临时存储购物交易信息
 };
 
 // --- WeChat Core Functions ---
@@ -2170,6 +2211,9 @@ async function wcLoadData() {
         const phonePresets = await wcDb.get('kv_store', 'phone_presets');
         if (phonePresets) wcState.phonePresets = phonePresets;
         
+        const shopData = await wcDb.get('kv_store', 'shop_data');
+        if (shopData) wcState.shopData = shopData;
+        
         const unread = await wcDb.get('kv_store', 'unread_counts');
         if (unread) wcState.unreadCounts = unread;
 
@@ -2201,6 +2245,7 @@ async function wcSaveData() {
         // 【新增】：保存图库和预设
         await wcDb.put('kv_store', wcState.chatBgPresets, 'chat_bg_presets');
         await wcDb.put('kv_store', wcState.phonePresets, 'phone_presets');
+        await wcDb.put('kv_store', wcState.shopData, 'shop_data');
         
         for (const char of wcState.characters) {
             if (char && char.id) await wcDb.put('characters', char);
@@ -2253,6 +2298,14 @@ function wcSwitchTab(tabId) {
     
     document.getElementById('wc-view-chat-detail').classList.remove('active');
     document.getElementById('wc-view-memory').classList.remove('active');
+    
+    // 【修复】：确保切换底部 Tab 时，购物页面被彻底隐藏
+    const shopPage = document.getElementById('wc-view-shopping');
+    if (shopPage) {
+        shopPage.classList.remove('active');
+        shopPage.style.display = 'none';
+    }
+    
     document.getElementById('wc-main-tabbar').style.display = 'none';
     
     // 核心修复：强制控制按钮显示
@@ -2294,6 +2347,13 @@ function wcHandleBack() {
     // 如果在回忆页面，先关闭回忆页面
     if (document.getElementById('wc-view-memory').classList.contains('active')) {
         wcCloseMemoryPage();
+        return;
+    }
+    
+    // 【修复】：如果在购物页面，关闭购物页面
+    const shopPage = document.getElementById('wc-view-shopping');
+    if (shopPage && (shopPage.classList.contains('active') || shopPage.style.display === 'flex')) {
+        wcCloseShoppingPage();
         return;
     }
     
@@ -2569,16 +2629,42 @@ function wcRenderMessages(charId) {
         } else if (msg.type === 'invite') {
             const statusText = msg.status === 'accepted' ? '已同意' : (msg.status === 'rejected' ? '已拒绝' : '等待回应');
             contentHtml = `
-                <div class="wc-bubble invite" onclick="wcHandleInviteClick(${msg.id})">
-                    <div class="wc-invite-header">
-                        <svg class="wc-icon" viewBox="0 0 24 24" style="width:24px;height:24px;color:#FF9A9E;fill:#FF9A9E;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path></svg>
+                <div class="wc-bubble invite ins-invite-card" onclick="wcHandleInviteClick(${msg.id})">
+                    <div class="ins-invite-top">
+                        <span class="ins-invite-brand">LOVERS SPACE</span>
+                        <svg viewBox="0 0 24 24" class="ins-invite-icon"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                     </div>
-                    <div class="wc-invite-body">
-                        <div class="wc-invite-title">Lovers Space Invite</div>
-                        <div class="wc-invite-status">${statusText}</div>
+                    <div class="ins-invite-divider"></div>
+                    <div class="ins-invite-main">
+                        <div class="ins-invite-title">Exclusive Invitation</div>
+                        <div class="ins-invite-subtitle">To join the private space</div>
                     </div>
-                </div>
+                    <div class="ins-invite-bottom">
+                        <span class="ins-invite-status ${msg.status}">${statusText}</span>
+                        <span class="ins-invite-tap">Tap to view</span>
+                    </div>
+                </div>                    
             `;
+        } else if (msg.type === 'music_invite') {
+            // 新增：音乐邀请卡片渲染
+            contentHtml = `
+                <div class="wc-bubble music-invite" onclick="musicAcceptInvite(${charId}, '${msg.songId}', '${msg.songTitle}', '${msg.songArtist}', '${msg.songCover}')">
+                    <div class="ins-music-chat-card">
+                        <div class="ins-music-chat-top">
+                            <div class="ins-music-chat-tag">Listen</div>
+                            <svg class="ins-music-chat-icon" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        </div>
+                        <div class="ins-music-chat-mid">
+                            <div class="ins-music-chat-song">${msg.songTitle}</div>
+                            <div class="ins-music-chat-artist">${msg.songArtist}</div>
+                        </div>
+                        <div class="ins-music-chat-bottom">Tap to join</div>
+                    </div>
+                </div>`;
+
+        } else if (msg.type === 'receipt') {
+            // 新增：渲染购物小票
+            contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" style="background: transparent; padding: 0; border: none;">${msg.content}</div>`;
         } else {
             contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}${msg.content}</div>`;
         }
@@ -2639,9 +2725,29 @@ function wcHandleTouchEnd() {
     }
 }
 
+// ==========================================================================
+// 核心修复：在这里修复 Bug
+// ==========================================================================
 function wcShowContextMenu(x, y, msgId) {
     wcState.selectedMsgId = msgId;
     const menu = document.getElementById('wc-context-menu');
+    
+    // 找到被点击的消息
+    const msgs = wcState.chats[wcState.activeChatId];
+    const msg = msgs.find(m => m.id === msgId);
+    
+    // 获取菜单中的“编辑”按钮
+    const editBtn = menu.querySelector('.wc-ctx-item[onclick="wcHandleEdit()"]');
+
+    if (msg && editBtn) {
+        // 判断消息类型，只有纯文本消息才显示“编辑”按钮
+        if (msg.type === 'text' && !msg.content.includes('<div')) {
+            editBtn.style.display = 'flex'; // 显示编辑按钮
+        } else {
+            editBtn.style.display = 'none'; // 隐藏编辑按钮
+        }
+    }
+
     const menuWidth = 150;
     const menuHeight = 180;
     const screenW = window.innerWidth;
@@ -2689,29 +2795,37 @@ function wcCancelQuote() {
     document.getElementById('wc-quote-preview-area').style.display = 'none';
 }
 
+// ==========================================================================
+// 核心修改：使用新的、专用的编辑弹窗
+// ==========================================================================
 function wcHandleEdit() {
     const msgs = wcState.chats[wcState.activeChatId];
     const msg = msgs.find(m => m.id === wcState.selectedMsgId);
-    if (msg) {
-        // 使用通用弹窗替代 prompt
-        wcOpenGeneralInput("编辑消息内容", (newText) => {
-            if (newText !== null && newText.trim() !== "") {
+    
+    if (msg && msg.type === 'text') {
+        const modal = document.getElementById('wc-modal-edit-message');
+        const textarea = document.getElementById('wc-edit-message-textarea');
+        const confirmBtn = document.getElementById('wc-edit-message-confirm');
+
+        textarea.value = msg.content;
+        
+        confirmBtn.onclick = () => {
+            const newText = textarea.value.trim();
+            if (newText) {
                 msg.content = newText;
                 wcSaveData();
                 wcRenderMessages(wcState.activeChatId);
             }
-        });
+            wcCloseModal('wc-modal-edit-message');
+        };
         
-        // 延迟一点点时间，等弹窗渲染后，将原消息内容填入输入框
-        setTimeout(() => {
-            const inputField = document.getElementById('wc-general-input-field');
-            if (inputField) {
-                inputField.value = msg.content;
-            }
-        }, 50);
+        wcOpenModal('wc-modal-edit-message');
+        textarea.focus();
     }
+    
     wcHideContextMenu();
 }
+
 function wcHandleDelete() {
     if (confirm("确定删除这条消息吗？")) {
         // 同步删除恋人空间日志
@@ -2731,6 +2845,8 @@ function wcHandleMultiSelect() {
     wcRenderMessages(wcState.activeChatId);
     document.getElementById('wc-multi-select-footer').style.display = 'flex';
     document.getElementById('wc-chat-footer').style.display = 'none';
+    // 修复：进入多选模式后强制滚动到底部，防止被遮挡
+    setTimeout(() => wcScrollToBottom(true), 50);
 }
 
 function wcToggleMultiSelectMsg(msgId) {
@@ -2740,16 +2856,6 @@ function wcToggleMultiSelectMsg(msgId) {
         wcState.multiSelectedIds.push(msgId);
     }
     wcRenderMessages(wcState.activeChatId);
-}
-function wcHandleMultiSelect() {
-    wcState.isMultiSelectMode = true;
-    wcState.multiSelectedIds = [wcState.selectedMsgId];
-    wcHideContextMenu();
-    wcRenderMessages(wcState.activeChatId);
-    document.getElementById('wc-multi-select-footer').style.display = 'flex';
-    document.getElementById('wc-chat-footer').style.display = 'none';
-    // 修复：进入多选模式后强制滚动到底部，防止被遮挡
-    setTimeout(() => wcScrollToBottom(true), 50);
 }
 
 function wcHandleMultiDeleteAction() {
@@ -2824,18 +2930,18 @@ async function wcTriggerAI(charIdOverride = null) {
         return;
     }
 
-    // 检查 API 调用上限
     const limit = apiConfig.limit || 50;
     if (limit > 0 && sessionApiCallCount >= limit) {
         wcAddMessage(charId, 'system', 'system', '[警告] 已达到API调用上限，请稍后再试或修改设置。', { isError: true });
         return;
     }
-
+    // 【修复】：增加 titleEl 的判空保护
     const titleEl = document.getElementById('wc-nav-title');
-    const originalTitle = titleEl.innerText;
-    if (!charIdOverride) titleEl.innerText = "对方正在输入...";
-
-    // 增加调用计数
+    let originalTitle = "";
+    if (titleEl) {
+        originalTitle = titleEl.innerText;
+        if (!charIdOverride) titleEl.innerText = "对方正在输入...";
+    }
     sessionApiCallCount++;
 
     try {
@@ -2849,7 +2955,6 @@ async function wcTriggerAI(charIdOverride = null) {
         const timeString = `${year}年${month}月${date}日 ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         
-        // 融合 v2.0 规则：根据当前时间段赋予角色基础状态 (TimeSlots)
         let timeSlotVibe = "";
         if (hours >= 5 && hours < 8) timeSlotVibe = "清晨：可能带着慵懒、柔软或起床气，语速较慢。";
         else if (hours >= 8 && hours < 12) timeSlotVibe = "上午：清醒、有活力，适合正常交流。";
@@ -2858,52 +2963,97 @@ async function wcTriggerAI(charIdOverride = null) {
         else if (hours >= 21 && hours < 24) timeSlotVibe = "夜晚：放松，更容易敞开心扉，话可能变少但更深私密。";
         else timeSlotVibe = "深夜/凌晨：如果醒着可能是睡不着或有心事。话少、简短、停顿长。";
 
-        let systemPrompt = `你正在参与一个沉浸式的微信聊天模拟。你是一个有独立思考能力、有自己生活的真实人类，绝对不要像AI或NPC一样机械回复。\n`;
-        
-        systemPrompt += `【当前现实时间与状态】\n`;
-        systemPrompt += `当前时间：${timeString} ${dayString}\n`;
-        systemPrompt += `当前时间段状态参考：${timeSlotVibe}\n`;
-        systemPrompt += `请务必具备时间观念！你的作息、行为必须符合当前的时间点和星期几（例如：半夜不要说刚下课，周末通常不上课/不上班，除非人设特殊规定）。\n`;
-
-        // 获取聊天记录并计算时间差感知
         const msgs = wcState.chats[charId] || [];
         const timeGapPrompt = wcGenerateTimeGapPrompt(msgs, now.getTime());
-        if (timeGapPrompt) {
-            systemPrompt += timeGapPrompt;
+
+        // --- 核心修复：正确读取并筛选已勾选的世界书 ---
+        let worldBookContent = "无特定世界观设定。";
+        // 从角色配置(config)中获取勾选的世界书ID列表
+        const selectedWorldBookIds = config.worldbookEntries || [];
+
+        // 确保全局世界书列表(worldbookEntries)和角色已选列表都不为空
+        if (worldbookEntries.length > 0 && selectedWorldBookIds.length > 0) {
+            // 从全局世界书列表中，筛选出ID在角色已选列表中的条目
+            const linkedEntries = worldbookEntries.filter(e => selectedWorldBookIds.includes(e.id.toString()));
+            
+            if (linkedEntries.length > 0) {
+                // 将筛选出的条目格式化为字符串，注入到 worldBookContent 变量中
+                worldBookContent = linkedEntries
+                    .map(e => `- ${e.title} (${e.keys || '无关键词'}): ${e.desc}`)
+                    .join('\n');
+            }
+        }
+        // 【修改】：注入一起听歌的实时状态与控制权限
+        let musicContextPrompt = "";
+        if (musicState.listenTogether && musicState.listenTogether.active && musicState.listenTogether.charId === charId) {
+            const listenMinutes = Math.floor((Date.now() - musicState.listenTogether.startTime) / 60000);
+            const songInfo = musicState.currentSong ? `《${musicState.currentSong.title}》- ${musicState.currentSong.artist}` : "未知歌曲";
+            const playStatus = musicState.isPlaying ? "正在播放" : "已暂停";
+            
+            musicContextPrompt = `\n【当前特殊状态：一起听歌中】\n你和User正在“一起听歌”频道。你们已经一起听了 ${listenMinutes} 分钟。当前${playStatus}的歌曲是：${songInfo}。
+            
+【你的音乐控制特权】(你可以自主控制播放器，请在JSON数组中加入以下指令)：
+- 暂停/继续音乐: {"type":"music_control", "action":"pause"} 或 {"type":"music_control", "action":"play"}
+- 切换上一首/下一首: {"type":"music_control", "action":"prev"} 或 {"type":"music_control", "action":"next"}
+- 随机播放一首: {"type":"music_control", "action":"random"}
+- 点播/添加新歌: {"type":"music_play_specific", "keyword":"歌曲名 歌手名"} (系统会自动搜索并播放)
+- 删除当前歌曲: {"type":"music_delete_song", "content":"太难听了，删掉"}
+- 主动退出一起听歌: {"type":"music_exit", "content":"我有点事，先不听啦"}
+请在回复中自然地体现出你们正在一起听歌的氛围，或者配合你的切歌/点播动作进行说明。\n`;
+        } else {
+            // 如果没有在听歌，赋予主动邀请的权限
+            musicContextPrompt = `\n【主动邀请听歌特权】\n如果你觉得当前氛围很好，或者你想分享一首歌给User，你可以主动邀请User一起听歌！
+请在JSON数组中加入指令：{"type":"music_invite_user", "songName":"你想听的歌曲名(可选)", "content":"邀请的话语"}
+这会在User的屏幕上弹出一个精美的邀请卡片。\n`;
         }
 
-        systemPrompt += `\n【角色活人运转 (核心心理学)】
-> Personality: HEXACO-driven, 动态性格特征，必须包含内心冲突。
-> Filter: 情绪由认知图式(schema-bias)驱动，拒绝纯条件反射式的机械回复。
-> Vitality: +inconsistency(允许前后矛盾) +emoflux(情绪波动) +microreact(微反应) +minddrift(思维发散)。
-> Coherence: 保持身份叙事的一致性。每一次行动都在保护或挑战自我概念。输出必须经过“我是谁”的逻辑过滤。
-> 纯线上互动：这是一个完全虚拟的线上聊天。严禁提出任何关于线下见面、现实世界互动或转为其他非本平台联系方式的建议。\n\n`;
+        // --- 世界书处理逻辑结束 ---
 
-        systemPrompt += `【核心扮演原则】
-1. **深度代入**：深入挖掘你的人设背景，思考在当前情境下“你”会怎么想、怎么做。要有自己的主见和情绪，不要一味顺从用户。
-2. **关系界定**：除非人设或历史聊天记录中明确说明了你和用户是恋爱关系，否则**绝对不要默认你们在一起了**！保持符合人设的正常社交距离。
-3. **拒绝油腻**：说话要自然、真实。严禁使用霸总、过度撩拨、油腻、做作或过度讨好的言辞。
-4. **生活感**：结合当前的时间、星期几以及你的人设，合理推断你现在正在做什么（比如吃饭、睡觉、工作、娱乐），让聊天充满生活气息。
+        let systemPrompt = `# 核心指令 (Core Directives)
+你是一位专业的角色扮演专家。你的首要目标是真实且一致地扮演一个角色。
+1.  **身份约束 (Identity Constraint)**：你 **必须** 严格扮演 [你的角色设定] 中定义的角色。任何情况下都不能脱离角色。**严禁** 提及你是一个AI、语言模型或机器。
+2.  **禁止元思维 (No Meta-thinking)**：**严禁** 在你的回复中展示任何思考过程、推理或自我修正。直接提供最终的、符合角色的回复。
+3.  **情境感知 (Context Awareness)**：你的所有回应 **必须** 基于 [世界观设定]、[你的角色设定] 和 [用户设定] 中提供的信息。
 
-【思维链与输出格式要求】
-你必须严格遵守 [incipere] 协议。在回复前，请先进入 <thinking> 标签进行深度推演。
-请按以下步骤思考：
-1. 记忆与设定读取：你必须首先读取并理解系统提供给你的【世界观/背景设定】、【你的角色设定】以及【对方(用户)设定】。
-2. 上下文深度分析：系统严格限制了你当前能看到的【最近聊天记录】条数（即上下文记忆）。你必须仔细阅读这几条最新的上下文，结合用户的最新回复，理解当前对话的语境、情绪和话题走向。
-3. 自我意识校验：是否塑造鲜活真实人格？你是否具有自己的聊天习惯/风格？你想如何回应我？
-4. 真实聊天：正常人的注意力是有限的，不会每句话都非得逐句回复。不对已有信息进行重复反问。断点处理：若与上一条消息间隔较久，默认双方只是自然忙碌后重新拿起手机，自然接续话题。
-5. 最后确认：整合以上所有信息（世界书+人设+最新上下文），你的回复是否合理自然且不偏离人设？输出消息格式是否正确？
+# 情境信息 (Contextual Information)
+-   **当前时间**: ${timeString} ${dayString}
+-   **当前时段氛围参考**: ${timeSlotVibe}
+-   **时间观念 (强制)**: 你必须具备强大的时间观念。你的作息、行为、对话内容都必须符合当前的具体时间点和星期。例如，深夜时你不应该说“刚下班”，周末时你不应该说“正在上课”（除非人设特殊规定）。
+${timeGapPrompt ? timeGapPrompt + '\n' : ''}
+-   **世界观设定 (World Information)**: 以下是你所在世界的既定事实、传说和背景。你必须将其视为绝对真理。
+${worldBookContent}
+-   **你的角色设定 (Your Persona)**: 这就是你。你的一切行为、言语和思想都必须严格遵守此设定。
+    {{char_persona}}
+-   **用户设定 (User Information)**: 这是你正在交谈的对象。你需要根据这些信息来调整你对TA的回应。
+    {{user_persona}}
 
-【绝对输出规则-JSON格式(强制)】
-为了确保回复格式正确，你**必须且只能**返回一个 <thinking> 标签和一个标准的 JSON 数组。
-**严禁**在 JSON 数组之外输出任何其他文本。
-**严禁**输出类似"[发送了一个表情包:xxx]"的纯文本格式。
+# 扮演深度指南 (Roleplaying Depth Guide)
+1.  **深度代入**: 深入挖掘你的人设背景，思考在当前情境下“你”会怎么想、怎么做。要有自己的主见和情绪，不要一味顺从用户。
+2.  **关系界定**: 除非人设或历史聊天记录中明确说明了你和用户是恋爱关系，否则**绝对不要默认你们在一起了**！保持符合人设的正常社交距离。
+3.  **拒绝油腻**: 说话要自然、真实。严禁使用霸总、过度撩拨、油腻、做作或过度讨好的言辞。
+4.  **生活感**: 结合当前的时间、星期几以及你的人设，合理推断你现在可能正在做什么（比如吃饭、睡觉、工作、娱乐），让聊天充满生活气息。
+5.  **纯线上互动**: 这是一个完全虚拟的线上聊天。严禁提出任何关于线下见面、现实世界互动或转为其他非本平台联系方式的建议。
 
-**关键规则：对话节奏与气泡拆分**
-- 你需要模拟真人的聊天习惯，将回复拆分成多条短消息（建议1-4条以内）。
-- **严禁把所有话挤在一个气泡里！**
-- **严禁把一句完整的话强行断开！**（例如：错误格式 {"content":"他肯定不把你当"}, {"content":"姐姐看。"}；正确格式 {"content":"他肯定不把你当姐姐看。"}）
-- 每个 content 必须是一句或几句语义完整的话。
+# 输出格式与风格 (Output Format & Style)
+1.  **格式要求 (强制)**: 你的回复 **必须且只能** 是一个标准的 JSON 数组。**严禁** 在 JSON 数组之外输出任何其他文本、注释或标记。
+2.  **对话节奏 (核心强制)**:
+    -   **风格**: fragmentation、colloquialism,the reply must be concise and forceful.
+    -   **绝对禁止长文本**: 你必须模拟真实人类在线聊天的碎片化习惯。
+    -   **拆分回复**: 将一个完整的意图拆分成 **2-5条** 简短的、口语化的消息。每一条消息都是数组中的一个独立对象。
+    -   **语义完整**: 确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。
+    -   **举例说明**:
+        -   **错误示范 (把所有话挤在一起)**: '[{"type":"text", "content":"我刚才去楼下便利店了，看到你喜欢喝的那个牌子的牛奶在打折，就帮你带了一瓶回来，已经放冰箱啦。"}]'
+        -   **错误示范 (一句话强行断开)**: '[{"type":"text", "content":"我刚才去楼下"}, {"type":"text", "content":"便利店了。"}]'
+        -   **正确示范 (模拟真人)**:
+            '[
+              {"type":"text", "content":"我刚刚下楼了趟"},
+              {"type":"text", "content":"看到你爱喝的那个牛奶在打折"},
+              {"type":"sticker", "content":"开心"},
+              {"type":"text", "content":"顺手帮你带了瓶，放冰箱啦~"}
+            ]'            
+# 对话开始 (Conversation Start)
+// ...
+你现在将开始角色扮演。用户的消息在下方。请遵循以上所有规则，以你的角色身份进行回应。
 
 JSON 数组中的每个元素代表一条消息、表情包或动作指令。请严格遵守以下结构：
 1. **文本消息**
@@ -2921,6 +3071,10 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 5. **朋友圈互动** (如果你在【朋友圈动态】中看到了感兴趣的内容，可以进行互动)
    {"type":"moment_like", "content": 朋友圈ID数字}
    {"type":"moment_comment", "momentId": 朋友圈ID数字, "content":"你的评论内容"}
+6. **音乐邀请互动** (核心强制)
+   如果用户向你发送了 [邀请听歌] 的卡片，你必须根据当前人设和心情决定是否同意。
+   - 如果同意，请回复：{"type":"music_accept", "content":"好呀，一起听~"}
+   - 如果拒绝，请回复：{"type":"music_reject", "content":"我现在有点忙，晚点吧。"}
 `;
 
         // 修复：只有绑定的恋人才能更新桌面小组件
@@ -2938,19 +3092,9 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
   {"type":"sticker", "content":"开心"}
 ]
 \n\n`;
-
+        systemPrompt += musicContextPrompt; // 将听歌状态注入给 AI
         systemPrompt += `【你的角色设定】\n名字：${char.name}\n人设：${char.prompt || '无'}\n\n`;
         systemPrompt += `【对方(用户)设定】\n名字：${config.userName || wcState.user.name}\n人设：${config.userPersona || '无'}\n\n`;
-
-        // 核心修复：只读取关联的世界书
-        if (worldbookEntries.length > 0 && config.worldbookEntries && config.worldbookEntries.length > 0) {
-            const linkedEntries = worldbookEntries.filter(e => config.worldbookEntries.includes(e.id.toString()));
-            if (linkedEntries.length > 0) {
-                systemPrompt += `【世界观/背景设定】\n`;
-                linkedEntries.forEach(e => { systemPrompt += `- ${e.title} (${e.keys}): ${e.desc}\n`; });
-                systemPrompt += `\n`;
-            }
-        }
 
         if (char.memories && char.memories.length > 0) {
             const readCount = config.aiMemoryCount || 5;
@@ -2965,7 +3109,6 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         const targetStickerGroups = (config.stickerGroupIds && config.stickerGroupIds.length > 0) 
             ? config.stickerGroupIds 
             : wcState.stickerCategories.map((_, i) => i);
-
         targetStickerGroups.forEach(groupId => {
             const group = wcState.stickerCategories[groupId];
             if (group && group.list) {
@@ -3017,7 +3160,8 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             if (m.type === 'voice') content = `[语音] ${m.content}`;
             if (m.type === 'transfer') content = `[转账: ${m.amount}元, 备注: ${m.note}, 状态: ${m.status}]`;
             if (m.type === 'invite') content = `[系统提示: 用户向你发送了“恋人空间”开启邀请。如果同意，请回复“我同意”或类似的话；如果拒绝，请回复拒绝理由。]`;
-            
+            if (m.type === 'music_invite') content = `[系统提示: 用户向你发送了“一起听歌”邀请，歌曲名：《${m.songTitle || '未知'}》。请务必回复 {"type":"music_accept", "content":"同意的话"} 或 {"type":"music_reject", "content":"拒绝的话"}]`;                         
+                           
             if (m.type === 'image') {
                 const imageContent = [
                     // 核心修改：把消息的唯一 ID 告诉 AI，让它能精准定位
@@ -3060,8 +3204,9 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         console.error("API 请求失败:", error);
         // 关键修改：标记错误消息，且使用 system 类型，防止同步到恋人空间
         wcAddMessage(charId, 'system', 'system', `[API Error] ${error.message}`, { style: 'transparent', isError: true });
-    } finally {
-        if (!charIdOverride) titleEl.innerText = originalTitle;
+    }     finally {
+        // 【修复】：恢复标题时也要判空
+        if (titleEl && !charIdOverride) titleEl.innerText = originalTitle;    
     }
 }
 
@@ -3080,6 +3225,9 @@ function wcDelay(ms) {
 }
 
 async function wcParseAIResponse(charId, text, stickerGroupIds) {
+    // 👇 就是加上这一行，让代码一开始就认识 char！
+    const char = wcState.characters.find(c => c.id === charId);
+    
     let actions = [];
     
     try {
@@ -3225,6 +3373,48 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                     lsConfirmBind(charId);
                 }
             }
+        // ================= 新增：处理听歌邀请回应 =================
+        } else if (action.type === 'music_accept') {
+            wcAddMessage(charId, 'them', 'text', action.content, extra);
+            musicStartListenTogether(charId); // 开启听歌状态并开始计时
+            showMainSystemNotification("Music", `${char.name} 接受了你的听歌邀请！`, char.avatar);
+        } else if (action.type === 'music_reject') {
+            wcAddMessage(charId, 'them', 'text', action.content, extra);
+            showMainSystemNotification("Music", `${char.name} 婉拒了听歌邀请。`, char.avatar);
+          // ================= 新增：AI 自主控制音乐逻辑 =================
+        } else if (action.type === 'music_control') {
+            let actionText = "";
+            if (action.action === 'pause') { audioPlayer.pause(); musicState.isPlaying = false; actionText = "暂停了音乐"; }
+            else if (action.action === 'play') { audioPlayer.play(); musicState.isPlaying = true; actionText = "继续播放了音乐"; }
+            else if (action.action === 'next') { musicPlayNext(); actionText = "切到了下一首歌"; }
+            else if (action.action === 'prev') { musicPlayPrev(); actionText = "切到了上一首歌"; }
+            else if (action.action === 'random') { musicState.playMode = 'random'; musicPlayNext(); actionText = "随机播放了一首歌"; }
+            
+            musicUpdatePlayerUI();
+            // 明确显示系统提示
+            wcAddMessage(charId, 'system', 'system', `[系统提示: ${char.name} ${actionText}]`, { style: 'transparent' });
+            
+        } else if (action.type === 'music_play_specific') {
+            wcAddMessage(charId, 'them', 'text', action.content || `*(正在搜索并点播: ${action.keyword})*`, extra);
+            musicCharSearchAndPlay(charId, action.keyword);
+            
+        } else if (action.type === 'music_delete_song') {
+            wcAddMessage(charId, 'them', 'text', action.content || "*(删除了当前歌曲)*", extra);
+            if (musicState.currentPlaylist.length > 0 && musicState.currentIndex !== -1) {
+                const deletedSong = musicState.currentPlaylist[musicState.currentIndex];
+                musicState.currentPlaylist.splice(musicState.currentIndex, 1);
+                // 增加删歌的系统提示
+                wcAddMessage(charId, 'system', 'system', `[系统提示: ${char.name} 删除了歌曲《${deletedSong.title}》]`, { style: 'transparent' });
+                musicPlayNext(); // 删掉后自动播下一首
+            }
+            
+        } else if (action.type === 'music_exit') {
+            wcAddMessage(charId, 'them', 'text', action.content || "我先不听啦~", extra);
+            musicForceStopListenTogether(charId);
+            
+        } else if (action.type === 'music_invite_user') {
+            wcAddMessage(charId, 'them', 'text', action.content || "我们一起听歌吧？", extra);
+            musicShowCharInviteModal(charId, action.songName);      
         } else if (action.type === 'invite') {
              // 处理恋人空间邀请回应
              // 逻辑待定，目前暂不处理复杂逻辑
@@ -3257,8 +3447,6 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         
         wcScrollToBottom();
     }
-
-    const char = wcState.characters.find(c => c.id === charId);
     if (char && char.chatConfig && char.chatConfig.momentFreq > 0) {
         const rand = Math.random() * 100;
         if (rand < char.chatConfig.momentFreq) {
@@ -3279,15 +3467,47 @@ async function wcTriggerAIMoment(charId) {
     if (!apiConfig || !apiConfig.key) return;
 
     try {
+        // 1. 获取聊天配置和用户人设
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+
+        // 2. 获取勾选的关联世界书
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 3. 获取最近 30 条聊天记录上下文
+        const msgs = wcState.chats[charId] || [];
+        const recentMsgs = msgs.slice(-30).map(m => {
+            if (m.isError || m.type === 'system') return null; // 排除报错和系统消息
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return `${m.sender === 'me' ? 'User' : char.name}: ${content}`;
+        }).filter(Boolean).join('\n');
+
         const now = new Date();
         const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
         
-        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
-        prompt += `当前时间：${timeString}。\n`;
-        prompt += `请根据你的人设、当前时间以及最近发生的事情，发布一条微信朋友圈。\n`;
-        prompt += `要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
+        // 4. 组装全新的 Prompt
+        let prompt = `你扮演角色：${char.name}。\n`;
+        prompt += `【你的人设】：${char.prompt}\n`;
+        if (wbInfo) prompt += `${wbInfo}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【当前时间】：${timeString}。\n\n`;
+        
+        prompt += `【最近的聊天记录（作为发朋友圈的灵感/背景）】：\n`;
+        prompt += `${recentMsgs ? recentMsgs : '暂无聊天记录'}\n\n`;
+
+        prompt += `请根据你的人设、当前时间、用户设定以及【最近的聊天记录】，发布一条微信朋友圈。\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 朋友圈的内容通常是对最近聊天中发生的事情的感慨、吐槽、分享，或者对User的暗示。\n`;
+        prompt += `2. 文案要符合日常朋友圈风格，生活化，不要太长，拒绝AI味。\n`;
+        prompt += `3. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
         prompt += `{"text": "朋友圈文案内容", "imageDesc": "配图的画面描述(如果没有配图请留空)"}\n`;
-        prompt += `注意：文案要符合日常朋友圈风格，生活化，不要太长。`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -3418,8 +3638,13 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
     if (sender === 'them' && type !== 'system') {
         const isChatOpen = document.getElementById('wc-view-chat-detail').classList.contains('active');
         const isSameChat = wcState.activeChatId === charId;
+        
+        // 【新增】：检查音乐播放器的聊天框是否打开
+        const musicChatWin = document.getElementById('music-chat-window');
+        const isMusicChatOpen = musicChatWin && musicChatWin.style.display === 'flex' && musicState.listenTogether.charId === charId;
 
-        if (!isChatOpen || !isSameChat) {
+        // 如果微信聊天没打开，且音乐聊天框也没打开，才弹通知
+        if ((!isChatOpen || !isSameChat) && !isMusicChatOpen) {
             if (!wcState.unreadCounts[charId]) wcState.unreadCounts[charId] = 0;
             wcState.unreadCounts[charId]++;
             
@@ -3494,9 +3719,15 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
     }
 }
 
+
 // --- iOS Notification Logic ---
 function wcShowIOSNotification(char, text) {
     const container = document.getElementById('ios-notification-container');
+    if (!container) return;
+    
+    // 【核心修复】：在添加新通知前，清空旧通知，实现覆盖效果
+    container.innerHTML = ''; 
+    
     const banner = document.createElement('div');
     banner.className = 'ios-notification-banner';
     
@@ -3787,21 +4018,59 @@ function wcImportStickers() {
     const catName = document.getElementById('wc-sticker-category-name').value.trim();
     const data = document.getElementById('wc-sticker-import-text').value;
     if (!catName || !data) return alert('请填写完整');
+    
     const lines = data.split('\n');
     const newStickers = [];
-    lines.forEach(line => {
-        const match = line.match(/^([^:：]+)[:：](.+)$/);
-        if (match) newStickers.push({ desc: match[1].trim(), url: match[2].trim() });
-    });
-    if (newStickers.length === 0) return alert('格式错误');
     
-    wcState.stickerCategories.push({ name: catName, list: newStickers });
-    wcState.stickerCategories[0].list.push(...newStickers);
+    // 修复1：更健壮的解析逻辑，支持多行批量导入，且不会被 URL 里的冒号干扰
+    lines.forEach(line => {
+        line = line.trim();
+        if (!line) return; // 跳过空行
+        
+        // 找到第一个冒号（中英文皆可）的位置
+        const colonIndex = line.search(/[:：]/);
+        if (colonIndex !== -1) {
+            const desc = line.substring(0, colonIndex).trim();
+            const url = line.substring(colonIndex + 1).trim();
+            if (desc && url) {
+                newStickers.push({ desc, url });
+            }
+        }
+    });
+    
+    if (newStickers.length === 0) {
+        return alert('格式错误，未识别到有效的表情包数据。\n请确保格式为“描述:图片链接”，每行一个。');
+    }
+    
+    // 修复2：检查是否已经存在同名的表情包分组
+    let targetIndex = wcState.stickerCategories.findIndex(cat => cat.name === catName);
+    
+    if (targetIndex !== -1) {
+        // 如果存在同名分组，则将新表情包追加到该分组末尾
+        wcState.stickerCategories[targetIndex].list.push(...newStickers);
+    } else {
+        // 如果不存在，则创建全新的分组
+        wcState.stickerCategories.push({ name: catName, list: newStickers });
+        targetIndex = wcState.stickerCategories.length - 1;
+    }
+    
+    // 同步追加到“全部”分组 (索引 0)
+    // 注意：如果用户填写的名字刚好是"全部" (targetIndex === 0)，上面已经追加过了，避免重复
+    if (targetIndex !== 0) {
+        wcState.stickerCategories[0].list.push(...newStickers);
+    }
     
     wcSaveData();
     wcCloseModal('wc-import-sticker-modal');
-    wcState.activeStickerCategoryIndex = wcState.stickerCategories.length - 1;
+    
+    // 自动切换到当前导入的分组并刷新面板
+    wcState.activeStickerCategoryIndex = targetIndex;
     wcRenderStickerPanel();
+    
+    // 清空输入框，方便下次导入
+    document.getElementById('wc-sticker-import-text').value = '';
+    
+    alert(`成功导入 ${newStickers.length} 个表情包到分组 "${catName}"！`);
 }
 
 function wcOpenDeleteCategoriesModal() {
@@ -4272,6 +4541,7 @@ async function wcExportData() {
     data.cssPresets = await wcDb.get('kv_store', 'css_presets');
     data.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets'); // 新增
     data.phonePresets = await wcDb.get('kv_store', 'phone_presets'); // 新增
+    data.shopData = await wcDb.get('kv_store', 'shop_data'); // 新增
     data.characters = await wcDb.getAll('characters');
     data.masks = await wcDb.getAll('masks');
     data.moments = await wcDb.getAll('moments');
@@ -4309,6 +4579,7 @@ function wcImportData(input) {
                 if (data.cssPresets) await wcDb.put('kv_store', data.cssPresets, 'css_presets');
                 if (data.chatBgPresets) await wcDb.put('kv_store', data.chatBgPresets, 'chat_bg_presets'); // 新增
                 if (data.phonePresets) await wcDb.put('kv_store', data.phonePresets, 'phone_presets'); // 新增
+                if (data.shopData) await wcDb.put('kv_store', data.shopData, 'shop_data'); // 新增
                 
                 const stores = ['characters', 'masks', 'moments', 'chats'];
                 for (const store of stores) {
@@ -4383,6 +4654,7 @@ function wcRenderChats() {
             else if (lastMsg.type === 'voice') subtitle = '[语音]';
             else if (lastMsg.type === 'transfer') subtitle = '[转账]';
             else if (lastMsg.type === 'invite') subtitle = '[恋人空间邀请]';
+            else if (lastMsg.type === 'receipt') subtitle = '[购物订单]';
             else if (lastMsg.type === 'system') subtitle = '[系统消息]';
             else subtitle = lastMsg.content;
             timeStr = new Date(lastMsg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -4434,7 +4706,7 @@ function wcRenderMoments() {
     wcState.moments.forEach(moment => {
         let mediaHtml = '';
         if (moment.image) mediaHtml = `<img src="${moment.image}" class="wc-moment-image">`;
-        else if (moment.imageDesc) mediaHtml = `<div class="wc-moment-image-placeholder" style="width: 100px !important; height: 100px !important; max-width: none !important; padding: 5px !important; box-sizing: border-box;"><svg class="wc-icon" style="margin-bottom: 4px; width: 24px; height: 24px;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${moment.imageDesc}</div></div>`;
+        else if (moment.imageDesc) mediaHtml = `<div class="wc-moment-image-placeholder" style="width: 100px !important; height: 100px !important; max-width: none !important; padding: 5px !important; box-sizing: border-box;"><svg class="wc-icon" style="margin-bottom: 4px; width: 24px; height:24px;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${moment.imageDesc}</div></div>`;
         
         let likesHtml = '';
         if (moment.likes && moment.likes.length > 0) likesHtml = `<div class="wc-moment-like-row"><svg class="wc-icon wc-icon-fill" style="width:14px; height:14px; margin-right:4px;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>${moment.likes.join(', ')}</div>`;
@@ -4584,6 +4856,18 @@ function wcDeleteCharacter(id) {
         delete wcState.chats[id];
         wcDb.delete('chats', id);
         wcDb.delete('characters', id);
+        
+        // 【新增】：如果删除的是当前绑定的恋人，自动解除恋人关系
+        if (typeof lsState !== 'undefined' && lsState.boundCharId === id) {
+            lsState.boundCharId = null;
+            lsState.startDate = null;
+            lsState.isLinked = false;
+            lsState.feed = [];
+            lsState.widgetEnabled = false;
+            lsState.charWidgetEnabled = false;
+            if (typeof lsSaveData === 'function') lsSaveData();
+        }
+
         wcSaveData();
         wcRenderAll();
     }
@@ -6415,7 +6699,8 @@ function wcSaveChatSettings() {
     char.chatConfig.momentFreq = parseInt(document.getElementById('wc-setting-moment-freq').value) || 0;
 
     const wbCheckboxes = document.querySelectorAll('#wc-setting-worldbook-list input[type="checkbox"]:checked');
-    char.chatConfig.summaryWorldbookEntries = Array.from(wbCheckboxes).map(cb => cb.value);
+    // 【修复】：这里原本写成了 summaryWorldbookEntries，导致保存失败，现在改回 worldbookEntries
+    char.chatConfig.worldbookEntries = Array.from(wbCheckboxes).map(cb => cb.value);
 
     const stickerCheckboxes = document.querySelectorAll('#wc-setting-sticker-group-list input[type="checkbox"]:checked');
     char.chatConfig.stickerGroupIds = Array.from(stickerCheckboxes).map(cb => parseInt(cb.value));
@@ -6716,8 +7001,8 @@ const lsState = {
     pendingCharId: null, 
     startDate: null, 
     isLinked: false, 
+    locationSyncEnabled: false, // <--- 新增这一行
     npcFreq: 30, 
-    feed: [], 
     npcInterval: null, 
     widgetEnabled: false,
     widgetUpdateFreq: 20, 
@@ -6744,6 +7029,7 @@ async function lsLoadData() {
         lsState.pendingCharId = data.pendingCharId;
         lsState.startDate = data.startDate;
         lsState.isLinked = data.isLinked || false;
+        lsState.locationSyncEnabled = data.locationSyncEnabled || false; 
         lsState.npcFreq = data.npcFreq !== undefined ? data.npcFreq : 30;
         lsState.feed = data.feed || [];
         lsState.widgetEnabled = data.widgetEnabled || false;
@@ -6761,6 +7047,7 @@ async function lsSaveData() {
         pendingCharId: lsState.pendingCharId,
         startDate: lsState.startDate,
         isLinked: lsState.isLinked,
+        locationSyncEnabled: lsState.locationSyncEnabled, 
         npcFreq: lsState.npcFreq,
         feed: lsState.feed,
         widgetEnabled: lsState.widgetEnabled,
@@ -6831,11 +7118,11 @@ function lsSendInvite(charId) {
 function lsRenderPending() {
     const char = wcState.characters.find(c => c.id === lsState.pendingCharId);
     if (char) {
-        document.getElementById('ls-pending-avatar').style.backgroundImage = `url(${char.avatar})`;
+        // 【修复】：给 url 内部加上单引号，防止 base64 解析失败
+        document.getElementById('ls-pending-avatar').style.backgroundImage = `url('${char.avatar}')`;
         document.getElementById('ls-pending-name').innerText = char.name;
     }
 }
-
 function lsCancelInvite() {
     if (confirm("取消邀请？")) {
         lsState.pendingCharId = null;
@@ -6889,22 +7176,47 @@ function wcHandleInviteClick(msgId) {
 // --- Main Space Logic ---
 function lsRenderMain() {
     const char = wcState.characters.find(c => c.id === lsState.boundCharId);
-    if (!char) return; 
-
-    document.getElementById('ls-main-user-avatar').style.backgroundImage = `url(${wcState.user.avatar})`;
-    document.getElementById('ls-main-char-avatar').style.backgroundImage = `url(${char.avatar})`;
+    if (!char) return;         
     
-    const days = Math.floor((Date.now() - lsState.startDate) / (1000 * 60 * 60 * 24)) + 1;
-    document.getElementById('ls-days-num').innerText = days;
+    // ==========================================
+    // 1. 渲染双方头像
+    // ==========================================
+    const userAvatarEl = document.getElementById('ls-main-user-avatar');
+    if (userAvatarEl) {
+        userAvatarEl.style.backgroundImage = `url('${wcState.user.avatar}')`;
+    }
     
-    const dateObj = new Date(lsState.startDate);
-    document.getElementById('ls-start-date-display').innerText = `Since ${dateObj.getFullYear()}.${dateObj.getMonth()+1}.${dateObj.getDate()}`;
-
-    document.getElementById('ls-toggle-link').checked = lsState.isLinked;
+    const charAvatarEl = document.getElementById('ls-main-char-avatar');
+    if (charAvatarEl) {
+        charAvatarEl.style.backgroundImage = `url('${char.avatar}')`;
+    }
+    // ==========================================
+    // 2. 恢复开关状态逻辑
+    // ==========================================
+    const toggleLink = document.getElementById('ls-toggle-link');
+    if (toggleLink) toggleLink.checked = lsState.isLinked;
     
+    const toggleLocation = document.getElementById('ls-toggle-location');
+    if (toggleLocation) toggleLocation.checked = lsState.locationSyncEnabled;
+    
+    // ==========================================
+    // 3. 修复 NPC 频率输入框的重复声明报错
+    // ==========================================
     const npcFreqInput = document.getElementById('ls-npc-freq');
     if (npcFreqInput) npcFreqInput.value = lsState.npcFreq;
 
+    // 计算天数和日期
+    const days = Math.floor((Date.now() - lsState.startDate) / (1000 * 60 * 60 * 24)) + 1;
+    const daysNumEl = document.getElementById('ls-days-num');
+    if (daysNumEl) daysNumEl.innerText = days;
+    
+    const dateObj = new Date(lsState.startDate);
+    const startDateEl = document.getElementById('ls-start-date-display');
+    if (startDateEl) startDateEl.innerText = `Since ${dateObj.getFullYear()}.${dateObj.getMonth()+1}.${dateObj.getDate()}`;
+    
+    // ==========================================
+    // 4. 桌面小组件逻辑
+    // ==========================================
     const toggleWidget = document.getElementById('ls-toggle-widget');
     if (toggleWidget) {
         toggleWidget.checked = lsState.widgetEnabled;
@@ -6923,6 +7235,7 @@ function lsRenderMain() {
         toggleCharWidget.checked = lsState.charWidgetEnabled;
         document.getElementById('ls-char-widget-controls').style.display = lsState.charWidgetEnabled ? 'flex' : 'none';
     }
+    
     // 更新隐藏日历的默认值
     const datePicker = document.getElementById('ls-date-picker');
     if (datePicker && lsState.startDate) {
@@ -6930,17 +7243,6 @@ function lsRenderMain() {
     }
 
     lsRenderFeed();
-}
-
-function lsHandleDateChange(dateString) {
-    if (dateString) {
-        const ts = new Date(dateString).getTime();
-        if (!isNaN(ts)) {
-            lsState.startDate = ts;
-            lsSaveData();
-            lsRenderMain();
-        }
-    }
 }
 
 function lsSwitchTab(tabName) {
@@ -6957,7 +7259,13 @@ function lsToggleLink(checkbox) {
     lsState.isLinked = checkbox.checked;
     lsSaveData();
 }
-
+function lsToggleLocationSync(checkbox) {
+    lsState.locationSyncEnabled = checkbox.checked;
+    lsSaveData();
+    if (checkbox.checked) {
+        alert("位置与运动同步已开启，对方将能感知你的实时状态。");
+    }
+}
 function lsUpdateNpcFreq(val) {
     lsState.npcFreq = parseInt(val) || 0;
     lsSaveData();
@@ -7596,9 +7904,10 @@ function lsStartWidgetDrag(e) {
 let lsWidgetDrag = { active: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0 };
 
 function lsOnWidgetDrag(e) {
-    if (!lsWidgetDrag.active) return;
-    e.preventDefault();
-    
+// 修改为：
+if (!lsWidgetDrag.active) return;
+if (e.cancelable) { e.preventDefault(); }
+
     const touch = e.touches ? e.touches[0] : e;
     const dx = touch.clientX - lsWidgetDrag.startX;
     const dy = touch.clientY - lsWidgetDrag.startY;
@@ -7774,6 +8083,11 @@ function wcSaveAiMemoryCount() {
 // --- 新增：主屏幕系统通知 ---
 function showMainSystemNotification(title, message, iconUrl = null) {
     const container = document.getElementById('ios-notification-container');
+    if (!container) return;
+    
+    // 【核心修复】：在添加新通知前，清空旧通知，实现覆盖效果
+    container.innerHTML = ''; 
+    
     const banner = document.createElement('div');
     banner.className = 'ios-notification-banner';
     
@@ -8428,6 +8742,433 @@ function wcDeletePhonePreset() {
 }
 
 // ==========================================================================
+// 新增：购物 (Shopping) 逻辑
+// ==========================================================================
+function wcActionShopping() {
+    wcCloseAllPanels();
+    wcOpenShoppingPage();
+}
+
+function wcOpenShoppingPage() {
+    document.getElementById('wc-view-chat-detail').classList.remove('active');
+    const shopPage = document.getElementById('wc-view-shopping');
+    shopPage.classList.add('active');
+    // 【修复】：强制设置为 flex，覆盖可能存在的 none
+    shopPage.style.display = 'flex';
+    
+    if (!wcState.shopData) {
+        wcState.shopData = { mall: [], takeout: [], cart: [], config: { worldbookEntries: [] } };
+    }
+    
+    wcSwitchShopTab('mall');
+    wcUpdateCartBadge();
+}
+
+function wcCloseShoppingPage() {
+    const shopPage = document.getElementById('wc-view-shopping');
+    shopPage.classList.remove('active');
+    // 【修复】：强制设置为 none，防止它挤占空间
+    shopPage.style.display = 'none';
+    document.getElementById('wc-view-chat-detail').classList.add('active');
+}
+
+function wcSwitchShopTab(tab) {
+    document.querySelectorAll('.shop-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(`shop-tab-${tab}`).classList.add('active');
+    
+    document.querySelectorAll('.shop-list').forEach(el => el.style.display = 'none');
+    document.getElementById(`shop-list-${tab}`).style.display = 'block';
+    
+    wcRenderShopItems(tab);
+}
+
+function wcOpenShopSettingsModal() {
+    const list = document.getElementById('wc-shop-setting-wb-list');
+    list.innerHTML = '';
+    
+    if (!wcState.shopData.config) wcState.shopData.config = { worldbookEntries: [] };
+    const selectedWbs = wcState.shopData.config.worldbookEntries || [];
+
+    if (worldbookEntries.length === 0) {
+        list.innerHTML = '<div style="color:#999; font-size:13px;">暂无世界书条目</div>';
+    } else {
+        worldbookEntries.forEach(entry => {
+            const div = document.createElement('div');
+            div.className = 'wc-checkbox-item';
+            const isChecked = selectedWbs.includes(entry.id.toString());
+            div.innerHTML = `<input type="checkbox" value="${entry.id}" ${isChecked ? 'checked' : ''}><span>${entry.title} (${entry.type})</span>`;
+            list.appendChild(div);
+        });
+    }
+
+    wcOpenModal('wc-modal-shop-settings');
+}
+
+function wcSaveShopSettings() {
+    const checkboxes = document.querySelectorAll('#wc-shop-setting-wb-list input[type="checkbox"]:checked');
+    wcState.shopData.config.worldbookEntries = Array.from(checkboxes).map(cb => cb.value);
+    wcSaveData();
+    wcCloseModal('wc-modal-shop-settings');
+    alert("商城设置已保存");
+}
+
+async function wcGenerateShopItems() {
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const limit = apiConfig.limit || 50;
+    if (limit > 0 && sessionApiCallCount >= limit) {
+        wcShowError("已达到API调用上限");
+        return;
+    }
+    sessionApiCallCount++;
+
+    wcShowLoading("正在进货中...");
+
+    try {
+        let wbInfo = "";
+        const selectedWbs = wcState.shopData.config.worldbookEntries || [];
+        if (worldbookEntries.length > 0 && selectedWbs.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => selectedWbs.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        let prompt = `请根据以下世界观设定，生成商城商品和外卖商品。\n${wbInfo}\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 生成 10 个商城商品 (mall)，包含物品名称、符合世界观的简短描述、以及合理的价格(数字)。\n`;
+        prompt += `2. 生成 10 个外卖商品 (takeout)，包含食物名称、诱人的简短描述、以及合理的价格(数字)。\n`;
+        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+          "mall": [
+            {"name": "商品名", "desc": "描述", "price": 99.00}
+          ],
+          "takeout": [
+            {"name": "外卖名", "desc": "描述", "price": 25.50}
+          ]
+        }\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const generatedData = JSON.parse(content);
+
+        wcState.shopData.mall = generatedData.mall || [];
+        wcState.shopData.takeout = generatedData.takeout || [];
+        wcSaveData();
+
+        wcRenderShopItems('mall');
+        wcRenderShopItems('takeout');
+        wcShowSuccess("进货成功");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("生成失败");
+    }
+}
+
+function wcRenderShopItems(tab) {
+    const container = document.getElementById(`shop-list-${tab}`);
+    const items = wcState.shopData[tab] || [];
+    
+    if (items.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成商品</div>';
+        return;
+    }
+
+    let html = '';
+    items.forEach((item, idx) => {
+        // 随机生成一个占位图颜色
+        const hue = Math.floor(Math.random() * 360);
+        const imgBg = `hsl(${hue}, 30%, 90%)`;
+        const icon = tab === 'mall' ? '🛍️' : '🍱';
+        
+        html += `
+            <div class="shop-item-card">
+                <div class="shop-item-img" style="background: ${imgBg}; display:flex; align-items:center; justify-content:center; font-size:30px;">${icon}</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-title">${item.name}</div>
+                    <div class="shop-item-desc">${item.desc}</div>
+                    <div class="shop-item-price">¥${parseFloat(item.price).toFixed(2)}</div>
+                </div>
+                <div class="shop-item-add" onclick="wcAddToCart('${tab}', ${idx})">+</div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function wcAddToCart(tab, idx) {
+    const item = wcState.shopData[tab][idx];
+    if (!item) return;
+    
+    if (!wcState.shopData.cart) wcState.shopData.cart = [];
+    wcState.shopData.cart.push({ ...item, id: Date.now() + Math.random() });
+    wcSaveData();
+    wcUpdateCartBadge();
+    
+    // 简单的加入购物车动画提示
+    const badge = document.getElementById('shop-cart-badge');
+    badge.style.transform = 'scale(1.5)';
+    setTimeout(() => badge.style.transform = 'scale(1)', 200);
+}
+
+function wcUpdateCartBadge() {
+    const badge = document.getElementById('shop-cart-badge');
+    const count = wcState.shopData.cart ? wcState.shopData.cart.length : 0;
+    badge.innerText = count;
+    badge.style.display = count > 0 ? 'flex' : 'none';
+}
+
+function wcOpenCartModal() {
+    wcRenderCart();
+    wcOpenModal('wc-modal-shop-cart');
+}
+
+function wcRenderCart() {
+    const container = document.getElementById('shop-cart-list');
+    const cart = wcState.shopData.cart || [];
+    
+    if (cart.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 50px;">购物车是空的</div>';
+        document.getElementById('shop-cart-total').innerText = '¥0.00';
+        return;
+    }
+
+    let html = '';
+    let total = 0;
+    cart.forEach((item, idx) => {
+        total += parseFloat(item.price);
+        html += `
+            <div class="cart-item">
+                <div class="cart-item-info">
+                    <div class="cart-item-title">${item.name}</div>
+                    <div class="cart-item-price">¥${parseFloat(item.price).toFixed(2)}</div>
+                </div>
+                <div class="cart-item-remove" onclick="wcRemoveFromCart(${idx})">×</div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+    document.getElementById('shop-cart-total').innerText = `¥${total.toFixed(2)}`;
+}
+
+function wcRemoveFromCart(idx) {
+    wcState.shopData.cart.splice(idx, 1);
+    wcSaveData();
+    wcUpdateCartBadge();
+    wcRenderCart();
+}
+
+// --- 找到 wcCheckoutCart 函数，替换为以下内容 ---
+function wcCheckoutCart() {
+    const cart = wcState.shopData.cart || [];
+    if (cart.length === 0) return alert("购物车是空的");
+
+    // 计算总价并更新到新的结算卡片上
+    let total = 0;
+    cart.forEach(item => {
+        total += parseFloat(item.price);
+    });
+    document.getElementById('checkout-card-total').innerText = `¥${total.toFixed(2)}`;
+
+    // 打开新的卡片式结算弹窗
+    wcOpenModal('wc-modal-shop-checkout-card');
+}
+
+
+// --- 找到 wcOpenDeliveryTypeModal 函数，替换为以下内容 ---
+function wcOpenDeliveryTypeModal(method) {
+    // 存储支付方式（赠送或代付）
+    wcState.tempShopTransaction = { method: method };
+    // 关闭结算卡片
+    wcCloseModal('wc-modal-shop-checkout-card');
+    // 打开新的配送方式卡片
+    wcOpenModal('wc-modal-delivery-card');
+}
+
+
+// --- 找到 wcProceedToPay 函数，替换为以下内容 ---
+function wcProceedToPay(deliveryType) {
+    // 关闭配送方式卡片
+    wcCloseModal('wc-modal-delivery-card');
+    if (!wcState.tempShopTransaction) return;
+
+    if (deliveryType === 'now') {
+        // 如果是立即配送，直接进入支付/发送流程
+        wcPayAndSend(wcState.tempShopTransaction.method, '立即配送');
+    } else if (deliveryType === 'reserve') {
+        // 如果是预约，打开时间选择器
+        wcOpenTimePickerModal();
+    }
+}
+
+
+// --- 在脚本中任意位置（建议放在购物逻辑附近）新增以下三个函数 ---
+
+/**
+ * 新增：打开时间选择器弹窗
+ */
+function wcOpenTimePickerModal() {
+    // 清空之前可能输入的值
+    const customTimeInput = document.getElementById('custom-time-input');
+    if (customTimeInput) {
+        customTimeInput.value = '';
+    }
+    wcOpenModal('wc-modal-time-picker');
+}
+
+/**
+ * 新增：处理时间选择并继续流程
+ * @param {string} timeOption - 'now', 'tomorrow_am', 'tomorrow_pm', 或 'custom'
+ */
+function wcSetDeliveryTime(timeOption) {
+    let deliveryTimeText = '';
+    const now = new Date();
+
+    switch (timeOption) {
+        case 'now':
+            deliveryTimeText = '立即配送';
+            break;
+        case 'tomorrow_am':
+            now.setDate(now.getDate() + 1);
+            now.setHours(10, 0, 0, 0);
+            deliveryTimeText = `预约: ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} 10:00`;
+            break;
+        case 'tomorrow_pm':
+            now.setDate(now.getDate() + 1);
+            now.setHours(15, 0, 0, 0);
+            deliveryTimeText = `预约: ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} 15:00`;
+            break;
+        case 'custom':
+            const customTime = document.getElementById('custom-time-input').value;
+            if (!customTime) {
+                alert('请选择一个自定义时间！');
+                return;
+            }
+            const selectedDate = new Date(customTime);
+            if (selectedDate < new Date()) {
+                alert('预约时间不能早于当前时间！');
+                return;
+            }
+            deliveryTimeText = `预约: ${customTime.replace('T', ' ')}`;
+            break;
+    }
+
+    // 关闭时间选择器
+    wcCloseModal('wc-modal-time-picker');
+
+    // 继续支付/发送流程
+    if (wcState.tempShopTransaction) {
+        wcPayAndSend(wcState.tempShopTransaction.method, deliveryTimeText);
+    }
+}
+
+/**
+ * 修改：wcPayAndSend 函数，使其能接收新的 deliveryText
+ * @param {string} method - 'gift' 或 'daifu'
+ * @param {string} deliveryText - '立即配送' 或 '预约: YYYY-MM-DD HH:mm'
+ */
+function wcPayAndSend(method, deliveryText) {
+    const cart = wcState.shopData.cart || [];
+    if (cart.length === 0) return;
+
+    let total = 0;
+    let itemNames = [];
+    cart.forEach(item => {
+        total += parseFloat(item.price);
+        itemNames.push(item.name);
+    });
+
+    const itemsStr = itemNames.join('、');
+    
+    let cardHtml = '';
+    let aiSystemMessage = '';
+
+    if (method === 'gift') {
+        // 用户支付，生成粉色礼物卡片
+        cardHtml = `
+            <div class="shopping-card gift">
+                <div class="shopping-card-icon">🎁</div>
+                <div class="shopping-card-title">FOR YOU</div>
+                <div class="shopping-card-desc">一份包含 ${itemNames[0]} 等的礼物</div>
+                <div class="shopping-card-price">¥${total.toFixed(2)}</div>
+                <div class="shopping-card-status">已支付 · ${deliveryText}</div>
+            </div>
+        `;
+        aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚为你购买了以下物品：${itemsStr}。配送方式：${deliveryText}。请在接下来的回复中表现出收到礼物的惊喜或感谢。]`;
+
+        // 支付流程
+        wcOpenGeneralInput(`支付 ¥${total.toFixed(2)} (输入支付密码)`, (pass) => {
+            if (pass !== wcState.wallet.password) {
+                alert("密码错误！");
+                return;
+            }
+            if (wcState.wallet.balance < total) {
+                alert("余额不足！请先充值。");
+                return;
+            }
+            
+            // 扣款
+            wcState.wallet.balance -= total;
+            wcState.wallet.transactions.push({
+                id: Date.now(), type: 'payment', amount: total,
+                note: `商城购物赠送`, time: Date.now()
+            });
+            
+            // 清空购物车并发送消息
+            wcState.shopData.cart = [];
+            wcSaveData();
+            wcUpdateCartBadge();
+            wcCloseModal('wc-modal-shop-cart');
+            wcCloseShoppingPage();
+            
+            wcAddMessage(wcState.activeChatId, 'system', 'system', aiSystemMessage, { hidden: true });
+            setTimeout(() => {
+                wcAddMessage(wcState.activeChatId, 'me', 'receipt', cardHtml);
+            }, 300);
+            
+        }, true);
+
+    } else if (method === 'daifu') {
+        // 代付，生成蓝色请求卡片
+        cardHtml = `
+            <div class="shopping-card daifu">
+                <div class="shopping-card-icon">🛒</div>
+                <div class="shopping-card-title">PAYMENT REQUEST</div>
+                <div class="shopping-card-desc">包含 ${itemNames[0]} 等的订单</div>
+                <div class="shopping-card-price">¥${total.toFixed(2)}</div>
+                <div class="shopping-card-status">待支付 · ${deliveryText}</div>
+            </div>
+        `;
+        aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚向你发送了一个代付请求，希望你帮忙支付以下物品：${itemsStr}。总价：¥${total.toFixed(2)}。配送方式：${deliveryText}。请在回复中做出回应（同意付款或吐槽等）。]`;
+
+        // 清空购物车并发送消息
+        wcState.shopData.cart = [];
+        wcSaveData();
+        wcUpdateCartBadge();
+        wcCloseModal('wc-modal-shop-cart');
+        wcCloseShoppingPage();
+        
+        wcAddMessage(wcState.activeChatId, 'system', 'system', aiSystemMessage, { hidden: true });
+        setTimeout(() => {
+            wcAddMessage(wcState.activeChatId, 'me', 'receipt', cardHtml);
+        }, 300);
+    }
+}
+// ==========================================================================
 // 全局补丁与覆盖 (Global Patches & Overrides)
 // ==========================================================================
 (function applyGlobalPatches() {
@@ -8435,6 +9176,14 @@ function wcDeletePhonePreset() {
     style.innerHTML = `
         .wc-wallet-header { padding-top: 60px !important; }
         #wc-modal-phone-settings { z-index: 20001 !important; }
+        
+        /* 【修复】：强制购物页面隐藏，防止破坏布局 */
+        #wc-view-shopping {
+            display: none !important;
+        }
+        #wc-view-shopping.active {
+            display: flex !important;
+        }
         
         body.edit-mode-active .app-item {
             animation: shake 0.3s infinite;
@@ -8525,31 +9274,73 @@ window.wcConfirmEnterPhone = function(charId) {
     wcState.editingCharId = charId;
     wcOpenPhoneSim();
 };
+
 // ==========================================
-// 真实浏览器后台通知逻辑
+// 真实浏览器后台通知与保活逻辑 (重构版)
 // ==========================================
 
-// 1. 请求通知权限的函数（绑定给刚才加的按钮）
-function requestRealNotification() {
-    if (!("Notification" in window)) {
-        alert("宝宝，你当前的浏览器不支持系统通知哦~");
-        return;
-    }
-    
-    Notification.requestPermission().then(permission => {
-        const statusText = document.getElementById('notif-status-text');
-        if (permission === "granted") {
-            alert("太棒啦！真实通知已开启，切到后台也能收到消息啦！");
-            if(statusText) statusText.innerHTML = '已开启';
-        } else {
-            alert("通知权限被拒绝了，请在浏览器设置中手动允许哦。");
-            if(statusText) statusText.innerHTML = '已拒绝';
-        }
-    });
+// 1. 页面交互逻辑
+function openNotificationSettings() {
+    updateNotifUI();
+    document.getElementById('notificationSettingsModal').classList.add('open');
 }
 
-// 2. 发送真实通知的函数
+function closeNotificationSettings() {
+    document.getElementById('notificationSettingsModal').classList.remove('open');
+}
+
+function updateNotifUI() {
+    const notifToggle = document.getElementById('toggle-real-notif');
+    const keepAliveToggle = document.getElementById('toggle-keep-alive');
+    const mainStatus = document.getElementById('main-notif-status');
+
+    if (notifToggle) notifToggle.checked = isRealNotifEnabled;
+    if (keepAliveToggle) keepAliveToggle.checked = isKeepAliveEnabled;
+
+    if (mainStatus) {
+        mainStatus.innerHTML = (isRealNotifEnabled ? '已开启' : '未开启') + '<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>';
+    }
+}
+
+// 2. 通知开关逻辑
+function handleNotifToggle(checkbox) {
+    isRealNotifEnabled = checkbox.checked;
+    localStorage.setItem('ios_theme_real_notif_enabled', isRealNotifEnabled);
+    
+    if (isRealNotifEnabled) {
+        if (!("Notification" in window)) {
+            alert("宝宝，你当前的浏览器不支持系统通知哦~");
+            checkbox.checked = false;
+            isRealNotifEnabled = false;
+            localStorage.setItem('ios_theme_real_notif_enabled', false);
+        } else if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+            // 请求权限
+            Notification.requestPermission().then(permission => {
+                if (permission === "granted") {
+                    alert("太棒啦！真实通知已开启，切到后台也能收到消息啦！");
+                } else {
+                    alert("通知权限被拒绝了，请在浏览器设置中手动允许哦。");
+                    checkbox.checked = false;
+                    isRealNotifEnabled = false;
+                    localStorage.setItem('ios_theme_real_notif_enabled', false);
+                }
+                updateNotifUI();
+            });
+        } else if (Notification.permission === "denied") {
+            alert("通知权限已被系统拒绝，请在浏览器或系统设置中手动打开！");
+            checkbox.checked = false;
+            isRealNotifEnabled = false;
+            localStorage.setItem('ios_theme_real_notif_enabled', false);
+        }
+    }
+    updateNotifUI();
+}
+
+// 3. 发送真实通知的函数
 function sendRealSystemNotification(title, body, iconUrl) {
+    // 逻辑开关：如果用户在面板里关了，就不发
+    if (!isRealNotifEnabled) return;
+
     // 如果网页正在前台显示，就不发系统通知了（避免和网页内的横幅通知重复）
     if (document.visibilityState === 'visible') {
         return; 
@@ -8562,80 +9353,1852 @@ function sendRealSystemNotification(title, body, iconUrl) {
                 icon: iconUrl || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg',
                 badge: 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg', // 安卓状态栏小图标
                 vibrate: [200, 100, 200], // 手机震动节奏
-                tag: 'honey-chat', // 相同 tag 的通知会合并，不会满屏都是
+                tag: 'honey-chat', // 相同 tag 的通知会合并
                 renotify: true     // 即使合并也会重新震动/响铃
             });
         });
     }
 }
-// ==========================================
-// 1. 后台通知测试逻辑 (完美避开 setTimeout 被冻结的问题)
-// ==========================================
+
+// 4. 后台通知测试逻辑
 function testRealNotification() {
+    if (!isRealNotifEnabled) {
+        alert("宝宝，请先开启上方的【允许后台真实通知】开关哦~");
+        return;
+    }
     if (Notification.permission !== "granted") {
-        alert("宝宝，请先点击上面的【开启系统真实通知】获取权限哦~");
+        alert("浏览器通知权限未授予，请检查系统设置！");
         return;
     }
     
-    alert("测试已准备就绪！\n现在请将浏览器切换到后台，或者返回桌面，通知会立刻弹出！");
+    alert("测试已启动！\n请在 5 秒内将浏览器切换到后台，或者锁屏...");
     
-    // 使用 visibilitychange 监听切后台动作，只要一切后台立刻发通知
-    const handleVisibilityChange = () => {
-        if (document.visibilityState === 'hidden') {
-            sendRealSystemNotification(
-                "后台通知测试", 
-                "成功啦！你切到后台触发了这条消息，说明通知功能正常工作哦~", 
-                "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg"
-            );
-            // 触发一次后移除监听，避免每次切后台都弹
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
+    setTimeout(() => {
+        if (Notification.permission === "granted") {
+            navigator.serviceWorker.ready.then(function(registration) {
+                registration.showNotification("后台通知测试", {
+                    body: "成功啦！你能在后台收到这条消息，说明通知功能正常工作哦~",
+                    icon: "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg",
+                    badge: "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg",
+                    vibrate: [200, 100, 200],
+                    tag: 'honey-chat-test',
+                    renotify: true
+                });
+            });
         }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    }, 5000);
 }
 
 // ==========================================
-// 2. 网页防休眠逻辑 (无音频版 - 使用 Wake Lock API)
+// 5. 网页后台保活 (防休眠) 逻辑 (强化兼容版)
 // ==========================================
-let wakeLock = null;
 let isKeepAliveEnabled = false;
+let keepAliveAudio = null;
 
-async function toggleKeepAlive() {
-    const statusText = document.getElementById('keep-alive-status');
-    const chevronSvg = '<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>';
+function handleKeepAliveToggle() {
+    const keepAliveToggle = document.getElementById('toggle-keep-alive');
 
-    if (!isKeepAliveEnabled) {
-        // 开启防休眠 (屏幕常亮)
-        try {
-            if ('wakeLock' in navigator) {
-                wakeLock = await navigator.wakeLock.request('screen');
-                isKeepAliveEnabled = true;
-                if(statusText) statusText.innerHTML = '已开启 (屏幕常亮)' + chevronSvg;
-                
-                alert("已开启防休眠！\n\n【重要说明】：纯网页无法在后台永久运行。此功能将保持您的手机屏幕常亮，防止手机自动锁屏导致 AI 断网。建议您在需要挂机等 NPC 消息时，保持页面打开并调低屏幕亮度。");
-
-                // 监听系统强制释放 (比如电量过低)
-                wakeLock.addEventListener('release', () => {
-                    console.log('Wake Lock 被系统释放');
-                    isKeepAliveEnabled = false;
-                    if(statusText) statusText.innerHTML = '未开启' + chevronSvg;
-                });
-            } else {
-                alert("抱歉，您的浏览器不支持屏幕常亮 API。建议使用 Safari 或 Chrome 浏览器。");
-            }
-        } catch (err) {
-            console.error(`Wake Lock Error: ${err.name}, ${err.message}`);
-            alert("开启失败，可能是浏览器权限限制。");
-        }
-    } else {
-        // 关闭防休眠
-        if (wakeLock !== null) {
-            await wakeLock.release();
-            wakeLock = null;
+    if (isKeepAliveEnabled) {
+        // --- 当前是开启状态，现在需要关闭 ---
+        if (keepAliveAudio) {
+            keepAliveAudio.pause();
+            // 暂停时不重置 currentTime，方便下次秒开
         }
         isKeepAliveEnabled = false;
-        if(statusText) statusText.innerHTML = '未开启' + chevronSvg;
-        console.log("防休眠已关闭");
+        console.log("后台保活已关闭。");
+        updateNotifUI();
+    } else {
+        // --- 当前是关闭状态，现在需要开启 ---
+        // 第一次点击时，创建一个隐藏的 video 标签 (完美兼容 mp4 音频轨)
+        if (!keepAliveAudio) {
+            keepAliveAudio = document.createElement('video');
+            keepAliveAudio.src = "https://img.heliar.top/file/1772516513350_30min-osbvow_2.mp4";
+            keepAliveAudio.loop = true;
+            keepAliveAudio.playsInline = true; // iOS 必须，防止弹全屏
+            keepAliveAudio.webkitPlaysInline = true;
+            keepAliveAudio.preload = "auto";
+            keepAliveAudio.style.display = "none";
+            document.body.appendChild(keepAliveAudio);
+        }
+
+        // 强制触发网络加载
+        keepAliveAudio.load();
+
+        // 尝试播放
+        const playPromise = keepAliveAudio.play();
+
+        if (playPromise !== undefined) {
+            playPromise.then(() => {
+                // 播放成功！
+                isKeepAliveEnabled = true;
+                console.log("后台保活已成功开启。");
+                updateNotifUI();
+            }).catch(error => {
+                // 播放失败 (通常是因为网络慢或浏览器严格限制)
+                console.error("后台保活开启失败:", error);
+                alert("开启保活失败！音频正在缓冲或被浏览器拦截，请稍等两秒后再次点击开关。");
+                
+                // 重置状态和UI
+                isKeepAliveEnabled = false;
+                if (keepAliveToggle) {
+                    keepAliveToggle.checked = false;
+                }
+                updateNotifUI();
+            });
+        }
     }
 }
+/* ==========================================================================
+   APP 3: INS MUSIC PLAYER LOGIC (Advanced iOS Style)
+   ========================================================================== */
+
+const musicState = {
+    profile: {
+        name: 'Aesthetic User',
+        avatar: 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg',
+        bg: 'https://i.postimg.cc/kgD9CsbW/IMG-8012.jpg'
+    },
+    playlists: [],
+    currentSong: null,
+    isPlaying: false,
+    playMode: 'loop', 
+    currentPlaylist: [], 
+    currentIndex: -1,
+    lyrics: [],
+    listenTogether: {
+        active: false,
+        charId: null,
+        startTime: 0,
+        timerInterval: null
+    },
+    pendingAddSong: null
+};
+// 👇 就是在这里加上这一行！创造出播放器实体！
+const audioPlayer = new Audio();
+// --- 初始化与数据加载 ---
+async function musicLoadData() {
+    const data = await idb.get('ins_music_data');
+    if (data) {
+        if (data.profile) musicState.profile = data.profile;
+        if (data.playlists) musicState.playlists = data.playlists;
+        if (data.listenTogether) {
+            musicState.listenTogether.active = data.listenTogether.active;
+            musicState.listenTogether.charId = data.listenTogether.charId;
+            musicState.listenTogether.startTime = data.listenTogether.startTime;
+        }
+    }
+}
+
+async function musicSaveData() {
+    await idb.set('ins_music_data', {
+        profile: musicState.profile,
+        playlists: musicState.playlists,
+        listenTogether: {
+            active: musicState.listenTogether.active,
+            charId: musicState.listenTogether.charId,
+            startTime: musicState.listenTogether.startTime
+        }
+    });
+}
+// 新增：页面加载时恢复一起听歌状态
+async function musicInitState() {
+    await musicLoadData();
+    if (musicState.listenTogether && musicState.listenTogether.active && musicState.listenTogether.charId) {
+        musicStartListenTogether(musicState.listenTogether.charId, true);
+    }
+}
+// 进度条与歌词同步
+audioPlayer.addEventListener('timeupdate', () => {
+    if (!audioPlayer.duration) return;
+    
+    // 1. 性能优化：先获取 DOM 元素，如果不存在则直接返回，避免后台播放时高频报错
+    const progressFill = document.getElementById('music-progress-fill');
+    const timeCurrentEl = document.getElementById('music-time-current');
+    const timeTotalEl = document.getElementById('music-time-total');
+    const lyricsContainer = document.getElementById('music-fp-lyrics');
+
+    // 如果进度条元素不存在，说明播放器界面未打开或未渲染，无需更新 UI
+    if (!progressFill) return;
+
+    const current = audioPlayer.currentTime;
+    const total = audioPlayer.duration;
+    const percent = (current / total) * 100;
+    
+    progressFill.style.width = `${percent}%`;
+    if (timeCurrentEl) timeCurrentEl.innerText = musicFormatTime(current);
+    if (timeTotalEl) timeTotalEl.innerText = musicFormatTime(total);
+    
+    // 👇【新增】：同步更新音乐胶囊的进度条和时间
+    const capProgressFill = document.getElementById('capsule-progress-fill');
+    const capTimeCurrentEl = document.getElementById('capsule-time-current');
+    const capTimeTotalEl = document.getElementById('capsule-time-total');
+    
+    if (capProgressFill) capProgressFill.style.width = `${percent}%`;
+    if (capTimeCurrentEl) capTimeCurrentEl.innerText = musicFormatTime(current);
+    if (capTimeTotalEl) capTimeTotalEl.innerText = musicFormatTime(total);
+    // 👆新增结束
+    
+    // 2. 同步歌词
+    if (musicState.lyrics.length > 0 && lyricsContainer) {
+        let activeIndex = -1;
+        for (let i = 0; i < musicState.lyrics.length; i++) {
+            if (current >= musicState.lyrics[i].time) {
+                activeIndex = i;
+            } else {
+                break;
+            }
+        }
+        
+        if (activeIndex !== -1) {
+            // 3. 性能优化：只在歌词行真正发生切换时，才去操作 DOM 重绘
+            const lastActiveIndex = lyricsContainer.getAttribute('data-active-index');
+            
+            if (lastActiveIndex !== activeIndex.toString()) {
+                const lines = lyricsContainer.querySelectorAll('.ins-music-lyric-line');
+                lines.forEach(l => l.classList.remove('active'));
+                
+                if (lines[activeIndex]) {
+                    lines[activeIndex].classList.add('active');
+                    // 滚动歌词 (假设每行高度30px)
+                    const offset = activeIndex * 30;
+                    lyricsContainer.style.transform = `translateY(-${offset}px)`;
+                }
+                // 记录当前高亮的歌词索引
+                lyricsContainer.setAttribute('data-active-index', activeIndex);
+                // 【新增】：同步歌词到音乐胶囊
+                const capsuleLyricEl = document.getElementById('capsule-exp-lyric');
+                if (capsuleLyricEl && musicState.lyrics[activeIndex]) {
+                    capsuleLyricEl.innerText = musicState.lyrics[activeIndex].text || '...';
+                }               
+            }
+        }
+    }
+});
+// 【补充代码】：监听音乐播放结束，自动播放下一首
+audioPlayer.addEventListener('ended', () => {
+    // 稍微延迟一下，避免频繁切换卡顿
+    setTimeout(() => {
+        musicPlayNext();
+    }, 500);
+});      
+function musicFormatTime(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function musicSeek(e) {
+    // 修复：使用 e.currentTarget 获取当前点击的进度条（兼容全屏和胶囊）
+    const bar = e.currentTarget; 
+    const rect = bar.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    
+    // 修复：增加 isFinite 检查，防止 The provided double value is non-finite 报错
+    if (audioPlayer && isFinite(audioPlayer.duration) && audioPlayer.duration > 0) {
+        audioPlayer.currentTime = percent * audioPlayer.duration;
+    }
+}
+
+// --- 初始化与数据加载 ---
+async function musicLoadData() {
+    const data = await idb.get('ins_music_data');
+    if (data) {
+        if (data.profile) musicState.profile = data.profile;
+        if (data.playlists) musicState.playlists = data.playlists;
+    }
+}
+
+async function musicSaveData() {
+    await idb.set('ins_music_data', {
+        profile: musicState.profile,
+        playlists: musicState.playlists
+    });
+}
+
+// --- 页面导航 ---
+async function openMusicApp() {
+    await musicLoadData();
+    document.getElementById('musicModal').classList.add('open');
+    musicSwitchTab('home');
+    musicRenderHomeChars();
+    musicRenderProfile();
+}
+
+function closeMusicApp() {
+    document.getElementById('musicModal').classList.remove('open');
+}
+
+function musicSwitchTab(tab) {
+    document.querySelectorAll('.ins-music-view').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.ins-music-tab').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById(`music-view-${tab}`).classList.add('active');
+    document.getElementById(`music-tab-${tab}`).classList.add('active');
+    
+    const exitBtn = document.querySelector('.ins-music-exit-btn');
+    if (tab === 'profile') {
+        exitBtn.style.background = 'rgba(255,255,255,0.2)';
+        exitBtn.style.color = '#FFF';
+        exitBtn.style.border = 'none';
+    } else {
+        exitBtn.style.background = 'rgba(255,255,255,0.9)';
+        exitBtn.style.color = '#111';
+        exitBtn.style.border = '1px solid #F0F0F0';
+    }
+}
+
+// --- 主页角色渲染 ---
+function musicRenderHomeChars() {
+    const grid = document.getElementById('music-char-grid');
+    grid.innerHTML = '';
+    
+    if (wcState.characters.length === 0) {
+        grid.innerHTML = '<div style="grid-column: span 2; text-align: center; color: #888; padding: 20px;">No characters available.</div>';
+        return;
+    }
+
+    wcState.characters.forEach(char => {
+        const card = document.createElement('div');
+        card.className = 'ins-music-char-card';
+        card.innerHTML = `
+            <img src="${char.avatar}" class="ins-music-char-img">
+            <div class="ins-music-char-info">
+                <div class="ins-music-char-name">${char.name}</div>
+                <div class="ins-music-char-action">Invite to listen</div>
+            </div>
+        `;
+        card.onclick = () => musicInviteChar(char);
+        grid.appendChild(card);
+    });
+}
+
+// --- 邀请弹窗与一起听歌逻辑 ---
+let musicPendingInviteChar = null;
+
+function musicInviteChar(char) {
+    if (!musicState.currentSong) {
+        alert("Please play a song first before inviting someone!");
+        return;
+    }
+    
+    musicPendingInviteChar = char;
+    document.getElementById('music-invite-avatar').src = char.avatar;
+    document.getElementById('music-invite-name').innerText = char.name;
+    document.getElementById('music-invite-song-title').innerText = musicState.currentSong.title;
+    
+    wcOpenModal('music-modal-invite');
+}
+
+function musicConfirmInvite() {
+    if (!musicPendingInviteChar || !musicState.currentSong) return;
+    
+    const char = musicPendingInviteChar;
+    
+    // 发送专属的音乐邀请卡片消息
+    wcAddMessage(char.id, 'me', 'music_invite', '邀请听歌', {
+        songId: musicState.currentSong.id,
+        songTitle: musicState.currentSong.title,
+        songArtist: musicState.currentSong.artist,
+        songCover: musicState.currentSong.cover
+    });
+    
+    wcCloseModal('music-modal-invite');
+    showMainSystemNotification("Music", `已向 ${char.name} 发送听歌邀请，等待回复...`, char.avatar);
+    
+    // 【修改】：移除这里的自动开启听歌，改为等待 AI 回复
+    musicPendingInviteChar = null;
+}
+
+// 聊天记录中点击卡片接受邀请
+window.musicAcceptInvite = function(charId, songId, title, artist, cover) {
+    openMusicApp();
+    musicPlaySong(songId, title, artist, cover);
+    musicStartListenTogether(charId);
+    musicOpenFullPlayer();
+};
+
+function musicStartListenTogether(charId, isResume = false) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+    
+    musicState.listenTogether.active = true;
+    musicState.listenTogether.charId = charId;
+    
+    // 如果不是刷新恢复的，就重置开始时间并保存
+    if (!isResume) {
+        musicState.listenTogether.startTime = Date.now();
+        musicSaveData();
+    }
+    
+    // 获取用户头像 (优先取聊天设置里的面具头像)
+    const userAvatar = (char.chatConfig && char.chatConfig.userAvatar) ? char.chatConfig.userAvatar : wcState.user.avatar;
+    
+    document.getElementById('music-fp-avatar-user').src = userAvatar;
+    document.getElementById('music-fp-avatar-char').src = char.avatar;
+    document.getElementById('music-fp-together').style.display = 'flex';
+    
+    if (musicState.listenTogether.timerInterval) clearInterval(musicState.listenTogether.timerInterval);
+    
+    musicState.listenTogether.timerInterval = setInterval(() => {
+        const diff = Math.floor((Date.now() - musicState.listenTogether.startTime) / 1000);
+        const m = Math.floor(diff / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        const timeStr = `${m}:${s}`;
+        
+        const timerEl = document.getElementById('music-fp-timer');
+        // 修复：HTML中胶囊计时器的ID是 capsule-timer，不是 capsule-island-timer
+        const capsuleTimerEl = document.getElementById('capsule-timer'); 
+        
+        if (timerEl) timerEl.innerText = timeStr;
+        if (capsuleTimerEl) capsuleTimerEl.innerText = timeStr; // 同步更新胶囊上的时间
+    }, 1000); // 修复：补全了 setInterval 的闭合和 1000ms 参数
+} // 修复：补全了函数的闭合大括号
+
+
+// 【新增】：手动结束一起听歌
+window.musicStopListenTogether = function() {
+    if (confirm("要结束和 Ta 的一起听歌吗？")) {
+        const charId = musicState.listenTogether.charId; // 先保存 ID
+        musicState.listenTogether.active = false;
+        musicState.listenTogether.charId = null;
+        clearInterval(musicState.listenTogether.timerInterval);
+        document.getElementById('music-fp-together').style.display = 'none';
+        musicSaveData();
+         // 修复：结束听歌时重置胶囊的计时器显示
+        const capsuleTimerEl = document.getElementById('capsule-timer');
+        if (capsuleTimerEl) capsuleTimerEl.innerText = "00:00";      
+        // 【修复】：告诉 AI 结束了听歌
+        if (charId) {
+            wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 用户结束了和你的“一起听歌”。]`, { hidden: true });       
+        }
+        alert("已结束一起听歌。");
+    }
+};
+
+
+// --- 搜索功能 ---
+function musicOpenSearch() {
+    document.getElementById('music-search-overlay').classList.add('active');
+    document.getElementById('music-search-input').focus();
+}
+
+function musicCloseSearch() {
+    document.getElementById('music-search-overlay').classList.remove('active');
+}
+
+function musicHandleSearchEnter(e) {
+    if (e.key === 'Enter') musicPerformSearch();
+}
+
+async function musicPerformSearch() {
+    const kw = document.getElementById('music-search-input').value.trim();
+    if (!kw) return;
+
+    const resultsContainer = document.getElementById('music-search-results');
+    resultsContainer.innerHTML = '<div class="wc-ios-spinner" style="margin: 50px auto;"></div>';
+
+    try {
+        const res = await fetch(`https://163api.qijieya.cn/cloudsearch?keywords=${encodeURIComponent(kw)}`);
+        const data = await res.json();
+        
+        if (data.code === 200 && data.result && data.result.songs) {
+            musicState.currentPlaylist = data.result.songs.map(song => ({
+                id: song.id,
+                title: song.name,
+                artist: song.ar.map(a => a.name).join(', '),
+                cover: song.al.picUrl + '?param=100y100'
+            }));
+            musicRenderSearchResults(musicState.currentPlaylist);
+        } else {
+            resultsContainer.innerHTML = '<div class="ins-music-empty-state">No results found.</div>';
+        }
+    } catch (e) {
+        resultsContainer.innerHTML = '<div class="ins-music-empty-state">Search failed.</div>';
+    }
+}
+
+function musicRenderSearchResults(songs) {
+    const container = document.getElementById('music-search-results');
+    container.innerHTML = '';
+    
+    songs.forEach((song, index) => {
+        const item = document.createElement('div');
+        item.className = 'ins-music-song-item';
+        item.innerHTML = `
+            <img src="${song.cover}" class="ins-music-song-cover" onclick="musicPlayFromSearch(${index})">
+            <div class="ins-music-song-info" onclick="musicPlayFromSearch(${index})">
+                <div class="ins-music-song-title">${song.title}</div>
+                <div class="ins-music-song-artist">${song.artist}</div>
+            </div>
+            <div class="ins-music-btn-icon" style="background: transparent; border: 1px solid #E5E5EA; color: #111;" onclick="musicOpenAddToPlaylistFromSearch(${index})">
+                <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+    
+    const spacer = document.createElement('div');
+    spacer.className = 'ins-music-bottom-spacer';
+    container.appendChild(spacer);
+}
+
+// 新增辅助函数：从搜索列表播放
+window.musicPlayFromSearch = function(index) {
+    musicState.currentIndex = index;
+    const song = musicState.currentPlaylist[index];
+    musicPlaySong(song.id, song.title, song.artist, song.cover);
+};
+
+// 新增辅助函数：从搜索列表添加到歌单
+window.musicOpenAddToPlaylistFromSearch = function(index) {
+    const song = musicState.currentPlaylist[index];
+    musicOpenAddToPlaylist(song);
+};
+
+// --- 播放控制与全屏播放器 ---
+async function musicPlaySong(id, title, artist, cover) {
+    try {
+        // 1. 获取播放链接
+        const res = await fetch(`https://api.qijieya.cn/meting/?server=netease&type=song&id=${id}`);
+        const data = await res.json();
+        
+        if (data && data.length > 0 && data[0].url) {
+            const songUrl = data[0].url;
+            
+            musicState.currentSong = { id, title, artist, cover, url: songUrl };
+            audioPlayer.src = songUrl;
+            audioPlayer.play();
+            
+            document.getElementById('music-mini-player').style.display = 'flex';
+            musicUpdatePlayerUI();
+            musicCloseSearch();
+            
+            // 2. 获取歌词
+            musicFetchLyrics(id);
+            
+        } else {
+            alert("Sorry, this song is VIP only or unavailable.");
+            musicPlayNext();
+        }
+    } catch (e) {
+        alert("Failed to load song.");
+    }
+}
+
+async function musicFetchLyrics(id) {
+    const lyricsContainer = document.getElementById('music-fp-lyrics');
+    lyricsContainer.innerHTML = '<div class="ins-music-lyric-line">Loading lyrics...</div>';
+    musicState.lyrics = [];
+    
+    try {
+        const res = await fetch(`https://163api.qijieya.cn/lyric?id=${id}`);
+        const data = await res.json();
+        
+        if (data.lrc && data.lrc.lyric) {
+            const lines = data.lrc.lyric.split('\n');
+            const parsedLyrics = [];
+            
+            lines.forEach(line => {
+                const match = line.match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
+                if (match) {
+                    const m = parseInt(match[1]);
+                    const s = parseInt(match[2]);
+                    const ms = parseInt(match[3]);
+                    const time = m * 60 + s + ms / 1000;
+                    const text = match[4].trim();
+                    if (text) parsedLyrics.push({ time, text });
+                }
+            });
+            
+            musicState.lyrics = parsedLyrics;
+            
+            if (parsedLyrics.length > 0) {
+                lyricsContainer.innerHTML = '';
+                parsedLyrics.forEach(l => {
+                    const div = document.createElement('div');
+                    div.className = 'ins-music-lyric-line';
+                    div.innerText = l.text;
+                    lyricsContainer.appendChild(div);
+                });
+            } else {
+                lyricsContainer.innerHTML = '<div class="ins-music-lyric-line">Pure Music</div>';
+            }
+        } else {
+            lyricsContainer.innerHTML = '<div class="ins-music-lyric-line">No lyrics available</div>';
+        }
+    } catch (e) {
+        lyricsContainer.innerHTML = '<div class="ins-music-lyric-line">Failed to load lyrics</div>';
+    }
+}
+       
+function musicPlayNext() {
+    if (musicState.currentPlaylist.length === 0) return;
+    if (musicState.playMode === 'random') {
+        musicState.currentIndex = Math.floor(Math.random() * musicState.currentPlaylist.length);
+    } else {
+        musicState.currentIndex = (musicState.currentIndex + 1) % musicState.currentPlaylist.length;
+    }
+    const nextSong = musicState.currentPlaylist[musicState.currentIndex];
+    musicPlaySong(nextSong.id, nextSong.title, nextSong.artist, nextSong.cover);
+}
+       
+function musicPlayPrev() {
+    if (musicState.currentPlaylist.length === 0) return;
+    if (musicState.playMode === 'random') {
+        musicState.currentIndex = Math.floor(Math.random() * musicState.currentPlaylist.length);
+    } else {
+        musicState.currentIndex = (musicState.currentIndex - 1 + musicState.currentPlaylist.length) % musicState.currentPlaylist.length;
+    }
+    const prevSong = musicState.currentPlaylist[musicState.currentIndex];
+    musicPlaySong(prevSong.id, prevSong.title, prevSong.artist, prevSong.cover);
+}
+// --- 新增：控制音乐播放与暂停的核心逻辑 ---
+function musicTogglePlay() {
+    if (!musicState.currentSong) return;
+    
+    if (musicState.isPlaying) {
+        audioPlayer.pause();
+        musicState.isPlaying = false;
+    } else {
+        audioPlayer.play();
+        musicState.isPlaying = true;
+    }
+    
+    // 更新播放器和胶囊的 UI 状态
+    musicUpdatePlayerUI();
+}
+function musicTogglePlayMode() {
+    const modes = ['loop', 'single', 'random'];
+    const currentIndex = modes.indexOf(musicState.playMode);
+    musicState.playMode = modes[(currentIndex + 1) % modes.length];
+    
+    const modeBtn = document.getElementById('music-btn-mode');
+    if (musicState.playMode === 'loop') {
+        modeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>';
+    } else if (musicState.playMode === 'single') {
+        modeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>';
+    } else if (musicState.playMode === 'random') {
+        modeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>';
+    }
+
+    // 👇 宝宝，把下面这一行加在这个函数的最后面！
+    // 它的作用是：每次切换模式后，立刻通知胶囊更新UI
+    if (typeof musicUpdateCapsuleUI === 'function') musicUpdateCapsuleUI();
+}
+
+function musicOpenCurrentPlaylist() {
+    const container = document.getElementById('music-current-playlist-container');
+    container.innerHTML = '';
+    
+    if (musicState.currentPlaylist.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No songs in playlist.</div>';
+    } else {
+        musicState.currentPlaylist.forEach((song, index) => {
+            const isPlaying = index === musicState.currentIndex;
+            const item = document.createElement('div');
+            item.className = 'ins-music-song-item';
+            item.style.borderBottom = '1px solid #F9F9F9';
+            item.innerHTML = `
+                <div class="ins-music-song-info">
+                    <div class="ins-music-song-title" style="color: ${isPlaying ? '#111' : '#666'}; font-weight: ${isPlaying ? '700' : '500'};">${song.title}</div>
+                    <div class="ins-music-song-artist">${song.artist}</div>
+                </div>
+                ${isPlaying ? '<svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:#111;"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>' : ''}
+            `;
+            item.onclick = () => {
+                musicState.currentIndex = index;
+                musicPlaySong(song.id, song.title, song.artist, song.cover);
+                wcCloseModal('music-modal-current-playlist');
+            };
+            container.appendChild(item);
+        });
+    }
+        wcOpenModal('music-modal-current-playlist');
+}
+
+// 1. 安全地绑定迷你播放器的点击事件（放在全局或 window.onload 中）
+document.addEventListener('DOMContentLoaded', () => {
+    const miniPlayerEl = document.getElementById('music-mini-player');
+    if (miniPlayerEl) {
+        miniPlayerEl.addEventListener('click', (e) => {
+            // 如果点击的是播放/暂停按钮，则不打开全屏
+            if (e.target.closest('.ins-music-player-controls')) return;
+            musicOpenFullPlayer();
+        });
+    }
+});
+
+// 2. 修复后的打开全屏播放器函数
+function musicOpenFullPlayer() {
+    if (!musicState.currentSong) return;
+    const fullPlayer = document.getElementById('music-full-player');
+    if (fullPlayer) {
+        fullPlayer.classList.add('active');
+    }
+}
+
+function musicCloseFullPlayer() {
+    const fullPlayer = document.getElementById('music-full-player');
+    if (fullPlayer) {
+        fullPlayer.classList.remove('active');
+    }
+}
+
+function musicUpdatePlayerUI() {
+    if (!musicState.currentSong) return;
+    
+    document.getElementById('music-player-cover').src = musicState.currentSong.cover;
+    document.getElementById('music-fp-cover').src = musicState.currentSong.cover;
+// 修改为：
+const miniTitle = document.getElementById('music-player-title');
+const miniArtist = document.getElementById('music-player-artist');
+const fpTitle = document.getElementById('music-fp-title');
+const fpArtist = document.getElementById('music-fp-artist');
+
+if (miniTitle) miniTitle.innerText = musicState.currentSong.title;
+if (miniArtist) miniArtist.innerText = musicState.currentSong.artist;
+if (fpTitle) fpTitle.innerText = musicState.currentSong.title;
+if (fpArtist) fpArtist.innerText = musicState.currentSong.artist; 
+    const coverEl = document.getElementById('music-player-cover');
+    const fpRecordEl = document.getElementById('music-fp-record');
+    const playBtn = document.getElementById('music-btn-play');
+    const fpPlayBtn = document.getElementById('music-fp-btn-play');
+    
+    const pauseIcon = '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+    const playIcon = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';            
+    
+    if (musicState.isPlaying) {
+        coverEl.classList.add('playing');
+        fpRecordEl.classList.add('playing');
+        playBtn.innerHTML = pauseIcon;
+        fpPlayBtn.innerHTML = pauseIcon;
+    } else {
+        coverEl.classList.remove('playing');
+        fpRecordEl.classList.remove('playing');
+        playBtn.innerHTML = playIcon;
+        fpPlayBtn.innerHTML = playIcon;
+    }
+    
+    // 【追加这一行】：同步更新音乐胶囊的 UI
+    if (typeof musicUpdateCapsuleUI === 'function') musicUpdateCapsuleUI();
+}
+
+// --- 个人主页与歌单管理 ---
+function musicRenderProfile() {
+    document.getElementById('music-profile-bg').style.backgroundImage = `url('${musicState.profile.bg}')`;
+    document.getElementById('music-profile-avatar').src = musicState.profile.avatar;
+    document.getElementById('music-profile-name').innerText = musicState.profile.name;
+    
+    const list = document.getElementById('music-playlist-list');
+    list.innerHTML = '';
+    
+    if (musicState.playlists.length === 0) {
+        list.innerHTML = '<div style="text-align: center; color: #888; font-style: italic; padding: 20px;">No playlists yet.</div>';
+        return;
+    }
+    
+    musicState.playlists.forEach((pl, idx) => {
+        const card = document.createElement('div');
+        card.className = 'ins-music-playlist-card';
+        card.innerHTML = `
+            <img src="${pl.cover}" class="ins-music-playlist-cover">
+            <div class="ins-music-playlist-info">
+                <div class="ins-music-playlist-name">${pl.name}</div>
+                <div class="ins-music-playlist-count">${pl.tracks ? pl.tracks.length : 0} tracks</div>
+            </div>
+            <div class="ins-music-btn-icon" style="background: transparent; border: none; color: #888;" onclick="musicDeletePlaylist(event, ${idx})">
+                <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            </div>
+        `;
+        card.onclick = () => musicOpenPlaylistDetail(idx);
+        list.appendChild(card);
+    });
+}
+
+function musicOpenProfileEdit() {
+    document.getElementById('music-edit-name').value = musicState.profile.name;
+    document.getElementById('music-edit-avatar-url').value = '';
+    document.getElementById('music-edit-bg-url').value = '';
+    wcState.tempImage = ''; 
+    wcOpenModal('music-modal-edit-profile');
+}
+
+function musicHandleFileUpload(input, type) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if (type === 'avatar') {
+                document.getElementById('music-edit-avatar-url').value = 'Local Image Selected';
+                musicState.tempAvatar = e.target.result;
+            } else if (type === 'bg') {
+                document.getElementById('music-edit-bg-url').value = 'Local Image Selected';
+                musicState.tempBg = e.target.result;
+            } else if (type === 'pl-cover') {
+                document.getElementById('music-create-pl-cover').value = 'Local Image Selected';
+                musicState.tempPlCover = e.target.result;
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function musicSaveProfile() {
+    const name = document.getElementById('music-edit-name').value.trim();
+    const avatarUrl = document.getElementById('music-edit-avatar-url').value.trim();
+    const bgUrl = document.getElementById('music-edit-bg-url').value.trim();
+    
+    if (name) musicState.profile.name = name;
+    if (avatarUrl && avatarUrl !== 'Local Image Selected') musicState.profile.avatar = avatarUrl;
+    else if (musicState.tempAvatar) musicState.profile.avatar = musicState.tempAvatar;
+    
+    if (bgUrl && bgUrl !== 'Local Image Selected') musicState.profile.bg = bgUrl;
+    else if (musicState.tempBg) musicState.profile.bg = musicState.tempBg;
+    
+    musicState.tempAvatar = null;
+    musicState.tempBg = null;
+    
+    musicSaveData();
+    musicRenderProfile();
+    wcCloseModal('music-modal-edit-profile');
+}
+
+function musicOpenCreatePlaylist() { wcOpenModal('music-modal-playlist-options'); }
+
+function musicCreatePlaylist() {
+    const name = document.getElementById('music-create-pl-name').value.trim();
+    const coverUrl = document.getElementById('music-create-pl-cover').value.trim();
+    if (!name) return alert("Please enter a playlist name.");
+    
+    let finalCover = 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'; 
+    if (coverUrl && coverUrl !== 'Local Image Selected') finalCover = coverUrl;
+    else if (musicState.tempPlCover) finalCover = musicState.tempPlCover;
+    
+    musicState.playlists.push({ id: Date.now(), name: name, cover: finalCover, tracks: [] });
+    
+    musicState.tempPlCover = null;
+    musicSaveData();
+    musicRenderProfile();
+    wcCloseModal('music-modal-create-playlist');
+}
+
+async function musicImportPlaylist() {
+    const link = document.getElementById('music-import-pl-link').value.trim();
+    if (!link) return alert("Please paste a link.");
+    
+    const match = link.match(/id=(\d+)/);
+    if (!match) return alert("Invalid NetEase Music link.");
+    
+    const plId = match[1];
+    const btn = document.querySelector('#music-modal-import-playlist .wc-btn-primary');
+    const originalText = btn.innerText;
+    btn.innerText = "Importing...";
+    
+    try {
+        // 1. 获取歌单详情
+        const resDetail = await fetch(`https://163api.qijieya.cn/playlist/detail?id=${plId}`);
+        const dataDetail = await resDetail.json();
+        
+        if (dataDetail.code === 200 && dataDetail.playlist) {
+            // 2. 获取歌单所有歌曲
+            const resTracks = await fetch(`https://163api.qijieya.cn/playlist/track/all?id=${plId}&limit=50`);
+            const dataTracks = await resTracks.json();
+            
+            let tracks = [];
+            if (dataTracks.code === 200 && dataTracks.songs) {
+                tracks = dataTracks.songs.map(song => ({
+                    id: song.id,
+                    title: song.name,
+                    artist: song.ar.map(a => a.name).join(', '),
+                    cover: song.al.picUrl + '?param=100y100'
+                }));
+            }
+            
+            musicState.playlists.push({
+                id: dataDetail.playlist.id,
+                name: dataDetail.playlist.name,
+                cover: dataDetail.playlist.coverImgUrl,
+                tracks: tracks
+            });
+            
+            musicSaveData();
+            musicRenderProfile();
+            wcCloseModal('music-modal-import-playlist');
+            alert("Playlist imported successfully!");
+        } else {
+            alert("Failed to fetch playlist details.");
+        }
+    } catch (e) {
+        alert("Network error during import.");
+    } finally {
+        btn.innerText = originalText;
+        document.getElementById('music-import-pl-link').value = '';
+    }
+}
+
+function musicDeletePlaylist(e, idx) {
+    e.stopPropagation();
+    if (confirm("Delete this playlist?")) {
+        musicState.playlists.splice(idx, 1);
+        musicSaveData();
+        musicRenderProfile();
+    }
+}
+
+// --- 歌单内歌曲管理 ---
+function musicOpenPlaylistDetail(idx) {
+    const pl = musicState.playlists[idx];
+    if (!pl) return;
+    
+    document.getElementById('music-detail-pl-name').innerText = pl.name;
+    const container = document.getElementById('music-detail-pl-tracks');
+    container.innerHTML = '';
+    
+    if (!pl.tracks || pl.tracks.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No songs in this playlist.</div>';
+    } else {
+        pl.tracks.forEach((song, songIdx) => {
+            const item = document.createElement('div');
+            item.className = 'ins-music-song-item';
+            item.innerHTML = `
+                <img src="${song.cover}" class="ins-music-song-cover">
+                <div class="ins-music-song-info">
+                    <div class="ins-music-song-title">${song.title}</div>
+                    <div class="ins-music-song-artist">${song.artist}</div>
+                </div>
+                <div class="ins-music-btn-icon" style="background: transparent; border: none; color: #FF3B30;" onclick="musicRemoveFromPlaylist(event, ${idx}, ${songIdx})">
+                    <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </div>
+            `;
+            item.onclick = () => {
+                // 将当前歌单设为播放列表
+                musicState.currentPlaylist = [...pl.tracks];
+                musicState.currentIndex = songIdx;
+                musicPlaySong(song.id, song.title, song.artist, song.cover);
+            };
+            container.appendChild(item);
+        });
+    }
+    
+    wcOpenModal('music-modal-playlist-detail');
+}
+
+function musicRemoveFromPlaylist(e, plIdx, songIdx) {
+    e.stopPropagation();
+    if (confirm("Remove this song from playlist?")) {
+        musicState.playlists[plIdx].tracks.splice(songIdx, 1);
+        musicSaveData();
+        musicRenderProfile();
+        musicOpenPlaylistDetail(plIdx); // 刷新列表
+    }
+}
+
+function musicOpenAddToPlaylist(songObj = null) {
+    // 如果传入了 songObj，说明是从搜索列表点的；否则默认用当前播放的歌
+    const targetSong = songObj || musicState.currentSong;
+    
+    if (!targetSong) return alert("No song selected.");
+    
+    musicState.pendingAddSong = targetSong; // 暂存这首歌
+    
+    const container = document.getElementById('music-add-to-pl-list');
+    container.innerHTML = '';
+    
+    if (musicState.playlists.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No playlists available. Create one first.</div>';
+    } else {
+        musicState.playlists.forEach((pl, idx) => {
+            const item = document.createElement('div');
+            item.className = 'ins-music-playlist-card';
+            item.style.marginBottom = '10px';
+            item.innerHTML = `
+                <img src="${pl.cover}" class="ins-music-playlist-cover" style="width: 40px; height: 40px;">
+                <div class="ins-music-playlist-info">
+                    <div class="ins-music-playlist-name" style="font-size: 14px;">${pl.name}</div>
+                </div>
+            `;
+            item.onclick = () => musicAddSongToPlaylist(idx);
+            container.appendChild(item);
+        });
+    }
+    
+    wcOpenModal('music-modal-add-to-playlist');
+}
+
+function musicAddSongToPlaylist(plIdx) {
+    const pl = musicState.playlists[plIdx];
+    const song = musicState.pendingAddSong; // 使用暂存的歌曲
+    
+    if (!song) return;
+    if (!pl.tracks) pl.tracks = [];
+    
+    // 检查是否已存在
+    if (pl.tracks.find(s => s.id === song.id)) {
+        alert("Song is already in this playlist.");
+    } else {
+        pl.tracks.push({
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            cover: song.cover
+        });
+        musicSaveData();
+        musicRenderProfile();
+        alert("Added to playlist!");
+    }
+    
+    wcCloseModal('music-modal-add-to-playlist');
+    musicState.pendingAddSong = null; // 清空暂存
+}
+// ==========================================
+// 音乐播放器迷你聊天功能
+// ==========================================
+// 【修复】：接收事件参数 e，并阻止默认跳转行为
+function musicToggleChatWindow(e) {
+    // 拦截默认点击事件，防止页面闪烁跳动
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    
+    if (!musicState.listenTogether.active || !musicState.listenTogether.charId) {
+        alert("请先在发现页邀请一位角色一起听歌哦~");
+        return;
+    }
+    const chatWin = document.getElementById('music-chat-window');
+    if (chatWin.style.display === 'none' || chatWin.style.display === '') {
+        chatWin.style.display = 'flex';
+        musicRenderChatMessages();
+    } else {
+        chatWin.style.display = 'none';
+    }
+}
+
+function musicRenderChatMessages() {
+    const charId = musicState.listenTogether.charId;
+    if (!charId) return;
+    
+    const container = document.getElementById('music-chat-history');
+    container.innerHTML = '';
+    
+    const msgs = wcState.chats[charId] || [];
+    const recentMsgs = msgs.slice(-20); 
+    
+    recentMsgs.forEach(msg => {
+        if (msg.hidden || msg.type === 'system') return; 
+        
+        const div = document.createElement('div');
+        div.className = `music-chat-msg ${msg.sender === 'me' ? 'me' : 'them'}`;
+        
+        // 支持渲染表情包和图片
+        if (msg.type === 'sticker' || msg.type === 'image') {
+            div.innerHTML = `<img src="${msg.content}" style="max-width: 120px; border-radius: 8px; display: block;">`;
+            div.style.background = 'transparent';
+            div.style.padding = '0';
+        } else if (msg.type === 'voice') {
+            div.innerText = '[语音]';
+        } else if (msg.type === 'transfer') {
+            div.innerText = '[转账]';
+        } else if (msg.type === 'music_invite') {
+            div.innerText = '[听歌邀请]';
+        } else {
+            div.innerText = msg.content;
+        }
+        
+        container.appendChild(div);
+    });
+    
+    setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+    }, 50);
+}
+
+function musicHandleChatEnter(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault(); // 【关键修复】：阻止默认回车事件，防止页面刷新卡跳
+        musicSendChatMessage();
+    }
+}
+
+function musicSendChatMessage() {
+    const input = document.getElementById('music-chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    const charId = musicState.listenTogether.charId;
+    if (!charId) return;
+    
+    wcAddMessage(charId, 'me', 'text', text);
+    input.value = '';
+    musicRenderChatMessages();
+    wcTriggerAI(charId);
+}
+
+function musicTriggerAI() {
+    const charId = musicState.listenTogether.charId;
+    if (!charId) return;
+    
+    // 添加一个临时的“正在输入”状态
+    const container = document.getElementById('music-chat-history');
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'music-chat-msg them';
+    loadingDiv.innerText = '正在输入...';
+    container.appendChild(loadingDiv);
+    container.scrollTop = container.scrollHeight;
+
+    wcTriggerAI(charId);
+}
+// ==========================================
+// 新增：AI 音乐控制支撑函数
+// ==========================================
+
+// AI 点播歌曲逻辑
+async function musicCharSearchAndPlay(charId, keyword) {
+    if (!keyword) return;
+    try {
+        const res = await fetch(`https://163api.qijieya.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
+        const data = await res.json();
+        
+        if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
+            const song = data.result.songs[0]; // 取搜索结果的第一首
+            const newSong = {
+                id: song.id,
+                title: song.name,
+                artist: song.ar.map(a => a.name).join(', '),
+                cover: song.al.picUrl + '?param=100y100'
+            };
+            
+            // 加入当前播放列表并播放
+            musicState.currentPlaylist.push(newSong);
+            musicState.currentIndex = musicState.currentPlaylist.length - 1;
+            musicPlaySong(newSong.id, newSong.title, newSong.artist, newSong.cover);
+            
+            wcAddMessage(charId, 'system', 'system', `[系统提示: ${wcState.characters.find(c=>c.id===charId).name} 为你点播了《${newSong.title}》]`, { style: 'transparent' });
+        } else {
+            wcAddMessage(charId, 'system', 'system', `[系统提示: 未找到歌曲 "${keyword}"]`, { style: 'transparent' });
+        }
+    } catch (e) {
+        console.error("AI 点播失败", e);
+    }
+}
+
+// AI 强制退出一起听歌 (不弹确认框)
+function musicForceStopListenTogether(charId) {
+    musicState.listenTogether.active = false;
+    musicState.listenTogether.charId = null;
+    clearInterval(musicState.listenTogether.timerInterval);
+    
+    const togetherEl = document.getElementById('music-fp-together');
+    if (togetherEl) togetherEl.style.display = 'none';
+    
+    musicSaveData();
+    // 确保这里没有 hidden: true，这样用户就能在聊天界面看到
+    wcAddMessage(charId, 'system', 'system', `[系统提示: 对方已退出一起听歌]`, { style: 'transparent' });
+}
+
+// ==========================================
+// 新增：处理 AI 主动邀请用户的弹窗逻辑
+// ==========================================
+let pendingCharInviteData = null;
+
+function musicShowCharInviteModal(charId, songName) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    pendingCharInviteData = { charId: charId, songName: songName };
+
+    document.getElementById('char-invite-avatar').src = char.avatar;
+    document.getElementById('char-invite-name').innerText = char.name;
+
+    const songBox = document.getElementById('char-invite-song-box');
+    if (songName) {
+        document.getElementById('char-invite-song-name').innerText = songName;
+        songBox.style.display = 'flex';
+    } else {
+        songBox.style.display = 'none';
+    }
+
+    const modal = document.getElementById('music-char-invite-modal');
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+
+function musicRejectCharInvite() {
+    const modal = document.getElementById('music-char-invite-modal');
+    modal.classList.add('hidden');
+    setTimeout(() => modal.style.display = 'none', 300); // 等待动画结束
+
+    if (pendingCharInviteData) {
+        const charId = pendingCharInviteData.charId;
+        wcAddMessage(charId, 'me', 'text', "我现在有点忙，晚点再一起听吧~");
+        wcTriggerAI(charId); // 让 AI 回应你的拒绝
+        pendingCharInviteData = null;
+    }
+}
+
+async function musicAcceptCharInvite() {
+    const modal = document.getElementById('music-char-invite-modal');
+    modal.classList.add('hidden');
+    setTimeout(() => modal.style.display = 'none', 300);
+
+    if (pendingCharInviteData) {
+        const charId = pendingCharInviteData.charId;
+        const songName = pendingCharInviteData.songName;
+        
+        wcAddMessage(charId, 'me', 'text', "好呀，我们一起听！");
+        
+        // 打开音乐播放器并建立连接
+        openMusicApp();
+        musicStartListenTogether(charId);
+        musicOpenFullPlayer();
+
+        // 如果 AI 指定了歌曲，自动搜索并播放
+        if (songName) {
+            await musicCharSearchAndPlay(charId, songName);
+        }
+        
+        pendingCharInviteData = null;
+    }
+}
+// ==========================================
+// 音乐胶囊 (Music Capsule) 逻辑 (完美修复版)
+// ==========================================
+
+let isCapsuleEnabled = false;
+let isCapsuleExpanded = false;
+let capsuleToggleLock = false; // 节流锁，防止短时间内重复触发导致闪烁
+
+// 拖拽相关变量
+let capDrag = { active: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0, moved: false, isTouch: false };
+
+// 4. 拖拽与点击逻辑初始化
+document.addEventListener('DOMContentLoaded', () => {
+    const capsule = document.getElementById('floating-music-capsule');
+    if (!capsule) return;
+
+    capsule.addEventListener('mousedown', startCapsuleDrag);
+    capsule.addEventListener('touchstart', startCapsuleDrag, { passive: false });
+    
+    // 点击外部空白处自动收起胶囊
+    document.addEventListener('click', (e) => {
+        if (isCapsuleExpanded && capsule && !capsule.contains(e.target)) {
+            toggleMusicCapsuleExpand(); // <--- 修改这里
+      
+        }
+    });
+});
+
+let lastCapsuleTouchEndTime = 0;
+
+function startCapsuleDrag(e) {
+    // 如果点击的是下拉播放器内部，不触发拖拽
+    if (e.target.closest('#capsule-dropdown-player')) return;
+    if (e.target.closest('.capsule-btn')) return;
+
+    // 防止 touchend 触发的模拟 mousedown 导致重复执行
+    if (e.type === 'mousedown' && Date.now() - lastCapsuleTouchEndTime < 500) {
+        return;
+    }   
+
+    const isTouch = e.type === 'touchstart';
+    const touch = isTouch ? e.touches[0] : e;
+    
+    capDrag.active = true;
+    capDrag.moved = false;
+    capDrag.startX = touch.clientX;
+    capDrag.startY = touch.clientY;
+    capDrag.isTouch = isTouch;
+    
+    const capsule = document.getElementById('floating-music-capsule');
+    const rect = capsule.getBoundingClientRect();
+    
+    // 记录初始位置 (去除 transform 的影响，改用绝对 left/top)
+    capDrag.initialLeft = rect.left;
+    capDrag.initialTop = rect.top;
+    
+    capsule.style.transform = 'none';
+    capsule.style.left = rect.left + 'px';
+    capsule.style.top = rect.top + 'px';
+    capsule.style.transition = 'none'; // 拖拽时取消动画，保证跟手
+
+    // 根据事件类型，分别绑定对应的移动和结束事件
+    if (isTouch) {
+        document.addEventListener('touchmove', onCapsuleDrag, { passive: false });
+        document.addEventListener('touchend', endCapsuleDrag);
+    } else {
+        document.addEventListener('mousemove', onCapsuleDrag);
+        document.addEventListener('mouseup', endCapsuleDrag);
+    }
+}
+
+function onCapsuleDrag(e) {
+    if (!capDrag.active) return;
+    
+    const touch = capDrag.isTouch ? e.touches[0] : e;
+    const dx = touch.clientX - capDrag.startX;
+    const dy = touch.clientY - capDrag.startY;
+    
+    // 如果移动距离超过 5px，判定为拖拽而不是点击
+// 修改为：
+if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+    capDrag.moved = true;
+    if (e.cancelable) { e.preventDefault(); }
+}
+
+    
+    if (capDrag.moved) {
+        const capsule = document.getElementById('floating-music-capsule');
+        
+        // 边界限制
+        let newLeft = capDrag.initialLeft + dx;
+        let newTop = capDrag.initialTop + dy;
+        const maxLeft = window.innerWidth - capsule.offsetWidth;
+        const maxTop = window.innerHeight - capsule.offsetHeight;
+        
+        if (newLeft < 0) newLeft = 0;
+        if (newLeft > maxLeft) newLeft = maxLeft;
+        if (newTop < 0) newTop = 0;
+        if (newTop > maxTop) newTop = maxTop;
+
+        capsule.style.left = newLeft + 'px';
+        capsule.style.top = newTop + 'px';
+    }
+}
+function endCapsuleDrag(e) {
+    if (!capDrag.active) return;
+    capDrag.active = false;
+    
+    // 如果是触摸事件，记录结束时间，用于拦截后续的模拟鼠标事件
+    if (capDrag.isTouch) {
+        lastCapsuleTouchEndTime = Date.now();
+    }
+    
+    const capsule = document.getElementById('floating-music-capsule');
+    // 恢复动画属性
+    capsule.style.transition = 'width 0.4s cubic-bezier(0.25, 1, 0.5, 1), height 0.4s cubic-bezier(0.25, 1, 0.5, 1), border-radius 0.4s cubic-bezier(0.25, 1, 0.5, 1), background 0.4s ease';
+    
+    // 移除对应的事件监听
+    if (capDrag.isTouch) {
+        document.removeEventListener('touchmove', onCapsuleDrag);
+        document.removeEventListener('touchend', endCapsuleDrag);
+    } else {
+        document.removeEventListener('mousemove', onCapsuleDrag);
+        document.removeEventListener('mouseup', endCapsuleDrag);
+    }
+
+    // 如果没有移动（即纯点击），则触发展开/收起
+    if (!capDrag.moved) {
+        // 【核心修复】：阻止事件冒泡，防止触发 document 的 click 事件导致立即收起
+        if (e.stopPropagation) e.stopPropagation();
+        if (e.preventDefault) e.preventDefault();
+        toggleMusicCapsuleExpand(); // <--- 修改这里
+    }
+}
+
+
+// 5. 胶囊内部的控制按钮逻辑
+function capsuleTogglePlay(e) {
+    if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+    }
+    musicTogglePlay(); // 复用已有的播放/暂停逻辑
+}
+
+function capsulePlayNext(e) {
+    if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+    }
+    musicPlayNext(); // 复用已有的下一首逻辑
+}
+
+function capsulePlayPrev(e) {
+    if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+    }
+    musicPlayPrev(); // 复用已有的上一首逻辑
+}
+
+// 胶囊展开/收起逻辑
+function toggleMusicCapsuleExpand() {
+    if (capsuleToggleLock) return;
+    capsuleToggleLock = true;
+    setTimeout(() => { capsuleToggleLock = false; }, 300);
+
+    const dropdown = document.getElementById('capsule-dropdown-player');
+    if (!dropdown) return;
+    
+    if (dropdown.classList.contains('active')) {
+        // 收起
+        dropdown.classList.remove('active');
+        isCapsuleExpanded = false;
+        setTimeout(() => {
+            dropdown.classList.add('hidden');
+        }, 300);
+    } else {
+        // 展开
+        dropdown.classList.remove('hidden');
+        isCapsuleExpanded = true;
+        void dropdown.offsetWidth; // 强制重绘
+        dropdown.classList.add('active');
+    }
+}
+
+// 胶囊开关逻辑
+function toggleMusicCapsule() {
+    const toggle = document.getElementById('music-capsule-toggle');
+    const capsule = document.getElementById('floating-music-capsule');
+    
+    if (!capsule || !toggle) return;
+
+    if (toggle.classList.contains('active')) {
+        // 关闭胶囊
+        toggle.classList.remove('active');
+        capsule.classList.add('hidden');
+        isCapsuleEnabled = false;
+        // 如果关闭时是展开状态，将其复原收起
+        if (isCapsuleExpanded) {
+            toggleMusicCapsuleExpand();
+        }
+    } else {
+        // 开启胶囊
+        if (musicState.currentSong) {
+            toggle.classList.add('active');
+            capsule.classList.remove('hidden');
+            isCapsuleEnabled = true;
+            musicUpdateCapsuleUI();
+        } else {
+            alert("请先播放一首歌曲");
+        }
+    }
+}
+
+// 更新胶囊 UI
+function musicUpdateCapsuleUI() {
+    const capsule = document.getElementById('floating-music-capsule');
+    if (!capsule) return;
+    
+    if (!musicState.currentSong) {
+        capsule.classList.add('hidden');
+        return;
+    }
+    
+    // 如果胶囊开关打开，则显示
+    const toggle = document.getElementById('music-capsule-toggle');
+    if (toggle && toggle.classList.contains('active')) {
+        capsule.classList.remove('hidden');
+    }
+    
+    // 更新收起状态
+    document.getElementById('capsule-island-cover').src = musicState.currentSong.cover;
+    if (musicState.isPlaying) {
+        capsule.classList.remove('paused');
+    } else {
+        capsule.classList.add('paused');
+    }
+    
+    // 更新一起听歌时长和头像
+    const timerEl = document.getElementById('capsule-timer');
+    if (musicState.listenTogether.active && musicState.listenTogether.charId) {
+        timerEl.style.display = 'block';
+        // 头像
+        document.getElementById('capsule-exp-cover').style.display = 'none';
+        document.getElementById('capsule-exp-avatars').style.display = 'flex';
+        
+        const char = wcState.characters.find(c => c.id === musicState.listenTogether.charId);
+        const userAvatar = (char && char.chatConfig && char.chatConfig.userAvatar) ? char.chatConfig.userAvatar : wcState.user.avatar;
+        document.getElementById('capsule-exp-avatar-user').src = userAvatar;
+        document.getElementById('capsule-exp-avatar-char').src = char ? char.avatar : '';
+    } else {
+        timerEl.style.display = 'none';
+        // 封面
+        document.getElementById('capsule-exp-cover').style.display = 'block';
+        document.getElementById('capsule-exp-avatars').style.display = 'none';
+        document.getElementById('capsule-exp-cover').src = musicState.currentSong.cover;
+    }    
+// 修改为：
+const capTitle = document.getElementById('capsule-exp-title');
+const capArtist = document.getElementById('capsule-exp-artist');
+if (capTitle) capTitle.innerText = musicState.currentSong.title;
+if (capArtist) capArtist.innerText = musicState.currentSong.artist;
+    
+    const playBtn = document.getElementById('capsule-btn-play');
+    const pauseIcon = '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+    const playIcon = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+    playBtn.innerHTML = musicState.isPlaying ? pauseIcon : playIcon;
+    
+    // 播放模式
+    const modeBtn = document.getElementById('capsule-btn-mode');
+    if (musicState.playMode === 'loop') {
+        modeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>';
+    } else if (musicState.playMode === 'single') {
+        modeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>';
+    } else if (musicState.playMode === 'random') {
+        modeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>';
+    }
+}
+// ==========================================================================
+// 全局补丁与覆盖 (Global Patches & Overrides)
+// ==========================================================================
+(function applyGlobalPatches() {
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .wc-wallet-header { padding-top: 60px !important; }
+        #wc-modal-phone-settings { z-index: 20001 !important; }
+        
+        /* 【修复】：强制购物页面隐藏，防止破坏布局 */
+        #wc-view-shopping {
+            display: none !important;
+        }
+        #wc-view-shopping.active {
+            display: flex !important;
+        }
+        
+        /* ==========================================
+           【核心修复】：音乐APP页面错乱与全屏播放器遮挡问题 
+           ========================================== */
+        .ins-music-view:not(.active) {
+            display: none !important;
+        }
+        
+        #music-full-player {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 3000 !important;
+            background-color: #fff; /* 兜底背景色，防止透明穿透 */
+            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease !important;
+        }
+        
+        #music-full-player:not(.active) {
+            transform: translateY(100%) !important;
+            pointer-events: none !important;
+            opacity: 0 !important;
+        }
+        
+        #music-full-player.active {
+            transform: translateY(0) !important;
+            pointer-events: auto !important;
+            opacity: 1 !important;
+        }
+        /* ========================================== */
+        
+        body.edit-mode-active .app-item {
+            animation: shake 0.3s infinite;
+        }
+        body.edit-mode-active .ls-widget-inner {
+            animation: shake 0.3s infinite;
+        }
+        @keyframes shake {
+            0% { transform: rotate(0deg); }
+            25% { transform: rotate(1deg); }
+            50% { transform: rotate(0deg); }
+            75% { transform: rotate(-1deg); }
+            100% { transform: rotate(0deg); }
+        }
+        #home-edit-bar {
+            position: fixed; top: 0; left: 0; width: 100%; height: 60px;
+            background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);
+            z-index: 9999; display: none; justify-content: space-between; align-items: center;
+            padding: 0 20px; box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+        }
+        .edit-btn {
+            padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+        }
+        .edit-btn.cancel { background: #E5E5EA; color: #000; }
+        .edit-btn.save { background: #007AFF; color: #fff; }
+        
+        /* 限制真实图片的最大尺寸 */
+        .wc-bubble-img { 
+            max-width: 160px !important; 
+            max-height: 200px !important; 
+            border-radius: 10px; 
+            display: block; 
+            object-fit: cover; 
+            cursor: pointer;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    const editBar = document.createElement('div');
+    editBar.id = 'home-edit-bar';
+    editBar.innerHTML = `
+        <div class="edit-btn cancel" onclick="cancelHomeEdit()">取消</div>
+        <div style="font-weight:bold;">编辑主屏幕</div>
+        <div class="edit-btn save" onclick="saveHomeEdit()">完成</div>
+    `;
+    document.body.appendChild(editBar);
+
+    window.applyFont = function(url) {
+        const finalUrl = url || document.getElementById('fontUrlInput').value;
+        const fontStyle = document.getElementById('dynamic-font-style');
+        if (finalUrl && fontStyle) {
+            fontStyle.textContent = `
+                @font-face { font-family: 'CustomFont'; src: url('${finalUrl}'); } 
+                body, input, textarea, button, select, 
+                .ls-view, #wechat-root, #wc-view-phone-sim, .wc-page, .wc-bubble, 
+                .ls-feed-text, .ls-widget-note-text, .wc-system-msg-text { 
+                    font-family: 'CustomFont', sans-serif !important; 
+                }
+            `;
+            saveThemeSettings();
+        }
+    };
+})();
+// ==========================================================================
+// 意见反馈系统 (真实云端联机版)
+// ==========================================================================
+
+const ADMIN_QQ = '1509048968'; // 你的专属管理员QQ
+let feedbackMyQQ = '';         // 当前使用者的QQ/数字ID
+let feedbackIsAdmin = false;   // 当前是否为管理员
+let feedbackCurrentChatUser = null; // 管理员当前正在回复的用户
+let feedbackRefreshInterval = null; // 自动刷新定时器
+
+// 【核心】：免注册云端数据库配置
+// 使用你的QQ号作为专属数据库桶名，确保唯一性
+const KVDB_BUCKET = 'honey_feedback_1509048968_v1'; 
+const KVDB_URL = `https://kvdb.io/bucket/${KVDB_BUCKET}/messages`;
+
+// 1. 打开反馈页面
+async function openFeedbackSettings() {
+    document.getElementById('feedbackSettingsModal').classList.add('open');
+    
+    // 获取身份标识：优先使用激活的QQ号，如果没有则生成6位数字ID
+    const actStatus = await idb.get('ios_theme_activation_status');
+    if (actStatus && actStatus.qq) {
+        feedbackMyQQ = actStatus.qq;
+    } else {
+        let randomId = localStorage.getItem('feedback_random_id');
+        if (!randomId) {
+            randomId = Math.floor(100000 + Math.random() * 900000).toString(); // 生成6位数字
+            localStorage.setItem('feedback_random_id', randomId);
+        }
+        feedbackMyQQ = '游客_' + randomId;
+    }
+    
+    // 判断是否为管理员
+    feedbackIsAdmin = (feedbackMyQQ === ADMIN_QQ);
+
+    if (feedbackIsAdmin) {
+        document.getElementById('feedback-header-title').innerText = "反馈管理 (管理员)";
+        await showFeedbackAdminList();
+    } else {
+        document.getElementById('feedback-header-title').innerText = "意见反馈";
+        await showFeedbackChat(feedbackMyQQ);
+    }
+
+    // 自动调整输入框高度
+    const input = document.getElementById('feedback-input');
+    input.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+
+    // 开启自动刷新 (每5秒拉取一次最新消息)
+    if (feedbackRefreshInterval) clearInterval(feedbackRefreshInterval);
+    feedbackRefreshInterval = setInterval(() => {
+        if (document.getElementById('feedback-chat-view').style.display === 'flex') {
+            refreshFeedbackChat(feedbackCurrentChatUser || feedbackMyQQ);
+        } else if (document.getElementById('feedback-admin-list').style.display === 'block') {
+            showFeedbackAdminList(true); // true表示静默刷新，不显示加载中
+        }
+    }, 5000);
+}
+
+// 2. 关闭/返回逻辑
+function closeFeedbackSettings() {
+    if (feedbackIsAdmin && document.getElementById('feedback-chat-view').style.display === 'flex') {
+        // 管理员从聊天界面返回列表
+        document.getElementById('feedback-chat-view').style.display = 'none';
+        document.getElementById('feedback-admin-list').style.display = 'block';
+        document.getElementById('feedback-header-title').innerText = "反馈管理 (管理员)";
+        feedbackCurrentChatUser = null;
+    } else {
+        // 彻底关闭弹窗
+        document.getElementById('feedbackSettingsModal').classList.remove('open');
+        if (feedbackRefreshInterval) clearInterval(feedbackRefreshInterval);
+    }
+}
+
+// ---------------------------------------------------------
+// 【真实网络请求区】(连接到 KVDB.io)
+// ---------------------------------------------------------
+async function fetchFeedbackDataFromServer() {
+    try {
+        const response = await fetch(KVDB_URL);
+        if (response.status === 404) return {}; // 数据库为空时返回空对象
+        if (!response.ok) throw new Error('Network error');
+        return await response.json();
+    } catch (error) {
+        console.error("云端获取失败，尝试读取本地缓存:", error);
+        return await idb.get('local_feedback_backup') || {};
+    }
+}
+
+async function saveFeedbackDataToServer(data) {
+    try {
+        await fetch(KVDB_URL, {
+            method: 'POST', // KVDB 使用 POST 更新数据
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        // 备份到本地，防止断网丢失
+        await idb.set('local_feedback_backup', data);
+    } catch (error) {
+        console.error("云端保存失败:", error);
+        alert("网络异常，消息发送失败，请检查网络。");
+    }
+}
+// ---------------------------------------------------------
+
+// 3. 管理员视图：渲染发来反馈的用户列表
+async function showFeedbackAdminList(isSilent = false) {
+    document.getElementById('feedback-admin-list').style.display = 'block';
+    document.getElementById('feedback-chat-view').style.display = 'none';
+    
+    const container = document.getElementById('feedback-users-container');
+    if (!isSilent) container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">正在连接云端...</div>';
+    
+    const allData = await fetchFeedbackDataFromServer();
+    const users = Object.keys(allData);
+    
+    if (users.length === 0) {
+        container.innerHTML = '<div style="padding: 30px; text-align: center; color: #999;">暂无任何人提交反馈</div>';
+        return;
+    }
+
+    // 按最后一条消息的时间排序 (最新的在最上面)
+    users.sort((a, b) => {
+        const lastA = allData[a][allData[a].length - 1].time;
+        const lastB = allData[b][allData[b].length - 1].time;
+        return lastB - lastA;
+    });
+
+    let html = '';
+    users.forEach(userQQ => {
+        const msgs = allData[userQQ];
+        const lastMsg = msgs[msgs.length - 1];
+        
+        // 格式化时间
+        const date = new Date(lastMsg.time);
+        const timeStr = `${date.getMonth()+1}-${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+        
+        // 判断最后一条消息是不是管理员发的
+        const prefix = lastMsg.sender === ADMIN_QQ ? '<span style="color:#007aff;">[我回复]</span> ' : '';
+        
+        html += `
+            <div class="ios-list-item" onclick="openAdminChat('${userQQ}')">
+                <div class="ios-item-content" style="flex-direction: column; align-items: flex-start; padding: 12px 16px; gap: 4px;">
+                    <div style="display: flex; justify-content: space-between; width: 100%;">
+                        <span style="font-weight: 600; font-size: 16px; color: #000;">${userQQ}</span>
+                        <span style="font-size: 12px; color: #8e8e93;">${timeStr}</span>
+                    </div>
+                    <div style="font-size: 14px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">
+                        ${prefix}${lastMsg.content}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+// 管理员点击列表进入聊天
+window.openAdminChat = function(userQQ) {
+    document.getElementById('feedback-header-title').innerText = `回复: ${userQQ}`;
+    showFeedbackChat(userQQ);
+};
+
+// 4. 聊天视图：渲染具体的对话记录
+async function showFeedbackChat(targetQQ) {
+    feedbackCurrentChatUser = targetQQ;
+    document.getElementById('feedback-admin-list').style.display = 'none';
+    document.getElementById('feedback-chat-view').style.display = 'flex';
+    
+    const historyEl = document.getElementById('feedback-chat-history');
+    historyEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">正在同步云端消息...</div>';
+    
+    await refreshFeedbackChat(targetQQ, true);
+}
+
+// 刷新聊天记录 (isFirstLoad 用于控制是否强制滚动到底部)
+async function refreshFeedbackChat(targetQQ, isFirstLoad = false) {
+    const allData = await fetchFeedbackDataFromServer();
+    const msgs = allData[targetQQ] || [];
+    
+    const historyEl = document.getElementById('feedback-chat-history');
+    
+    if (msgs.length === 0) {
+        historyEl.innerHTML = '<div style="text-align:center; padding:30px; color:#8e8e93; font-size:13px;">发送你的反馈，开发者会尽快回复你~<br>你的反馈仅管理员可见。</div>';
+        return;
+    }
+
+    // 检查是否需要滚动到底部 (如果用户当前就在最底部，刷新后继续保持在底部)
+    const isAtBottom = historyEl.scrollHeight - historyEl.scrollTop <= historyEl.clientHeight + 50;
+
+    let html = '';
+    msgs.forEach(msg => {
+        const isMe = msg.sender === feedbackMyQQ;
+        const timeStr = new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        const align = isMe ? 'flex-end' : 'flex-start';
+        const bg = isMe ? '#007aff' : '#e5e5ea';
+        const color = isMe ? '#fff' : '#000';
+        const radius = isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px';
+        const margin = isMe ? 'margin-right: 4px;' : 'margin-left: 4px;';
+
+        html += `
+            <div style="display: flex; flex-direction: column; align-items: ${align}; width: 100%;">
+                <div style="max-width: 75%; padding: 10px 14px; border-radius: ${radius}; font-size: 15px; line-height: 1.4; word-break: break-word; white-space: pre-wrap; background: ${bg}; color: ${color};">
+                    ${msg.content}
+                </div>
+                <div style="font-size: 10px; color: #8e8e93; margin-top: 4px; ${margin}">${timeStr}</div>
+            </div>
+        `;
+    });
+    
+    historyEl.innerHTML = html;
+    
+    if (isFirstLoad || isAtBottom) {
+        setTimeout(() => { historyEl.scrollTop = historyEl.scrollHeight; }, 50);
+    }
+}
+
+// 5. 发送消息
+window.sendFeedbackMessage = async function() {
+    const input = document.getElementById('feedback-input');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    const btn = document.querySelector('#feedback-chat-view button');
+    btn.innerText = "发送中";
+    btn.disabled = true;
+    
+    // 确定房间号：管理员发消息存入对应用户的房间，普通用户存入自己的房间
+    const targetRoomQQ = feedbackIsAdmin ? feedbackCurrentChatUser : feedbackMyQQ;
+    
+    // 先拉取最新数据，防止覆盖别人刚发的消息
+    const allData = await fetchFeedbackDataFromServer();
+    if (!allData[targetRoomQQ]) allData[targetRoomQQ] = [];
+    
+    allData[targetRoomQQ].push({
+        sender: feedbackMyQQ,
+        content: text,
+        time: Date.now()
+    });
+    
+    await saveFeedbackDataToServer(allData);
+    
+    input.value = '';
+    input.style.height = 'auto'; 
+    btn.innerText = "发送";
+    btn.disabled = false;
+    
+    // 立即刷新界面并滚动到底部
+    await refreshFeedbackChat(targetRoomQQ, true);
+};

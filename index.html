@@ -28,8 +28,7 @@
 
     <!-- 新增：Leaflet 地图库 (免费开源，无需Key) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -50,8 +49,7 @@
             </div>
             
             <!-- 低饱和渐变粉色按钮 -->
-<button class="bingo-btn" onclick="verifyActivation()">
-            
+            <button class="bingo-btn" onclick="verifyActivation()">
                 BINGO (´・ω・)ﾉ
             </button>
             
@@ -80,6 +78,10 @@
         <input type="file" id="backupImportInput" class="hidden-file-input" accept=".json" onchange="importAllData(this)">
         <input type="file" id="themeImportInput" class="hidden-file-input" accept=".json" onchange="importThemeOnly(this)">
         <input type="file" id="wcBackupImportInput" class="hidden-file-input" accept=".json" onchange="wcImportData(this)">
+        <!-- 音乐APP 隐藏的文件输入框 -->
+        <input type="file" id="musicBgInput" class="hidden-file-input" accept="image/*" onchange="handleMusicUpload(this, 'bg')">
+        <input type="file" id="musicAvatarInput" class="hidden-file-input" accept="image/*" onchange="handleMusicUpload(this, 'avatar')">
+        <input type="file" id="musicPlaylistCoverInput" class="hidden-file-input" accept="image/*" onchange="handleMusicUpload(this, 'playlist')">
 
         <!-- iOS 顶部通知容器 -->
         <div id="ios-notification-container"></div>
@@ -124,7 +126,7 @@
                     <!-- App 5: iOS Settings -->
                     <div class="app-item" id="app-5" onclick="openIOSSettings()">
                         <div class="app-icon" id="icon-5">
-                            <svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                            <svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47.41l.36 2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
                         </div>
                         <div class="app-name" id="name-5" style="display:none">Settings</div>
                     </div>
@@ -631,37 +633,17 @@
                             <div class="ios-item-right">API 配置<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
                         </div>
                     </div>
-                    <!-- 找到这里： <div class="ios-list-group"> -->
-<!-- 在 Wi-Fi (API 配置) 的下面，新增一个通知权限按钮 -->
-<div class="ios-list-item" onclick="requestRealNotification()">
-    <div class="ios-icon-box" style="background:#ff3b30">
-        <svg viewBox="0 0 24 24" fill="white"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/></svg>
-    </div>
-    <div class="ios-item-content">
-        <span class="ios-item-label">开启系统真实通知</span>
-        <div class="ios-item-right" id="notif-status-text">未开启<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
-    </div>
-</div>
-<!-- 1. 测试通知按钮 -->
-<div class="ios-list-item" onclick="testRealNotification()">
-    <div class="ios-icon-box" style="background:#ff9500">
-        <svg viewBox="0 0 24 24" fill="white"><path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z"/></svg>
-    </div>
-    <div class="ios-item-content">
-        <span class="ios-item-label">测试后台通知 (点后切后台)</span>
-        <div class="ios-item-right"><svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
-    </div>
-</div>
-<!-- 2. 后台保活开关 -->
-<div class="ios-list-item" onclick="toggleKeepAlive()">
-    <div class="ios-icon-box" style="background:#34c759">
-        <svg viewBox="0 0 24 24" fill="white"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
-    </div>
-    <div class="ios-item-content">
-        <span class="ios-item-label">后台持续运行 (防休眠)</span>
-        <div class="ios-item-right" id="keep-alive-status">未开启<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
-    </div>
-</div>
+                    
+                    <!-- 通知与后台入口 -->
+                    <div class="ios-list-item" onclick="openNotificationSettings()">
+                        <div class="ios-icon-box" style="background:#ff3b30">
+                            <svg viewBox="0 0 24 24" fill="white"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/></svg>
+                        </div>
+                        <div class="ios-item-content">
+                            <span class="ios-item-label">通知与后台</span>
+                            <div class="ios-item-right" id="main-notif-status">未开启<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
+                        </div>
+                    </div>
                     <!-- 新增隐私与安全 -->
                     <div class="ios-list-item" onclick="openPrivacySettings()">
                         <div class="ios-icon-box" style="background:#34c759"><svg viewBox="0 0 24 24" fill="white"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg></div>
@@ -670,6 +652,68 @@
                             <div class="ios-item-right"><svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
                         </div>
                     </div>
+
+                    <!-- 【新增】：意见反馈入口 -->
+                    <div class="ios-list-item" onclick="openFeedbackSettings()">
+                        <div class="ios-icon-box" style="background:#ff9500">
+                            <svg viewBox="0 0 24 24" fill="white"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z"/></svg>
+                        </div>
+                        <div class="ios-item-content">
+                            <span class="ios-item-label">意见反馈</span>
+                            <div class="ios-item-right"><svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 通知与后台 设置页面 -->
+        <div class="settings-modal sub-page" id="notificationSettingsModal">
+            <div class="settings-header">
+                <div class="header-left">
+                    <button class="nav-btn" onclick="closeNotificationSettings()">
+                        <svg class="back-svg" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                        <span>设置</span>
+                    </button>
+                </div>
+                <div class="header-title">通知与后台</div>
+                <div class="header-right"></div>
+            </div>
+            <div class="settings-content ios-settings-content">
+                <div class="settings-title" style="margin-top:20px;">系统通知</div>
+                <div class="ios-list-group">
+                    <div class="ios-list-item">
+                        <div class="ios-item-content">
+                            <div style="display:flex; flex-direction:column;">
+                                <span class="ios-item-label">允许后台真实通知</span>
+                                <span style="font-size:11px; color:#8e8e93; margin-top:4px;">开启后，切到后台也能收到消息推送</span>
+                            </div>
+                            <!-- 使用与恋人空间相同的 iOS 风格开关 -->
+                            <input type="checkbox" id="toggle-real-notif" class="ls-toggle" onchange="handleNotifToggle(this)">
+                        </div>
+                    </div>
+                    <div class="ios-list-item" onclick="testRealNotification()">
+                        <div class="ios-item-content">
+                            <span class="ios-item-label" style="color:#007aff;">测试通知 (点击后5秒内切后台)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-title">后台保活 (防休眠)</div>
+                <div class="ios-list-group">
+                    <div class="ios-list-item">
+                        <div class="ios-item-content">
+                            <div style="display:flex; flex-direction:column;">
+                                <span class="ios-item-label">后台持续运行</span>
+                                <span style="font-size:11px; color:#8e8e93; margin-top:4px;">播放静音音频防止浏览器休眠</span>
+                            </div>
+<input type="checkbox" id="toggle-keep-alive" onclick="handleKeepAliveToggle()">
+
+                        </div>
+                    </div>
+                </div>
+                <div style="padding: 0 16px; font-size: 12px; color: #8e8e93; margin-top: 10px; line-height: 1.5;">
+                    注：如果通知无法弹出，请检查浏览器或手机系统的通知权限是否已手动打开。部分手机系统可能会强杀后台，建议同时开启保活功能。
                 </div>
             </div>
         </div>
@@ -718,6 +762,44 @@
                 </div>
             </div>
         </div>
+           <!-- 意见反馈 设置页面 -->
+        <div class="settings-modal sub-page" id="feedbackSettingsModal">
+            <div class="settings-header">
+                <div class="header-left">
+                    <button class="nav-btn" onclick="closeFeedbackSettings()">
+                        <svg class="back-svg" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                        <span>返回</span>
+                    </button>
+                </div>
+                <div class="header-title" id="feedback-header-title">意见反馈</div>
+                <div class="header-right"></div>
+            </div>
+            
+            <div class="settings-content ios-settings-content" style="display: flex; flex-direction: column; padding: 0; height: 100%; overflow: hidden;">
+                
+                <!-- 管理员视图：显示所有发来反馈的用户列表 -->
+                <div id="feedback-admin-list" style="display: none; flex: 1; overflow-y: auto; background: #f2f2f7;">
+                    <div class="settings-title" style="margin-top:20px;">用户反馈列表</div>
+                    <div class="ios-list-group" id="feedback-users-container">
+                        <!-- JS 动态注入用户列表 -->
+                    </div>
+                </div>
+
+                <!-- 聊天视图：普通用户发反馈，或管理员回复特定用户 -->
+                <div id="feedback-chat-view" style="display: flex; flex-direction: column; flex: 1; height: 100%; background: #f2f2f7;">
+                    <div id="feedback-chat-history" style="flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 15px;">
+                        <!-- JS 动态注入聊天气泡 -->
+                    </div>
+                    
+                    <!-- 底部输入框 -->
+                    <div style="padding: 10px 15px; background: #f9f9f9; border-top: 1px solid #c6c6c8; display: flex; gap: 10px; align-items: flex-end; padding-bottom: calc(10px + env(safe-area-inset-bottom)); flex-shrink: 0;">
+                        <textarea id="feedback-input" style="flex: 1; min-height: 36px; max-height: 100px; border-radius: 18px; border: 1px solid #d1d1d6; padding: 8px 15px; font-size: 15px; resize: none; outline: none;" placeholder="输入反馈内容..." rows="1"></textarea>
+                        <button onclick="sendFeedbackMessage()" style="background: #007aff; color: white; border: none; padding: 0 16px; height: 36px; border-radius: 18px; font-weight: 600; font-size: 15px; cursor: pointer; margin-bottom: 1px;">发送</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>    
         <!-- Apple ID 详细设置页面 -->
         <div class="settings-modal sub-page" id="appleIdSettingsModal">
             <div class="settings-header">
@@ -814,7 +896,7 @@
                     <div class="settings-row">
                         <div class="row-label">API 地址 (Base URL)</div>
                         <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com/v1">
-                        <div style="font-size:11px; color:#888; margin-top:4px;">请确保反代服务器支持 CORS (跨域访问)</div>
+                        <div style="font-size:11px; color:#888; margin-top:4px;">记得后缀/v1哦</div>
                     </div>
                     <div class="settings-row">
                         <div class="row-label">API 密钥 (Key)</div>
@@ -946,8 +1028,8 @@
             </div>
         </div>
 
-        <!-- 通用弹窗 -->
-        <div class="custom-modal-overlay" id="modalOverlay">
+        <!-- 通用弹窗 (修复了 z-index 层级) -->
+        <div class="custom-modal-overlay" id="modalOverlay" style="z-index: 2800;">
             <div class="custom-modal">
                 <div class="modal-title" id="modalTitle">标题</div>
                 <div class="modal-desc" id="modalDesc">描述文本</div>
@@ -988,6 +1070,364 @@
                 <svg class="wc-ios-success-icon hidden" id="wc-loading-success" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 <svg class="wc-ios-error-icon hidden" id="wc-loading-error" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 <div class="wc-ios-loading-text" id="wc-loading-text">正在生成内容...</div>
+            </div>
+        </div>
+        <!-- ========================================== -->
+        <!-- App 3: INS Music Player -->
+        <!-- ========================================== -->
+        <div class="settings-modal" id="musicModal" style="padding: 0; z-index: 3500; background: #FFF;">
+            <div id="music-root" class="ins-music-root">
+                
+                <!-- 视图 1：主页 (发现与角色) -->
+                <div id="music-view-home" class="ins-music-view active">
+                    <div class="ins-music-header">
+                        <div class="ins-music-title">Discover</div>
+                        <div class="ins-music-search-bar" onclick="musicOpenSearch()">
+                            <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                            <span>Search for music...</span>
+                        </div>
+                    </div>
+                    <div class="ins-music-content">
+                        <div class="ins-music-section-title">Listen Together</div>
+                        <div class="ins-music-char-grid" id="music-char-grid">
+                            <!-- 角色卡片由 JS 注入 -->
+                        </div>
+                        <div class="ins-music-bottom-spacer"></div>
+                    </div>
+                </div>
+
+                <!-- 视图 2：个人主页 (半屏背景 + 白色底图) -->
+                <div id="music-view-profile" class="ins-music-view">
+                    <!-- 固定在顶部的半屏背景 -->
+                    <div class="ins-music-profile-bg" id="music-profile-bg"></div>
+       <!-- 悬浮在背景上的顶部按钮 -->
+                    <div class="ins-music-profile-topbar">
+                        <!-- 留空保持布局 -->
+                    </div>
+                 
+ 
+
+                    <!-- 可滚动的白色内容区 -->
+                    <div class="ins-music-profile-content">
+                        <div class="ins-music-profile-info">
+                            <div class="ins-music-avatar-wrapper">
+                                <img src="" id="music-profile-avatar" class="ins-music-profile-avatar">
+                            </div>
+                            <div class="ins-music-profile-name" id="music-profile-name">User</div>
+                        </div>
+                        
+                        <div class="ins-music-playlist-container">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <!-- 移到这里的编辑按钮 -->
+                                    <div class="ins-music-btn-icon" onclick="musicOpenProfileEdit()" style="background: #F5F5F5; color: #111; width: 28px; height: 28px; border: 1px solid #E5E5EA;">
+                                        <svg viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                                    </div>
+                                    <div class="ins-music-section-title" style="margin-bottom: 0;">My Playlists</div>
+                                </div>
+                                <!-- 音乐胶囊开关：五角星 -->
+                                <div class="ins-music-capsule-toggle" id="music-capsule-toggle" onclick="toggleMusicCapsule()">
+                                    <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                                </div>
+                            </div>
+                              </div>
+                            <!-- 【修复】：补回承载歌单的容器 -->
+                            <div id="music-playlist-list"></div>
+                            
+                            <div class="ins-music-btn-create" onclick="musicOpenCreatePlaylist()">
+                                <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                                <span>New Playlist</span>
+                            </div>
+                        </div>
+                        <!-- 强制底部留白，防止被播放器遮挡 -->
+                        <div class="ins-music-bottom-spacer"></div>
+                    </div>
+                </div>
+
+                <!-- 搜索覆盖层 -->
+                <div id="music-search-overlay" class="ins-music-search-overlay">
+                    <div class="ins-music-search-header">
+                        <div class="ins-music-btn-icon" onclick="musicCloseSearch()" style="color: #111; border-color: #E5E5EA;">
+                            <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                        </div>
+                        <input type="text" id="music-search-input" class="ins-music-search-input" placeholder="Song, Artist, Album..." onkeypress="musicHandleSearchEnter(event)">
+                        <div class="ins-music-btn-icon" onclick="musicPerformSearch()" style="color: #111; border-color: #E5E5EA;">
+                            <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        </div>
+                    </div>
+                    <div id="music-search-results" class="ins-music-search-results">
+                        <div class="ins-music-empty-state">Search for your favorite tracks</div>
+                        <div class="ins-music-bottom-spacer"></div>
+                    </div>
+                </div>
+
+                <!-- 底部悬浮播放器 -->
+                <div class="ins-music-mini-player" id="music-mini-player" style="display: none;">
+                    <img src="" id="music-player-cover" class="ins-music-player-cover">
+                    <div class="ins-music-player-info">
+                        <div class="ins-music-player-title" id="music-player-title">Song Title</div>
+                        <div class="ins-music-player-artist" id="music-player-artist">Artist</div>
+                    </div>
+                    <div class="ins-music-player-controls">
+                        <div class="ins-music-btn-icon" onclick="musicTogglePlay(event)" id="music-btn-play" style="border: none; background: #F5F5F5;">
+                            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 全屏音乐播放器 (黑白灰简约 iOS 风 + 黑胶唱片 + 歌词) -->
+                <div id="music-full-player" class="ins-music-full-player">
+                    <!-- 顶部：返回按钮 & 聊天按钮 -->
+                    <div class="ins-music-fp-header">
+                        <div class="ins-music-fp-btn" onclick="musicCloseFullPlayer()">
+                            <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" transform="rotate(-90 12 12)"/></svg>
+                        </div>
+                        <div class="ins-music-fp-title">Now Playing</div>
+                        <!-- 修改这里：把添加歌单按钮改成了聊天按钮 -->
+                        <div class="ins-music-fp-btn" onclick="musicToggleChatWindow()">
+                            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        </div>
+                    </div>
+                    
+                    <!-- 【新增】：迷你聊天弹窗 (放在头部下方) -->
+                    <div id="music-chat-window" class="music-chat-window" style="display: none;">
+                        <div class="music-chat-history" id="music-chat-history"></div>
+                        <div class="music-chat-input-area">
+                            <input type="text" id="music-chat-input" placeholder="和 Ta 聊聊这首歌..." onkeypress="musicHandleChatEnter(event)">
+                            <!-- AI 回复按钮 -->
+                            <button onclick="musicTriggerAI()" title="让Ta回复">
+                                <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:currentColor;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                            </button>
+                            <!-- 发送按钮 -->
+                            <button onclick="musicSendChatMessage()" title="发送">
+                                <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:currentColor;"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                            </button>
+                        </div>
+                    </div> <!-- ⚠️ 修复：在这里补上闭合标签 -->
+                    
+                    <!-- 新增：一起听歌状态 (点击可结束) -->
+                    <div class="ins-music-fp-together" id="music-fp-together" style="display: none;" onclick="musicStopListenTogether()">
+                        <div class="ins-music-fp-avatars">
+                            <img src="" id="music-fp-avatar-user" class="ins-music-fp-avatar">
+                            <img src="" id="music-fp-avatar-char" class="ins-music-fp-avatar char">
+                        </div>
+ <div class="ins-music-fp-timer" id="music-fp-timer" onclick="musicStopListenTogether()" title="点击结束一起听歌">00:00</div>
+                    </div>
+                    
+                    <!-- 中间：黑胶唱片 -->
+                    <div class="ins-music-fp-record-container">
+                        <div class="ins-music-fp-record" id="music-fp-record">
+                            <img src="" id="music-fp-cover" class="ins-music-fp-cover">
+                        </div>
+                    </div>
+                    
+                    <!-- 歌曲信息 -->
+                    <div class="ins-music-fp-info">
+                        <div class="ins-music-fp-song" id="music-fp-title">Song Title</div>
+                        <div class="ins-music-fp-artist" id="music-fp-artist">Artist</div>
+                    </div>
+
+                    <!-- 滚动歌词 -->
+                    <div class="ins-music-fp-lyrics-container" id="music-fp-lyrics-container">
+                        <div class="ins-music-fp-lyrics" id="music-fp-lyrics">
+                            <div class="ins-music-lyric-line">Pure Music...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 进度条 -->
+                    <div class="ins-music-fp-progress">
+                        <div class="ins-music-fp-progress-bar" id="music-progress-bar" onclick="musicSeek(event)">
+                            <div class="ins-music-fp-progress-fill" id="music-progress-fill"></div>
+                        </div>
+                        <div class="ins-music-fp-time">
+                            <span id="music-time-current">0:00</span>
+                            <span id="music-time-total">-:-</span>
+                        </div>
+                    </div>
+
+                    <!-- 播放控制栏 -->
+                    <div class="ins-music-fp-controls">
+                        <div class="ins-music-fp-ctrl-btn small" onclick="musicTogglePlayMode()" id="music-btn-mode">
+                            <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+                        </div>
+                        <div class="ins-music-fp-ctrl-btn" onclick="musicPlayPrev()">
+                            <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                        </div>
+                        <div class="ins-music-fp-ctrl-btn play" onclick="musicTogglePlay(event)" id="music-fp-btn-play">
+                            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        </div>
+                        <div class="ins-music-fp-ctrl-btn" onclick="musicPlayNext()">
+                            <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                        </div>
+                        <div class="ins-music-fp-ctrl-btn small" onclick="musicOpenCurrentPlaylist()">
+                            <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+                        </div>
+                    </div>
+                </div>
+        <!-- ========================================== -->
+        <!-- 音乐 APP 弹窗集合 -->
+        <!-- ========================================== -->
+
+        <!-- 歌单详情弹窗 -->
+        <div id="music-modal-playlist-detail" class="wc-modal hidden" style="z-index: 3600; align-items: flex-end;">
+            <div class="wc-modal-content" style="height: 80vh; border-radius: 24px 24px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column;">
+                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                    <h3 style="color: #111; font-size: 18px; font-weight: 700;" id="music-detail-pl-name">Playlist</h3>
+                    <button class="wc-close-btn" onclick="wcCloseModal('music-modal-playlist-detail')">&times;</button>
+                </div>
+                <div class="wc-modal-body" id="music-detail-pl-tracks" style="flex: 1; overflow-y: auto; padding: 10px 20px;">
+                    <!-- 歌曲列表由 JS 注入 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 添加到歌单弹窗 -->
+        <div id="music-modal-add-to-playlist" class="wc-modal hidden" style="z-index: 3800; align-items: flex-end;">
+            <div class="wc-modal-content" style="height: 50vh; border-radius: 24px 24px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column;">
+                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                    <h3 style="color: #111; font-size: 16px; font-weight: 600;">Add to Playlist</h3>
+                    <button class="wc-close-btn" onclick="wcCloseModal('music-modal-add-to-playlist')">&times;</button>
+                </div>
+                <div class="wc-modal-body" id="music-add-to-pl-list" style="flex: 1; overflow-y: auto; padding: 10px 20px;">
+                    <!-- 歌单列表由 JS 注入 -->
+                </div>
+            </div>
+        </div>
+                <!-- 底部导航栏 -->
+                <div class="ins-music-tabbar">
+                    <div class="ins-music-tab active" onclick="musicSwitchTab('home')" id="music-tab-home">
+                        <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                    </div>
+                    <div class="ins-music-tab" onclick="musicSwitchTab('profile')" id="music-tab-profile">
+                        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    </div>
+                </div>
+
+                <!-- 退出按钮 -->
+                <div class="ins-music-exit-btn" onclick="closeMusicApp()">
+                    <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 19 17.59 13.41 12z"/></svg>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 当前播放列表弹窗 -->
+        <div id="music-modal-current-playlist" class="wc-modal hidden" style="z-index: 3800; align-items: flex-end;">
+            <div class="wc-modal-content" style="height: 60vh; border-radius: 24px 24px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column;">
+                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                    <h3 style="color: #111; font-size: 18px; font-weight: 700;">Up Next</h3>
+                    <button class="wc-close-btn" onclick="wcCloseModal('music-modal-current-playlist')">&times;</button>
+                </div>
+                <div class="wc-modal-body" id="music-current-playlist-container" style="flex: 1; overflow-y: auto; padding: 10px 20px;">
+                    <!-- 列表由 JS 注入 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 音乐 APP 弹窗：精美邀请确认 -->
+        <div id="music-modal-invite" class="wc-modal hidden" style="z-index: 3700;">
+            <div class="ins-music-invite-card">
+                <div class="ins-music-invite-avatar-wrap">
+                    <img src="" id="music-invite-avatar" class="ins-music-invite-avatar">
+                </div>
+                <h3 class="ins-music-invite-title">Listen Together</h3>
+                <p class="ins-music-invite-desc">Invite <span id="music-invite-name" style="font-weight:600; color:#000;">Name</span> to listen to</p>
+                <div class="ins-music-invite-song">
+                    <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                    <span id="music-invite-song-title">Song Title</span>
+                </div>
+                <div class="ins-music-invite-actions">
+                    <button class="ins-music-invite-btn cancel" onclick="wcCloseModal('music-modal-invite')">Cancel</button>
+                    <button class="ins-music-invite-btn confirm" onclick="musicConfirmInvite()">Send Invite</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 音乐 APP 弹窗：编辑个人主页 -->
+        <div id="music-modal-edit-profile" class="wc-modal hidden" style="z-index: 3600;">
+            <div class="wc-modal-content" style="background: #FFF;">
+                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0;">
+                    <h3 style="color: #111; font-weight: 700;">Edit Profile</h3>
+                    <button class="wc-close-btn" onclick="wcCloseModal('music-modal-edit-profile')">&times;</button>
+                </div>
+                <div class="wc-modal-body">
+                    <div class="wc-form-group">
+                        <label class="wc-form-label" style="color: #888;">Name</label>
+                        <input type="text" id="music-edit-name" class="wc-form-input" style="background: #F5F5F5; border: none;">
+                    </div>
+                    <div class="wc-form-group">
+                        <label class="wc-form-label" style="color: #888;">这里是上传头像˶ᵒ ᵕ ˂˶</label>
+                        <input type="text" id="music-edit-avatar-url" class="wc-form-input" placeholder="Image URL" style="background: #F5F5F5; border: none; margin-bottom: 8px;">
+                        <button class="wc-btn-secondary" style="width: 100%; padding: 10px; border-radius: 8px; background: #E5E5EA; color: #111; border: none;" onclick="document.getElementById('music-upload-avatar').click()">Upload Local Image</button>
+                        <input type="file" id="music-upload-avatar" style="display: none;" accept="image/*" onchange="musicHandleFileUpload(this, 'avatar')">
+                    </div>
+                    <div class="wc-form-group">
+                        <label class="wc-form-label" style="color: #888;">这里是上传背景˶ᵒ ᵕ ˂˶</label>
+                        <input type="text" id="music-edit-bg-url" class="wc-form-input" placeholder="Image URL" style="background: #F5F5F5; border: none; margin-bottom: 8px;">
+                        <button class="wc-btn-secondary" style="width: 100%; padding: 10px; border-radius: 8px; background: #E5E5EA; color: #111; border: none;" onclick="document.getElementById('music-upload-bg').click()">Upload Local Image</button>
+                        <input type="file" id="music-upload-bg" style="display: none;" accept="image/*" onchange="musicHandleFileUpload(this, 'bg')">
+                    </div>
+                    <button class="wc-btn-primary" style="background: #111; color: #FFF;" onclick="musicSaveProfile()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 音乐 APP 弹窗：新建歌单选择 -->
+        <div id="music-modal-playlist-options" class="wc-modal hidden" style="z-index: 3600; align-items: flex-end;">
+            <div class="wc-modal-content" style="height: auto; border-radius: 20px 20px 0 0; width: 100%; max-width: 100%; background: transparent;">
+                <div class="wc-ios-list-group" style="margin: 20px; border-radius: 16px; overflow: hidden; background: #FFF;">
+                    <div class="wc-list-item center-content" onclick="wcCloseModal('music-modal-playlist-options'); wcOpenModal('music-modal-create-playlist');" style="height: 60px;">
+                        <span style="font-size: 16px; color: #111; font-weight: 600;">创建歌单(՞_   ̫ _՞)ᐝ</span>
+                    </div>
+                    <div class="wc-list-item center-content" onclick="wcCloseModal('music-modal-playlist-options'); wcOpenModal('music-modal-import-playlist');" style="height: 60px; border-top: 1px solid #F0F0F0;">
+                        <span style="font-size: 16px; color: #111; font-weight: 600;">导入歌单๑'ꇴ'๑</span>
+                    </div>
+                </div>
+                <div class="wc-ios-list-group" style="margin: 0 20px 30px 20px; border-radius: 16px; overflow: hidden; background: #FFF;">
+                    <div class="wc-list-item center-content" onclick="wcCloseModal('music-modal-playlist-options')" style="height: 60px;">
+                        <span style="font-size: 16px; font-weight: bold; color: #FF3B30;">Cancel</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 音乐 APP 弹窗：手动创建歌单 -->
+        <div id="music-modal-create-playlist" class="wc-modal hidden" style="z-index: 3600;">
+            <div class="wc-modal-content" style="background: #FFF;">
+                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0;">
+                    <h3 style="color: #111; font-weight: 700;">New Playlist</h3>
+                    <button class="wc-close-btn" onclick="wcCloseModal('music-modal-create-playlist')">&times;</button>
+                </div>
+                <div class="wc-modal-body">
+                    <div class="wc-form-group">
+                        <label class="wc-form-label" style="color: #888;">Playlist Name</label>
+                        <input type="text" id="music-create-pl-name" class="wc-form-input" style="background: #F5F5F5; border: none;">
+                    </div>
+                    <div class="wc-form-group">
+                        <label class="wc-form-label" style="color: #888;">Cover Image (URL or Upload)</label>
+                        <input type="text" id="music-create-pl-cover" class="wc-form-input" placeholder="Image URL" style="background: #F5F5F5; border: none; margin-bottom: 8px;">
+                        <button class="wc-btn-secondary" style="width: 100%; padding: 10px; border-radius: 8px; background: #E5E5EA; color: #111; border: none;" onclick="document.getElementById('music-upload-pl-cover').click()">Upload Local Image</button>
+                        <input type="file" id="music-upload-pl-cover" style="display: none;" accept="image/*" onchange="musicHandleFileUpload(this, 'pl-cover')">
+                    </div>
+                    <button class="wc-btn-primary" style="background: #111; color: #FFF;" onclick="musicCreatePlaylist()">Create</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 音乐 APP 弹窗：导入歌单 -->
+        <div id="music-modal-import-playlist" class="wc-modal hidden" style="z-index: 3600;">
+            <div class="wc-modal-content" style="background: #FFF;">
+                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0;">
+                    <h3 style="color: #111; font-weight: 700;">Import Playlist</h3>
+                    <button class="wc-close-btn" onclick="wcCloseModal('music-modal-import-playlist')">&times;</button>
+                </div>
+                <div class="wc-modal-body">
+                    <div class="wc-form-group">
+                        <label class="wc-form-label" style="color: #888;">NetEase Music Link</label>
+                        <textarea id="music-import-pl-link" class="wc-form-textarea" placeholder="这里是网易云链接或ID导入歌单，导入歌单前注意要先前往网易云设置把歌单公开哦，导入完就可以继续隐藏了哦^^" style="background: #F5F5F5; border: none; height: 80px;"></textarea>
+                    </div>
+                    <button class="wc-btn-primary" style="background: #111; color: #FFF;" onclick="musicImportPlaylist()">Import</button>
+                </div>
             </div>
         </div>
 
@@ -1085,10 +1525,16 @@
                                         <svg class="wc-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                                     </div>
                                     <span class="wc-more-label">回忆总结</span>
-                                </div>                           
+                                </div>
+                                <!-- 新增购物按钮 -->
+                                <div class="wc-more-item" onclick="wcActionShopping()">
+                                    <div class="wc-more-icon-box">
+                                        <svg class="wc-icon" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+                                    </div>
+                                    <span class="wc-more-label">购物</span>
+                                </div>
                             </div>
                         </div>
-
                         <!-- Chat Footer -->
                         <div class="wc-chat-footer" id="wc-chat-footer">
                             <!-- Quote Preview -->
@@ -1207,6 +1653,41 @@
                             <div id="wc-memory-list-container" style="padding: 16px;">
                                 <!-- Memories injected here -->
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Shopping Full Page (New Full Screen) -->
+                    <div id="wc-view-shopping">
+                        <div class="wc-navbar" style="position: relative; background: #fdfbf7; border-bottom: none; box-shadow: 0 2px 10px rgba(212, 196, 183, 0.15);">
+                            <div class="wc-nav-left">
+                                <button class="wc-nav-btn" onclick="wcCloseShoppingPage()">
+                                    <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                </button>
+                            </div>
+                            <div class="wc-nav-title" style="display: flex; justify-content: center; gap: 20px; font-weight: normal;">
+                                <div id="shop-tab-mall" class="shop-tab active" onclick="wcSwitchShopTab('mall')">商城</div>
+                                <div id="shop-tab-takeout" class="shop-tab" onclick="wcSwitchShopTab('takeout')">外卖</div>
+                            </div>
+                            <div class="wc-nav-right" style="gap: 10px;">
+                                <button class="wc-nav-btn" onclick="wcOpenShopSettingsModal()">
+                                    <svg class="wc-icon" viewBox="0 0 24 24"><path d="M4 21v-7"></path><path d="M4 10V3"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M20 21v-5"></path><path d="M20 12V3"></path><path d="M1 14h6"></path><path d="M9 8h6"></path><path d="M17 16h6"></path></svg>
+                                </button>
+                                <button class="wc-nav-btn" onclick="wcGenerateShopItems()">
+                                    <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="wc-main-content" style="padding-top: 64px; background: #fdfbf7; position: relative;">
+                            <div id="shop-list-mall" class="shop-list active" style="padding: 16px;">
+                                <div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成商品</div>
+                            </div>
+                            <div id="shop-list-takeout" class="shop-list" style="display: none; padding: 16px;">
+                                <div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成外卖</div>
+                            </div>
+                        </div>
+                        <div class="shop-cart-btn" onclick="wcOpenCartModal()">
+                            <svg class="wc-icon" viewBox="0 0 24 24" style="color: #fff;"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                            <div class="shop-cart-badge" id="shop-cart-badge">0</div>
                         </div>
                     </div>
 
@@ -1493,8 +1974,24 @@
                     </div>
                 </div>
 
-                <!-- General Input Modal -->
-                <div id="wc-modal-general-input" class="wc-modal hidden" style="z-index: 2400;">
+                <!-- 【新增】编辑消息专用弹窗 -->
+                <div id="wc-modal-edit-message" class="wc-modal hidden" style="z-index: 2800;">
+                    <div class="wc-modal-content" style="width: 90%; max-width: 340px; border-radius: 14px;">
+                        <div style="padding: 20px;">
+                            <h3 style="margin-top: 0; text-align: center;">编辑消息</h3>
+                            <div class="wc-form-group" style="margin-top: 15px;">
+                                <textarea id="wc-edit-message-textarea" class="wc-form-textarea" style="height: 150px; font-size: 15px;"></textarea>
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                <button class="wc-ios-btn-block wc-btn-secondary" style="flex: 1; margin: 0;" onclick="wcCloseModal('wc-modal-edit-message')">取消</button>
+                                <button class="wc-ios-btn-block" style="flex: 1; margin: 0;" id="wc-edit-message-confirm">确认</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- General Input Modal (修复了 z-index 层级) -->
+                <div id="wc-modal-general-input" class="wc-modal hidden" style="z-index: 2800;">
                     <div class="wc-modal-content" style="width: 80%; max-width: 300px; border-radius: 12px;">
                         <div style="padding: 20px;">
                             <h3 style="margin-top: 0; text-align: center;" id="wc-general-input-title">输入</h3>
@@ -1579,9 +2076,122 @@
                     </div>
                 </div>
 
- <!-- CHAT SETTINGS MODAL -->
-<div id="wc-modal-chat-settings" class="wc-modal hidden" style="z-index: 2500; align-items: flex-start;">
-    <div class="wc-modal-content" style="background: #F2F2F7; display: flex; flex-direction: column; height: 100%; width: 100%; max-width: 100%; border-radius: 0; margin: 0;">
+                <!-- Shop Settings Modal -->
+                <div id="wc-modal-shop-settings" class="wc-modal hidden" style="z-index: 2600;">
+                    <div class="wc-modal-content">
+                        <div class="wc-modal-header">
+                            <h3>商城设置</h3>
+                            <button class="wc-close-btn" onclick="wcCloseModal('wc-modal-shop-settings')">&times;</button>
+                        </div>
+                        <div class="wc-modal-body">
+                            <div class="wc-form-group">
+                                <label class="wc-form-label">关联世界书 (用于生成商品/外卖)</label>
+                                <div id="wc-shop-setting-wb-list" class="wc-checkbox-list" style="max-height: 200px; overflow-y: auto;">
+                                    <!-- JS 注入 -->
+                                </div>
+                            </div>
+                            <button class="wc-btn-primary" onclick="wcSaveShopSettings()">保存设置</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cart Modal -->
+                <div id="wc-modal-shop-cart" class="wc-modal hidden" style="z-index: 2600; align-items: flex-end;">
+                    <div class="wc-modal-content" style="height: 80vh; border-radius: 20px 20px 0 0; width: 100%; max-width: 100%; display: flex; flex-direction: column; background: #fdfbf7;">
+                        <div class="wc-modal-header" style="background: #fdfbf7; border-bottom: none; padding: 20px;">
+                            <h3 style="font-size: 20px; color: #4a413e;">购物车</h3>
+                            <button class="wc-close-btn" onclick="wcCloseModal('wc-modal-shop-cart')">&times;</button>
+                        </div>
+                        <div class="wc-modal-body" id="shop-cart-list" style="flex: 1; overflow-y: auto; padding: 0 20px;">
+                            <!-- Cart Items -->
+                        </div>
+                        <div style="padding: 20px; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 15px rgba(0,0,0,0.02);">
+                            <div style="font-size: 18px; font-weight: bold; color: #4a413e;">合计: <span style="color: #c28e7e; font-family: 'Georgia', serif; font-style: italic;" id="shop-cart-total">¥0.00</span></div>
+                            <button class="wc-btn-primary" style="width: 120px; margin: 0; background: #5d5350;" onclick="wcCheckoutCart()">去结算</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- [旧] Checkout Action Modal (将被新的卡片式弹窗替换) -->
+                <div id="wc-modal-shop-checkout" class="wc-modal hidden" style="z-index: 2700; align-items: flex-end;">
+                    <!-- ... 此内容将被新弹窗取代 ... -->
+                </div>
+
+                <!-- [旧] Delivery Type Modal (将被新的卡片式弹窗替换) -->
+                <div id="wc-modal-delivery-type" class="wc-modal hidden" style="z-index: 2750; align-items: flex-end;">
+                    <!-- ... 此内容将被新弹窗取代 ... -->
+                </div>
+
+                <!-- ========================================== -->
+                <!-- 新增：高级感结算卡片 -->
+                <!-- ========================================== -->
+                <div id="wc-modal-shop-checkout-card" class="wc-modal-overlay hidden" style="z-index: 2700; align-items: center; justify-content: center;">
+                    <div class="shop-checkout-card">
+                        <button class="wc-close-btn" onclick="wcCloseModal('wc-modal-shop-checkout-card')" style="position: absolute; top: 15px; right: 15px; z-index: 10;">&times;</button>
+                        <h3>确认订单</h3>
+                        <div class="checkout-total-display">
+                            <span>应付总额</span>
+                            <strong id="checkout-card-total">¥0.00</strong>
+                        </div>
+                        <div class="checkout-actions">
+                            <button class="shop-card-btn gift" onclick="wcOpenDeliveryTypeModal('gift')">
+                                <svg viewBox="0 0 24 24"><path d="M20 12v10H4V12M20 7H4V4h16v3M12 22V7m-4 0h8v0a4 4 0 0 1-8 0v0Z"></path></svg>
+                                <span>为Ta赠送</span>
+                            </button>
+                            <button class="shop-card-btn daifu" onclick="wcOpenDeliveryTypeModal('daifu')">
+                                <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                                <span>请Ta代付</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- 新增：高级感配送方式卡片 -->
+                <!-- ========================================== -->
+                <div id="wc-modal-delivery-card" class="wc-modal-overlay hidden" style="z-index: 2750; align-items: center; justify-content: center;">
+                    <div class="shop-delivery-card">
+                        <button class="wc-close-btn" onclick="wcCloseModal('wc-modal-delivery-card')" style="position: absolute; top: 15px; right: 15px; z-index: 10;">&times;</button>
+                        <h3>选择配送方式</h3>
+                        <div class="delivery-actions">
+                            <button class="shop-card-btn delivery" onclick="wcProceedToPay('now')">
+                                <svg viewBox="0 0 24 24"><path d="M13 17h8m0-5h-8m8-5h-8M3 17l5 4 5-4M3 7l5 4 5-4"></path><path d="M12 12H3"></path></svg>
+                                <span>立即配送</span>
+                                <small>快马加鞭，即刻送达</small>
+                            </button>
+                            <button class="shop-card-btn delivery" onclick="wcProceedToPay('reserve')">
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span>预约配送</span>
+                                <small>指定一个特别的时刻</small>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- 新增：预约时间选择卡片 -->
+                <!-- ========================================== -->
+                <div id="wc-modal-time-picker" class="wc-modal-overlay hidden" style="z-index: 2800; align-items: center; justify-content: center;">
+                    <div class="time-picker-card">
+                        <button class="wc-close-btn" onclick="wcCloseModal('wc-modal-time-picker')" style="position: absolute; top: 15px; right: 15px; z-index: 10;">&times;</button>
+                        <h3>预约一个时间</h3>
+                        <div class="time-options">
+                            <button class="time-option-btn" onclick="wcSetDeliveryTime('now')">还是现在吧</button>
+                            <button class="time-option-btn" onclick="wcSetDeliveryTime('tomorrow_am')">明天上午 (10:00)</button>
+                            <button class="time-option-btn" onclick="wcSetDeliveryTime('tomorrow_pm')">明天下午 (15:00)</button>
+                        </div>
+                        <div class="custom-time-section">
+                            <label>或自定义时间</label>
+                            <input type="datetime-local" id="custom-time-input">
+                            <button class="shop-card-btn" style="width: 100%; margin-top: 10px; background: #5d5350;" onclick="wcSetDeliveryTime('custom')">确认预约这个时间</button>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- CHAT SETTINGS MODAL -->
+                <div id="wc-modal-chat-settings" class="wc-modal hidden" style="z-index: 2500; align-items: flex-start;">
+                    <div class="wc-modal-content" style="background: #F2F2F7; display: flex; flex-direction: column; height: 100%; width: 100%; max-width: 100%; border-radius: 0; margin: 0;">
                         <div class="wc-navbar" style="position: sticky; top: 0; flex-shrink: 0;">
                             <div class="wc-nav-left">
                                 <button class="wc-nav-btn" onclick="wcCloseModal('wc-modal-chat-settings')">关闭</button>
@@ -1702,7 +2312,8 @@
 
                                 <!-- Appearance -->
                                 <div class="wc-settings-section">
-                                    <div class="wc-settings-section-title">外观与美化</div>                                                                                                                <div class="wc-form-group">
+                                    <div class="wc-settings-section-title">外观与美化</div>                                                                                                                
+                                    <div class="wc-form-group">
                                         <label class="wc-form-label">聊天背景图</label>
                                         <div class="wc-upload-rect-placeholder" style="width: 100%; height: 120px;" onclick="wcTriggerUpload('setting-bg')">
                                             <img id="wc-setting-bg-preview" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
@@ -1966,6 +2577,7 @@
                         </div>
                         <button class="wc-ios-btn-block wc-btn-secondary" style="padding: 8px; font-size: 14px;" onclick="wcSavePhonePreset()">将当前搭配保存为预设</button>
                     </div>                    
+                    <div class="wc-form-group">
                         <label class="wc-form-label">便利贴图片 (点击上传)</label>
                         <div class="wc-upload-rect-placeholder" style="width: 100px; height: 100px; margin: 0 auto 16px;" onclick="wcTriggerUpload('sticky-note')">
                             <img id="wc-preview-sticky-note" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
@@ -2005,7 +2617,105 @@
                 </div>
             </div>
         </div>
+        <!-- ========================================== -->
+        <!-- 新增：NPC 主动邀请听歌的高级感弹窗 (黑白灰 INS 风) -->
+        <!-- ========================================== -->
+        <div id="music-char-invite-modal" class="wc-modal-overlay hidden" style="z-index: 16000; align-items: center; justify-content: center; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); background: rgba(0,0,0,0.4);">
+            <div class="ins-korean-invite-card">
+                <div class="invite-header">
+                    <span class="invite-tag">MUSIC INVITATION</span>
+                    <button class="invite-close" onclick="musicRejectCharInvite()">
+                        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 19 17.59 13.41 12z"/></svg>
+                    </button>
+                </div>
+                
+                <div class="invite-body">
+                    <div class="invite-avatar-ring">
+                        <img src="" id="char-invite-avatar" class="invite-avatar">
+                    </div>
+                    <h2 id="char-invite-name" class="invite-name">Name</h2>
+                    <p class="invite-text">"Wants to listen to music with you."</p>
+                    
+                    <div class="invite-song-box" id="char-invite-song-box" style="display: none;">
+                        <div class="vinyl-icon">
+                            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                        </div>
+                        <div class="song-info">
+                            <div id="char-invite-song-name" class="song-name">Song Name</div>
+                            <div class="song-artist">Recommended track</div>
+                        </div>
+                    </div>
+                </div>
 
+                <div class="invite-actions">
+                    <button class="btn-reject" onclick="musicRejectCharInvite()">Decline</button>
+                    <button class="btn-accept" onclick="musicAcceptCharInvite()">Accept</button>
+                </div>
+            </div>
+        </div> 
+        <!-- ========================================== -->
+        <!-- 仿灵动岛：悬浮音乐胶囊 (全局最高层级) -->
+        <!-- ========================================== -->
+        <div id="floating-music-capsule" class="floating-music-capsule hidden">
+            <!-- 1. 胶囊本体 (始终显示，点击展开/收起下方播放器) -->
+            <div class="capsule-island-view" id="capsule-island-view" onclick="toggleMusicCapsuleExpand()">
+                <div class="capsule-wave" id="capsule-island-wave">
+                    <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+                </div>
+                <div id="capsule-timer" style="display:none; color:white; font-size:12px; margin:0 8px; font-family:monospace; font-weight:bold;">00:00</div>
+                <img src="https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg" id="capsule-island-cover" class="capsule-island-cover">
+            </div>
+            
+            <!-- 2. 下拉迷你播放器 (展开时显示，固定在胶囊下方 8px) -->
+            <div class="capsule-dropdown-player hidden" id="capsule-dropdown-player">
+                <!-- 顶部：封面或头像 -->
+                <div class="capsule-exp-top" id="capsule-exp-top">
+                    <!-- 普通听歌：封面 -->
+                    <img src="" id="capsule-exp-cover" class="capsule-exp-cover">
+                    <!-- 一起听歌：双头像 -->
+                    <div class="capsule-exp-avatars" id="capsule-exp-avatars" style="display:none;">
+                        <img src="" id="capsule-exp-avatar-user" class="capsule-exp-avatar">
+                        <img src="" id="capsule-exp-avatar-char" class="capsule-exp-avatar char">
+                    </div>
+                </div>
+                
+                <!-- 中间：歌名、歌手、歌词、进度条 -->
+                <div class="capsule-exp-mid">
+                    <div class="capsule-exp-title" id="capsule-exp-title">Not Playing</div>
+                    <div class="capsule-exp-artist" id="capsule-exp-artist">--</div>
+                    <div class="capsule-exp-lyric" id="capsule-exp-lyric">Pure Music...</div>
+                    <div class="capsule-exp-progress">
+                        <div class="capsule-exp-progress-bar" id="capsule-progress-bar" onclick="musicSeek(event); event.stopPropagation();">
+                            <div class="capsule-exp-progress-fill" id="capsule-progress-fill"></div>
+                        </div>
+                        <!-- 新增：胶囊播放器的音乐时间显示 -->
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 4px; font-family: monospace;">
+                            <span id="capsule-time-current">0:00</span>
+                            <span id="capsule-time-total">-:-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 底部：控制按钮 -->
+                <div class="capsule-exp-controls">
+                    <div class="capsule-btn small" onclick="musicTogglePlayMode(); event.stopPropagation();" id="capsule-btn-mode">
+                        <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+                    </div>
+                    <div class="capsule-btn" onclick="musicPlayPrev(); event.stopPropagation();">
+                        <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                    </div>
+                    <div class="capsule-btn play" onclick="musicTogglePlay(event)" id="capsule-btn-play">
+                        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                    <div class="capsule-btn" onclick="musicPlayNext(); event.stopPropagation();">
+                        <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                    </div>
+                    <div class="capsule-btn small" onclick="musicOpenCurrentPlaylist(); event.stopPropagation();">
+                        <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div> <!-- End of #app-root -->
 
     <style id="dynamic-font-style"></style>
