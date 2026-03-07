@@ -301,20 +301,44 @@ window.onload = async function() {
         const appRoot = document.getElementById('app-root');
         
         const handleResize = () => {
-            // 强制 app-root 的高度等于可视区域高度（减去键盘高度）
-            appRoot.style.height = window.visualViewport.height + 'px';
-            // 强制 app-root 的顶部对齐可视区域顶部（抵消浏览器自动推挤）
-            appRoot.style.top = window.visualViewport.offsetTop + 'px';
+            // 【核心修复】：判断是否真的是键盘弹出（高度缩小超过 150px）
+            // 如果不加这个判断，iOS 全屏下 visualViewport.height 不包含底部安全区，会导致底部漏出白边！
+            const isKeyboardOpen = window.visualViewport.height < window.innerHeight - 150;
+            
+            if (isKeyboardOpen) {
+                // 键盘弹出时：强制 app-root 的高度等于可视区域高度
+                appRoot.style.height = window.visualViewport.height + 'px';
+                appRoot.style.top = window.visualViewport.offsetTop + 'px';
+                
+                const dreamPage = document.getElementById('dream-chat-page');
+                if (dreamPage && dreamPage.classList.contains('active')) {
+                    dreamPage.style.height = window.visualViewport.height + 'px';
+                    dreamPage.style.top = window.visualViewport.offsetTop + 'px';
+                }
+            } else {
+                // 键盘收起时：恢复 100% 高度，完美贴合屏幕底部，消除白边
+                appRoot.style.height = '100%';
+                appRoot.style.top = '0px';
+                
+                const dreamPage = document.getElementById('dream-chat-page');
+                if (dreamPage) {
+                    dreamPage.style.height = '100%';
+                    dreamPage.style.top = '0px';
+                }
+            }
             
             // 滚动到底部确保输入框可见
             if(document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
-                setTimeout(() => wcScrollToBottom(true), 100);
+                setTimeout(() => {
+                    wcScrollToBottom(true);
+                    const dreamContainer = document.getElementById('dream-chat-history');
+                    if (dreamContainer) dreamContainer.scrollTop = dreamContainer.scrollHeight;
+                }, 100);
             }
             
             // 强制滚动到顶部，防止页面整体偏移
             window.scrollTo(0, 0);
         };
-
         window.visualViewport.addEventListener('resize', handleResize);
         window.visualViewport.addEventListener('scroll', handleResize);
     }
@@ -327,6 +351,16 @@ window.onload = async function() {
         });
     }
 
+    // 👉【新增】：监听梦境聊天输入框焦点，主动滚动到底部
+    const dreamInput = document.getElementById('dream-chat-input');
+    if (dreamInput) {
+        dreamInput.addEventListener('focus', () => {
+            setTimeout(() => {
+                const container = document.getElementById('dream-chat-history');
+                if(container) container.scrollTop = container.scrollHeight;
+            }, 300);
+        });
+    }
     const bgFileInput = document.getElementById('bgFileInput');
     if (bgFileInput) {
         bgFileInput.addEventListener('change', function(e) {
@@ -385,6 +419,9 @@ window.onload = async function() {
     if (typeof updateNotifUI === 'function') {
         updateNotifUI();
     }
+         
+    // 延迟 1.5 秒检查并弹出系统更新日志
+    setTimeout(checkSystemUpdate, 1500); 
 };
 
 // --- 动态注入新增功能的 HTML 结构 ---
@@ -2828,12 +2865,18 @@ function wcHandleEdit() {
 
 function wcHandleDelete() {
     if (confirm("确定删除这条消息吗？")) {
-        // 同步删除恋人空间日志
-        lsRemoveFeedByMsgId(wcState.selectedMsgId);
+        // 同步删除恋人空间日志 (增加容错保护)
+        try {
+            lsRemoveFeedByMsgId(wcState.selectedMsgId);
+        } catch (e) {
+            console.warn("同步删除日志失败", e);
+        }
         
-        wcState.chats[wcState.activeChatId] = wcState.chats[wcState.activeChatId].filter(m => m.id !== wcState.selectedMsgId);
-        wcSaveData();
-        wcRenderMessages(wcState.activeChatId);
+        if (wcState.chats[wcState.activeChatId]) {
+            wcState.chats[wcState.activeChatId] = wcState.chats[wcState.activeChatId].filter(m => m.id !== wcState.selectedMsgId);
+            wcSaveData();
+            wcRenderMessages(wcState.activeChatId);
+        }
     }
     wcHideContextMenu();
 }
@@ -2861,12 +2904,18 @@ function wcToggleMultiSelectMsg(msgId) {
 function wcHandleMultiDeleteAction() {
     if (wcState.multiSelectedIds.length === 0) return;
     if (confirm(`确定删除选中的 ${wcState.multiSelectedIds.length} 条消息吗？`)) {
-        // 同步删除恋人空间日志
-        wcState.multiSelectedIds.forEach(id => lsRemoveFeedByMsgId(id));
+        // 同步删除恋人空间日志 (增加容错保护)
+        try {
+            wcState.multiSelectedIds.forEach(id => lsRemoveFeedByMsgId(id));
+        } catch (e) {
+            console.warn("同步删除日志失败", e);
+        }
         
-        wcState.chats[wcState.activeChatId] = wcState.chats[wcState.activeChatId].filter(m => !wcState.multiSelectedIds.includes(m.id));
-        wcSaveData();
-        wcExitMultiSelectMode();
+        if (wcState.chats[wcState.activeChatId]) {
+            wcState.chats[wcState.activeChatId] = wcState.chats[wcState.activeChatId].filter(m => !wcState.multiSelectedIds.includes(m.id));
+            wcSaveData();
+            wcExitMultiSelectMode();
+        }
     }
 }
 
@@ -2984,19 +3033,27 @@ async function wcTriggerAI(charIdOverride = null) {
             }
         }
         // 【修改】：注入一起听歌的实时状态与控制权限
-        let musicContextPrompt = "";
+         let musicContextPrompt = "";
         if (musicState.listenTogether && musicState.listenTogether.active && musicState.listenTogether.charId === charId) {
             const listenMinutes = Math.floor((Date.now() - musicState.listenTogether.startTime) / 60000);
             const songInfo = musicState.currentSong ? `《${musicState.currentSong.title}》- ${musicState.currentSong.artist}` : "未知歌曲";
             const playStatus = musicState.isPlaying ? "正在播放" : "已暂停";
             
-            musicContextPrompt = `\n【当前特殊状态：一起听歌中】\n你和User正在“一起听歌”频道。你们已经一起听了 ${listenMinutes} 分钟。当前${playStatus}的歌曲是：${songInfo}。
+            // --- 新增：让 AI 知道当前播放列表里有什么歌 ---
+            let playlistInfo = "当前播放列表为空";
+            if (musicState.currentPlaylist && musicState.currentPlaylist.length > 0) {
+                const listStr = musicState.currentPlaylist.map((s, i) => `${i === musicState.currentIndex ? '👉(正在播放)' : '  '} ${i+1}. 《${s.title}》- ${s.artist}`).join('\n');
+                playlistInfo = `\n【当前播放列表】:\n${listStr}`;
+            }
+            
+            musicContextPrompt = `\n【当前特殊状态：一起听歌中】\n你和User正在“一起听歌”频道。你们已经一起听了 ${listenMinutes} 分钟。当前${playStatus}的歌曲是：${songInfo}。${playlistInfo}
             
 【你的音乐控制特权】(你可以自主控制播放器，请在JSON数组中加入以下指令)：
 - 暂停/继续音乐: {"type":"music_control", "action":"pause"} 或 {"type":"music_control", "action":"play"}
 - 切换上一首/下一首: {"type":"music_control", "action":"prev"} 或 {"type":"music_control", "action":"next"}
 - 随机播放一首: {"type":"music_control", "action":"random"}
-- 点播/添加新歌: {"type":"music_play_specific", "keyword":"歌曲名 歌手名"} (系统会自动搜索并播放)
+- 搜索歌曲/歌手: {"type":"music_search", "keyword":"歌曲名 或 歌手名"} (系统会返回搜索结果列表给你，你需要从中筛选出正确的版本)
+- 播放选定的歌曲: {"type":"music_play_selected", "songId": 12345, "songName": "歌名"} (必须在收到搜索结果后，根据ID使用此指令播放)
 - 删除当前歌曲: {"type":"music_delete_song", "content":"太难听了，删掉"}
 - 主动退出一起听歌: {"type":"music_exit", "content":"我有点事，先不听啦"}
 请在回复中自然地体现出你们正在一起听歌的氛围，或者配合你的切歌/点播动作进行说明。\n`;
@@ -3374,13 +3431,26 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 }
             }
         // ================= 新增：处理听歌邀请回应 =================
-        } else if (action.type === 'music_accept') {
-            wcAddMessage(charId, 'them', 'text', action.content, extra);
-            musicStartListenTogether(charId); // 开启听歌状态并开始计时
-            showMainSystemNotification("Music", `${char.name} 接受了你的听歌邀请！`, char.avatar);
-        } else if (action.type === 'music_reject') {
-            wcAddMessage(charId, 'them', 'text', action.content, extra);
-            showMainSystemNotification("Music", `${char.name} 婉拒了听歌邀请。`, char.avatar);
+        } else if (action.type === 'music_accept' || action.type === 'music_reject') {
+            // 【修复】：检查最近的聊天记录中，是否有用户发出的听歌邀请卡片
+            const msgs = wcState.chats[charId] || [];
+            const recentMsgs = msgs.slice(-10); // 检查最近10条消息
+            const hasInvite = recentMsgs.some(m => m.type === 'music_invite' && m.sender === 'me');
+            
+            if (hasInvite) {
+                if (action.type === 'music_accept') {
+                    wcAddMessage(charId, 'them', 'text', action.content, extra);
+                    musicStartListenTogether(charId); // 开启听歌状态并开始计时
+                    showMainSystemNotification("Music", `${char.name} 接受了你的听歌邀请！`, char.avatar);
+                } else {
+                    wcAddMessage(charId, 'them', 'text', action.content, extra);
+                    showMainSystemNotification("Music", `${char.name} 婉拒了听歌邀请。`, char.avatar);
+                }
+            } else {
+                // 如果用户根本没发邀请，AI 却幻觉了，就只当做普通文本发出来，不触发听歌逻辑
+                console.warn("拦截到 AI 幻觉的听歌回应");
+                wcAddMessage(charId, 'them', 'text', action.content, extra);
+            }
           // ================= 新增：AI 自主控制音乐逻辑 =================
         } else if (action.type === 'music_control') {
             let actionText = "";
@@ -3394,9 +3464,15 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             // 明确显示系统提示
             wcAddMessage(charId, 'system', 'system', `[系统提示: ${char.name} ${actionText}]`, { style: 'transparent' });
             
-        } else if (action.type === 'music_play_specific') {
-            wcAddMessage(charId, 'them', 'text', action.content || `*(正在搜索并点播: ${action.keyword})*`, extra);
-            musicCharSearchAndPlay(charId, action.keyword);
+        } else if (action.type === 'music_search' || action.type === 'music_play_specific') {
+            // 兼容旧指令，统一走搜索逻辑
+            wcAddMessage(charId, 'them', 'text', action.content || `*(正在搜索: ${action.keyword}...)*`, extra);
+            musicCharSearch(charId, action.keyword);
+            
+        } else if (action.type === 'music_play_selected') {
+            // AI 筛选后确认播放
+            wcAddMessage(charId, 'them', 'text', action.content || `*(为你播放: ${action.songName})*`, extra);
+            musicCharPlaySelected(charId, action.songId, action.songName);
             
         } else if (action.type === 'music_delete_song') {
             wcAddMessage(charId, 'them', 'text', action.content || "*(删除了当前歌曲)*", extra);
@@ -3717,8 +3793,20 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
         wcRenderMessages(charId);
         wcScrollToBottom();
     }
+    
+    // 【修复】：同步更新音乐播放器里的迷你聊天窗口
+    if (typeof musicState !== 'undefined' && 
+        musicState.listenTogether && 
+        musicState.listenTogether.active && 
+        musicState.listenTogether.charId === charId) {
+        const musicChatWin = document.getElementById('music-chat-window');
+        if (musicChatWin && (musicChatWin.style.display === 'flex' || musicChatWin.style.display === 'block')) {
+            if (typeof musicRenderChatMessages === 'function') {
+                musicRenderChatMessages();
+            }
+        }
+    }
 }
-
 
 // --- iOS Notification Logic ---
 function wcShowIOSNotification(char, text) {
@@ -6996,14 +7084,16 @@ function wcHandleTouchEndSwipe(evt) { wcXDown = null; wcYDown = null; }
    ========================================================================== */
 
 // --- Lovers Space State ---
+// --- Lovers Space State ---
 const lsState = {
     boundCharId: null, 
     pendingCharId: null, 
     startDate: null, 
     isLinked: false, 
-    locationSyncEnabled: false, // <--- 新增这一行
+    locationSyncEnabled: false, 
     npcFreq: 30, 
     npcInterval: null, 
+    feed: [], // <--- 【新增这一行】防止 undefined 报错
     widgetEnabled: false,
     widgetUpdateFreq: 20, 
     widgetData: {
@@ -7176,8 +7266,8 @@ function wcHandleInviteClick(msgId) {
 // --- Main Space Logic ---
 function lsRenderMain() {
     const char = wcState.characters.find(c => c.id === lsState.boundCharId);
-    if (!char) return;         
-    
+    if (!char) return;             
+        
     // ==========================================
     // 1. 渲染双方头像
     // ==========================================
@@ -7236,14 +7326,20 @@ function lsRenderMain() {
         document.getElementById('ls-char-widget-controls').style.display = lsState.charWidgetEnabled ? 'flex' : 'none';
     }
     
-    // 更新隐藏日历的默认值
+    // 更新隐藏日历的默认值并绑定修改事件
     const datePicker = document.getElementById('ls-date-picker');
-    if (datePicker && lsState.startDate) {
-        datePicker.value = new Date(lsState.startDate).toISOString().slice(0,10);
-    }
+    if (datePicker) {
+        if (lsState.startDate) {
+            datePicker.value = new Date(lsState.startDate).toISOString().slice(0,10);
+        }
+        // 【修复】：动态绑定 change 事件，确保用户修改日期后能保存并刷新
+        datePicker.onchange = function(e) {
+            lsUpdateStartDate(e.target.value);
+        };
+    }            
 
     lsRenderFeed();
-}
+}    
 
 function lsSwitchTab(tabName) {
     document.querySelectorAll('.ls-tab-content').forEach(el => el.classList.remove('active'));
@@ -7271,7 +7367,17 @@ function lsUpdateNpcFreq(val) {
     lsSaveData();
     lsInitNpcLoop(); 
 }
-
+// 【新增】：处理恋人空间日期修改
+function lsUpdateStartDate(dateString) {
+    if (!dateString) return;
+    // 将选择的日期字符串 (YYYY-MM-DD) 转换为时间戳
+    const newDate = new Date(dateString).getTime();
+    if (!isNaN(newDate)) {
+        lsState.startDate = newDate;
+        lsSaveData();
+        lsRenderMain(); // 重新渲染以更新天数显示
+    }
+}
 function lsToggleWidget(checkbox) {
     lsState.widgetEnabled = checkbox.checked;
     document.getElementById('ls-my-widget-controls').style.display = checkbox.checked ? 'flex' : 'none';
@@ -7519,13 +7625,14 @@ function lsAddFeed(text, avatar = null, msgId = null) {
 }
 
 function lsRemoveFeedByMsgId(msgId) {
-    if (!msgId) return;
+    if (!msgId || !lsState.feed) return; // <--- 增加 !lsState.feed 保护
     const initialLen = lsState.feed.length;
     lsState.feed = lsState.feed.filter(item => item.msgId !== msgId);
     
     if (lsState.feed.length !== initialLen) {
         lsSaveData();
-        if (document.getElementById('ls-view-main').classList.contains('active')) {
+        const mainView = document.getElementById('ls-view-main');
+        if (mainView && mainView.classList.contains('active')) {
             lsRenderFeed();
         }
     }
@@ -9184,7 +9291,16 @@ function wcPayAndSend(method, deliveryText) {
         #wc-view-shopping.active {
             display: flex !important;
         }
-        
+                /* 【修复】：防止朋友圈、聊天列表等被底部导航栏遮挡 */
+        #wc-view-moments, #wc-view-chat, #wc-view-contacts, #wc-view-user {
+            padding-bottom: 85px !important;
+            box-sizing: border-box;
+        }
+        /* 确保长按菜单层级最高，防止被遮挡无法点击 */
+        #wc-context-menu {
+            z-index: 99999 !important;
+        }
+
         body.edit-mode-active .app-item {
             animation: shake 0.3s infinite;
         }
@@ -10452,15 +10568,51 @@ function musicTriggerAI() {
 // 新增：AI 音乐控制支撑函数
 // ==========================================
 
-// AI 点播歌曲逻辑
-async function musicCharSearchAndPlay(charId, keyword) {
+// AI 搜索歌曲逻辑 (返回结果给AI筛选)
+async function musicCharSearch(charId, keyword) {
     if (!keyword) return;
     try {
         const res = await fetch(`https://163api.qijieya.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
         const data = await res.json();
         
         if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
-            const song = data.result.songs[0]; // 取搜索结果的第一首
+            const songs = data.result.songs.slice(0, 5); // 取前5首供AI选择
+            let resultText = `[系统内部信息(仅AI可见): 搜索 "${keyword}" 的结果如下：\n`;
+            songs.forEach((song, index) => {
+                const artist = song.ar.map(a => a.name).join(', ');
+                resultText += `${index + 1}. ID: ${song.id}, 歌名: ${song.name}, 歌手: ${artist}\n`;
+            });
+            resultText += `请仔细核对歌名和歌手，筛选出正确的版本，然后使用 {"type":"music_play_selected", "songId": 对应的ID, "songName": "歌名"} 指令来播放。]`;
+            
+            // 把搜索结果作为隐藏消息发给 AI
+            wcAddMessage(charId, 'system', 'system', resultText, { hidden: true });
+            
+            // 自动触发 AI 再次思考并做出选择
+            setTimeout(() => {
+                wcTriggerAI(charId);
+            }, 1500);
+        } else {
+            wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 未找到关于 "${keyword}" 的歌曲，请换个关键词重新搜索。]`, { hidden: true });
+            setTimeout(() => {
+                wcTriggerAI(charId);
+            }, 1500);
+        }
+    } catch (e) {
+        console.error("AI 搜索失败", e);
+        wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 搜索失败，网络异常。]`, { hidden: true });
+    }
+}
+
+// AI 播放选定歌曲逻辑
+async function musicCharPlaySelected(charId, songId, songName) {
+
+    if (!songId) return;
+    try {
+        const res = await fetch(`https://163api.qijieya.cn/song/detail?ids=${songId}`);
+        const data = await res.json();
+        
+        if (data.code === 200 && data.songs && data.songs.length > 0) {
+            const song = data.songs[0];
             const newSong = {
                 id: song.id,
                 title: song.name,
@@ -10473,12 +10625,12 @@ async function musicCharSearchAndPlay(charId, keyword) {
             musicState.currentIndex = musicState.currentPlaylist.length - 1;
             musicPlaySong(newSong.id, newSong.title, newSong.artist, newSong.cover);
             
-            wcAddMessage(charId, 'system', 'system', `[系统提示: ${wcState.characters.find(c=>c.id===charId).name} 为你点播了《${newSong.title}》]`, { style: 'transparent' });
+            wcAddMessage(charId, 'system', 'system', `[系统提示: ${wcState.characters.find(c=>c.id===charId).name} 为你点播了《${newSong.title}》- ${newSong.artist}]`, { style: 'transparent' });
         } else {
-            wcAddMessage(charId, 'system', 'system', `[系统提示: 未找到歌曲 "${keyword}"]`, { style: 'transparent' });
+            wcAddMessage(charId, 'system', 'system', `[系统提示: 歌曲获取失败]`, { style: 'transparent' });
         }
     } catch (e) {
-        console.error("AI 点播失败", e);
+        console.error("AI 播放选中歌曲失败", e);
     }
 }
 
@@ -10530,7 +10682,8 @@ function musicRejectCharInvite() {
 
     if (pendingCharInviteData) {
         const charId = pendingCharInviteData.charId;
-        wcAddMessage(charId, 'me', 'text', "我现在有点忙，晚点再一起听吧~");
+        // 【修复】：不发送可见的文本消息，改为发送隐藏的系统提示给 AI
+        wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 用户婉拒了你的听歌邀请。]`, { hidden: true });
         wcTriggerAI(charId); // 让 AI 回应你的拒绝
         pendingCharInviteData = null;
     }
@@ -10545,7 +10698,8 @@ async function musicAcceptCharInvite() {
         const charId = pendingCharInviteData.charId;
         const songName = pendingCharInviteData.songName;
         
-        wcAddMessage(charId, 'me', 'text', "好呀，我们一起听！");
+        // 【修复】：不发送可见的文本消息，改为发送隐藏的系统提示给 AI
+        wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 用户接受了你的听歌邀请，你们现在正在一起听歌。]`, { hidden: true });
         
         // 打开音乐播放器并建立连接
         openMusicApp();
@@ -10839,455 +10993,1099 @@ if (capArtist) capArtist.innerText = musicState.currentSong.artist;
         modeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>';
     }
 }
-// ==========================================================================
-// 全局补丁与覆盖 (Global Patches & Overrides)
-// ==========================================================================
-(function applyGlobalPatches() {
-    const style = document.createElement('style');
-    style.innerHTML = `
-        .wc-wallet-header { padding-top: 60px !important; }
-        #wc-modal-phone-settings { z-index: 20001 !important; }
-        
-        /* 【修复】：强制购物页面隐藏，防止破坏布局 */
-        #wc-view-shopping {
-            display: none !important;
-        }
-        #wc-view-shopping.active {
-            display: flex !important;
-        }
-        
-        /* ==========================================
-           【核心修复】：音乐APP页面错乱与全屏播放器遮挡问题 
-           ========================================== */
-        .ins-music-view:not(.active) {
-            display: none !important;
-        }
-        
-        #music-full-player {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 3000 !important;
-            background-color: #fff; /* 兜底背景色，防止透明穿透 */
-            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease !important;
-        }
-        
-        #music-full-player:not(.active) {
-            transform: translateY(100%) !important;
-            pointer-events: none !important;
-            opacity: 0 !important;
-        }
-        
-        #music-full-player.active {
-            transform: translateY(0) !important;
-            pointer-events: auto !important;
-            opacity: 1 !important;
-        }
-        /* ========================================== */
-        
-        body.edit-mode-active .app-item {
-            animation: shake 0.3s infinite;
-        }
-        body.edit-mode-active .ls-widget-inner {
-            animation: shake 0.3s infinite;
-        }
-        @keyframes shake {
-            0% { transform: rotate(0deg); }
-            25% { transform: rotate(1deg); }
-            50% { transform: rotate(0deg); }
-            75% { transform: rotate(-1deg); }
-            100% { transform: rotate(0deg); }
-        }
-        #home-edit-bar {
-            position: fixed; top: 0; left: 0; width: 100%; height: 60px;
-            background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);
-            z-index: 9999; display: none; justify-content: space-between; align-items: center;
-            padding: 0 20px; box-shadow: 0 1px 5px rgba(0,0,0,0.1);
-        }
-        .edit-btn {
-            padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer;
-        }
-        .edit-btn.cancel { background: #E5E5EA; color: #000; }
-        .edit-btn.save { background: #007AFF; color: #fff; }
-        
-        /* 限制真实图片的最大尺寸 */
-        .wc-bubble-img { 
-            max-width: 160px !important; 
-            max-height: 200px !important; 
-            border-radius: 10px; 
-            display: block; 
-            object-fit: cover; 
-            cursor: pointer;
-        }
-    `;
-    document.head.appendChild(style);
-    
-    const editBar = document.createElement('div');
-    editBar.id = 'home-edit-bar';
-    editBar.innerHTML = `
-        <div class="edit-btn cancel" onclick="cancelHomeEdit()">取消</div>
-        <div style="font-weight:bold;">编辑主屏幕</div>
-        <div class="edit-btn save" onclick="saveHomeEdit()">完成</div>
-    `;
-    document.body.appendChild(editBar);
+/* ==========================================================================
+   梦境系统 (Dream Space) 逻辑
+   ========================================================================== */
 
-    window.applyFont = function(url) {
-        const finalUrl = url || document.getElementById('fontUrlInput').value;
-        const fontStyle = document.getElementById('dynamic-font-style');
-        if (finalUrl && fontStyle) {
-            fontStyle.textContent = `
-                @font-face { font-family: 'CustomFont'; src: url('${finalUrl}'); } 
-                body, input, textarea, button, select, 
-                .ls-view, #wechat-root, #wc-view-phone-sim, .wc-page, .wc-bubble, 
-                .ls-feed-text, .ls-widget-note-text, .wc-system-msg-text { 
-                    font-family: 'CustomFont', sans-serif !important; 
-                }
-            `;
-            saveThemeSettings();
-        }
-    };
-})();
-// ==========================================================================
-// 意见反馈系统 (真实云端联机版 - 基于 KVDB)
-// ==========================================================================
-
-const ADMIN_QQ = '1509048968'; // 你的专属管理员QQ
-let feedbackMyQQ = '';         
-let feedbackIsAdmin = false;   
-let feedbackCurrentChatUser = null; 
-let feedbackServerId = localStorage.getItem('feedback_server_id') || ''; // 存储联机ID
-let feedbackAutoRefreshTimer = null; // 自动刷新定时器
-
-// 1. 打开反馈页面
-async function openFeedbackSettings() {
-    document.getElementById('feedbackSettingsModal').classList.add('open');
-    
-    // 获取当前登录的QQ号
-    const actStatus = await idb.get('ios_theme_activation_status');
-    feedbackMyQQ = actStatus ? actStatus.qq : ('User_' + Math.floor(Math.random()*10000));
-    feedbackIsAdmin = (feedbackMyQQ === ADMIN_QQ);
-
-    // 自动调整输入框高度
-    const input = document.getElementById('feedback-input');
-    input.addEventListener('input', function() {
-        this.style.height = 'auto';
-        this.style.height = (this.scrollHeight) + 'px';
-    });
-
-    checkFeedbackConnection();
-}
-
-// 2. 检查连接状态并分配视图
-function checkFeedbackConnection() {
-    document.getElementById('feedback-setup-view').style.display = 'none';
-    document.getElementById('feedback-admin-list').style.display = 'none';
-    document.getElementById('feedback-chat-view').style.display = 'none';
-    document.getElementById('feedback-refresh-btn').style.display = 'none';
-
-    if (!feedbackServerId) {
-        // 未配置联机ID，显示配置界面
-        document.getElementById('feedback-header-title').innerText = "配置联机";
-        document.getElementById('feedback-setup-view').style.display = 'flex';
-        
-        if (feedbackIsAdmin) {
-            document.getElementById('setup-admin-area').style.display = 'block';
-            document.getElementById('setup-user-area').style.display = 'none';
-        } else {
-            document.getElementById('setup-admin-area').style.display = 'none';
-            document.getElementById('setup-user-area').style.display = 'block';
-        }
-    } else {
-        // 已配置联机ID，进入主界面
-        document.getElementById('feedback-refresh-btn').style.display = 'block';
-        if (feedbackIsAdmin) {
-            document.getElementById('feedback-header-title').innerText = "反馈管理";
-            document.getElementById('display-server-id').innerText = feedbackServerId;
-            showFeedbackAdminList();
-        } else {
-            document.getElementById('feedback-header-title').innerText = "意见反馈";
-            showFeedbackChat(feedbackMyQQ);
-        }
-        // 开启自动刷新 (每5秒拉取一次新消息)
-        startAutoRefresh();
+const dreamState = {
+    cards: [], 
+    presets: [], 
+    selectedWbIds: [], 
+    selectedPresetId: null, 
+    currentChat: [],
+    // 新增：扩展组件数据
+    ext: {
+        currentTab: 'css', // 当前停留的tab
+        css: [], html: [], regex: [], // 储存的预设列表
+        activeCssId: null, activeHtmlId: null, activeRegexId: null // 当前启用的ID
     }
-}
-
-// 3. 关闭/返回逻辑
-function closeFeedbackSettings() {
-    stopAutoRefresh();
-    if (feedbackIsAdmin && document.getElementById('feedback-chat-view').style.display === 'flex') {
-        // 管理员从聊天退回列表
-        document.getElementById('feedback-chat-view').style.display = 'none';
-        document.getElementById('feedback-admin-list').style.display = 'block';
-        document.getElementById('feedback-header-title').innerText = "反馈管理";
-        feedbackCurrentChatUser = null;
-        startAutoRefresh(); // 重新启动列表刷新
-    } else {
-        document.getElementById('feedbackSettingsModal').classList.remove('open');
-    }
-}
-
-// ==========================================
-// 【核心：云端联机 API 请求】
-// ==========================================
-
-// 管理员生成全新的联机ID (向 KVDB 申请一个 Bucket)
-async function generateFeedbackServerId() {
-    const btn = document.getElementById('btn-gen-id');
-    btn.innerText = "生成中...";
-    try {
-        const res = await fetch('https://kvdb.io/', { method: 'POST' });
-        if (res.ok) {
-            const newId = await res.text();
-            feedbackServerId = newId.trim();
-            localStorage.setItem('feedback_server_id', feedbackServerId);
-            
-            // 初始化数据库结构
-            await saveFeedbackDataToServer({});
-            alert("联机服务器创建成功！");
-            checkFeedbackConnection();
-        } else {
-            alert("生成失败，请检查网络。");
-        }
-    } catch (e) {
-        alert("网络错误: " + e.message);
-    } finally {
-        btn.innerText = "生成专属联机 ID";
-    }
-}
-
-// 用户输入ID连接服务器
-async function connectToFeedbackServer() {
-    const inputId = document.getElementById('input-server-id').value.trim();
-    if (!inputId) return alert("请输入联机ID");
-    
-    const btn = document.getElementById('btn-connect-id');
-    btn.innerText = "连接中...";
-    try {
-        // 尝试读取该ID的数据以验证是否有效
-        const res = await fetch(`https://kvdb.io/${inputId}/feedback_data`);
-        if (res.ok || res.status === 404) { // 404代表房间存在但还没数据，也是正常的
-            feedbackServerId = inputId;
-            localStorage.setItem('feedback_server_id', feedbackServerId);
-            alert("连接成功！");
-            checkFeedbackConnection();
-        } else {
-            alert("连接失败：无效的联机ID");
-        }
-    } catch (e) {
-        alert("网络错误: " + e.message);
-    } finally {
-        btn.innerText = "连接服务器";
-    }
-}
-
-// 从云端拉取数据
-async function fetchFeedbackDataFromServer() {
-    if (!feedbackServerId) return {};
-    try {
-        const res = await fetch(`https://kvdb.io/${feedbackServerId}/feedback_data`);
-        if (res.ok) {
-            return await res.json();
-        }
-        return {};
-    } catch (e) {
-        console.error("拉取数据失败", e);
-        return {};
-    }
-}
-
-// 保存数据到云端
-async function saveFeedbackDataToServer(data) {
-    if (!feedbackServerId) return;
-    try {
-        await fetch(`https://kvdb.io/${feedbackServerId}/feedback_data`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-    } catch (e) {
-        console.error("保存数据失败", e);
-    }
-}
-
-// 复制联机ID
-function copyServerId() {
-    navigator.clipboard.writeText(feedbackServerId).then(() => {
-        alert("联机ID已复制: " + feedbackServerId);
-    });
-}
-
-// ==========================================
-// 【UI 渲染与交互】
-// ==========================================
-
-// 自动刷新机制
-function startAutoRefresh() {
-    stopAutoRefresh();
-    feedbackAutoRefreshTimer = setInterval(() => {
-        if (document.getElementById('feedback-admin-list').style.display === 'block') {
-            showFeedbackAdminList(true); // true代表静默刷新，不显示加载中
-        } else if (document.getElementById('feedback-chat-view').style.display === 'flex') {
-            const targetQQ = feedbackIsAdmin ? feedbackCurrentChatUser : feedbackMyQQ;
-            showFeedbackChat(targetQQ, true);
-        }
-    }, 5000); // 每5秒自动拉取一次新消息
-}
-
-function stopAutoRefresh() {
-    if (feedbackAutoRefreshTimer) clearInterval(feedbackAutoRefreshTimer);
-}
-
-function manualRefreshFeedback() {
-    if (document.getElementById('feedback-admin-list').style.display === 'block') {
-        showFeedbackAdminList();
-    } else if (document.getElementById('feedback-chat-view').style.display === 'flex') {
-        const targetQQ = feedbackIsAdmin ? feedbackCurrentChatUser : feedbackMyQQ;
-        showFeedbackChat(targetQQ);
-    }
-}
-
-// 渲染管理员列表
-async function showFeedbackAdminList(silent = false) {
-    document.getElementById('feedback-admin-list').style.display = 'block';
-    document.getElementById('feedback-chat-view').style.display = 'none';
-    
-    const container = document.getElementById('feedback-users-container');
-    if (!silent) container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">正在同步云端数据...</div>';
-    
-    const allData = await fetchFeedbackDataFromServer();
-    const users = Object.keys(allData);
-    
-    if (users.length === 0) {
-        container.innerHTML = '<div style="padding: 30px; text-align: center; color: #999;">暂无任何人提交反馈</div>';
-        return;
-    }
-
-    users.sort((a, b) => {
-        const lastA = allData[a][allData[a].length - 1].time;
-        const lastB = allData[b][allData[b].length - 1].time;
-        return lastB - lastA;
-    });
-
-    let html = '';
-    users.forEach(userQQ => {
-        const msgs = allData[userQQ];
-        const lastMsg = msgs[msgs.length - 1];
-        const timeStr = new Date(lastMsg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        
-        // 简单判断是否有未读 (如果最后一条不是我发的)
-        const isUnread = lastMsg.sender !== ADMIN_QQ;
-        const dotHtml = isUnread ? `<div style="width:8px;height:8px;background:#ff3b30;border-radius:50%;margin-right:8px;"></div>` : '';
-
-        html += `
-            <div class="ios-list-item" onclick="openAdminChat('${userQQ}')" style="border-bottom: 0.5px solid #e5e5ea;">
-                <div class="ios-item-content" style="flex-direction: column; align-items: flex-start; padding: 12px 16px; gap: 4px; border:none;">
-                    <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
-                        <div style="display: flex; align-items: center;">
-                            ${dotHtml}
-                            <span style="font-weight: 600; font-size: 16px; color: #000;">用户: ${userQQ}</span>
-                        </div>
-                        <span style="font-size: 12px; color: #8e8e93;">${timeStr}</span>
-                    </div>
-                    <div style="font-size: 14px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">
-                        ${lastMsg.sender === ADMIN_QQ ? '我: ' : ''}${lastMsg.content}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    container.innerHTML = html;
-}
-
-window.openAdminChat = function(userQQ) {
-    document.getElementById('feedback-header-title').innerText = `回复: ${userQQ}`;
-    showFeedbackChat(userQQ);
 };
 
-// 渲染聊天界面
-async function showFeedbackChat(targetQQ, silent = false) {
-    feedbackCurrentChatUser = targetQQ;
-    document.getElementById('feedback-admin-list').style.display = 'none';
-    document.getElementById('feedback-chat-view').style.display = 'flex';
-    
-    const historyEl = document.getElementById('feedback-chat-history');
-    
-    // 记录当前滚动位置，判断是否在最底部
-    const isAtBottom = historyEl.scrollHeight - historyEl.scrollTop <= historyEl.clientHeight + 50;
+async function dreamLoadData() {
+    const data = await idb.get('dream_space_data');
+    if (data) {
+        if (data.cards) dreamState.cards = data.cards;
+        if (data.presets) dreamState.presets = data.presets;
+        if (data.selectedWbIds) dreamState.selectedWbIds = data.selectedWbIds;
+        if (data.selectedPresetId) dreamState.selectedPresetId = data.selectedPresetId;
+        if (data.ext) dreamState.ext = { ...dreamState.ext, ...data.ext };
+    }
+    applyDreamCss(); // 加载时自动应用全局 CSS
+}
 
-    if (!silent) historyEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">正在同步云端数据...</div>';
+async function dreamSaveData() {
+    await idb.set('dream_space_data', {
+        cards: dreamState.cards,
+        presets: dreamState.presets,
+        selectedWbIds: dreamState.selectedWbIds,
+        selectedPresetId: dreamState.selectedPresetId,
+        ext: dreamState.ext
+    });
+}
+
+// --- 页面导航 ---
+async function openDreamMainPage() {
+    wcCloseAllPanels(); // 关闭微信的更多面板
+    await dreamLoadData();
+    document.getElementById('dream-main-page').classList.add('active');
+    dreamRenderCards();
+}
+
+function closeDreamMainPage() {
+    document.getElementById('dream-main-page').classList.remove('active');
+}
+
+// --- 渲染主页卡片 ---
+// --- 渲染主页卡片 (加入云朵注入按钮) ---
+function dreamRenderCards() {
+    const container = document.getElementById('dream-card-container');
+    container.innerHTML = '';
     
-    const allData = await fetchFeedbackDataFromServer();
-    const msgs = allData[targetQQ] || [];
-    
-    if (msgs.length === 0) {
-        historyEl.innerHTML = '<div style="text-align:center; padding:30px; color:#8e8e93; font-size:13px;">发送你的反馈，开发者会尽快回复你~<br>你的反馈仅管理员可见。</div>';
+    if (dreamState.cards.length === 0) {
+        container.innerHTML = '<div class="dream-empty-state">No dreams yet.<br><span style="font-size:10px; color:#E5E5EA;">点击下方进入梦境</span></div>';
         return;
     }
 
-    let html = '';
-    msgs.forEach(msg => {
-        const isMe = msg.sender === feedbackMyQQ;
-        const align = isMe ? 'flex-end' : 'flex-start';
-        const bg = isMe ? '#007aff' : '#e5e5ea';
-        const color = isMe ? '#fff' : '#000';
-        const radius = isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px';
-        const timeStr = new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-        html += `
-            <div style="display: flex; flex-direction: column; align-items: ${align}; width: 100%;">
-                <div style="max-width: 75%; padding: 10px 14px; border-radius: ${radius}; font-size: 15px; line-height: 1.4; word-break: break-word; white-space: pre-wrap; background: ${bg}; color: ${color}; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
-                    ${msg.content}
-                </div>
-                <div style="font-size: 10px; color: #8e8e93; margin-top: 4px; margin-${isMe?'right':'left'}: 4px;">
-                    ${timeStr}
-                </div>
+    const sortedCards = [...dreamState.cards].sort((a, b) => b.time - a.time);
+    
+    sortedCards.forEach((card, idx) => {
+        const dateStr = new Date(card.time).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const div = document.createElement('div');
+        div.className = 'dream-card';
+        div.innerHTML = `
+            <div class="dream-card-cloud-btn" onclick="injectDreamToChar(${card.id})" title="将此梦境化作记忆注入给当前角色">
+                <svg viewBox="0 0 24 24"><path d="M17.5 19c2.48 0 4.5-2.02 4.5-4.5 0-2.33-1.77-4.26-4.05-4.48C17.2 6.52 13.9 4 10 4 6.14 4 3 7.14 3 11c0 .17.01.34.04.5C1.3 11.83 0 13.26 0 15c0 2.21 1.79 4 4 4h13.5z"/></svg>
+                <span>INJECT</span>
             </div>
+            <div style="position: absolute; top: 15px; right: 15px; color: #CCC; cursor: pointer; font-size: 18px;" onclick="dreamDeleteCard(${card.id})">×</div>
+            <div class="dream-card-date">${dateStr}</div>
+            <div class="dream-card-text">${card.content}</div>
         `;
+        container.appendChild(div);
     });
-    
-    historyEl.innerHTML = html;
-    
-    // 如果之前在最底部，或者是非静默刷新，则滚动到底部
-    if (isAtBottom || !silent) {
-        setTimeout(() => { historyEl.scrollTop = historyEl.scrollHeight; }, 50);
+}
+
+// --- 醒来并总结梦境 (修复卡死 Bug) ---
+async function endDreamAndSummarize() {
+    if (dreamState.currentChat.length <= 1) {
+        document.getElementById('dream-chat-page').classList.remove('active');
+        return;
+    }
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    // 修复：使用正确的 ID 获取按钮
+    const btn = document.getElementById('dream-btn-summarize');
+    if (btn) btn.innerText = "总结中...";
+
+    try {
+        let chatText = dreamState.currentChat
+            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .map(m => `${m.role === 'user' ? '我' : '梦境'}: ${m.content}`)
+            .join('\n');
+
+        let prompt = `请将以下梦境交互记录，总结成一段极具高级感、意识流、文艺且带有一丝忧郁或唯美气息的散文诗（字数100-200字）。不要出现“总结”、“梦境记录”等字眼，直接输出这段散文。\n\n【记录】：\n${chatText}`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.7
+            })
+        });
+
+        const data = await response.json();
+        let summary = data.choices[0].message.content;
+        summary = summary.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+
+        dreamState.cards.push({
+            id: Date.now(),
+            time: Date.now(),
+            content: summary
+        });
+        await dreamSaveData();
+
+        document.getElementById('dream-chat-page').classList.remove('active');
+        dreamRenderCards();
+
+    } catch (e) {
+        alert("总结失败：" + e.message);
+    } finally {
+        if (btn) btn.innerText = "醒来(总结)";
     }
 }
 
-// 发送消息
-async function sendFeedbackMessage() {
-    const input = document.getElementById('feedback-input');
-    const btn = document.getElementById('feedback-send-btn');
+function dreamDeleteCard(id) {
+    if (confirm("确定要删除这条梦境记录吗？")) {
+        dreamState.cards = dreamState.cards.filter(c => c.id !== id);
+        dreamSaveData();
+        dreamRenderCards();
+    }
+}
+
+// --- 设置弹窗 (世界书与预设) ---
+function openDreamSettings() {
+    document.getElementById('dream-settings-modal').classList.add('active');
+    dreamRenderSettings();
+}
+
+function closeDreamSettings() {
+    document.getElementById('dream-settings-modal').classList.remove('active');
+}
+
+function dreamRenderSettings() {
+    // 1. 渲染世界书列表
+    const wbList = document.getElementById('dream-wb-list');
+    wbList.innerHTML = '';
+    if (typeof worldbookEntries !== 'undefined' && worldbookEntries.length > 0) {
+        worldbookEntries.forEach(entry => {
+            const isChecked = dreamState.selectedWbIds.includes(entry.id.toString());
+            wbList.innerHTML += `
+                <div class="dream-item-row">
+                    <span>${entry.title}</span>
+                    <input type="checkbox" class="dream-checkbox" value="${entry.id}" ${isChecked ? 'checked' : ''} onchange="dreamToggleWb(this)">
+                </div>
+            `;
+        });
+    } else {
+        wbList.innerHTML = '<div style="color:#999; font-size:12px;">暂无世界书，请在主界面添加</div>';
+    }
+
+    // 2. 渲染预设列表 (带左滑删除)
+    const presetList = document.getElementById('dream-preset-list');
+    presetList.innerHTML = '';
+    if (dreamState.presets.length > 0) {
+        dreamState.presets.forEach(p => {
+            const isChecked = dreamState.selectedPresetId === p.id;
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = 'dream-swipe-wrapper';
+            
+             wrapper.innerHTML = `
+                <div class="dream-swipe-action" onclick="deleteDreamPreset(${p.id})">DELETE</div>
+                <div class="dream-swipe-content" ontouchstart="dreamTouchStart(event)" ontouchmove="dreamTouchMove(event)" ontouchend="dreamTouchEnd(event)">
+                    <div style="flex:1; cursor:pointer; font-family: 'Courier New', monospace; font-weight: bold;" onclick="openDreamPresetEditor(${p.id})">
+                        ${p.name} <span style="color:#999; font-size:10px; font-weight: normal;">(Edit)</span>
+                    </div>
+                    <!-- 👇修改：改成 checkbox，并传入 this -->
+                    <input type="checkbox" class="dream-checkbox" value="${p.id}" ${isChecked ? 'checked' : ''} onchange="dreamSelectPreset(${p.id}, this)">
+                </div>
+            `;
+            presetList.appendChild(wrapper);
+        });
+    } else {
+        presetList.innerHTML = '<div style="color:#999; font-size:12px;">暂无预设</div>';
+    }
+}
+
+// --- 新增：左滑交互逻辑 ---
+function addDreamSwipeLogic(element) {
+    let startX = 0, currentX = 0;
+    element.addEventListener('touchstart', e => { 
+        startX = e.touches[0].clientX; 
+    }, {passive: true});
+    
+    element.addEventListener('touchmove', e => {
+        currentX = e.touches[0].clientX;
+        let diff = currentX - startX;
+        // 只允许向左滑动，最大滑动距离 70px
+        if (diff < 0 && diff > -80) { 
+            element.style.transform = `translateX(${diff}px)`; 
+        }
+    }, {passive: true});
+    
+    element.addEventListener('touchend', e => {
+        let diff = currentX - startX;
+        if (diff < -35) { 
+            element.style.transform = `translateX(-70px)`; // 展开删除按钮
+        } else { 
+            element.style.transform = `translateX(0px)`; // 恢复原状
+        }
+    });
+
+    // 点击其他地方恢复原状
+    document.addEventListener('touchstart', e => {
+        if (!element.contains(e.target)) {
+            element.style.transform = `translateX(0px)`;
+        }
+    }, {passive: true});
+}
+
+function dreamToggleWb(checkbox) {
+    const val = checkbox.value;
+    if (checkbox.checked) {
+        if (!dreamState.selectedWbIds.includes(val)) dreamState.selectedWbIds.push(val);
+    } else {
+        dreamState.selectedWbIds = dreamState.selectedWbIds.filter(id => id !== val);
+    }
+    dreamSaveData();
+}
+
+function dreamSelectPreset(id, checkbox) {
+    if (checkbox.checked) {
+        // 如果勾选了，记录当前选中的预设 ID
+        dreamState.selectedPresetId = id;
+    } else {
+        // 如果取消勾选，清空预设 ID
+        dreamState.selectedPresetId = null;
+    }
+    dreamSaveData();
+    // 重新渲染列表，确保其他多余的勾选被清除（实现可取消的单选效果）
+    dreamRenderSettings();
+}
+
+
+function addDreamPreset() {
+    const name = prompt("请输入预设名称：");
+    if (!name) return;
+    const content = prompt("请输入预设内容（AI的系统提示词）：");
+    if (!content) return;
+    
+    dreamState.presets.push({ id: Date.now(), name, content });
+    dreamSaveData();
+    dreamRenderSettings();
+}
+
+function editDreamPreset(id) {
+    const preset = dreamState.presets.find(p => p.id === id);
+    if (!preset) return;
+    
+    const newContent = prompt(`编辑预设 [${preset.name}] 的内容：`, preset.content);
+    if (newContent !== null) {
+        if (newContent.trim() === "") {
+            if (confirm("内容为空，是否删除该预设？")) {
+                dreamState.presets = dreamState.presets.filter(p => p.id !== id);
+                if (dreamState.selectedPresetId === id) dreamState.selectedPresetId = null;
+            }
+        } else {
+            preset.content = newContent;
+        }
+        dreamSaveData();
+        dreamRenderSettings();
+    }
+}
+
+// --- 梦境聊天交互 ---
+function enterDreamChat() {
+    dreamState.currentChat = []; // 清空上次的聊天
+    document.getElementById('dream-chat-page').classList.add('active');
+    dreamRenderChat();
+    
+    // 插入一条系统提示
+    dreamState.currentChat.push({ role: 'system', content: '你闭上眼睛，坠入了梦境...' });
+    dreamRenderChat();
+}
+
+function exitDreamChat() {
+    if (dreamState.currentChat.length > 1) {
+        if (!confirm("退出将丢失当前梦境对话，确定退出吗？(如需保存请点击右上角'醒来')")) return;
+    }
+    document.getElementById('dream-chat-page').classList.remove('active');
+}
+
+function dreamRenderChat() {
+    const container = document.getElementById('dream-chat-history');
+    container.innerHTML = '';
+    
+    dreamState.currentChat.forEach(msg => {
+        const div = document.createElement('div');
+        if (msg.role === 'user') {
+            div.className = 'dream-msg me';
+        } else if (msg.role === 'assistant') {
+            div.className = 'dream-msg ai';
+        } else {
+            div.className = 'dream-msg system';
+        }
+        div.innerText = msg.content;
+        container.appendChild(div);
+    });
+    
+    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+}
+
+function sendDreamMessage() {
+    const input = document.getElementById('dream-chat-input');
     const text = input.value.trim();
     if (!text) return;
     
-    btn.disabled = true;
-    btn.style.opacity = '0.5';
-    
-    const targetRoomQQ = feedbackIsAdmin ? feedbackCurrentChatUser : feedbackMyQQ;
-    
-    // 1. 先拉取最新数据，防止覆盖别人刚发的消息
-    const allData = await fetchFeedbackDataFromServer();
-    if (!allData[targetRoomQQ]) allData[targetRoomQQ] = [];
-    
-    // 2. 追加新消息
-    allData[targetRoomQQ].push({
-        sender: feedbackMyQQ,
-        content: text,
-        time: Date.now()
-    });
-    
-    // 3. 推送到云端
-    await saveFeedbackDataToServer(allData);
-    
+    dreamState.currentChat.push({ role: 'user', content: text });
     input.value = '';
-    input.style.height = 'auto'; 
-    btn.disabled = false;
-    btn.style.opacity = '1';
-    
-    // 4. 刷新界面
-    showFeedbackChat(targetRoomQQ);
+    dreamRenderChat();
 }
 
+// --- 梦境 AI 逻辑 (带对话/旁白分离解析) ---
+// --- 梦境 AI 逻辑 (带人设读取、动态HTML状态栏与正则解析) ---
+async function triggerDreamAI() {
+    if (dreamState.currentChat.length === 0) return;
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先在主设置中配置 API");
+
+    // 1. 基础设定
+    let systemPrompt = "你现在处于一个梦境文字交互游戏中（作为独立的小番外）。请根据用户的输入（User），推动梦境的发展。回复要充满画面感、意识流、或者诡异/唯美的梦境氛围。不要输出JSON，直接输出纯文本回复。请使用中文双引号（“”）或单引号（「」）来包裹角色说出的话。\n\n";
+    
+    // 2. 核心：读取当前角色和用户的人设
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    const charName = char ? char.name : "未知角色";
+    const charPersona = char ? char.prompt : "无";
+    const userPersona = (char && char.chatConfig && char.chatConfig.userPersona) ? char.chatConfig.userPersona : wcState.user.persona;
+
+    systemPrompt += `【当前角色设定 (${charName})】：\n${charPersona}\n\n`;
+    systemPrompt += `【用户设定 (User)】：\n${userPersona}\n\n`;
+
+    // 3. 读取关联的世界书
+    if (dreamState.selectedWbIds.length > 0 && typeof worldbookEntries !== 'undefined') {
+        const linkedWbs = worldbookEntries.filter(e => dreamState.selectedWbIds.includes(e.id.toString()));
+        if (linkedWbs.length > 0) {
+            systemPrompt += "【梦境背景参考 (世界书)】：\n" + linkedWbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+        }
+    }
+    
+    // 4. 读取梦境预设
+    if (dreamState.selectedPresetId) {
+        const preset = dreamState.presets.find(p => p.id === dreamState.selectedPresetId);
+        if (preset) systemPrompt += "【梦境特殊规则/预设】：\n" + preset.content + "\n\n";
+    }
+
+    // 5. 核心：读取 HTML 状态栏模板，并要求 AI 动态填写
+    if (dreamState.ext.activeHtmlId) {
+        const activeHtml = dreamState.ext.html.find(h => h.id === dreamState.ext.activeHtmlId);
+        if (activeHtml && activeHtml.content) {
+            systemPrompt += `【强制指令：动态状态栏】：\n你必须在回复的最末尾，输出以下 HTML 状态栏代码，并根据当前梦境的剧情发展，更新里面的数值或状态文本（不要修改 HTML 标签结构，只修改里面的内容）。\n请务必将状态栏代码包裹在 \`\`\`html 和 \`\`\` 之间！\n\n状态栏模板如下：\n${activeHtml.content}\n\n`;
+        }
+    }
+
+    // 构造消息体
+    const messages = [{ role: "system", content: systemPrompt }];
+    dreamState.currentChat.forEach(m => {
+        if (m.role === 'user' || m.role === 'assistant') {
+            // 传给 AI 的历史记录剥离掉 HTML 状态栏，防止污染 AI 的认知
+            messages.push({ role: m.role, content: m.rawContent || m.content });
+        }
+    });
+
+    dreamState.currentChat.push({ role: 'system', content: '梦境正在演化...' });
+    dreamRenderChatWithHTML();
+
+    try {
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: messages,
+                temperature: 0.9 
+            })
+        });
+
+        const data = await response.json();
+        let rawReply = data.choices[0].message.content;
+        rawReply = rawReply.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        
+        let finalReply = rawReply;
+        let extractedHtml = "";
+
+        // ==========================================
+        // 解析 AI 动态生成的 HTML 状态栏
+        // ==========================================
+        const htmlMatch = finalReply.match(/```html\s*([\s\S]*?)\s*```/i);
+        if (htmlMatch) {
+            extractedHtml = htmlMatch[1]; // 提取出 AI 填好的 HTML
+            finalReply = finalReply.replace(/```html\s*[\s\S]*?\s*```/i, '').trim(); // 从正文中删掉代码块
+        } else {
+            // 兜底：如果 AI 忘了加 ```html，尝试直接提取末尾的 <div>
+            const divMatch = finalReply.match(/(<div[\s\S]*>[\s\S]*<\/div>)$/i);
+            if (divMatch) {
+                extractedHtml = divMatch[1];
+                finalReply = finalReply.replace(/(<div[\s\S]*>[\s\S]*<\/div>)$/i, '').trim();
+            }
+        }
+
+        // ==========================================
+        // 执行正则替换 (Regex)
+        // ==========================================
+        if (dreamState.ext.activeRegexId) {
+            const activeRegex = dreamState.ext.regex.find(r => r.id === dreamState.ext.activeRegexId);
+            if (activeRegex && activeRegex.content) {
+                const lines = activeRegex.content.split('\n');
+                lines.forEach(line => {
+                    const parts = line.split('===');
+                    if (parts.length === 2) {
+                        try {
+                            const match = parts[0].trim().match(/^\/(.+)\/([gimuy]*)$/);
+                            if (match) {
+                                const regex = new RegExp(match[1], match[2]);
+                                finalReply = finalReply.replace(regex, parts[1].trim());
+                            } else {
+                                finalReply = finalReply.split(parts[0].trim()).join(parts[1].trim());
+                            }
+                        } catch(e) {}
+                    }
+                });
+            }
+        }
+
+        dreamState.currentChat.pop(); // 移除 loading
+        
+        // 保存记录：rawContent 存纯净文本，htmlInject 存 AI 填好的状态栏
+        dreamState.currentChat.push({ 
+            role: 'assistant', 
+            content: finalReply, 
+            rawContent: rawReply,
+            htmlInject: extractedHtml 
+        });
+        
+        dreamRenderChatWithHTML();
+
+    } catch (e) {
+        dreamState.currentChat.pop(); 
+        dreamState.currentChat.push({ role: 'system', content: '梦境连接断开: ' + e.message });
+        dreamRenderChatWithHTML();
+    }
+}
+// 文本解析器：分离对话和旁白
+function parseDreamTextToCards(text) {
+    // 匹配中文双引号 “”、英文双引号 ""、直角引号 「」『』
+    const regex = /([“"「『][^”"」』]+[”"」』])/g;
+    const parts = text.split(regex);
+    let html = '';
+    
+    parts.forEach(part => {
+        if (!part) return;
+        if (part.match(/^[“"「『]/)) {
+            // 这是对话，用气泡包裹
+            html += `<div class="dream-dialogue-bubble">${part}</div>`;
+        } else {
+            // 这是旁白，转换换行符
+            const formatted = part.replace(/\n/g, '<br>');
+            if (formatted.trim() || formatted.includes('<br>')) {
+                html += `<div class="dream-narrative-text">${formatted}</div>`;
+            }
+        }
+    });
+    return html;
+}
+
+// 渲染聊天记录 (支持长按、解析和AI卡片操作)
+function dreamRenderChatWithHTML() {
+    const container = document.getElementById('dream-chat-history');
+    container.innerHTML = '';
+    
+    dreamState.currentChat.forEach((msg, index) => {
+        const div = document.createElement('div');
+        
+        if (msg.role === 'user') {
+            div.className = 'dream-msg me';
+            div.innerText = msg.content;
+            // 绑定长按事件 (传入 'user' 类型)
+            div.addEventListener('touchstart', (e) => handleDreamTouchStart(e, index), {passive: false});
+            div.addEventListener('touchend', handleDreamTouchEnd);
+            div.addEventListener('contextmenu', (e) => {
+                showDreamContextMenu(e, index, 'user');
+            });
+            
+        } else if (msg.role === 'assistant') {
+            div.className = 'dream-msg ai';
+            let innerHtml = parseDreamTextToCards(msg.content);
+            
+            if (msg.htmlInject) {
+                innerHtml += `<div style="margin-top: 10px; border-top: 1px dashed #E5E5EA; padding-top: 10px;">${msg.htmlInject}</div>`;
+            }
+            
+            // 新增：右下角操作按键 (传入 'ai' 类型)
+            innerHtml += `
+                <div class="dream-ai-action-btn" onclick="showDreamContextMenu(event, ${index}, 'ai')">
+                    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                </div>
+            `;
+            div.innerHTML = innerHtml;
+            
+        } else {
+            div.className = 'dream-msg system';
+            div.innerText = msg.content;
+        }
+        container.appendChild(div);
+    });
+    
+    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+}
+
+// 自动调整输入框高度
+document.addEventListener('DOMContentLoaded', function() {
+    const dreamInput = document.getElementById('dream-chat-input');
+    if (dreamInput) {
+        dreamInput.addEventListener('input', function() {
+            this.style.height = '44px';
+            // 👉【修改】：使用 setProperty 确保优先级，防止被其他样式覆盖导致闪烁
+            this.style.setProperty('height', this.scrollHeight + 'px', 'important');
+        });
+    }
+});
+// 覆盖原本的 enterDreamChat 和 sendDreamMessage，让它们调用支持 HTML 的渲染函数
+function enterDreamChat() {
+    dreamState.currentChat = []; 
+    document.getElementById('dream-chat-page').classList.add('active');
+    dreamState.currentChat.push({ role: 'system', content: '你闭上眼睛，坠入了梦境...' });
+    dreamRenderChatWithHTML();
+}
+
+function sendDreamMessage() {
+    const input = document.getElementById('dream-chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    dreamState.currentChat.push({ role: 'user', content: text });
+    input.value = '';
+    dreamRenderChatWithHTML();
+}
+
+// --- 梦境预设卡片编辑与保存逻辑 ---
+function openDreamPresetEditor(id = null) {
+    dreamState.editingPresetId = id;
+    const modal = document.getElementById('dream-preset-editor-modal');
+    const nameInput = document.getElementById('dream-preset-name');
+    const contentInput = document.getElementById('dream-preset-content');
+    const idDisplay = document.getElementById('dream-preset-id-display');
+
+    if (id) {
+        const preset = dreamState.presets.find(p => p.id === id);
+        if (preset) {
+            nameInput.value = preset.name;
+            contentInput.value = preset.content;
+            idDisplay.innerText = id.toString().slice(-4); // 显示ID后四位作为档案号
+        }
+    } else {
+        nameInput.value = '';
+        contentInput.value = '';
+        idDisplay.innerText = 'NEW';
+    }
+    
+    modal.classList.add('active');
+}
+
+function closeDreamPresetEditor() {
+    document.getElementById('dream-preset-editor-modal').classList.remove('active');
+    dreamState.editingPresetId = null;
+}
+
+function saveDreamPreset() {
+    const name = document.getElementById('dream-preset-name').value.trim();
+    const content = document.getElementById('dream-preset-content').value.trim();
+    
+    if (!name || !content) {
+        alert("SUBJECT 和 内容都不能为空哦。");
+        return;
+    }
+
+    if (dreamState.editingPresetId) {
+        // 编辑模式
+        const preset = dreamState.presets.find(p => p.id === dreamState.editingPresetId);
+        if (preset) {
+            preset.name = name;
+            preset.content = content;
+        }
+    } else {
+        // 新增模式
+        dreamState.presets.push({ id: Date.now(), name, content });
+    }
+    
+    dreamSaveData();
+    dreamRenderSettings();
+    closeDreamPresetEditor();
+}
+
+function deleteDreamPreset(id) {
+    if (confirm("确定要销毁这份档案(预设)吗？")) {
+        dreamState.presets = dreamState.presets.filter(p => p.id !== id);
+        if (dreamState.selectedPresetId === id) {
+            dreamState.selectedPresetId = null; // 如果删除了正在使用的，清空选中状态
+        }
+        dreamSaveData();
+        dreamRenderSettings();
+    }
+}
+
+// --- 替换旧的 addDreamPreset，让点击“+ 添加”时调用新弹窗 ---
+function addDreamPreset() {
+    openDreamPresetEditor(null);
+}
+
+// --- 预设列表左滑逻辑 ---
+let dreamSwipeXDown = null;
+let dreamSwipeYDown = null;
+let dreamCurrentSwipeElement = null;
+
+function dreamTouchStart(evt) {
+    dreamSwipeXDown = evt.touches[0].clientX;
+    dreamSwipeYDown = evt.touches[0].clientY;
+    dreamCurrentSwipeElement = evt.currentTarget;
+}
+
+function dreamTouchMove(evt) {
+    if (!dreamSwipeXDown || !dreamSwipeYDown || !dreamCurrentSwipeElement) return;
+    let xUp = evt.touches[0].clientX;
+    let yUp = evt.touches[0].clientY;
+    let xDiff = dreamSwipeXDown - xUp;
+    let yDiff = dreamSwipeYDown - yUp;
+    
+    // 确保是水平滑动
+    if (Math.abs(xDiff) > Math.abs(yDiff)) { 
+        if (xDiff > 0) {
+            // 向左滑，露出删除按钮 (宽度70px)
+            dreamCurrentSwipeElement.style.transform = `translateX(-70px)`; 
+        } else {
+            // 向右滑，恢复原位
+            dreamCurrentSwipeElement.style.transform = 'translateX(0px)'; 
+        }
+    }
+}
+
+function dreamTouchEnd(evt) {
+    dreamSwipeXDown = null;
+    dreamSwipeYDown = null;
+}
+// ==========================================
+// 梦境扩展组件 (CSS / HTML / REGEX) 逻辑
+// ==========================================
+
+function openDreamExtModal() {
+    document.getElementById('dream-ext-modal').classList.add('active');
+    switchDreamExtTab(dreamState.ext.currentTab);
+}
+
+function closeDreamExtModal() {
+    document.getElementById('dream-ext-modal').classList.remove('active');
+}
+
+function switchDreamExtTab(tab) {
+    dreamState.ext.currentTab = tab;
+    
+    // UI 切换
+    document.querySelectorAll('.dream-ext-tab').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.dream-ext-tab[onclick="switchDreamExtTab('${tab}')"]`).classList.add('active');
+    
+    // 清空输入框
+    document.getElementById('dream-ext-name').value = '';
+    document.getElementById('dream-ext-content').value = '';
+    
+    // 渲染列表
+    renderDreamExtList();
+}
+
+// 处理文件导入
+function handleDreamExtImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // 自动提取文件名作为预设名（去掉后缀）
+    const fileName = file.name.replace(/\.[^/.]+$/, "");
+    document.getElementById('dream-ext-name').value = fileName;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('dream-ext-content').value = e.target.result;
+    };
+    reader.readAsText(file);
+    event.target.value = ''; // 清空 input
+}
+
+// 保存预设
+function saveDreamExt() {
+    const tab = dreamState.ext.currentTab;
+    const name = document.getElementById('dream-ext-name').value.trim();
+    const content = document.getElementById('dream-ext-content').value.trim();
+    
+    if (!name || !content) return alert("名称和内容不能为空");
+    
+    const newExt = { id: Date.now(), name, content };
+    dreamState.ext[tab].unshift(newExt); // 插入到最前面
+    
+    // 自动启用刚保存的预设
+    if (tab === 'css') dreamState.ext.activeCssId = newExt.id;
+    if (tab === 'html') dreamState.ext.activeHtmlId = newExt.id;
+    if (tab === 'regex') dreamState.ext.activeRegexId = newExt.id;
+    
+    dreamSaveData();
+    
+    if (tab === 'css') applyDreamCss(); // 如果是 CSS，立即生效
+    
+    document.getElementById('dream-ext-name').value = '';
+    document.getElementById('dream-ext-content').value = '';
+    renderDreamExtList();
+}
+
+// 渲染列表
+function renderDreamExtList() {
+    const tab = dreamState.ext.currentTab;
+    const list = dreamState.ext[tab];
+    const container = document.getElementById('dream-ext-list');
+    container.innerHTML = '';
+    
+    if (list.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; font-size:12px; margin-top:20px;">暂无保存的预设</div>';
+        return;
+    }
+    
+    let activeId = null;
+    if (tab === 'css') activeId = dreamState.ext.activeCssId;
+    if (tab === 'html') activeId = dreamState.ext.activeHtmlId;
+    if (tab === 'regex') activeId = dreamState.ext.activeRegexId;
+
+    list.forEach(item => {
+        const isActive = item.id === activeId;
+        const div = document.createElement('div');
+        div.className = `dream-ext-item ${isActive ? 'active' : ''}`;
+        
+        div.innerHTML = `
+            <div class="dream-ext-item-info" onclick="toggleDreamExtActive(${item.id})">
+                <div class="dream-ext-item-name">${item.name} ${isActive ? '<span style="color:#34C759; font-size:10px;">(已启用)</span>' : ''}</div>
+                <div class="dream-ext-item-preview">${item.content.replace(/\n/g, ' ')}</div>
+            </div>
+            <div class="dream-ext-item-actions">
+                <svg onclick="deleteDreamExt(${item.id})" viewBox="0 0 24 24" style="width:18px; height:18px; fill:none; stroke:#FF3B30; stroke-width:2; cursor:pointer;"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// 启用/取消启用
+function toggleDreamExtActive(id) {
+    const tab = dreamState.ext.currentTab;
+    let currentActive = null;
+    
+    if (tab === 'css') currentActive = dreamState.ext.activeCssId;
+    if (tab === 'html') currentActive = dreamState.ext.activeHtmlId;
+    if (tab === 'regex') currentActive = dreamState.ext.activeRegexId;
+
+    // 如果点击的是已经启用的，则取消启用；否则启用新的
+    const newActiveId = (currentActive === id) ? null : id;
+
+    if (tab === 'css') {
+        dreamState.ext.activeCssId = newActiveId;
+        applyDreamCss(); // 立即刷新 CSS
+    }
+    if (tab === 'html') dreamState.ext.activeHtmlId = newActiveId;
+    if (tab === 'regex') dreamState.ext.activeRegexId = newActiveId;
+
+    dreamSaveData();
+    renderDreamExtList();
+}
+
+// 删除预设
+function deleteDreamExt(id) {
+    if (!confirm("确定删除此预设吗？")) return;
+    const tab = dreamState.ext.currentTab;
+    
+    dreamState.ext[tab] = dreamState.ext[tab].filter(item => item.id !== id);
+    
+    // 如果删除的是正在启用的，清空启用状态
+    if (tab === 'css' && dreamState.ext.activeCssId === id) {
+        dreamState.ext.activeCssId = null;
+        applyDreamCss();
+    }
+    if (tab === 'html' && dreamState.ext.activeHtmlId === id) dreamState.ext.activeHtmlId = null;
+    if (tab === 'regex' && dreamState.ext.activeRegexId === id) dreamState.ext.activeRegexId = null;
+
+    dreamSaveData();
+    renderDreamExtList();
+}
+
+// 全局注入 CSS
+function applyDreamCss() {
+    let styleTag = document.getElementById('dream-custom-css-inject');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'dream-custom-css-inject';
+        document.head.appendChild(styleTag);
+    }
+    
+    if (dreamState.ext.activeCssId) {
+        const activeCss = dreamState.ext.css.find(c => c.id === dreamState.ext.activeCssId);
+        styleTag.innerHTML = activeCss ? activeCss.content : '';
+    } else {
+        styleTag.innerHTML = '';
+    }
+}
+// ==========================================
+// 梦境长按菜单、编辑与重生成逻辑
+// ==========================================
+let dreamLongPressTimer = null;
+let dreamSelectedMsgIndex = -1;
+
+function handleDreamTouchStart(e, index) {
+    dreamLongPressTimer = setTimeout(() => {
+        showDreamContextMenu(e, index, 'user');
+    }, 500);
+}
+
+function handleDreamTouchEnd() {
+    if (dreamLongPressTimer) {
+        clearTimeout(dreamLongPressTimer);
+        dreamLongPressTimer = null;
+    }
+}
+
+function showDreamContextMenu(e, index, type = 'user') {
+    // 阻止默认事件和冒泡，防止触发全局关闭
+    if (e.preventDefault) e.preventDefault();
+    if (e.stopPropagation) e.stopPropagation();
+
+    dreamSelectedMsgIndex = index;
+    const menu = document.getElementById('dream-context-menu');
+    
+    // 动态生成菜单内容
+    menu.innerHTML = '';
+    if (type === 'user') {
+        menu.innerHTML = `
+            <div class="dream-ctx-item" onclick="editDreamMsg()">EDIT / 编辑</div>
+            <div class="dream-ctx-item" style="color: #FF3B30;" onclick="deleteDreamMsg()">DELETE / 删除</div>
+        `;
+    } else if (type === 'ai') {
+        menu.innerHTML = `
+            <div class="dream-ctx-item" onclick="regenerateDreamMsg()">RETRY / 重生成</div>
+            <div class="dream-ctx-item" onclick="editDreamMsg()">EDIT / 编辑</div>
+            <div class="dream-ctx-item" style="color: #FF3B30;" onclick="deleteDreamMsg()">DELETE / 删除</div>
+        `;
+    }
+
+    // 获取点击位置 (兼容鼠标和触摸)
+    let x = e.clientX || (e.touches && e.touches[0].clientX);
+    let y = e.clientY || (e.touches && e.touches[0].clientY);
+
+    const menuWidth = 120;
+    const menuHeight = type === 'ai' ? 140 : 100; // AI菜单多一项，高度增加
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    if (x + menuWidth > screenW) x = screenW - menuWidth - 10;
+    if (y + menuHeight > screenH) y = screenH - menuHeight - 10;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'flex';
+}
+
+// 重新生成 AI 回复
+function regenerateDreamMsg() {
+    if (dreamSelectedMsgIndex > -1) {
+        const isLastMsg = dreamSelectedMsgIndex === dreamState.currentChat.length - 1;
+        
+        if (!isLastMsg) {
+            if (!confirm("重生成此条消息，将会删除它之后的所有对话记录，确定要继续吗？")) {
+                document.getElementById('dream-context-menu').style.display = 'none';
+                return;
+            }
+        }
+
+        // 截断数组：保留到这条 AI 消息之前的所有内容（即删除这条 AI 消息及之后的所有消息）
+        dreamState.currentChat = dreamState.currentChat.slice(0, dreamSelectedMsgIndex);
+        dreamRenderChatWithHTML();
+        document.getElementById('dream-context-menu').style.display = 'none';
+        
+        // 重新触发 AI
+        triggerDreamAI();
+    }
+}
+
+function deleteDreamMsg() {
+    if (dreamSelectedMsgIndex > -1) {
+        if (confirm("确定删除这条记录吗？")) {
+            dreamState.currentChat.splice(dreamSelectedMsgIndex, 1);
+            dreamRenderChatWithHTML();
+        }
+    }
+    document.getElementById('dream-context-menu').style.display = 'none';
+}
+
+function editDreamMsg() {
+    if (dreamSelectedMsgIndex > -1) {
+        const msg = dreamState.currentChat[dreamSelectedMsgIndex];
+        document.getElementById('dream-edit-textarea').value = msg.content;
+        document.getElementById('dream-edit-modal').classList.add('active');
+    }
+    document.getElementById('dream-context-menu').style.display = 'none';
+}
+
+function closeDreamEditModal() {
+    document.getElementById('dream-edit-modal').classList.remove('active');
+    dreamSelectedMsgIndex = -1;
+}
+
+function saveDreamEditMsg() {
+    const newText = document.getElementById('dream-edit-textarea').value.trim();
+    if (newText && dreamSelectedMsgIndex > -1) {
+        dreamState.currentChat[dreamSelectedMsgIndex].content = newText;
+        dreamState.currentChat[dreamSelectedMsgIndex].rawContent = newText; // 同步更新
+        dreamRenderChatWithHTML();
+    }
+    closeDreamEditModal();
+}
+// --- 将梦境作为潜意识注入给角色 ---
+function injectDreamToChar(cardId) {
+    const charId = wcState.activeChatId;
+    
+    if (!charId) {
+        alert("请先在微信主界面进入一个角色的聊天框，然后再打开梦境进行注入哦！");
+        return;
+    }
+
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const card = dreamState.cards.find(c => c.id === cardId);
+    if (!card) return;
+
+    if (!char.memories) char.memories = [];
+    
+    // 查重：防止重复注入同一个梦境
+    const isAlreadyInjected = char.memories.some(m => m.content.includes(card.content.substring(0, 20)));
+    if (isAlreadyInjected) {
+        if (!confirm("这个梦境似乎已经注入过了，确定要重复注入吗？")) return;
+    }
+
+    // 包装成潜意识记忆
+    const memoryText = `[梦境残影/潜意识] 我最近做了一个无比真实的梦，梦里的情景挥之不去，它可能会影响我现在的潜意识和情绪：${card.content}`;
+
+    char.memories.unshift({
+        id: Date.now(),
+        type: 'manual', // 存入角色的记忆库
+        content: memoryText,
+        time: Date.now()
+    });
+
+    wcSaveData();
+    alert(`成功！\n已将该梦境化作潜意识，植入到 ${char.name} 的记忆中。`);
+}
+
+// --- 系统更新日志数据 ---
+const systemUpdateLogs = [
+    {
+        version: "小元机",
+        date: "2026.03.07",
+        title: "欢迎来到小元机^",
+        content: [
+            "这里是小元，如有问题请多多反馈。",
+            "优化了char搜索歌曲模式（音乐的个人页面的五角星是音乐胶囊迷你音乐播放器！）",
+            "梦境支持html状态栏和正则式（我也不知道正则式能干什么）"
+        ],
+        notes: [
+            "更新后若遇到界面显示异常，请尝试清除浏览器缓存。",
+            "请妥善保管您的数据，建议定期在设置中进行备份。",
+            "一机一码，禁止二传二贩"
+        ]
+    },
+    {
+        version: "小元机",
+        date: "2026.03.06",
+        title: "欢迎来到小元机^",
+        content: [
+            "全新梦境空间，支持沉浸式文字交互。",
+            "新增动态状态栏与正则替换功能。"
+        ],
+        notes: [
+            "梦境数据储存在本地，清除缓存会导致数据丢失。"
+        ]
+    }
+];
+const CURRENT_VERSION = systemUpdateLogs[0].version;
+
+// --- 系统更新弹窗逻辑 ---
+function checkSystemUpdate() {
+    const lastVersion = localStorage.getItem('ios_theme_last_version');
+    if (lastVersion !== CURRENT_VERSION) {
+        showSystemUpdatePopup();
+    }
+}
+
+function showSystemUpdatePopup() {
+    const popup = document.getElementById('system-update-popup');
+    if (!popup) return;
+    const latestLog = systemUpdateLogs[0];
+    
+    document.getElementById('sys-update-version-text').innerText = `VERSION ${latestLog.version.replace('v', '')}`;
+    document.getElementById('sys-update-title-text').innerText = latestLog.title;
+    
+    const contentList = document.getElementById('sys-update-content-list');
+    contentList.innerHTML = latestLog.content.map(item => `<li>${item}</li>`).join('');
+    
+    const notesList = document.getElementById('sys-update-notes-list');
+    notesList.innerHTML = latestLog.notes.map(item => `<li>${item}</li>`).join('');
+    
+    popup.classList.remove('hidden');
+    requestAnimationFrame(() => {
+        popup.classList.add('active');
+    });
+}
+
+function closeSystemUpdatePopup() {
+    const popup = document.getElementById('system-update-popup');
+    popup.classList.remove('active');
+    setTimeout(() => {
+        popup.classList.add('hidden');
+    }, 300);
+    localStorage.setItem('ios_theme_last_version', CURRENT_VERSION);
+}
+
+// --- 更新日志设置页逻辑 ---
+function openUpdateLogSettings() {
+    document.getElementById('updateLogSettingsModal').classList.add('open');
+    renderUpdateLogs();
+}
+
+function closeUpdateLogSettings() {
+    document.getElementById('updateLogSettingsModal').classList.remove('open');
+}
+
+function renderUpdateLogs() {
+    const container = document.getElementById('updateLogContainer');
+    container.innerHTML = '';
+    
+    systemUpdateLogs.forEach((log, index) => {
+        const item = document.createElement('div');
+        item.className = 'update-log-item';
+        if (index === 0) item.classList.add('expanded'); // 默认展开最新版本
+        
+        let contentHtml = `<div class="update-log-section"><h4>更新内容</h4><ul class="update-log-list">${log.content.map(c => `<li>${c}</li>`).join('')}</ul></div>`;
+        if (log.notes && log.notes.length > 0) {
+            contentHtml += `<div class="update-log-section"><h4>注意事项</h4><ul class="update-log-list">${log.notes.map(n => `<li>${n}</li>`).join('')}</ul></div>`;
+        }
+        
+        item.innerHTML = `
+            <div class="update-log-header" onclick="toggleUpdateLog(this)">
+                <div class="update-log-title-wrap">
+                    <span class="update-log-version">${log.version}</span>
+                    <span class="update-log-title-text">${log.title}</span>
+                </div>
+                <div class="update-log-right">
+                    <span class="update-log-date">${log.date}</span>
+                    <svg class="update-log-chevron" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+                </div>
+            </div>
+            <div class="update-log-content">
+                <div class="update-log-content-inner">
+                    ${contentHtml}
+                </div>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
+
+function toggleUpdateLog(headerEl) {
+    const item = headerEl.parentElement;
+    item.classList.toggle('expanded');
+}

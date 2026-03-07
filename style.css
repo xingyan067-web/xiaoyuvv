@@ -50,9 +50,6 @@ body, input, textarea, select, button {
     transition: background 0.3s ease;
     z-index: 1; 
 }
-
-.status-bar-placeholder { height: 20px; width: 100%; flex-shrink: 0; }
-
 /* --- 桌面编辑栏 --- */
 .desktop-edit-bar {
     position: absolute;
@@ -2431,6 +2428,7 @@ input::-webkit-inner-spin-button {
 .ins-music-view {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     display: none; flex-direction: column; overflow-y: auto;
+    background-color: #FFF; /* 修复：增加背景色防止透底 */
 }
 .ins-music-view.active { display: flex; animation: wcFadeIn 0.3s ease; }
 
@@ -2535,18 +2533,24 @@ input::-webkit-inner-spin-button {
 .ins-music-player-title { font-size: 14px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ins-music-player-artist { font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ins-music-player-controls { z-index: 2; }
-.ins-music-player-controls .ins-music-btn-icon { width: 32px; height: 32px; color: #111; } ========================================== */
+.ins-music-player-controls .ins-music-btn-icon { width: 32px; height: 32px; color: #111; } 
+
+/* ========================================== */
 /* 全屏播放器 (黑白灰简约 iOS 风 + 黑胶唱片) */
 /* ========================================== */
 .ins-music-full-player {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; height: 100dvh;
     background: #FFF; z-index: 3000; display: flex; flex-direction: column;
-    transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), visibility 0.4s;
+    visibility: hidden; pointer-events: none; /* 修复：彻底隐藏，防止在主页和个人页误触或透出 */
 }
-.ins-music-full-player.active { transform: translateY(0); }
+.ins-music-full-player.active { 
+    transform: translateY(0); 
+    visibility: visible; pointer-events: auto; 
+}
 .ins-music-fp-header {
     display: flex; justify-content: space-between; align-items: center;
-    padding: env(safe-area-inset-top, 40px) 20px 10px 20px;
+    padding: calc(env(safe-area-inset-top, 20px) + 20px) 20px 10px 20px; /* 修复：增加顶部间距，防止太靠上 */
 }
 .ins-music-fp-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #111; }
 .ins-music-fp-btn svg { width: 24px; height: 24px; fill: currentColor; }
@@ -2557,15 +2561,15 @@ input::-webkit-inner-spin-button {
     margin-top: 10px; margin-bottom: -10px; z-index: 10; 
 }
 .ins-music-fp-avatars { 
-    display: flex; align-items: center; gap: 15px; /* 15px 的精确间距 */
+    display: flex; align-items: center; gap: 15px; 
     margin-bottom: 12px; 
 }
 .ins-music-fp-avatar { 
-    width: 80px; height: 80px; /* 80x80px 圆形头像 */
+    width: 80px; height: 80px; 
     border-radius: 50%; object-fit: cover; 
     border: 3px solid #FFF; box-shadow: 0 8px 25px rgba(0,0,0,0.15); 
 }
-.ins-music-fp-avatar.char { margin-left: 0; z-index: 2; } /* 移除负边距，使用 gap 控制 */
+.ins-music-fp-avatar.char { margin-left: 0; z-index: 2; } 
 .ins-music-fp-timer { 
     font-size: 14px; font-weight: 700; color: #555; font-family: monospace; 
     letter-spacing: 2px; background: #F5F5F5; padding: 6px 16px; border-radius: 16px; 
@@ -2573,23 +2577,24 @@ input::-webkit-inner-spin-button {
 /* 黑胶唱片设计 */
 .ins-music-fp-record-container {
     flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px;
+    margin-top: 2vh; margin-bottom: 2vh; min-height: 280px; /* 修复：增加上下弹性边距，使布局更均衡 */
 }
 .ins-music-fp-record {
-    width: 260px; height: 260px; border-radius: 50%; background: #111;
+    width: 280px; height: 280px; border-radius: 50%; background: #111; /* 稍微放大唱片 */
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 20px 50px rgba(0,0,0,0.2), inset 0 0 0 8px #222, inset 0 0 0 16px #111, inset 0 0 0 17px #333;
     animation: spin 12s linear infinite; animation-play-state: paused;
 }
 .ins-music-fp-record.playing { animation-play-state: running; }
 .ins-music-fp-cover {
-    width: 170px; height: 170px; border-radius: 50%; object-fit: cover;
+    width: 180px; height: 180px; border-radius: 50%; object-fit: cover;
     border: 4px solid #000;
 }
 
 /* 歌曲信息 */
 .ins-music-fp-info { padding: 0 30px 15px 30px; text-align: center; }
-.ins-music-fp-song { font-size: 22px; font-weight: 800; color: #111; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.5px; }
-.ins-music-fp-artist { font-size: 14px; color: #888; font-weight: 500; }
+.ins-music-fp-song { font-size: 24px; font-weight: 800; color: #111; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.5px; }
+.ins-music-fp-artist { font-size: 15px; color: #888; font-weight: 500; }
 
 /* 滚动歌词 */
 .ins-music-fp-lyrics-container {
@@ -2611,12 +2616,12 @@ input::-webkit-inner-spin-button {
 .ins-music-fp-progress-bar { width: 100%; height: 4px; background: #F0F0F0; border-radius: 2px; position: relative; cursor: pointer; }
 .ins-music-fp-progress-fill { width: 0%; height: 100%; background: #111; border-radius: 2px; position: absolute; top: 0; left: 0; pointer-events: none; }
 .ins-music-fp-progress-fill::after { content: ''; position: absolute; right: -4px; top: -3px; width: 10px; height: 10px; background: #111; border-radius: 50%; }
-.ins-music-fp-time { display: flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 8px; font-weight: 600; font-family: monospace; }
+.ins-music-fp-time { display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 10px; font-weight: 600; font-family: monospace; }
 
 /* 控制栏 */
 .ins-music-fp-controls {
     display: flex; justify-content: space-between; align-items: center; 
-    padding: 0 30px calc(env(safe-area-inset-bottom, 20px) + 20px) 30px;
+    padding: 10px 30px calc(env(safe-area-inset-bottom, 20px) + 40px) 30px; /* 修复：增加底部间距，减少底部过度留白 */
 }
 .ins-music-fp-ctrl-btn { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #111; }
 .ins-music-fp-ctrl-btn svg { width: 32px; height: 32px; fill: currentColor; }
@@ -2699,7 +2704,7 @@ input::-webkit-inner-spin-button {
         /* 音乐播放器迷你聊天弹窗样式 */
         .music-chat-window {
             position: absolute;
-            top: 130px; 
+            top: 165px; 
             left: 20px;
             right: 20px;
             height: 320px; 
@@ -2938,3 +2943,459 @@ input::-webkit-inner-spin-button {
 .capsule-btn.small svg { width: 16px; height: 16px; fill: #888; }
 .capsule-btn.play { width: 36px; height: 36px; background: #111; color: #FFF; }
 .capsule-btn.play svg { width: 20px; height: 20px; }
+/* ========================================== */
+/* 梦境系统 (Dream Space) - 极简黑白灰 INS 风 */
+/* ========================================== */
+
+.dream-fullscreen-view {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: #FAFAFA; z-index: 9000;
+    display: none; flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    animation: wcFadeIn 0.3s ease;
+}
+.dream-fullscreen-view.active { display: flex; }
+
+.dream-header {
+    height: calc(50px + env(safe-area-inset-top, 20px));
+    padding-top: env(safe-area-inset-top, 20px);
+    display: flex; justify-content: space-between; align-items: center;
+    padding-left: 15px; padding-right: 15px;
+    background: #FAFAFA; border-bottom: 1px solid #F0F0F0; flex-shrink: 0;
+}
+.dream-title {
+    font-family: 'Georgia', serif; font-style: italic; font-size: 16px;
+    font-weight: bold; color: #111; letter-spacing: 2px;
+}
+.dream-header-right { display: flex; gap: 10px; }
+.dream-icon-btn {
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #111;
+}
+.dream-icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+
+.dream-content {
+    flex: 1; overflow-y: auto; padding: 20px; background: #FAFAFA;
+}
+.dream-empty-state {
+    text-align: center; color: #CCC; font-family: 'Georgia', serif; font-style: italic;
+    margin-top: 50px; font-size: 14px; letter-spacing: 1px;
+}
+
+.dream-bottom-bar {
+    padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom, 20px));
+    background: #FAFAFA; border-top: 1px solid #F0F0F0;
+}
+.dream-btn-primary {
+    width: 100%; height: 50px; background: #111; color: #FFF;
+    border: none; border-radius: 25px; font-size: 14px; font-weight: bold;
+    letter-spacing: 2px; cursor: pointer; transition: transform 0.1s;
+}
+.dream-btn-primary:active { transform: scale(0.98); }
+.dream-btn-secondary {
+    flex: 1; height: 50px; background: #FFF; color: #111;
+    border: 1px solid #E5E5EA; border-radius: 25px; font-size: 14px; font-weight: bold;
+    cursor: pointer; transition: background 0.1s;
+}
+.dream-btn-secondary:active { background: #F5F5F5; }
+
+/* 梦境卡片 (高级感) */
+.dream-card {
+    background: #FFF; border-radius: 16px; padding: 24px; margin-bottom: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.04); border: 1px solid #F5F5F5;
+    position: relative; overflow: hidden;
+}
+.dream-card::before {
+    content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #111;
+}
+.dream-card-date {
+    font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #999;
+    margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px;
+}
+.dream-card-text {
+    font-size: 14px; color: #333; line-height: 1.8; text-align: justify;
+    font-family: 'Kaiti', 'STKaiti', '楷体', serif; /* 增加一点文艺感 */
+}
+
+/* 梦境聊天区 */
+.dream-chat-content {
+    flex: 1; overflow-y: auto; padding: 20px; background: #FAFAFA;
+    display: flex; flex-direction: column; gap: 15px;
+}
+.dream-msg { max-width: 85%; padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.5; }
+.dream-msg.me { align-self: flex-end; background: #111; color: #FFF; border-bottom-right-radius: 4px; }
+.dream-msg.ai { align-self: flex-start; background: #FFF; color: #111; border: 1px solid #E5E5EA; border-bottom-left-radius: 4px; }
+.dream-msg.system { align-self: center; background: transparent; color: #999; font-size: 12px; font-style: italic; }
+
+.dream-chat-footer {
+    padding: 10px 15px calc(10px + env(safe-area-inset-bottom, 20px)) 15px;
+    background: #FFF; border-top: 1px solid #F0F0F0; display: flex; flex-direction: column; gap: 10px;
+}
+.dream-chat-footer textarea {
+    width: 100%; height: 80px; border: 1px solid #E5E5EA; border-radius: 12px;
+    padding: 10px; font-size: 15px; background: #FAFAFA; resize: none; outline: none;
+}
+.dream-chat-actions { display: flex; gap: 10px; }
+
+/* 设置弹窗 */
+.dream-modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4); z-index: 9999; display: none;
+    align-items: flex-end; justify-content: center;
+}
+.dream-modal-overlay.active { display: flex; }
+.dream-modal-box {
+    width: 100%; background: #FFF; border-radius: 24px 24px 0 0;
+    padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom, 20px));
+    animation: wcSlideUpModal 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.dream-modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 16px; font-weight: bold; margin-bottom: 20px; border-bottom: 1px solid #F0F0F0; padding-bottom: 15px;
+}
+.dream-section-title { font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.dream-list-container { max-height: 200px; overflow-y: auto; background: #FAFAFA; border-radius: 12px; padding: 10px; }
+.dream-item-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-bottom: 1px solid #E5E5EA; font-size: 14px; color: #333;
+}
+.dream-item-row:last-child { border-bottom: none; }
+.dream-checkbox { width: 20px; height: 20px; accent-color: #111; }
+/* ========================================== */
+/* 梦境预设编辑卡片 (档案袋/报纸风，无圆角) */
+/* ========================================== */
+.dream-preset-paper {
+    width: 90%; max-width: 340px;
+    background: #F4F4F4; /* 偏灰的纸张底色 */
+    border: 2px solid #111;
+    border-radius: 0; /* 绝对无圆角 */
+    box-shadow: 6px 6px 0px #111; /* 硬阴影，复古印刷感 */
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 20px;
+    font-family: 'Courier New', Courier, monospace, sans-serif;
+    animation: wcPopIn 0.2s ease-out;
+}
+
+.dream-preset-header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 2px solid #111; padding-bottom: 10px;
+}
+.dream-preset-brand {
+    font-size: 18px; font-weight: 900; color: #111; letter-spacing: 1px;
+}
+.dream-preset-date {
+    font-size: 12px; color: #555; font-weight: bold;
+}
+
+.dream-preset-title-input input {
+    width: 100%; background: transparent; border: none;
+    border-bottom: 1px dashed #999; border-radius: 0;
+    padding: 10px 0; font-size: 16px; font-weight: bold; color: #111;
+    font-family: inherit; outline: none;
+}
+.dream-preset-title-input input::placeholder { color: #AAA; font-weight: normal; }
+
+.dream-preset-body-input textarea {
+    width: 100%; height: 150px; background: transparent; border: none;
+    border-bottom: 1px dashed #999; border-radius: 0;
+    padding: 10px 0; font-size: 14px; color: #333; line-height: 1.6;
+    font-family: 'Kaiti', 'STKaiti', '楷体', serif; /* 内容用衬线体增加文艺感 */
+    resize: none; outline: none;
+}
+.dream-preset-body-input textarea::placeholder { color: #AAA; font-family: 'Courier New', Courier, monospace; }
+
+.dream-preset-footer {
+    display: flex; gap: 15px; margin-top: 10px;
+}
+.dream-preset-btn {
+    flex: 1; padding: 12px 0; border-radius: 0; font-size: 14px; font-weight: bold;
+    font-family: inherit; cursor: pointer; letter-spacing: 1px; transition: all 0.1s;
+}
+.dream-preset-btn.cancel {
+    background: transparent; color: #111; border: 1px solid #111;
+}
+.dream-preset-btn.cancel:active { background: #E5E5EA; }
+.dream-preset-btn.save {
+    background: #111; color: #FFF; border: 1px solid #111;
+}
+.dream-preset-btn.save:active { transform: translate(2px, 2px); box-shadow: none; }
+
+/* ========================================== */
+/* 梦境预设列表 - 左滑删除样式 */
+/* ========================================== */
+.dream-swipe-wrapper {
+    position: relative; overflow: hidden; border-bottom: 1px solid #E5E5EA;
+}
+.dream-swipe-wrapper:last-child { border-bottom: none; }
+.dream-swipe-action {
+    position: absolute; right: 0; top: 0; bottom: 0; width: 70px;
+    background: #111; color: #FFF; display: flex; align-items: center; justify-content: center;
+    font-family: 'Courier New', monospace; font-weight: bold; font-size: 12px; letter-spacing: 1px;
+    z-index: 0; cursor: pointer;
+}
+.dream-swipe-content {
+    position: relative; z-index: 1; background: #FAFAFA; width: 100%;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; transition: transform 0.2s ease-out;
+}
+/* ========================================== */
+/* 梦境扩展组件 (Extensions) 样式 */
+/* ========================================== */
+.dream-ext-tabs {
+    display: flex; border-bottom: 1px solid #E5E5EA; margin-bottom: 15px;
+}
+.dream-ext-tab {
+    flex: 1; text-align: center; padding: 10px 0; font-size: 13px; font-weight: bold;
+    color: #999; cursor: pointer; transition: all 0.2s; letter-spacing: 1px;
+}
+.dream-ext-tab.active {
+    color: #111; border-bottom: 2px solid #111;
+}
+
+.dream-ext-content-area {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+}
+
+.dream-ext-input-box {
+    background: #FAFAFA; border: 1px solid #E5E5EA; border-radius: 12px; padding: 15px;
+    display: flex; flex-direction: column; flex-shrink: 0;
+}
+
+.dream-ext-name-input {
+    background: transparent; border: none; border-bottom: 1px solid #CCC;
+    font-size: 14px; font-weight: bold; color: #111; outline: none; width: 60%;
+    font-family: inherit; padding-bottom: 4px;
+}
+
+.dream-ext-import-btn {
+    font-size: 12px; color: #111; border: 1px solid #111; border-radius: 15px;
+    padding: 4px 12px; cursor: pointer; font-weight: bold; display: flex; align-items: center;
+}
+.dream-ext-import-btn:active { background: #E5E5EA; }
+
+.dream-ext-input-box textarea {
+    width: 100%; height: 120px; background: transparent; border: none;
+    font-size: 13px; color: #333; line-height: 1.5; font-family: 'Courier New', Courier, monospace;
+    resize: none; outline: none; margin-top: 10px;
+}
+
+/* 扩展列表项 */
+.dream-ext-item {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #FFF; border: 1px solid #E5E5EA; border-radius: 8px;
+    padding: 12px 15px; margin-bottom: 10px; transition: border 0.2s;
+}
+.dream-ext-item.active {
+    border: 1px solid #111; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+.dream-ext-item-info { flex: 1; overflow: hidden; cursor: pointer; }
+.dream-ext-item-name { font-size: 14px; font-weight: bold; color: #111; margin-bottom: 4px; }
+.dream-ext-item-preview { font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
+.dream-ext-item-actions { display: flex; gap: 15px; align-items: center; }
+/* ========================================== */
+/* 梦境底部输入框重构 (强制横向排列) */
+/* ========================================== */
+.dream-chat-footer {
+    padding: 12px 15px calc(12px + env(safe-area-inset-bottom, 20px)) 15px !important;
+    background: #FAFAFA !important; 
+    border-top: 1px solid #E5E5EA !important;
+    display: flex !important; 
+    flex-direction: row !important; /* 核心修复：强制横向排列 */
+    align-items: flex-end !important; /* 底部对齐，让按钮和输入框底边平齐 */
+    gap: 12px !important;
+}
+
+.dream-chat-footer textarea {
+    flex: 1 !important; 
+    height: 44px; /* 👉 删掉这里的 !important，允许 JS 动态撑开高度 */
+    min-height: 44px !important; 
+    max-height: 120px !important;
+    background: #FFF !important; 
+    border: 1px solid #E5E5EA !important; 
+    border-radius: 22px !important;
+    padding: 12px 16px !important; 
+    font-size: 15px !important; 
+    color: #111 !important; 
+    resize: none !important; 
+    outline: none !important;
+    font-family: inherit !important; 
+    line-height: 1.4 !important;
+    margin: 0 !important; 
+}
+
+.dream-footer-btn {
+    width: 40px !important; 
+    height: 40px !important; 
+    border-radius: 50% !important; 
+    background: #111 !important; 
+    color: #FFF !important;
+    display: flex !important; 
+    align-items: center !important; 
+    justify-content: center !important; 
+    flex-shrink: 0 !important; /* 防止按钮被挤压变形 */
+    cursor: pointer !important; 
+    transition: transform 0.1s !important; 
+    margin-bottom: 2px !important; /* 微调对齐 */
+}
+
+.dream-footer-btn:active { 
+    transform: scale(0.9) !important; 
+}
+
+.dream-footer-btn svg { 
+    width: 20px !important; 
+    height: 20px !important; 
+    fill: none !important; 
+    stroke: currentColor !important; 
+    stroke-width: 2 !important; 
+    stroke-linejoin: round !important; 
+    stroke-linecap: round !important; 
+} ========================================== */
+/* AI 回复卡片与对话/旁白分离排版 */
+/* ========================================== */
+.dream-msg.ai {
+    align-self: flex-start; 
+    background: #FFF; 
+    color: #111; 
+    border: 1px solid #111; /* 黑色硬边框 */
+    border-radius: 0; /* 绝对无圆角 */
+    padding: 16px;
+    box-shadow: 4px 4px 0px rgba(0,0,0,0.05); /* 报纸风硬阴影 */
+    width: 90%; /* 卡片稍微宽一点 */
+    display: flex; flex-direction: column; gap: 8px;
+}
+
+/* 旁白文本 (无气泡) */
+.dream-narrative-text {
+    font-size: 14px; color: #555; line-height: 1.7;
+    font-family: 'Kaiti', 'STKaiti', '楷体', serif;
+    text-align: justify;
+}
+
+/* 对话文本 (带气泡包裹) */
+.dream-dialogue-bubble {
+    background: #F4F4F4;
+    border-left: 3px solid #111;
+    padding: 10px 14px;
+    font-size: 15px; color: #111; font-weight: bold;
+    border-radius: 0; /* 保持无圆角 */
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    margin: 4px 0;
+}
+
+/* ========================================== */
+/* 长按菜单样式 */
+/* ========================================== */
+.dream-context-menu {
+    position: fixed; background: #FFF; border: 2px solid #111; border-radius: 0;
+    box-shadow: 4px 4px 0px #111; z-index: 10000; display: none; flex-direction: column;
+    min-width: 120px; font-family: 'Courier New', monospace; font-weight: bold;
+}
+.dream-ctx-item {
+    padding: 12px 16px; font-size: 13px; border-bottom: 1px dashed #CCC; cursor: pointer;
+}
+.dream-ctx-item:last-child { border-bottom: none; }
+.dream-ctx-item:active { background: #F4F4F4; }
+/* ========================================== */
+/* 梦境卡片 - 云朵注入按钮 */
+/* ========================================== */
+.dream-card-cloud-btn {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    color: #999;
+    cursor: pointer;
+    transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+.dream-card-cloud-btn:active { color: #111; }
+.dream-card-cloud-btn svg { width: 18px; height: 18px; fill: currentColor; }
+
+/* 调整卡片日期的位置，给云朵让出空间 */
+.dream-card-date {
+    text-align: right;
+    margin-bottom: 15px;
+    margin-top: 10px;
+}
+/* ========================================== */
+/* 梦境 AI 卡片操作按键 */
+/* ========================================== */
+.dream-msg.ai {
+    position: relative; /* 确保内部绝对定位生效 */
+    padding-bottom: 32px; /* 给底部按键留出空间 */
+}
+
+.dream-ai-action-btn {
+    position: absolute;
+    bottom: 8px;
+    right: 12px;
+    color: #CCC;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    transition: color 0.2s;
+}
+.dream-ai-action-btn:active { color: #111; }
+.dream-ai-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
+/* ========================================== */
+/* 系统更新弹窗 (黑白灰高级感) */
+/* ========================================== */
+.sys-update-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 100000;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+}
+.sys-update-overlay.active { opacity: 1; pointer-events: auto; }
+.sys-update-box {
+    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    width: 85%; max-width: 320px; border-radius: 16px; overflow: hidden;
+    transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2); display: flex; flex-direction: column;
+}
+.sys-update-overlay.active .sys-update-box { transform: scale(1); }
+.sys-update-header { padding: 24px 20px 16px; text-align: center; border-bottom: 1px solid rgba(0,0,0,0.05); }
+.sys-update-version { font-size: 10px; font-weight: 700; color: #888; letter-spacing: 1.5px; font-family: 'Courier New', Courier, monospace; }
+.sys-update-title { font-size: 18px; font-weight: 600; color: #111; margin-top: 6px; letter-spacing: 0.5px; }
+.sys-update-body { padding: 20px; max-height: 50vh; overflow-y: auto; }
+.sys-update-section { margin-bottom: 20px; }
+.sys-update-section:last-child { margin-bottom: 0; }
+.sys-update-section h4 { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+.sys-update-list { list-style: none; padding: 0; margin: 0; }
+.sys-update-list li { font-size: 13px; color: #333; line-height: 1.6; margin-bottom: 8px; position: relative; padding-left: 14px; text-align: justify; }
+.sys-update-list li::before { content: ''; position: absolute; left: 0; top: 7px; width: 4px; height: 4px; background: #111; border-radius: 50%; }
+.sys-update-footer { border-top: 1px solid rgba(0,0,0,0.05); }
+.sys-update-btn { width: 100%; padding: 16px; background: transparent; border: none; font-size: 16px; font-weight: 600; color: #111; cursor: pointer; transition: background 0.2s; letter-spacing: 1px; }
+.sys-update-btn:active { background: rgba(0,0,0,0.05); }
+
+/* ========================================== */
+/* 更新日志设置页 (可折叠手风琴) */
+/* ========================================== */
+.update-log-item { background: #fff; border-radius: 12px; margin-bottom: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: all 0.3s ease; }
+.update-log-header { padding: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: #fff; }
+.update-log-header:active { background: #f9f9f9; }
+.update-log-title-wrap { display: flex; flex-direction: column; gap: 4px; }
+.update-log-version { font-size: 16px; font-weight: 600; color: #111; font-family: 'Courier New', Courier, monospace; }
+.update-log-title-text { font-size: 12px; color: #666; }
+.update-log-right { display: flex; align-items: center; gap: 8px; }
+.update-log-date { font-size: 12px; color: #888; }
+.update-log-chevron { width: 20px; height: 20px; fill: #ccc; transition: transform 0.3s ease; }
+.update-log-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; background: #fafafa; }
+.update-log-content-inner { padding: 16px; border-top: 1px solid #eee; }
+.update-log-item.expanded .update-log-content { max-height: 1000px; }
+.update-log-item.expanded .update-log-chevron { transform: rotate(180deg); }
+.update-log-section { margin-bottom: 16px; }
+.update-log-section:last-child { margin-bottom: 0; }
+.update-log-section h4 { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 8px; }
+.update-log-list { list-style: none; padding: 0; margin: 0; }
+.update-log-list li { font-size: 13px; color: #333; line-height: 1.6; margin-bottom: 6px; position: relative; padding-left: 12px; text-align: justify; }
+.update-log-list li::before { content: '-'; position: absolute; left: 0; color: #888; }
