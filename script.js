@@ -297,53 +297,85 @@ window.onload = async function() {
         }
     });
 
-    // 修复：监听键盘弹出，解决 iOS 遮挡问题，确保输入框跟随
+    // 终极修复：监听可视区域变化，完美兼容 Chrome/Edge/Safari/微信环境
     if (window.visualViewport) {
-        const appRoot = document.getElementById('app-root');
-        
         const handleResize = () => {
-            // 【核心修复】：判断键盘是否真的弹出
-            // 如果可视高度比窗口高度小超过 100px，说明键盘弹出了
-            const isKeyboardOpen = window.visualViewport.height < window.innerHeight - 100;
-            
-            if (isKeyboardOpen) {
-                // 键盘弹出时：缩小容器高度，防止输入框被遮挡
-                appRoot.style.height = window.visualViewport.height + 'px';
-                appRoot.style.top = window.visualViewport.offsetTop + 'px';
-                appRoot.style.position = 'absolute'; // 临时改为 absolute 以便 top 生效
-                
-                const dreamPage = document.getElementById('dream-chat-page');
-                if (dreamPage && dreamPage.classList.contains('active')) {
-                    dreamPage.style.height = window.visualViewport.height + 'px';
-                    dreamPage.style.top = window.visualViewport.offsetTop + 'px';
-                }
-            } else {
-                // 键盘收起时：【必须清空内联样式】，让 CSS 的 100dvh 重新接管！告别白边！
-                appRoot.style.height = '';
-                appRoot.style.top = '';
-                appRoot.style.position = 'relative';
-                
-                const dreamPage = document.getElementById('dream-chat-page');
-                if (dreamPage) {
-                    dreamPage.style.height = '';
-                    dreamPage.style.top = '';
-                }
+            const vv = window.visualViewport;
+            if (!vv) return;
+
+            // 无论键盘是否弹出，强制让容器的高度和位置严格贴合肉眼可见的真实区域
+            const height = vv.height + 'px';
+            const top = vv.offsetTop + 'px';
+
+            // 1. 调整主容器
+            const appRoot = document.getElementById('app-root');
+            if (appRoot) {
+                appRoot.style.height = height;
+                appRoot.style.top = top;
             }
-            
-            // 滚动到底部确保输入框可见
-            if(document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
+
+            // 2. 调整梦境页面
+            const dreamPage = document.getElementById('dream-chat-page');
+            if (dreamPage && dreamPage.classList.contains('active')) {
+                dreamPage.style.height = height;
+                dreamPage.style.top = top;
+            }
+
+            // 3. 调整微信主界面
+            const wechatModal = document.getElementById('wechatModal');
+            if (wechatModal && wechatModal.classList.contains('open')) {
+                wechatModal.style.height = height;
+                wechatModal.style.top = top;
+            }
+
+            // 4. 调整手机模拟器界面
+            const phoneSim = document.getElementById('wc-view-phone-sim');
+            if (phoneSim && phoneSim.classList.contains('active')) {
+                phoneSim.style.height = height;
+                phoneSim.style.top = top;
+            }
+
+            // 👇 从这里开始复制，新增第 5 点 👇
+            // 5. 调整全屏音乐播放器界面，防止键盘弹出时闪烁
+            const musicPlayer = document.getElementById('music-full-player');
+            if (musicPlayer && musicPlayer.classList.contains('active')) {
+                musicPlayer.style.height = height;
+                musicPlayer.style.top = top;
+            }
+            // 👆 新增结束 👆
+
+            // 如果当前有输入框正在输入，强制滚动到底部，防止被遮挡
+            if (document.activeElement && ['TEXTAREA', 'INPUT'].includes(document.activeElement.tagName)) {
                 setTimeout(() => {
-                    if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
+                    // 微信聊天滚动
+                    wcScrollToBottom(true);
+                    
+                    // 梦境聊天滚动
                     const dreamContainer = document.getElementById('dream-chat-history');
                     if (dreamContainer) dreamContainer.scrollTop = dreamContainer.scrollHeight;
+                    
+                    // 模拟器聊天滚动
+                    const simContainer = document.getElementById('wc-sim-chat-history');
+                    if (simContainer) simContainer.scrollTop = simContainer.scrollHeight;
+
+                    // 音乐迷你聊天滚动
+                    const musicChatContainer = document.getElementById('music-chat-history');
+                    if (musicChatContainer) musicChatContainer.scrollTop = musicChatContainer.scrollHeight;
+
+                    // 终极防遮挡：让输入框本身强制滚动到可视范围内 (兼容 Chrome)
+                    // 【修复】：排除音乐迷你聊天输入框，防止触发 fixed 容器滚动导致闪烁
+                    if (document.activeElement.id !== 'music-chat-input') {
+                        document.activeElement.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                    }
                 }, 100);
             }
-            
-            // 强制滚动到顶部，防止页面整体偏移
-            window.scrollTo(0, 0);
-        };
+        }; // <--- 【修复】：在这里加上 }; 来闭合 handleResize 函数！
+
         window.visualViewport.addEventListener('resize', handleResize);
         window.visualViewport.addEventListener('scroll', handleResize);
+        
+        // 初始化执行一次
+        handleResize();
     }
 
     // 监听聊天输入框焦点，主动滚动到底部
@@ -362,8 +394,19 @@ window.onload = async function() {
                 const container = document.getElementById('dream-chat-history');
                 if(container) container.scrollTop = container.scrollHeight;
             }, 300);
+        }); // <--- 补上这里的 }); 闭合 addEventListener
+    } // <--- 补上这里的 } 闭合 if 语句
+     
+    // 👉【新增】：监听音乐聊天输入框焦点，主动滚动到底部
+    const musicInput = document.getElementById('music-chat-input');    
+    if (musicInput) {
+        musicInput.addEventListener('focus', () => {
+            setTimeout(() => {
+                const container = document.getElementById('music-chat-history');
+                if(container) container.scrollTop = container.scrollHeight;
+            }, 300);
         });
-    }
+    }           
     const bgFileInput = document.getElementById('bgFileInput');
     if (bgFileInput) {
         bgFileInput.addEventListener('change', function(e) {
@@ -865,8 +908,7 @@ async function analyzeStorage() {
     }
 }
 
-// --- 仅导出桌面美化 (Theme Only) ---
-// --- 仅导出桌面美化 (Theme Only) ---
+// --- 仅导出桌面美化 (Theme Only) // --- 仅导出桌面美化 (Theme Only) ---
 async function exportThemeOnly() {
     const data = {};
     const themeKeys = [
@@ -930,7 +972,8 @@ function importThemeOnly(input) {
     };
     reader.readAsText(file);
     input.value = '';
-}
+}    
+
 // --- 全局备份 (包含 WeChat) ---
 async function exportAllData() {
     const data = {};
@@ -2758,11 +2801,12 @@ function wcScrollToBottom(force = false) {
     requestAnimationFrame(() => {
         if (anchor) {
             anchor.scrollIntoView({ behavior: force ? "auto" : "smooth", block: "end" });
-        } else {
+        } else if (area) { // 【修复】：增加 area 判空保护
             area.scrollTop = area.scrollHeight;
         }
     });
 }
+
 
 // --- WeChat Interaction ---
 function wcHandleTouchStart(e, msgId) {
@@ -10573,9 +10617,13 @@ function musicSendChatMessage() {
     input.value = '';
     musicRenderChatMessages();
     
+    // 👇 新增这一行：发送消息后保持输入框焦点，防止键盘收起导致画面跳动
+    input.focus(); 
+    
     // 【修复】：改为调用 musicTriggerAI，统一处理 loading 状态和锁
     musicTriggerAI();
 }
+
 
 function musicTriggerAI() {
     const charId = musicState.listenTogether.charId;
