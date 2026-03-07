@@ -301,29 +301,28 @@ window.onload = async function() {
         const appRoot = document.getElementById('app-root');
         
         const handleResize = () => {
-            // 【核心修复】：判断是否真的是键盘弹出（高度缩小超过 150px）
-            // 如果不加这个判断，iOS 全屏下 visualViewport.height 不包含底部安全区，会导致底部漏出白边！
-            const isKeyboardOpen = window.visualViewport.height < window.innerHeight - 150;
+            // 判断键盘是否真的弹出 (高度缩小超过 100px)
+            const isKeyboardOpen = window.visualViewport.height < window.innerHeight - 100;
             
             if (isKeyboardOpen) {
-                // 键盘弹出时：强制 app-root 的高度等于可视区域高度
+                // 键盘弹出时：跟随键盘高度
                 appRoot.style.height = window.visualViewport.height + 'px';
-                appRoot.style.top = window.visualViewport.offsetTop + 'px';
+                appRoot.style.bottom = 'auto';
                 
                 const dreamPage = document.getElementById('dream-chat-page');
                 if (dreamPage && dreamPage.classList.contains('active')) {
                     dreamPage.style.height = window.visualViewport.height + 'px';
-                    dreamPage.style.top = window.visualViewport.offsetTop + 'px';
+                    dreamPage.style.bottom = 'auto';
                 }
             } else {
-                // 键盘收起时：恢复 100% 高度，完美贴合屏幕底部，消除白边
-                appRoot.style.height = '100%';
-                appRoot.style.top = '0px';
+                // 键盘收起时：清空内联高度，让 CSS 的 bottom: 0 重新接管，完美贴底！
+                appRoot.style.height = '';
+                appRoot.style.bottom = '0px';
                 
                 const dreamPage = document.getElementById('dream-chat-page');
                 if (dreamPage) {
-                    dreamPage.style.height = '100%';
-                    dreamPage.style.top = '0px';
+                    dreamPage.style.height = '';
+                    dreamPage.style.bottom = '0px';
                 }
             }
             
@@ -336,13 +335,11 @@ window.onload = async function() {
                 }, 100);
             }
             
-            // 强制滚动到顶部，防止页面整体偏移
             window.scrollTo(0, 0);
         };
         window.visualViewport.addEventListener('resize', handleResize);
         window.visualViewport.addEventListener('scroll', handleResize);
     }
-
     // 监听聊天输入框焦点，主动滚动到底部
     const chatInput = document.getElementById('wc-chat-input');
     if (chatInput) {

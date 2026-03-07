@@ -4,13 +4,15 @@
 
 /* 修复：彻底锁定页面，禁止橡皮筋效果和多余滚动 */
 html, body {
-    width: 100%;
-    height: 100%;
-    overflow: hidden; 
     position: fixed; 
     top: 0;
     left: 0;
-    background-color: #f2f2f7; 
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; 
+    background-color: transparent; /* 关键：改为透明，让壁纸能透到底 */
     overscroll-behavior: none; 
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
@@ -22,14 +24,15 @@ body, input, textarea, select, button {
 
 /* --- 核心应用容器 --- */
 #app-root {
-    width: 100%;
-    height: 100%; 
     position: absolute; 
     top: 0;
     left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%; 
     overflow: hidden;
-    background-color: #f2f2f7;
-    max-width: 100%; 
+    background-color: transparent; /* 关键：改为透明，消除白边底色 */
     z-index: 1;
 }
 
@@ -38,18 +41,23 @@ body, input, textarea, select, button {
 
 /* --- 屏幕容器 --- */
 .screen {
-    width: 100%; height: 100%;
-    background: linear-gradient(180deg, #2c3e50 0%, #4ca1af 100%);
-    background-size: cover; background-position: center;
     position: absolute; 
     top: 0; 
     left: 0;
+    right: 0;
+    bottom: 0; /* 关键：强制拉伸到物理屏幕最底端 */
+    width: 100%; 
+    height: 100%;
+    background: linear-gradient(180deg, #2c3e50 0%, #4ca1af 100%);
+    background-size: cover; 
+    background-position: center;
     display: flex; flex-direction: column; justify-content: space-between;
     padding-top: env(safe-area-inset-top, 44px);
     padding-bottom: env(safe-area-inset-bottom, 20px);
     transition: background 0.3s ease;
     z-index: 1; 
 }
+
 /* --- 桌面编辑栏 --- */
 .desktop-edit-bar {
     position: absolute;
