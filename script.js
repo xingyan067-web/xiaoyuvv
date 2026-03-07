@@ -119,6 +119,7 @@ let apiPresets = [];
 
 // API 限制相关
 let sessionApiCallCount = 0; // 当前会话已调用次数
+const aiGeneratingLocks = {}; // 【新增】：防止 AI 重复生成的锁
 
 // 世界书数据 (全局共享)
 let worldbookEntries = [];
@@ -301,45 +302,50 @@ window.onload = async function() {
         const appRoot = document.getElementById('app-root');
         
         const handleResize = () => {
-            // 判断键盘是否真的弹出 (高度缩小超过 100px)
+            // 【核心修复】：判断键盘是否真的弹出
+            // 如果可视高度比窗口高度小超过 100px，说明键盘弹出了
             const isKeyboardOpen = window.visualViewport.height < window.innerHeight - 100;
             
             if (isKeyboardOpen) {
-                // 键盘弹出时：跟随键盘高度
+                // 键盘弹出时：缩小容器高度，防止输入框被遮挡
                 appRoot.style.height = window.visualViewport.height + 'px';
-                appRoot.style.bottom = 'auto';
+                appRoot.style.top = window.visualViewport.offsetTop + 'px';
+                appRoot.style.position = 'absolute'; // 临时改为 absolute 以便 top 生效
                 
                 const dreamPage = document.getElementById('dream-chat-page');
                 if (dreamPage && dreamPage.classList.contains('active')) {
                     dreamPage.style.height = window.visualViewport.height + 'px';
-                    dreamPage.style.bottom = 'auto';
+                    dreamPage.style.top = window.visualViewport.offsetTop + 'px';
                 }
             } else {
-                // 键盘收起时：清空内联高度，让 CSS 的 bottom: 0 重新接管，完美贴底！
+                // 键盘收起时：【必须清空内联样式】，让 CSS 的 100dvh 重新接管！告别白边！
                 appRoot.style.height = '';
-                appRoot.style.bottom = '0px';
+                appRoot.style.top = '';
+                appRoot.style.position = 'relative';
                 
                 const dreamPage = document.getElementById('dream-chat-page');
                 if (dreamPage) {
                     dreamPage.style.height = '';
-                    dreamPage.style.bottom = '0px';
+                    dreamPage.style.top = '';
                 }
             }
             
             // 滚动到底部确保输入框可见
             if(document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
                 setTimeout(() => {
-                    wcScrollToBottom(true);
+                    if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
                     const dreamContainer = document.getElementById('dream-chat-history');
                     if (dreamContainer) dreamContainer.scrollTop = dreamContainer.scrollHeight;
                 }, 100);
             }
             
+            // 强制滚动到顶部，防止页面整体偏移
             window.scrollTo(0, 0);
         };
         window.visualViewport.addEventListener('resize', handleResize);
         window.visualViewport.addEventListener('scroll', handleResize);
     }
+
     // 监听聊天输入框焦点，主动滚动到底部
     const chatInput = document.getElementById('wc-chat-input');
     if (chatInput) {
@@ -860,6 +866,7 @@ async function analyzeStorage() {
 }
 
 // --- 仅导出桌面美化 (Theme Only) ---
+// --- 仅导出桌面美化 (Theme Only) ---
 async function exportThemeOnly() {
     const data = {};
     const themeKeys = [
@@ -872,7 +879,13 @@ async function exportThemeOnly() {
     ];
 
     for (let key of themeKeys) {
-        data[key] = await idb.get(key);
+        let val = await idb.get(key);
+        // 【修复】：剔除 API 预设，防止泄露给别人
+        if (key === 'ios_theme_presets' && val) {
+            val = { ...val };
+            delete val.apis;
+        }
+        data[key] = val;
     }
 
     const exportObj = { signature: 'ios_theme_studio_theme_only', timestamp: Date.now(), data: data };
@@ -897,7 +910,15 @@ function importThemeOnly(input) {
             if (confirm("这将覆盖当前的桌面壁纸、图标和小组件设置，确定要恢复吗？")) {
                 const data = json.data;
                 for (let key in data) {
-                    await idb.set(key, data[key]);
+                    // 【修复】：导入预设时，保留本地原有的 API 预设
+                    if (key === 'ios_theme_presets') {
+                        const localPresets = await idb.get('ios_theme_presets') || {};
+                        const importedPresets = data[key] || {};
+                        importedPresets.apis = localPresets.apis || [];
+                        await idb.set(key, importedPresets);
+                    } else {
+                        await idb.set(key, data[key]);
+                    }
                 }
                 alert("桌面美化恢复成功，页面将刷新。");
                 location.reload();
@@ -910,7 +931,6 @@ function importThemeOnly(input) {
     reader.readAsText(file);
     input.value = '';
 }
-
 // --- 全局备份 (包含 WeChat) ---
 async function exportAllData() {
     const data = {};
@@ -2967,18 +2987,31 @@ function wcSendMsg() {
 // --- WeChat AI & API Logic ---
 async function wcTriggerAI(charIdOverride = null) {
     const charId = charIdOverride || wcState.activeChatId;
+    
+    // 【修复】：防止重复触发 AI 导致发一堆重复消息
+    if (aiGeneratingLocks[charId]) {
+        console.log(`Char ${charId} 正在生成中，拦截重复请求`);
+        return;
+    }
+    aiGeneratingLocks[charId] = true;
+
     const char = wcState.characters.find(c => c.id === charId);
-    if (!char) return;
+    if (!char) {
+        aiGeneratingLocks[charId] = false;
+        return;
+    }
 
     const apiConfig = await idb.get('ios_theme_api_config');
     if (!apiConfig || !apiConfig.baseUrl || !apiConfig.key || !apiConfig.model) {
         if (!charIdOverride) alert("请先在系统设置中配置 API 地址、密钥并选择模型！");
+        aiGeneratingLocks[charId] = false;
         return;
     }
 
     const limit = apiConfig.limit || 50;
     if (limit > 0 && sessionApiCallCount >= limit) {
         wcAddMessage(charId, 'system', 'system', '[警告] 已达到API调用上限，请稍后再试或修改设置。', { isError: true });
+        aiGeneratingLocks[charId] = false;
         return;
     }
     // 【修复】：增加 titleEl 的判空保护
@@ -3014,29 +3047,24 @@ async function wcTriggerAI(charIdOverride = null) {
 
         // --- 核心修复：正确读取并筛选已勾选的世界书 ---
         let worldBookContent = "无特定世界观设定。";
-        // 从角色配置(config)中获取勾选的世界书ID列表
         const selectedWorldBookIds = config.worldbookEntries || [];
 
-        // 确保全局世界书列表(worldbookEntries)和角色已选列表都不为空
         if (worldbookEntries.length > 0 && selectedWorldBookIds.length > 0) {
-            // 从全局世界书列表中，筛选出ID在角色已选列表中的条目
             const linkedEntries = worldbookEntries.filter(e => selectedWorldBookIds.includes(e.id.toString()));
-            
             if (linkedEntries.length > 0) {
-                // 将筛选出的条目格式化为字符串，注入到 worldBookContent 变量中
                 worldBookContent = linkedEntries
                     .map(e => `- ${e.title} (${e.keys || '无关键词'}): ${e.desc}`)
                     .join('\n');
             }
         }
+        
         // 【修改】：注入一起听歌的实时状态与控制权限
-         let musicContextPrompt = "";
+        let musicContextPrompt = "";
         if (musicState.listenTogether && musicState.listenTogether.active && musicState.listenTogether.charId === charId) {
             const listenMinutes = Math.floor((Date.now() - musicState.listenTogether.startTime) / 60000);
             const songInfo = musicState.currentSong ? `《${musicState.currentSong.title}》- ${musicState.currentSong.artist}` : "未知歌曲";
             const playStatus = musicState.isPlaying ? "正在播放" : "已暂停";
             
-            // --- 新增：让 AI 知道当前播放列表里有什么歌 ---
             let playlistInfo = "当前播放列表为空";
             if (musicState.currentPlaylist && musicState.currentPlaylist.length > 0) {
                 const listStr = musicState.currentPlaylist.map((s, i) => `${i === musicState.currentIndex ? '👉(正在播放)' : '  '} ${i+1}. 《${s.title}》- ${s.artist}`).join('\n');
@@ -3055,13 +3083,10 @@ async function wcTriggerAI(charIdOverride = null) {
 - 主动退出一起听歌: {"type":"music_exit", "content":"我有点事，先不听啦"}
 请在回复中自然地体现出你们正在一起听歌的氛围，或者配合你的切歌/点播动作进行说明。\n`;
         } else {
-            // 如果没有在听歌，赋予主动邀请的权限
             musicContextPrompt = `\n【主动邀请听歌特权】\n如果你觉得当前氛围很好，或者你想分享一首歌给User，你可以主动邀请User一起听歌！
 请在JSON数组中加入指令：{"type":"music_invite_user", "songName":"你想听的歌曲名(可选)", "content":"邀请的话语"}
 这会在User的屏幕上弹出一个精美的邀请卡片。\n`;
         }
-
-        // --- 世界书处理逻辑结束 ---
 
         let systemPrompt = `# 核心指令 (Core Directives)
 你是一位专业的角色扮演专家。你的首要目标是真实且一致地扮演一个角色。
@@ -3131,7 +3156,6 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
    - 如果拒绝，请回复：{"type":"music_reject", "content":"我现在有点忙，晚点吧。"}
 `;
 
-        // 修复：只有绑定的恋人才能更新桌面小组件
         if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
             systemPrompt += `\n【桌面小组件互动】\n你和用户绑定了恋人空间，并且用户在手机桌面上放置了你的专属小组件。你有 ${lsState.widgetUpdateFreq}% 的概率在回复时顺便更新这个小组件。\n如果决定更新，请在JSON数组中加入一条指令：\n- 发送便利贴：{"type":"widget_note", "content":"留言内容"}\n- 发送拍立得照片：{"type":"widget_photo", "content":"照片画面描述"}\n注意：每次最多只发一个组件更新指令。\n`;
         }
@@ -3146,7 +3170,7 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
   {"type":"sticker", "content":"开心"}
 ]
 \n\n`;
-        systemPrompt += musicContextPrompt; // 将听歌状态注入给 AI
+        systemPrompt += musicContextPrompt; 
         systemPrompt += `【你的角色设定】\n名字：${char.name}\n人设：${char.prompt || '无'}\n\n`;
         systemPrompt += `【对方(用户)设定】\n名字：${config.userName || wcState.user.name}\n人设：${config.userPersona || '无'}\n\n`;
 
@@ -3159,7 +3183,6 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         }
 
         let availableStickers = [];
-        // MODIFIED: Default to all groups if none selected
         const targetStickerGroups = (config.stickerGroupIds && config.stickerGroupIds.length > 0) 
             ? config.stickerGroupIds 
             : wcState.stickerCategories.map((_, i) => i);
@@ -3193,7 +3216,6 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         const messages = [{ role: "system", content: systemPrompt }];
         
         recentMsgs.forEach(m => {
-            // 关键修改：跳过错误消息，不让 AI 读取
             if (m.isError) return;
 
             if (m.type === 'system') {
@@ -3218,7 +3240,6 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
                            
             if (m.type === 'image') {
                 const imageContent = [
-                    // 核心修改：把消息的唯一 ID 告诉 AI，让它能精准定位
                     { type: "text", text: `[发送了一张图片, 图片ID: ${m.id}]` },
                     { type: "image_url", image_url: { url: m.content } }
                 ];
@@ -3256,13 +3277,20 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 
     } catch (error) {
         console.error("API 请求失败:", error);
-        // 关键修改：标记错误消息，且使用 system 类型，防止同步到恋人空间
         wcAddMessage(charId, 'system', 'system', `[API Error] ${error.message}`, { style: 'transparent', isError: true });
-    }     finally {
+    } finally {
         // 【修复】：恢复标题时也要判空
         if (titleEl && !charIdOverride) titleEl.innerText = originalTitle;    
+        
+        // 【修复】：释放锁
+        aiGeneratingLocks[charId] = false;
+        
+        // 【修复】：移除迷你聊天窗口的“正在输入...”提示
+        const loadingEl = document.getElementById('music-chat-loading');
+        if (loadingEl) loadingEl.remove();
     }
 }
+
 
 function wcFindStickerDescByUrl(url) {
     for (const cat of wcState.stickerCategories) {
@@ -10544,17 +10572,23 @@ function musicSendChatMessage() {
     wcAddMessage(charId, 'me', 'text', text);
     input.value = '';
     musicRenderChatMessages();
-    wcTriggerAI(charId);
+    
+    // 【修复】：改为调用 musicTriggerAI，统一处理 loading 状态和锁
+    musicTriggerAI();
 }
 
 function musicTriggerAI() {
     const charId = musicState.listenTogether.charId;
     if (!charId) return;
     
+    // 【修复】：如果已经在生成中，就不再添加 loading 提示
+    if (aiGeneratingLocks[charId]) return;
+    
     // 添加一个临时的“正在输入”状态
     const container = document.getElementById('music-chat-history');
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'music-chat-msg them';
+    loadingDiv.id = 'music-chat-loading'; // 【修复】：加上 ID 以便后续移除
     loadingDiv.innerText = '正在输入...';
     container.appendChild(loadingDiv);
     container.scrollTop = container.scrollHeight;
