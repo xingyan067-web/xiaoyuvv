@@ -2,9 +2,24 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <!-- 核心：viewport-fit=cover 确保网页延伸到刘海和底部横条区域，避免黑边 -->
+    <!-- 核心：viewport-fit=cover 确保网页延伸到刘海和底部横条区域 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>iOS Aesthetic Home Screen</title>
+    
+    <title>iOS Desk</title>
+
+    <!-- ================= PWA & iOS 桌面安装专属配置 ================= -->
+    <!-- 允许网页以独立APP模式运行（隐藏 Safari 浏览器的地址栏和底部栏） -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- 状态栏透明沉浸式：让网页背景延伸到顶部状态栏（时间、电量）下方，告别顶部黑边 -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- 安装到桌面后的 APP 名称 -->
+    <meta name="apple-mobile-web-app-title" content="我的桌面">
+    <!-- 安装到桌面时的 APP 图标 (请确保同目录下有一张 icon.png) -->
+    <link rel="apple-touch-icon" href="https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg">
+    <!-- 引入 PWA manifest -->
+    <link rel="manifest" href="manifest.json">
+    <!-- ========================================================= -->
+
     <style>
         /* ================= 基础重置 ================= */
         * {
@@ -16,13 +31,12 @@
 
         body, html {
             width: 100%;
-            /* 使用 dvh (Dynamic Viewport Height) 完美解决移动端浏览器地址栏收缩导致的留白问题 */
+            /* 使用 dvh 完美解决移动端浏览器地址栏收缩导致的留白问题 */
             height: 100dvh; 
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
-            /* 韩系 Ins 风高级感背景：低饱和度柔和渐变 */
+            /* 韩系 Ins 风高级感背景 */
             background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
-            /* 如果想换成彩色ins风，可以尝试：background: linear-gradient(120deg, #e0c3fc 0%, #8ec5fc 100%); */
         }
 
         /* ================= 主屏幕容器 ================= */
@@ -39,7 +53,7 @@
             position: relative;
         }
 
-        /* 模拟顶部状态栏 (增加逼真度) */
+        /* 模拟顶部状态栏 (增加逼真度，独立APP模式下会和系统状态栏重合，所以这里可以隐藏或保留作为装饰) */
         .status-bar {
             height: 30px;
             display: flex;
@@ -50,17 +64,16 @@
             font-weight: 600;
             color: #333;
             letter-spacing: 0.5px;
+            /* 在真实的独立APP模式下，系统会显示真实时间，所以我们可以把模拟的隐藏掉 */
+            opacity: 0; 
         }
 
         /* ================= 桌面 4x7 网格 ================= */
         .desktop {
             flex: 1;
             display: grid;
-            /* 强制 4 列 */
             grid-template-columns: repeat(4, 1fr);
-            /* 强制 7 行 */
             grid-template-rows: repeat(7, 1fr);
-            /* 动态间距，适配不同屏幕 */
             gap: 2vh 4vw; 
             padding: 20px 6vw;
             align-content: start;
@@ -77,7 +90,6 @@
             align-items: center;
             height: 90px;
             border-radius: 35px;
-            /* 高级感毛玻璃效果 */
             background: rgba(255, 255, 255, 0.4);
             backdrop-filter: blur(25px);
             -webkit-backdrop-filter: blur(25px);
@@ -88,76 +100,55 @@
         /* ================= APP 图标通用样式 ================= */
         .app-icon {
             width: 100%;
-            /* 保持完美正方形 */
             aspect-ratio: 1 / 1; 
-            /* iOS 标准圆角曲率近似值 */
             border-radius: 22.5%; 
-            /* 空白图标的高级感样式：半透明白 + 极简阴影 */
             background: rgba(255, 255, 255, 0.7);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             box-shadow: 
                 0 4px 15px rgba(0, 0, 0, 0.04),
                 inset 0 0 0 1px rgba(255, 255, 255, 0.8);
-            transition: transform 0.2s ease;
         }
 
-        /* 限制桌面图标的最大尺寸，防止在 PC 宽屏上过大 */
         .desktop .app-icon {
             max-width: 65px;
             max-height: 65px;
             margin: 0 auto;
         }
 
-        /* Dock 栏图标固定尺寸 */
         .dock .app-icon {
             width: 60px;
             height: 60px;
             background: rgba(255, 255, 255, 0.85);
         }
 
-        /* 响应式微调：针对 PC 等超宽屏幕，限制整体宽度以保持手机比例的视觉美感 */
         @media (min-width: 768px) {
             .ios-screen {
-                max-width: 430px; /* iPhone 15 Pro Max 宽度 */
+                max-width: 430px;
                 margin: 0 auto;
                 box-shadow: 0 0 50px rgba(0,0,0,0.1);
                 background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
             }
-            body {
-                background: #dcdcdc; /* PC端背景色 */
-            }
+            body { background: #dcdcdc; }
         }
     </style>
 </head>
 <body>
 
     <div class="ios-screen">
-        <!-- 顶部状态栏 -->
-        <div class="status-bar">
-            <div class="time">09:41</div>
-            <div class="icons">
-                <!-- 简单的状态栏图标占位 -->
-                <span>5G</span>
-                <span style="margin-left: 5px;">🔋</span>
-            </div>
-        </div>
+        <div class="status-bar"></div>
 
         <!-- 桌面区域 (4x7 网格) -->
         <div class="desktop">
-            <!-- 桌面 4 个 APP 图标 -->
             <div class="app-icon"></div>
             <div class="app-icon"></div>
             <div class="app-icon"></div>
             <div class="app-icon"></div>
-            
-            <!-- 剩余的网格留空，CSS Grid 会自动处理位置 -->
         </div>
 
         <!-- 底部 Dock 栏 -->
         <div class="dock-wrapper">
             <div class="dock">
-                <!-- Dock 栏 3 个 APP 图标 -->
                 <div class="app-icon"></div>
                 <div class="app-icon"></div>
                 <div class="app-icon"></div>
