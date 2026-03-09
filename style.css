@@ -2,31 +2,26 @@
 :root { --app-font-size: 11px; --bg-color: #f2f2f7; --separator-color: #c6c6c8; --blue: #007aff; --red: #ff3b30; --green: #34c759; --orange: #ff9500; --purple: #af52de; --teal: #5ac8fa; }
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; user-select: none; font-family: inherit; }
 /* --- 从这里开始替换 --- */
-html {
-    height: 100%;
-    height: -webkit-fill-available;
-    background: #000;
-}
-
-body {
+html, body {
     width: 100%;
-    min-height: 100vh;
-    min-height: 100svh;
-    min-height: -webkit-fill-available;
+    height: 100vh !important; /* 强制使用 100vh，无视动态视口，确保填满物理屏幕底部 */
     margin: 0;
+    padding: 0;
     overflow: hidden;
-    position: relative;
+    position: fixed;
+    top: 0;
+    left: 0;
     background: #000;
     overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
 }
 /* 强制全局字体继承 */
 body, input, textarea, select, button {
     font-family: inherit !important;
 }
 #app-root {
-    width: 100vw;
-    height: 100dvh;
-    min-height: -webkit-fill-available;
+    width: 100%;
+    height: 100vh !important; /* 同步改为 100vh */
     position: absolute; 
     top: 0;
     left: 0;
@@ -4199,9 +4194,9 @@ input::-webkit-inner-spin-button {
 /* 🍎 iOS 全屏终极修复 (从 :root 到具体容器) 🍎 */
 /* ========================================== */
 
-/* 1. 基础变量：使用 dvh 和 env 安全区 */
+/* 1. 基础变量：使用 100% 替代 dvh，防止键盘弹出时容器缩小漏出底色 */
 :root {
-  --app-height: 100dvh;
+  --app-height: 100%;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --keyboard-offset: 0px;
@@ -4298,14 +4293,14 @@ body {
 #loversSpaceModal,
 #music-full-player,
 #wc-view-shopping {
-  position: fixed !important;
-  inset: 0 !important;
+  position: absolute !important; /* 改为 absolute，跟随 app-root */
+  top: 0 !important;
+  left: 0 !important;
   width: 100% !important;
-  height: var(--app-height) !important;
-  min-height: var(--app-height) !important;
-  max-height: none !important; /* 防止被 max-height 限制 */
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: none !important;
   overflow: hidden !important;
-  /* 确保这些容器也有安全区处理 */
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
 }
