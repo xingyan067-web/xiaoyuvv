@@ -717,13 +717,23 @@
             <div class="settings-content ios-settings-content">
                 <div class="settings-title" style="margin-top:20px;">系统通知</div>
                 <div class="ios-list-group">
+                    <!-- 新增：全程真实通知 -->
                     <div class="ios-list-item">
                         <div class="ios-item-content">
                             <div style="display:flex; flex-direction:column;">
-                                <span class="ios-item-label">允许后台真实通知</span>
-                                <span style="font-size:11px; color:#8e8e93; margin-top:4px;">开启后，切到后台也能收到消息推送</span>
+                                <span class="ios-item-label">全程系统真实通知</span>
+                                <span style="font-size:11px; color:#8e8e93; margin-top:4px;">无论是否在后台/聊天页，都会弹系统通知</span>
                             </div>
-                            <!-- 使用与恋人空间相同的 iOS 风格开关 -->
+                            <input type="checkbox" id="toggle-always-real-notif" class="ls-toggle" onchange="handleAlwaysNotifToggle(this)">
+                        </div>
+                    </div>
+                    <!-- 原有：后台真实通知 -->
+                    <div class="ios-list-item">
+                        <div class="ios-item-content">
+                            <div style="display:flex; flex-direction:column;">
+                                <span class="ios-item-label">仅后台真实通知</span>
+                                <span style="font-size:11px; color:#8e8e93; margin-top:4px;">只有切换到后台时，才会收到系统推送</span>
+                            </div>
                             <input type="checkbox" id="toggle-real-notif" class="ls-toggle" onchange="handleNotifToggle(this)">
                         </div>
                     </div>

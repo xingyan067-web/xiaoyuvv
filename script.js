@@ -159,6 +159,7 @@ let isMotionListenerAdded = false;
 
 // 通知与后台全局变量 (新增)
 let isRealNotifEnabled = localStorage.getItem('ios_theme_real_notif_enabled') === 'true';
+let isAlwaysRealNotifEnabled = localStorage.getItem('ios_theme_always_real_notif_enabled') === 'true';
 
 // 检查是否是新的一天，如果是则步数清零
 function checkNewDay() {
@@ -4012,25 +4013,31 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
         const musicChatWin = document.getElementById('music-chat-window');
         const isMusicChatOpen = musicChatWin && musicChatWin.style.display === 'flex' && musicState.listenTogether.charId === charId;
 
-        // 如果微信聊天没打开，且音乐聊天框也没打开，才弹通知
+        const char = wcState.characters.find(c => c.id === charId);
+        let notifText = content;
+        if (type === 'sticker') notifText = '[表情包]';
+        else if (type === 'image') notifText = '[图片]';
+        else if (type === 'voice') notifText = '[语音]';
+        else if (type === 'transfer') notifText = '[转账]';
+        else if (type === 'invite') notifText = '[恋人空间邀请]';
+
+        // 如果微信聊天没打开，且音乐聊天框也没打开，才弹应用内横幅通知
         if ((!isChatOpen || !isSameChat) && !isMusicChatOpen) {
             if (!wcState.unreadCounts[charId]) wcState.unreadCounts[charId] = 0;
             wcState.unreadCounts[charId]++;
             
-            const char = wcState.characters.find(c => c.id === charId);
             if (char) {
-                let notifText = content;
-                if (type === 'sticker') notifText = '[表情包]';
-                else if (type === 'image') notifText = '[图片]';
-                else if (type === 'voice') notifText = '[语音]';
-                else if (type === 'transfer') notifText = '[转账]';
-                else if (type === 'invite') notifText = '[恋人空间邀请]';
-                
                 wcShowIOSNotification(char, notifText);
             }
             
             if (document.getElementById('wc-view-chat').classList.contains('active')) {
                 wcRenderChats();
+            }
+        } else {
+            // 如果在当前聊天页面，不弹应用内横幅，但如果开启了“全程真实通知”，需要触发系统通知
+            if (char && isAlwaysRealNotifEnabled) {
+                sendRealSystemNotification(char.name, notifText, char.avatar);
+                playNotificationSound();
             }
         }
     }
@@ -10430,49 +10437,150 @@ function closeNotificationSettings() {
 
 function updateNotifUI() {
     const notifToggle = document.getElementById('toggle-real-notif');
+    const alwaysNotifToggle = document.getElementById('toggle-always-real-notif');
     const keepAliveToggle = document.getElementById('toggle-keep-alive');
     const mainStatus = document.getElementById('main-notif-status');
 
     if (notifToggle) notifToggle.checked = isRealNotifEnabled;
+    if (alwaysNotifToggle) alwaysNotifToggle.checked = isAlwaysRealNotifEnabled;
     if (keepAliveToggle) keepAliveToggle.checked = isKeepAliveEnabled;
 
     if (mainStatus) {
-        mainStatus.innerHTML = (isRealNotifEnabled ? '已开启' : '未开启') + '<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>';
+        let statusText = '未开启';
+        if (isAlwaysRealNotifEnabled) statusText = '全程开启';
+        else if (isRealNotifEnabled) statusText = '后台开启';
+        
+        mainStatus.innerHTML = statusText + '<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>';
     }
 }
 
 // 2. 通知开关逻辑
+function requestNotificationPermission(callback) {
+    if (!("Notification" in window)) {
+        alert("宝宝，你当前的浏览器不支持系统通知哦~");
+        callback(false);
+    } else if (Notification.permission === "granted") {
+        callback(true);
+    } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(permission => {
+            if (permission === "granted") {
+                alert("太棒啦！真实通知已开启！");
+                callback(true);
+            } else {
+                alert("通知权限被拒绝了，请在浏览器设置中手动允许哦。");
+                callback(false);
+            }
+        });
+    } else {
+        alert("通知权限已被系统拒绝，请在浏览器或系统设置中手动打开！");
+        callback(false);
+    }
+}
+
 function handleNotifToggle(checkbox) {
-    isRealNotifEnabled = checkbox.checked;
-    localStorage.setItem('ios_theme_real_notif_enabled', isRealNotifEnabled);
-    
-    if (isRealNotifEnabled) {
-        if (!("Notification" in window)) {
-            alert("宝宝，你当前的浏览器不支持系统通知哦~");
-            checkbox.checked = false;
-            isRealNotifEnabled = false;
-            localStorage.setItem('ios_theme_real_notif_enabled', false);
-        } else if (Notification.permission !== "granted" && Notification.permission !== "denied") {
-            // 请求权限
-            Notification.requestPermission().then(permission => {
-                if (permission === "granted") {
-                    alert("太棒啦！真实通知已开启，切到后台也能收到消息啦！");
-                } else {
-                    alert("通知权限被拒绝了，请在浏览器设置中手动允许哦。");
-                    checkbox.checked = false;
-                    isRealNotifEnabled = false;
-                    localStorage.setItem('ios_theme_real_notif_enabled', false);
-                }
-                updateNotifUI();
-            });
-        } else if (Notification.permission === "denied") {
-            alert("通知权限已被系统拒绝，请在浏览器或系统设置中手动打开！");
-            checkbox.checked = false;
-            isRealNotifEnabled = false;
-            localStorage.setItem('ios_theme_real_notif_enabled', false);
+    if (checkbox.checked) {
+        requestNotificationPermission((granted) => {
+            isRealNotifEnabled = granted;
+            checkbox.checked = granted;
+            localStorage.setItem('ios_theme_real_notif_enabled', granted);
+            
+            // 互斥逻辑：开启仅后台时，关闭全程
+            if (granted && isAlwaysRealNotifEnabled) {
+                isAlwaysRealNotifEnabled = false;
+                localStorage.setItem('ios_theme_always_real_notif_enabled', false);
+            }
+            updateNotifUI();
+        });
+    } else {
+        isRealNotifEnabled = false;
+        localStorage.setItem('ios_theme_real_notif_enabled', false);
+        updateNotifUI();
+    }
+}
+
+function handleAlwaysNotifToggle(checkbox) {
+    if (checkbox.checked) {
+        requestNotificationPermission((granted) => {
+            isAlwaysRealNotifEnabled = granted;
+            checkbox.checked = granted;
+            localStorage.setItem('ios_theme_always_real_notif_enabled', granted);
+            
+            // 互斥逻辑：开启全程时，关闭仅后台
+            if (granted && isRealNotifEnabled) {
+                isRealNotifEnabled = false;
+                localStorage.setItem('ios_theme_real_notif_enabled', false);
+            }
+            updateNotifUI();
+        });
+    } else {
+        isAlwaysRealNotifEnabled = false;
+        localStorage.setItem('ios_theme_always_real_notif_enabled', false);
+        updateNotifUI();
+    }
+}
+
+// 3. 发送真实通知的函数 (核心修复：解决保活状态下的后台判定)
+function sendRealSystemNotification(title, body, iconUrl) {
+    // 如果两个都没开，直接返回
+    if (!isRealNotifEnabled && !isAlwaysRealNotifEnabled) return;
+
+    let shouldSend = false;
+
+    // 1. 如果开启了“全程真实通知”，无视前后台状态，直接发送
+    if (isAlwaysRealNotifEnabled) {
+        shouldSend = true;
+    } 
+    // 2. 如果开启了“仅后台真实通知”，则判断当前页面是否不可见
+    // (使用 document.hidden 完美解决开启保活音频时，浏览器仍判定为活跃的问题)
+    else if (isRealNotifEnabled) {
+        if (document.hidden || document.visibilityState !== 'visible') {
+            shouldSend = true;
         }
     }
-    updateNotifUI();
+
+    if (!shouldSend) return;
+
+    if (Notification.permission === "granted") {
+        navigator.serviceWorker.ready.then(function(registration) {
+            registration.showNotification(title, {
+                body: body,
+                icon: iconUrl || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg',
+                badge: 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg',
+                vibrate: [200, 100, 200],
+                tag: 'honey-chat',
+                renotify: true
+            });
+        });
+    }
+}
+
+// 4. 后台通知测试逻辑
+function testRealNotification() {
+    if (!isRealNotifEnabled && !isAlwaysRealNotifEnabled) {
+        alert("宝宝，请先开启上方的任意一个真实通知开关哦~");
+        return;
+    }
+    if (Notification.permission !== "granted") {
+        alert("浏览器通知权限未授予，请检查系统设置！");
+        return;
+    }
+    
+    alert("测试已启动！\n请在 5 秒内将浏览器切换到后台，或者锁屏...");
+    
+    setTimeout(() => {
+        if (Notification.permission === "granted") {
+            navigator.serviceWorker.ready.then(function(registration) {
+                registration.showNotification("后台通知测试", {
+                    body: "成功啦！你能在后台收到这条消息，说明通知功能正常工作哦~",
+                    icon: "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg",
+                    badge: "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg",
+                    vibrate: [200, 100, 200],
+                    tag: 'honey-chat-test',
+                    renotify: true
+                });
+            });
+        }
+    }, 5000);
 }
 
 // 3. 发送真实通知的函数
