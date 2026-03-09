@@ -302,99 +302,14 @@ window.onload = async function() {
 // iOS / PWA 全屏与键盘自适应最终版
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
-    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    docStyle.setProperty('--app-height', `${vh}px`);
-// 统一输入栏高度变量，给微信聊天滚动区预留空间
-document.documentElement.style.setProperty('--wc-input-height', '64px');
-
-    // 计算键盘占用高度
-    const fullHeight = window.innerHeight;
-    const keyboardOffset = Math.max(0, fullHeight - vh - (window.visualViewport ? window.visualViewport.offsetTop : 0));
-
-    // 小于 120px 视为不是键盘，避免地址栏伸缩误判
-    docStyle.setProperty('--keyboard-offset', keyboardOffset > 120 ? `${keyboardOffset}px` : '0px');
+    // 【关键修改】：不要动态缩小 --app-height，这会导致键盘弹出时整个页面缩小，漏出黑白底色！
+    // 保持 100% 高度，让 iOS 原生接管键盘上推
+    docStyle.setProperty('--app-height', `100%`);
+    // 统一输入栏高度变量，给微信聊天滚动区预留空间
+    document.documentElement.style.setProperty('--wc-input-height', '64px');
+    docStyle.setProperty('--keyboard-offset', '0px');
 }
 
-updateAppViewportVars();
-
-if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', updateAppViewportVars);
-    window.visualViewport.addEventListener('scroll', updateAppViewportVars);
-} else {
-    window.addEventListener('resize', updateAppViewportVars);
-}
-
-// 输入框聚焦时只滚动内容区，强制拦截 iOS 键盘推高页面的默认行为
-document.addEventListener('focusin', () => {
-    // 强制复位整个页面的滚动，防止顶部导航栏被推上去
-    window.scrollTo(0, 0);
-    document.body.scrollTop = 0;
-
-    setTimeout(() => {
-        updateAppViewportVars();
-
-        // 微信聊天滚到底
-        if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
-
-        // 梦境聊天滚到底
-        const dreamContainer = document.getElementById('dream-chat-history');
-        if (dreamContainer) dreamContainer.scrollTop = dreamContainer.scrollHeight;
-
-        // 手机模拟器聊天滚到底
-        const simContainer = document.getElementById('wc-sim-chat-history');
-        if (simContainer) simContainer.scrollTop = simContainer.scrollHeight;
-
-        // 音乐聊天滚到底
-        const musicChatContainer = document.getElementById('music-chat-history');
-        if (musicChatContainer) musicChatContainer.scrollTop = musicChatContainer.scrollHeight;
-    }, 80);
-});
-
-document.addEventListener('focusout', () => {
-    // 键盘收起时再次复位
-    window.scrollTo(0, 0);
-    document.body.scrollTop = 0;
-    
-    setTimeout(() => {
-        updateAppViewportVars();
-    }, 120);
-});
-
-    // 监听聊天输入框焦点，主动滚动到底部
-    const chatInput = document.getElementById('wc-chat-input');
-    if (chatInput) {
-        chatInput.addEventListener('focus', () => {
-            setTimeout(() => wcScrollToBottom(true), 300);
-        });
-    }
-
-    // 👉【新增】：监听梦境聊天输入框焦点，主动滚动到底部
-    const dreamInput = document.getElementById('dream-chat-input');
-    if (dreamInput) {
-        dreamInput.addEventListener('focus', () => {
-            setTimeout(() => {
-                const container = document.getElementById('dream-chat-history');
-                if(container) container.scrollTop = container.scrollHeight;
-            }, 300);
-        }); // <--- 补上这里的 }); 闭合 addEventListener
-    } // <--- 补上这里的 } 闭合 if 语句
-                 
-    const bgFileInput = document.getElementById('bgFileInput');
-    if (bgFileInput) {
-        bgFileInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(evt) {
-                    const url = evt.target.result;
-                    document.getElementById('mainScreen').style.backgroundImage = `url('${url}')`;
-                    saveThemeSettings();
-                    addWallpaperToGrid(url);
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-    }
 
     // 通用输入框确认按钮事件绑定
     const generalConfirmBtn = document.getElementById('wc-general-input-confirm');
@@ -13549,4 +13464,7 @@ function playNotificationSound() {
         if (navigator.vibrate) {
             navigator.vibrate([100, 50, 100]); // 震动-停顿-震动
         }
+    } catch (e) {
+        console.error("播放提示音失败", e);
     }
+}
