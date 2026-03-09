@@ -323,8 +323,12 @@ if (window.visualViewport) {
     window.addEventListener('resize', updateAppViewportVars);
 }
 
-// 输入框聚焦时只滚动内容区，不再 scrollTo(0,0) 硬拉页面
+// 输入框聚焦时只滚动内容区，强制拦截 iOS 键盘推高页面的默认行为
 document.addEventListener('focusin', () => {
+    // 强制复位整个页面的滚动，防止顶部导航栏被推上去
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+
     setTimeout(() => {
         updateAppViewportVars();
 
@@ -346,6 +350,10 @@ document.addEventListener('focusin', () => {
 });
 
 document.addEventListener('focusout', () => {
+    // 键盘收起时再次复位
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    
     setTimeout(() => {
         updateAppViewportVars();
     }, 120);
@@ -2910,17 +2918,22 @@ function wcRenderMessages(charId) {
 
 function wcScrollToBottom(force = false) {
     const area = document.getElementById('wc-chat-messages');
-    const anchor = document.getElementById('wc-chat-scroll-anchor');
     
     requestAnimationFrame(() => {
-        if (anchor) {
-            anchor.scrollIntoView({ behavior: force ? "auto" : "smooth", block: "end" });
-        } else if (area) { // 【修复】：增加 area 判空保护
-            area.scrollTop = area.scrollHeight;
+        if (area) {
+            if (force) {
+                area.scrollTop = area.scrollHeight;
+            } else {
+                // 尝试平滑滚动，如果不支持则直接赋值
+                try {
+                    area.scrollTo({ top: area.scrollHeight, behavior: 'smooth' });
+                } catch (e) {
+                    area.scrollTop = area.scrollHeight;
+                }
+            }
         }
     });
 }
-
 
 // --- WeChat Interaction ---
 function wcHandleTouchStart(e, msgId) {
@@ -5403,9 +5416,9 @@ function wcOpenPhoneSim() {
     const sim = document.getElementById('wc-view-phone-sim');
     sim.classList.add('active');
     const screenBg = document.getElementById('wc-phone-screen-bg');
-    if (char.phoneConfig && char.phoneConfig.wallpaper) {
-        screenBg.style.backgroundImage = `url(${char.phoneConfig.wallpaper})`;
-    } else {
+        if (char.phoneConfig && char.phoneConfig.wallpaper) {
+        screenBg.style.backgroundImage = `url('${char.phoneConfig.wallpaper}')`;
+    } else {    
         screenBg.style.backgroundImage = 'none';
     }
     
@@ -5487,10 +5500,12 @@ function wcSavePhoneSettings() {
     wcCloseModal('wc-modal-phone-settings');
     
     const screenBg = document.getElementById('wc-phone-screen-bg');
-    if (char.phoneConfig.wallpaper) screenBg.style.backgroundImage = `url(${char.phoneConfig.wallpaper})`;
+    if (char.phoneConfig.wallpaper) screenBg.style.backgroundImage = `url('${char.phoneConfig.wallpaper}')`;
     
     const noteBg = document.getElementById('wc-sticky-note-bg');
-    if (char.phoneConfig.stickyNote) noteBg.style.backgroundImage = `url(${char.phoneConfig.stickyNote})`;
+    if (char.phoneConfig.stickyNote) noteBg.style.backgroundImage = `url('${char.phoneConfig.stickyNote}')`;
+
+    
 
     const icons = char.phoneConfig.icons || {};
     ['msg', 'browser', 'cart', 'settings'].forEach(id => {
