@@ -2156,7 +2156,8 @@ function renderAppEditors() {
         const div = document.createElement('div');
         div.className = 'app-edit-item';
         div.innerHTML = `
-            <div class="app-edit-preview" style="background-image:${bg}" onclick="triggerAppIconUpload(${i})">
+            <!-- 👇 重点修改这一行：把 style 外面的双引号改成单引号 👇 -->
+            <div class="app-edit-preview" style='background-image:${bg}' onclick="triggerAppIconUpload(${i})">
                 <svg class="camera-icon" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
             </div>
             <div class="app-edit-inputs">
@@ -10431,15 +10432,16 @@ function sendRealSystemNotification(title, body, iconUrl) {
     // 逻辑开关：如果用户在面板里关了，就不发
     if (!isRealNotifEnabled) return;
 
-    // 如果网页正在前台显示，就不发系统通知了（避免和网页内的横幅通知重复）
-    if (document.visibilityState === 'visible') {
-        return; 
-    }
+    // 👇 重点修改：把下面这三行注释掉或删掉，这样前台也会触发真实系统通知
+    // if (document.visibilityState === 'visible') {
+    //     return; 
+    // }
 
     if (Notification.permission === "granted") {
         navigator.serviceWorker.ready.then(function(registration) {
             registration.showNotification(title, {
                 body: body,
+                // 这里的 iconUrl 已经自动接收了 char.avatar，所以会显示角色头像
                 icon: iconUrl || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg',
                 badge: 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg', // 安卓状态栏小图标
                 vibrate: [200, 100, 200], // 手机震动节奏
@@ -10449,7 +10451,6 @@ function sendRealSystemNotification(title, body, iconUrl) {
         });
     }
 }
-
 // 4. 后台通知测试逻辑
 function testRealNotification() {
     if (!isRealNotifEnabled) {
