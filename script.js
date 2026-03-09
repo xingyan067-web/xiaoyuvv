@@ -4009,7 +4009,6 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
         const isChatOpen = document.getElementById('wc-view-chat-detail').classList.contains('active');
         const isSameChat = wcState.activeChatId === charId;
         
-        // 【新增】：检查音乐播放器的聊天框是否打开
         const musicChatWin = document.getElementById('music-chat-window');
         const isMusicChatOpen = musicChatWin && musicChatWin.style.display === 'flex' && musicState.listenTogether.charId === charId;
 
@@ -4021,7 +4020,12 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
         else if (type === 'transfer') notifText = '[转账]';
         else if (type === 'invite') notifText = '[恋人空间邀请]';
 
-        // 如果微信聊天没打开，且音乐聊天框也没打开，才弹应用内横幅通知
+        // 1. 核心解耦：无论在什么页面，只要满足条件，就向系统发送真实通知请求
+        if (char) {
+            sendRealSystemNotification(char.name, notifText, char.avatar);
+        }
+
+        // 2. 处理应用内的网页横幅通知 (仅当不在当前聊天页面时触发)
         if ((!isChatOpen || !isSameChat) && !isMusicChatOpen) {
             if (!wcState.unreadCounts[charId]) wcState.unreadCounts[charId] = 0;
             wcState.unreadCounts[charId]++;
@@ -4034,9 +4038,8 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
                 wcRenderChats();
             }
         } else {
-            // 如果在当前聊天页面，不弹应用内横幅，但如果开启了“全程真实通知”，需要触发系统通知
-            if (char && isAlwaysRealNotifEnabled) {
-                sendRealSystemNotification(char.name, notifText, char.avatar);
+            // 如果在当前聊天页面，虽然不弹网页横幅，但如果开启了全程通知，需要播放提示音
+            if (isAlwaysRealNotifEnabled) {
                 playNotificationSound();
             }
         }
@@ -4158,13 +4161,10 @@ function wcShowIOSNotification(char, text) {
             setTimeout(() => banner.remove(), 400);
         }
     }, 5000);
-    // 【新增】：触发真实后台通知
-    sendRealSystemNotification(char.name, text, char.avatar);
     
-    // 👇 新增：触发声音与震动触感
+    // 👇 触发声音与震动触感
     playNotificationSound();
 }
-
 
 // --- iOS Loading Overlay Functions ---
 function wcShowLoading(text = "正在生成内容...") {
@@ -8711,8 +8711,6 @@ function showMainSystemNotification(title, message, iconUrl = null) {
             setTimeout(() => banner.remove(), 400);
         }
     }, 5000);
-    // 【新增】：触发真实后台通知
-    sendRealSystemNotification(title, message, iconUrl);
 }
 
 // ==========================================================================
@@ -10583,30 +10581,41 @@ function testRealNotification() {
     }, 5000);
 }
 
-// 3. 发送真实通知的函数
+// 3. 发送真实通知的函数 (核心修复：解决保活状态下的后台判定与通知覆盖)
 function sendRealSystemNotification(title, body, iconUrl) {
-    // 逻辑开关：如果用户在面板里关了，就不发
-    if (!isRealNotifEnabled) return;
+    // 如果两个都没开，直接返回
+    if (!isRealNotifEnabled && !isAlwaysRealNotifEnabled) return;
 
-    // 👇 重点修改：把下面这三行注释掉或删掉，这样前台也会触发真实系统通知
-    // if (document.visibilityState === 'visible') {
-    //     return; 
-    // }
+    let shouldSend = false;
+
+    // 1. 如果开启了“全程真实通知”，无视前后台状态，直接发送
+    if (isAlwaysRealNotifEnabled) {
+        shouldSend = true;
+    } 
+    // 2. 如果开启了“仅后台真实通知”，则判断当前页面是否不可见
+    else if (isRealNotifEnabled) {
+        if (document.hidden || document.visibilityState !== 'visible') {
+            shouldSend = true;
+        }
+    }
+
+    if (!shouldSend) return;
 
     if (Notification.permission === "granted") {
         navigator.serviceWorker.ready.then(function(registration) {
             registration.showNotification(title, {
                 body: body,
-                // 这里的 iconUrl 已经自动接收了 char.avatar，所以会显示角色头像
                 icon: iconUrl || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg',
-                badge: 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg', // 安卓状态栏小图标
-                vibrate: [200, 100, 200], // 手机震动节奏
-                tag: 'honey-chat', // 相同 tag 的通知会合并
-                renotify: true     // 即使合并也会重新震动/响铃
+                badge: 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg',
+                vibrate: [200, 100, 200],
+                // 核心修改：使用动态 tag，防止旧消息被新消息覆盖
+                tag: 'msg-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+                renotify: true
             });
         });
     }
 }
+
 // 4. 后台通知测试逻辑
 function testRealNotification() {
     if (!isRealNotifEnabled) {
@@ -13540,7 +13549,4 @@ function playNotificationSound() {
         if (navigator.vibrate) {
             navigator.vibrate([100, 50, 100]); // 震动-停顿-震动
         }
-    } catch (e) {
-        console.error("播放提示音失败", e);
     }
-}
