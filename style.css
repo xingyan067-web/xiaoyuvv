@@ -3,15 +3,15 @@
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; user-select: none; font-family: inherit; }
 /* --- 从这里开始替换 --- */
 html, body {
-    width: 100%;
-    height: 100vh !important; /* 强制使用 100vh，无视动态视口，确保填满物理屏幕底部 */
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh; /* 核心：强制使用动态视口，完美贴合物理屏幕底部 */
     margin: 0;
     padding: 0;
     overflow: hidden;
     position: fixed;
-    top: 0;
-    left: 0;
-    background: #000;
+    inset: 0; /* 等同于 top:0; bottom:0; left:0; right:0; */
+    background-color: transparent; /* 保持透明，让壁纸透出来 */
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
 }
@@ -20,11 +20,10 @@ body, input, textarea, select, button {
     font-family: inherit !important;
 }
 #app-root {
-    width: 100%;
-    height: 100vh !important; /* 同步改为 100vh */
     position: absolute; 
-    top: 0;
-    left: 0;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
     background-color: transparent;
     z-index: 1;
@@ -35,23 +34,19 @@ body, input, textarea, select, button {
 
 /* --- 屏幕容器 --- */
 .screen {
-    width: 100vw; 
-    height: 100dvh;
-    min-height: -webkit-fill-available;
-    background: linear-gradient(180deg, #fdfdfd 0%, #e5e5ea 100%);
-    background-size: cover; 
-    background-position: center;
-    background-repeat: no-repeat;
     position: absolute; 
-    top: 0; 
-    left: 0;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(180deg, #fdfdfd 0%, #e5e5ea 100%);
+    background-size: cover !important; 
+    background-position: center !important;
+    background-repeat: no-repeat !important;
     display: flex; 
     flex-direction: column; 
     justify-content: space-between;
-    /* 核心适配：利用 env() 填充刘海和底部横条区域，让背景延伸到物理边缘 */
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
-    transition: background 0.3s ease;
     z-index: 1; 
 }
 /* --- 到这里结束替换 --- */
@@ -4204,24 +4199,20 @@ input::-webkit-inner-spin-button {
 
 /* 2. 根节点强制全屏 (关键修复点) */
 html {
-  height: 100%;
-  height: -webkit-fill-available; /* iOS Safari 关键属性 */
-  background: #000; /* 防止露白时显示白底 */
+  height: 100dvh; /* 必须是 100dvh，消除底部白边 */
+  background: transparent; 
 }
 
 body {
-  width: 100%;
-  height: 100vh; /* 备用 */
-  height: 100dvh; /* 动态视口高度，解决地址栏问题 */
-  min-height: 100vh;
-  min-height: -webkit-fill-available; /* iOS 关键 */
+  width: 100vw;
+  height: 100dvh; /* 必须是 100dvh，消除底部白边 */
   margin: 0;
   padding: 0;
   overflow: hidden;
-  position: fixed; /* 防止 iOS 橡皮筋效果 */
-  inset: 0;
-  background: #000; /* 全局黑色背景防白边 */
-  overscroll-behavior: none; /* 防止滚动溢出 */
+  position: fixed; 
+  inset: 0; 
+  background: transparent; 
+  overscroll-behavior: none; 
   -webkit-overflow-scrolling: touch;
 }
 
@@ -4230,42 +4221,38 @@ body {
   position: fixed;
   inset: 0;
   width: 100%;
-  height: var(--app-height);
-  min-height: -webkit-fill-available;
+  height: 100%;
   overflow: hidden;
-  background: #000; /* 确保背景一致 */
+  background: transparent; 
   z-index: 1;
 }
 
-/* 4. 主屏幕容器 (关键：使用安全区变量) */
+/* 4. 主屏幕容器 */
 .screen {
   position: absolute;
   inset: 0;
   width: 100%;
-  height: var(--app-height);
-  min-height: var(--app-height);
+  height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  /* 核心：利用 env() 填充刘海和底部横条区域 */
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
   background-size: cover !important;
   background-position: center center !important;
   background-repeat: no-repeat !important;
-  background-color: #000; /* 防止图片加载前露白 */
+  background-color: transparent; 
 }
 
 /* 5. Dock 栏贴底 (不留白边) */
 .dock-container {
   position: absolute;
-  bottom: 0 !important; /* 强制贴底 */
+  bottom: 0 !important; 
   left: 0;
   width: 100%;
   display: flex;
   justify-content: center;
-  /* 关键：使用 max() 确保在安全和非安全区域都正确 */
   padding: 0 15px calc(var(--safe-bottom) + 8px) 15px !important;
   z-index: 10;
 }
@@ -4293,7 +4280,7 @@ body {
 #loversSpaceModal,
 #music-full-player,
 #wc-view-shopping {
-  position: absolute !important; /* 改为 absolute，跟随 app-root */
+  position: absolute !important; 
   top: 0 !important;
   left: 0 !important;
   width: 100% !important;
@@ -4301,8 +4288,8 @@ body {
   min-height: 100% !important;
   max-height: none !important;
   overflow: hidden !important;
-  padding-top: var(--safe-top);
-  padding-bottom: var(--safe-bottom);
+  /* 【关键修复】：删除了这里的 padding-top 和 padding-bottom */
+  /* 这样就不会和音乐播放器内部的安全区产生“双重挤压”，底部按钮就能正常显示了 */
 }
 
 /* 7. 微信/聊天页面特殊处理 (防止键盘顶起露白) */
