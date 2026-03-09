@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-title" content="Theme Studio">
     
     <!-- 优化视口配置：viewport-fit=cover 是延伸到刘海和底部的核心 -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     
     <!-- 图标配置 -->
     <link rel="apple-touch-icon" href="https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg">
@@ -27,24 +27,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
     <link rel="stylesheet" href="style.css">
     
-    <!-- 👇 从这里开始新增：动态生成 iOS 启动图，强制适配所有 iPhone 机型全屏无黑边 👇 -->
-    <script>
-        if (window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches || window.navigator.userAgent.indexOf('iPhone') > -1) {
-            var canvas = document.createElement('canvas');
-            var ctx = canvas.getContext('2d');
-            // 自动读取当前手机的真实物理像素尺寸
-            canvas.width = window.screen.width * window.devicePixelRatio;
-            canvas.height = window.screen.height * window.devicePixelRatio;
-            // 填充与你背景一致的颜色
-            ctx.fillStyle = '#f2f2f7'; 
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            var link = document.createElement('link');
-            link.setAttribute('rel', 'apple-touch-startup-image');
-            link.setAttribute('href', canvas.toDataURL('image/png'));
-            document.head.appendChild(link);
-        }
-    </script>
-    <!-- 👆 到这里结束新增 👆 -->
 </head>
 <body> <!-- 加上这一行 -->
     <div id="activation-overlay">
@@ -677,7 +659,16 @@
                             <div class="ios-item-right">API 配置<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
                         </div>
                     </div>
-                    
+                      <!-- 新增：声音与触感 -->
+                    <div class="ios-list-item" onclick="openSoundSettings()">
+                        <div class="ios-icon-box" style="background:#ff2d55">
+                            <svg viewBox="0 0 24 24" fill="white"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                        </div>
+                        <div class="ios-item-content">
+                            <span class="ios-item-label">声音与触感</span>
+                            <div class="ios-item-right"><svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
+                        </div>
+                    </div>                 
                     <!-- 通知与后台入口 -->
                     <div class="ios-list-item" onclick="openNotificationSettings()">
                         <div class="ios-icon-box" style="background:#ff3b30">
@@ -758,6 +749,41 @@
                 </div>
                 <div style="padding: 0 16px; font-size: 12px; color: #8e8e93; margin-top: 10px; line-height: 1.5;">
                     注：如果通知无法弹出，请检查浏览器或手机系统的通知权限是否已手动打开。部分手机系统可能会强杀后台，建议同时开启保活功能。
+                </div>
+            </div>
+        </div>
+        <!-- 新增：声音与触感 设置页面 -->
+        <div class="settings-modal sub-page" id="soundSettingsModal">
+            <div class="settings-header">
+                <div class="header-left">
+                    <button class="nav-btn" onclick="closeSoundSettings()">
+                        <svg class="back-svg" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                        <span>设置</span>
+                    </button>
+                </div>
+                <div class="header-title">声音与触感</div>
+                <div class="header-right"></div>
+            </div>
+            <div class="settings-content ios-settings-content">
+                <div class="settings-title" style="margin-top:20px;">消息提示音</div>
+                <div class="ios-list-group" style="padding: 10px 16px;">
+                    <div class="settings-row">
+                        <div class="row-label">音频 URL (mp3/wav)</div>
+                        <input type="text" id="soundUrlInput" placeholder="输入音频链接...">
+                        <button class="action-btn" onclick="saveSoundUrl()">应用 URL</button>
+                    </div>
+                    <div class="settings-row">
+                        <div class="row-label">本地音频上传</div>
+                        <input type="file" id="customAudioInput" accept="audio/*" style="display:none" onchange="handleAudioUpload(this)">
+                        <button class="action-btn secondary" onclick="document.getElementById('customAudioInput').click()">选择本地音频...</button>
+                    </div>
+                    <div class="settings-row" style="flex-direction: row; gap: 10px;">
+                        <button class="action-btn" style="flex: 1; background: #34c759;" onclick="playTestSound()">测试声音</button>
+                        <button class="action-btn destructive" style="flex: 1; margin-top: 5px;" onclick="resetSound()">恢复默认</button>
+                    </div>
+                </div>
+                <div style="padding: 0 16px; font-size: 12px; color: #8e8e93; line-height: 1.5;">
+                    注：iOS 系统限制，必须先在页面上有过点击交互，才能自动播放声音。如果上传本地音频，建议控制在 2MB 以内。
                 </div>
             </div>
         </div>
@@ -1758,22 +1784,10 @@
                             <div class="shop-cart-badge" id="shop-cart-badge">0</div>
                         </div>
                     </div>
-                    <!-- My Favorites Full Page (New Full Screen) -->
-                    <div id="wc-view-my-favorites" class="dream-fullscreen-view" style="z-index: 1400; background: #F2F2F7;">
-                        <div class="wc-navbar">
-                            <div class="wc-nav-left">
-                                <button class="wc-nav-btn" onclick="wcCloseMyFavorites()">
-                                    <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                                    返回
-                                </button>
-                            </div>
-                            <div class="wc-nav-title">我的收藏</div>
-                            <div class="wc-nav-right"></div>
-                        </div>
-                        <div class="wc-main-content" style="padding-top: 64px; background: #F2F2F7;">
-                            <div id="wc-my-favorites-list" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
-                                <!-- 收藏折叠卡片将在这里生成 -->
-                            </div>
+                    <!-- My Favorites Page (修复点击穿透退出Bug) -->
+                    <div id="wc-view-my-favorites" class="wc-page" style="background: #F2F2F7;">
+                        <div id="wc-my-favorites-list" style="padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                            <!-- 收藏折叠卡片将在这里生成 -->
                         </div>
                     </div>
 

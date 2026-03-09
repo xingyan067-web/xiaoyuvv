@@ -137,6 +137,7 @@ let pendingSaveType = '';
 let isHomeEditMode = false;
 let backupGridLayout = {};
 let backupWidgetPosition = {};
+let customNotificationSound = null; // 存储自定义提示音
 
 let dragItem = null;
 let dragGhost = null;
@@ -297,45 +298,58 @@ window.onload = async function() {
         }
     });
 
-    // 终极修复：监听可视区域变化，完美兼容 Chrome/Edge/Safari/微信环境
-    if (window.visualViewport) {
-        const handleResize = () => {
-            // 【核心修复】：因为启用了 interactive-widget=resizes-content，
-            // 浏览器会自动缩放视口，千万不要再用 JS 强行设置 height，否则会导致 iOS 键盘收起时底部出现白边！
-            // 我们只需要在这里处理输入框聚焦时的滚动逻辑即可。
+// iOS / PWA 全屏与键盘自适应最终版
+function updateAppViewportVars() {
+    const docStyle = document.documentElement.style;
+    const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    docStyle.setProperty('--app-height', `${vh}px`);
+// 统一输入栏高度变量，给微信聊天滚动区预留空间
+document.documentElement.style.setProperty('--wc-input-height', '64px');
 
-            // 如果当前有输入框正在输入，强制滚动到底部，防止被遮挡
-            if (document.activeElement && ['TEXTAREA', 'INPUT'].includes(document.activeElement.tagName)) {
-                setTimeout(() => {
-                    // 微信聊天滚动
-                    wcScrollToBottom(true);
-                    
-                    // 梦境聊天滚动
-                    const dreamContainer = document.getElementById('dream-chat-history');
-                    if (dreamContainer) dreamContainer.scrollTop = dreamContainer.scrollHeight;
-                    
-                    // 模拟器聊天滚动
-                    const simContainer = document.getElementById('wc-sim-chat-history');
-                    if (simContainer) simContainer.scrollTop = simContainer.scrollHeight;
+    // 计算键盘占用高度
+    const fullHeight = window.innerHeight;
+    const keyboardOffset = Math.max(0, fullHeight - vh - (window.visualViewport ? window.visualViewport.offsetTop : 0));
 
-                    // 音乐迷你聊天滚动
-                    const musicChatContainer = document.getElementById('music-chat-history');
-                    if (musicChatContainer) musicChatContainer.scrollTop = musicChatContainer.scrollHeight;
+    // 小于 120px 视为不是键盘，避免地址栏伸缩误判
+    docStyle.setProperty('--keyboard-offset', keyboardOffset > 120 ? `${keyboardOffset}px` : '0px');
+}
 
-                    // 终极防遮挡：让输入框本身强制滚动到可视范围内 (兼容 Chrome)
-                    if (document.activeElement.id !== 'music-chat-input') {
-                        document.activeElement.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-                    }
-                }, 100);
-            }
-        }; 
+updateAppViewportVars();
 
-        window.visualViewport.addEventListener('resize', handleResize);
-        window.visualViewport.addEventListener('scroll', handleResize);
-        
-        // 初始化执行一次
-        handleResize();
-    }
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', updateAppViewportVars);
+    window.visualViewport.addEventListener('scroll', updateAppViewportVars);
+} else {
+    window.addEventListener('resize', updateAppViewportVars);
+}
+
+// 输入框聚焦时只滚动内容区，不再 scrollTo(0,0) 硬拉页面
+document.addEventListener('focusin', () => {
+    setTimeout(() => {
+        updateAppViewportVars();
+
+        // 微信聊天滚到底
+        if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
+
+        // 梦境聊天滚到底
+        const dreamContainer = document.getElementById('dream-chat-history');
+        if (dreamContainer) dreamContainer.scrollTop = dreamContainer.scrollHeight;
+
+        // 手机模拟器聊天滚到底
+        const simContainer = document.getElementById('wc-sim-chat-history');
+        if (simContainer) simContainer.scrollTop = simContainer.scrollHeight;
+
+        // 音乐聊天滚到底
+        const musicChatContainer = document.getElementById('music-chat-history');
+        if (musicChatContainer) musicChatContainer.scrollTop = musicChatContainer.scrollHeight;
+    }, 80);
+});
+
+document.addEventListener('focusout', () => {
+    setTimeout(() => {
+        updateAppViewportVars();
+    }, 120);
+});
 
     // 监听聊天输入框焦点，主动滚动到底部
     const chatInput = document.getElementById('wc-chat-input');
@@ -355,32 +369,7 @@ window.onload = async function() {
             }, 300);
         }); // <--- 补上这里的 }); 闭合 addEventListener
     } // <--- 补上这里的 } 闭合 if 语句
-     
-    // 👉【新增】：监听音乐聊天输入框焦点，主动滚动到底部，并防止页面整体上推黑屏
-    const musicInput = document.getElementById('music-chat-input');    
-    if (musicInput) {
-        musicInput.addEventListener('focus', () => {
-            setTimeout(() => {
-                const container = document.getElementById('music-chat-history');
-                if(container) container.scrollTop = container.scrollHeight;
-                // 强制回滚，防止 iOS 键盘把整个容器推上去露出黑底
-                window.scrollTo(0, 0);
-                document.body.scrollTop = 0;
-            }, 100);
-            setTimeout(() => {
-                window.scrollTo(0, 0);
-                document.body.scrollTop = 0;
-            }, 300);
-        });
-        
-        // 失去焦点时也重置一下滚动位置
-        musicInput.addEventListener('blur', () => {
-            setTimeout(() => {
-                window.scrollTo(0, 0);
-                document.body.scrollTop = 0;
-            }, 100);
-        });
-    }           
+                 
     const bgFileInput = document.getElementById('bgFileInput');
     if (bgFileInput) {
         bgFileInput.addEventListener('change', function(e) {
@@ -611,7 +600,13 @@ async function loadAllData() {
         renderIconPresets();
         renderFontPresets();
         renderApiPresets();
-
+        // 8. 加载自定义提示音
+        const soundData = await idb.get('ios_theme_sound');
+        if (soundData && soundData.url) {
+            customNotificationSound = soundData.url;
+            const input = document.getElementById('soundUrlInput');
+            if(input) input.value = soundData.url.startsWith('data:') ? '已选择本地音频' : soundData.url;
+        }
     } catch (e) {
         console.error("IndexedDB Load Error:", e);
     }
@@ -2554,7 +2549,7 @@ function wcHandleBack() {
         return;
     }
     
-    // 【修复】：如果在购物页面，关闭购物页面
+    // 如果在购物页面，关闭购物页面
     const shopPage = document.getElementById('wc-view-shopping');
     if (shopPage && (shopPage.classList.contains('active') || shopPage.style.display === 'flex')) {
         wcCloseShoppingPage();
@@ -2564,6 +2559,12 @@ function wcHandleBack() {
     // 如果在钱包页面，关闭钱包
     if (document.getElementById('wc-view-wallet').classList.contains('active')) {
         wcCloseWallet();
+        return;
+    }
+
+    // 如果在收藏页面，关闭收藏
+    if (document.getElementById('wc-view-my-favorites').classList.contains('active')) {
+        wcCloseMyFavorites();
         return;
     }
 
@@ -3311,7 +3312,7 @@ ${worldBookContent}
 
 JSON 数组中的每个元素代表一条消息、表情包或动作指令。请严格遵守以下结构：
 1. **文本消息**
-   {"type":"text", "content":"完整的一句话或一段话。"}
+   {"type":"text", "content":"完整的一句话或一段话。", "quote":"(可选)如果你想针对性地回复对方的某句话，可以在这里填入你要引用的内容，例如：User: 吃饭了吗"}
 2. **表情包**
    {"type":"sticker", "content":"表情包名称"}
 3. **更换头像 (情头互动)**
@@ -3420,17 +3421,23 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
                     { type: "text", text: `[发送了一张图片, 图片ID: ${m.id}]` },
                     { type: "image_url", image_url: { url: m.content } }
                 ];
+                if (m.quote) {
+                    imageContent[0].text = `[引用了消息: "${m.quote.replace(/<[^>]*>?/gm, '')}"]\n` + imageContent[0].text;
+                }
                 messages.push({
                     role: m.sender === 'me' ? 'user' : 'assistant',
                     content: imageContent
                 });
             } else {
+                if (m.quote) {
+                    content = `[引用了消息: "${m.quote.replace(/<[^>]*>?/gm, '')}"]\n${content}`;
+                }
                 messages.push({
                     role: m.sender === 'me' ? 'user' : 'assistant',
                     content: content
                 });
             }
-        });
+        }); // <--- 🌟 就是在这里补上这一行！闭合上面的 forEach 循环！
 
         // 👇 新增：在对话记录最末尾，强行注入被拉黑的系统警告 👇
         if (char.isBlocked) {
@@ -3618,10 +3625,12 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         await wcDelay(1500 + Math.random() * 1000); // 模拟打字延迟
         
         let extra = {};
+        if (action.quote) {
+            extra.quote = action.quote;
+        }
         
         if (action.type === 'transfer_action') { // 兼容旧逻辑
-             wcAIHandleTransfer(charId, action.status);
-        } 
+        } // <--- 🌟 补上这个右大括号！
         // --- 新增：处理换头像指令 (通过唯一ID精准匹配真实图片) ---
         else if (action.type === 'change_avatar') {
             const msgs = wcState.chats[charId] || [];
@@ -4131,7 +4140,11 @@ function wcShowIOSNotification(char, text) {
     }, 5000);
     // 【新增】：触发真实后台通知
     sendRealSystemNotification(char.name, text, char.avatar);
+    
+    // 👇 新增：触发声音与震动触感
+    playNotificationSound();
 }
+
 
 // --- iOS Loading Overlay Functions ---
 function wcShowLoading(text = "正在生成内容...") {
@@ -9460,17 +9473,37 @@ function showFavoriteAlert() {
 // 新增：WeChat 主界面的「我的收藏」页面逻辑
 // ==========================================================================
 
+// 替换以下三个函数
 function wcOpenMyFavorites() {
     document.getElementById('wc-view-user').classList.remove('active');
     document.getElementById('wc-view-my-favorites').classList.add('active');
     document.getElementById('wc-main-tabbar').style.display = 'none';
+    
+    // 复用主 Navbar，防止点击穿透
+    document.getElementById('wc-btn-exit').style.display = 'none';
+    document.getElementById('wc-btn-back').style.display = 'flex';
+    document.getElementById('wc-btn-back').onclick = wcCloseMyFavorites;
+    
+    const titleEl = document.getElementById('wc-nav-title');
+    titleEl.innerText = '我的收藏';
+    titleEl.onclick = null;
+    titleEl.style.cursor = 'default';
+    
+    const rightContainer = document.getElementById('wc-nav-right-container');
+    rightContainer.innerHTML = '';
+    
     wcRenderMyFavorites();
 }
 
 function wcCloseMyFavorites() {
     document.getElementById('wc-view-my-favorites').classList.remove('active');
-    document.getElementById('wc-view-user').classList.add('active');
+    wcSwitchTab('user');
+    
     document.getElementById('wc-main-tabbar').style.display = 'flex';
+    document.getElementById('wc-btn-back').style.display = 'none';
+    document.getElementById('wc-btn-exit').style.display = 'flex';
+    
+    document.getElementById('wc-btn-back').onclick = wcHandleBack;
 }
 
 function wcRenderMyFavorites() {
@@ -11714,8 +11747,13 @@ async function musicAcceptCharInvite() {
 
         // 如果 AI 指定了歌曲，自动搜索并播放
         if (songName) {
-            await musicCharSearchAndPlay(charId, songName);
+            document.getElementById('music-search-input').value = songName;
+            await musicPerformSearch();
+            if (musicState.currentPlaylist.length > 0) {
+                musicPlayFromSearch(0);
+            }
         }
+
         
         pendingCharInviteData = null;
     }
@@ -13316,4 +13354,70 @@ function executeBlockToggle() {
         // 👆 修改结束 👆
     }
     closeBlockConfirmModal();
+}
+// ==========================================
+// 声音与触感逻辑
+// ==========================================
+function openSoundSettings() {
+    document.getElementById('soundSettingsModal').classList.add('open');
+}
+
+function closeSoundSettings() {
+    document.getElementById('soundSettingsModal').classList.remove('open');
+}
+
+async function saveSoundUrl() {
+    const url = document.getElementById('soundUrlInput').value.trim();
+    if (url && url !== '已选择本地音频') {
+        customNotificationSound = url;
+        await idb.set('ios_theme_sound', { url: customNotificationSound });
+        alert("提示音 URL 已保存！");
+    }
+}
+
+function handleAudioUpload(input) {
+    const file = input.files[0];
+    if (file) {
+        if (file.size > 2 * 1024 * 1024) {
+            alert("音频文件过大，请选择 2MB 以内的文件！");
+            input.value = '';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            customNotificationSound = e.target.result;
+            document.getElementById('soundUrlInput').value = '已选择本地音频';
+            await idb.set('ios_theme_sound', { url: customNotificationSound });
+            alert("本地提示音已保存！");
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+async function resetSound() {
+    customNotificationSound = null;
+    document.getElementById('soundUrlInput').value = '';
+    await idb.set('ios_theme_sound', { url: null });
+    alert("已恢复默认提示音！");
+}
+
+function playTestSound() {
+    playNotificationSound();
+}
+
+// 核心播放函数
+function playNotificationSound() {
+    try {
+        const audio = new Audio();
+        // 如果没有自定义声音，使用默认的清脆提示音
+        audio.src = customNotificationSound || "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"; 
+        audio.play().catch(e => console.log("浏览器限制了自动播放:", e));
+        
+        // 触发手机震动触感 (如果设备支持)
+        if (navigator.vibrate) {
+            navigator.vibrate([100, 50, 100]); // 震动-停顿-震动
+        }
+    } catch (e) {
+        console.error("播放提示音失败", e);
+    }
 }
