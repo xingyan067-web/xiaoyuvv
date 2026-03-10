@@ -9599,11 +9599,14 @@ function wcCloseShoppingPage() {
 }
 
 function wcSwitchShopTab(tab) {
-    document.querySelectorAll('.shop-tab').forEach(el => el.classList.remove('active'));
-    document.getElementById(`shop-tab-${tab}`).classList.add('active');
+    // 兼容旧的 shop-tab 和新的 shop-cap-tab
+    document.querySelectorAll('.shop-tab, .shop-cap-tab').forEach(el => el.classList.remove('active'));
+    const activeTab = document.getElementById(`shop-tab-${tab}`);
+    if (activeTab) activeTab.classList.add('active');
     
     document.querySelectorAll('.shop-list').forEach(el => el.style.display = 'none');
-    document.getElementById(`shop-list-${tab}`).style.display = 'block';
+    const activeList = document.getElementById(`shop-list-${tab}`);
+    if (activeList) activeList.style.display = 'block';
     
     wcRenderShopItems(tab);
 }

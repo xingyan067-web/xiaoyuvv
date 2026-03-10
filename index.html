@@ -1758,7 +1758,6 @@
                             </div>
                         </div>
                     </div>
-
                     <!-- Shopping Full Page (New Full Screen) -->
                     <div id="wc-view-shopping">
                         <div class="wc-navbar" style="position: relative; background: #fdfbf7; border-bottom: none; box-shadow: 0 2px 10px rgba(212, 196, 183, 0.15);">
@@ -1767,9 +1766,9 @@
                                     <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
                                 </button>
                             </div>
-                            <div class="wc-nav-title" style="display: flex; justify-content: center; gap: 20px; font-weight: normal;">
-                                <div id="shop-tab-mall" class="shop-tab active" onclick="wcSwitchShopTab('mall')">商城</div>
-                                <div id="shop-tab-takeout" class="shop-tab" onclick="wcSwitchShopTab('takeout')">外卖</div>
+                            <!-- 修改：移除顶部的 Tab，改为纯标题 -->
+                            <div class="wc-nav-title" style="font-weight: 600; color: #4a413e;">
+                                购物
                             </div>
                             <div class="wc-nav-right" style="gap: 10px;">
                                 <button class="wc-nav-btn" onclick="wcOpenShopSettingsModal()">
@@ -1780,7 +1779,8 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="wc-main-content" style="padding-top: 64px; background: #fdfbf7; position: relative;">
+                        <!-- 修改：增加 padding-bottom 防止列表被底部胶囊遮挡 -->
+                        <div class="wc-main-content" style="padding-top: 64px; padding-bottom: 100px; background: #fdfbf7; position: relative;">
                             <div id="shop-list-mall" class="shop-list active" style="padding: 16px;">
                                 <div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成商品</div>
                             </div>
@@ -1788,6 +1788,21 @@
                                 <div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成外卖</div>
                             </div>
                         </div>
+
+                        <!-- 新增：底部悬浮胶囊导航 -->
+                        <div class="shop-capsule-container">
+                            <div class="shop-capsule">
+                                <div class="shop-cap-tab active" id="shop-tab-mall" onclick="wcSwitchShopTab('mall')">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+                                    <span>商城</span>
+                                </div>
+                                <div class="shop-cap-tab" id="shop-tab-takeout" onclick="wcSwitchShopTab('takeout')">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
+                                    <span>外卖</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="shop-cart-btn" onclick="wcOpenCartModal()">
                             <svg class="wc-icon" viewBox="0 0 24 24" style="color: #fff;"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
                             <div class="shop-cart-badge" id="shop-cart-badge">0</div>
