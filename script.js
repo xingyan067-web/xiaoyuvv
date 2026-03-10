@@ -1,3 +1,4 @@
+
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
 /**
@@ -263,7 +264,7 @@ const idb = {
 // --- 初始化 ---
 window.onload = async function() {
     // !!! 新增：在所有操作之前，首先检查激活状态
-        checkAndShowActivation();    
+    checkAndShowActivation();    
     initGrid(); 
     await loadAllData(); // 加载 IndexedDB 数据 (含布局恢复)
     startClock();
@@ -302,14 +303,27 @@ window.onload = async function() {
 // iOS / PWA 全屏与键盘自适应最终版
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
-    // 【关键修改】：不要动态缩小 --app-height，这会导致键盘弹出时整个页面缩小，漏出黑白底色！
-    // 保持 100% 高度，让 iOS 原生接管键盘上推
-    docStyle.setProperty('--app-height', `100%`);
+    
+    // 检查是否为 PWA 桌面模式 (添加到桌面后打开)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    
+    if (isStandalone) {
+        // PWA 模式下，强制锁定 100vh，防止键盘弹出时整个页面被压缩导致漏出黑白底色
+        docStyle.setProperty('--app-height', `100vh`);
+    } else {
+        // 浏览器模式下，使用 window.innerHeight 应对 Safari 底部地址栏的收缩
+        docStyle.setProperty('--app-height', `${window.innerHeight}px`);
+    }
+    
     // 统一输入栏高度变量，给微信聊天滚动区预留空间
-    document.documentElement.style.setProperty('--wc-input-height', '64px');
+    docStyle.setProperty('--wc-input-height', '64px');
     docStyle.setProperty('--keyboard-offset', '0px');
 }
 
+// 监听窗口大小变化（处理屏幕旋转或浏览器地址栏收缩）
+window.addEventListener('resize', updateAppViewportVars);
+// 初始化调用一次
+updateAppViewportVars();
 
     // 通用输入框确认按钮事件绑定
     const generalConfirmBtn = document.getElementById('wc-general-input-confirm');
@@ -2245,7 +2259,8 @@ const wcDb = {
 
 // --- WeChat State ---
 const wcState = {
-    myFavorites: [], // 新增：全局收藏夹
+    myFavorites: [], 
+    calendarEvents: [], // <--- 新增这一行：用于存储日历事件
     currentTab: 'chat',
     characters: [],
     chats: {}, 
@@ -2297,8 +2312,13 @@ function closeWechat() {
 
 async function wcLoadData() {
     try {
-            const myFavs = await wcDb.get('kv_store', 'my_favorites');
+        const myFavs = await wcDb.get('kv_store', 'my_favorites');
         if (myFavs) wcState.myFavorites = myFavs;
+        
+        // <--- 新增下面这两行 --->
+        const calEvents = await wcDb.get('kv_store', 'calendar_events');
+        if (calEvents) wcState.calendarEvents = calEvents;
+
         const user = await wcDb.get('kv_store', 'user');
         if (user) wcState.user = user;
         else wcState.user.avatar = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#007AFF"/></svg>');
@@ -2345,7 +2365,8 @@ async function wcLoadData() {
 async function wcSaveData() {
     try {
         await wcDb.put('kv_store', wcState.myFavorites, 'my_favorites');
-
+        // <--- 新增下面这一行 --->
+        await wcDb.put('kv_store', wcState.calendarEvents, 'calendar_events');
         await wcDb.put('kv_store', wcState.user, 'user');
         await wcDb.put('kv_store', wcState.wallet, 'wallet');
         await wcDb.put('kv_store', wcState.stickerCategories, 'sticker_categories');
@@ -2399,6 +2420,7 @@ function wcCompressImage(file) {
 }
 
 // --- WeChat Navigation ---
+// --- 替换 wcSwitchTab 函数 ---
 function wcSwitchTab(tabId) {
     wcState.currentTab = tabId;
     document.querySelectorAll('.wc-tab-item').forEach(el => el.classList.remove('active'));
@@ -2409,7 +2431,6 @@ function wcSwitchTab(tabId) {
     document.getElementById('wc-view-chat-detail').classList.remove('active');
     document.getElementById('wc-view-memory').classList.remove('active');
     
-    // 【修复】：确保切换底部 Tab 时，购物页面被彻底隐藏
     const shopPage = document.getElementById('wc-view-shopping');
     if (shopPage) {
         shopPage.classList.remove('active');
@@ -2418,11 +2439,13 @@ function wcSwitchTab(tabId) {
     
     document.getElementById('wc-main-tabbar').style.display = 'none';
     
-    // 核心修复：强制控制按钮显示
     const btnBack = document.getElementById('wc-btn-back');
     const btnExit = document.getElementById('wc-btn-exit');
+    const btnCalendar = document.getElementById('wc-btn-calendar'); 
+    
     if (btnBack) btnBack.style.display = 'none';
-    if (btnExit) btnExit.style.display = 'flex'; // 确保显示退出键
+    if (btnExit) btnExit.style.display = 'flex'; 
+    if (btnCalendar) btnCalendar.style.display = 'none'; 
 
     const titleMap = { 'chat': '', 'contacts': 'Contacts', 'moments': 'Moments', 'user': 'User' };
     const titleEl = document.getElementById('wc-nav-title');
@@ -2430,7 +2453,7 @@ function wcSwitchTab(tabId) {
 
     if (tabId === 'chat') {
         navbar.classList.add('custom-chat-nav-mode');
-        // 注入 330x50px 的圆角卡片
+        navbar.classList.remove('custom-moments-nav-mode');
         titleEl.innerHTML = `
             <div class="chat-nav-card">
                 <div class="chat-nav-call" onclick="closeWechat()">
@@ -2439,9 +2462,55 @@ function wcSwitchTab(tabId) {
                 <img src="${wcState.user.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="chat-nav-avatar" onclick="wcOpenModal('wc-modal-add-char')">
             </div>
         `;
-    } else {
+        if (btnExit) btnExit.innerHTML = `<svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>退出`;
+    // 找到这段代码并替换
+    } else if (tabId === 'moments') {
         navbar.classList.remove('custom-chat-nav-mode');
+        navbar.classList.add('custom-moments-nav-mode');
+        
+        if (btnExit) btnExit.style.display = 'none';
+        if (btnCalendar) btnCalendar.style.display = 'flex';
+        
+        const now = new Date();
+        const currentDay = now.getDay(); 
+        const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
+        const mondayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday);
+        
+        let weekHtml = '';
+        // 🌟 核心修改：换成极简高级的英文缩写，瞬间提升 INS 杂志感
+        const weekNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+        
+        for(let i = 0; i < 7; i++) {
+            const d = new Date(mondayDate.getTime() + i * 86400000);
+            const dayNum = d.getDate();
+            const isToday = d.toDateString() === now.toDateString();
+            const filterKey = `week_${i}`;
+            
+            weekHtml += `
+                <div class="cal-item ${isToday ? 'active' : ''}" id="cal-${filterKey}" onclick="wcFilterMoments('${filterKey}', ${d.getTime()})">
+                    <span class="cal-day">${dayNum}</span>
+                    <span class="cal-label">${weekNames[i]}</span>
+                </div>`;
+        }
+        
+        // 🌟 核心修改：ALL 按钮的专属排版
+        weekHtml += `
+            <div class="cal-item" id="cal-all" onclick="wcFilterMoments('all')">
+                <span class="cal-day" style="font-size: 11px; font-family: -apple-system, sans-serif; letter-spacing: 1px;">ALL</span>
+                <span class="cal-label">全部</span>
+            </div>`;
+        
+        titleEl.innerHTML = `
+            <div class="ins-calendar-nav">
+                ${weekHtml}
+            </div>
+        `;
+    } else { navbar.classList.remove('custom-chat-nav-mode');
+        navbar.classList.remove('custom-moments-nav-mode');
         titleEl.innerHTML = titleMap[tabId];
+        if (btnExit) {
+            btnExit.innerHTML = `<svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>退出`;
+        }
     }
     
     titleEl.onclick = null;
@@ -2452,19 +2521,49 @@ function wcSwitchTab(tabId) {
 
     if (tabId === 'chat') {
         document.getElementById('wc-main-tabbar').style.display = 'flex';
-        // 原本的右上角加号按钮去掉了，因为头像已经接管了添加角色的功能
         wcRenderChats(); 
     } else if (tabId === 'moments') {
         document.getElementById('wc-main-tabbar').style.display = 'flex';
         const btn = document.createElement('button');
         btn.className = 'wc-nav-btn';
-        btn.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>';
+        btn.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24" style="stroke: #111;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>';
         btn.onclick = () => wcOpenModal('wc-modal-post-moment');
         rightContainer.appendChild(btn);
+        
+        // 默认选中今天
+        const now = new Date();
+        const currentDay = now.getDay();
+        const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
+        wcState.momentFilter = `week_${distanceToMonday}`;
+        wcState.momentFilterDate = { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
+        wcRenderMoments();
     } else if (tabId === 'contacts' || tabId === 'user') {
         document.getElementById('wc-main-tabbar').style.display = 'flex';
     }
 }
+
+// --- 替换 wcFilterMoments 函数 ---
+window.wcFilterMoments = function(type, timestamp) {
+    wcState.momentFilter = type;
+    wcState.momentFilterDate = null; 
+    document.querySelectorAll('.cal-item').forEach(el => el.classList.remove('active'));
+    const activeEl = document.getElementById(`cal-${type}`);
+    if (activeEl) activeEl.classList.add('active');
+    
+    // 如果点击的是星期几，设置具体日期过滤
+    if (type.startsWith('week_') && timestamp) {
+        const d = new Date(timestamp);
+        wcState.momentFilter = 'specificDate';
+        wcState.momentFilterDate = { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
+    } else if (type === 'all') {
+        // 👇 核心新增：点击全部时，清空日期限制，展示所有朋友圈 👇
+        wcState.momentFilter = 'all';
+        wcState.momentFilterDate = null;
+    }
+    
+    wcRenderMoments();
+}
+
 
 function wcHandleBack() {
     // 如果在回忆页面，先关闭回忆页面
@@ -3120,7 +3219,74 @@ async function wcTriggerAI(charIdOverride = null) {
         const minutes = now.getMinutes();
         const timeString = `${year}年${month}月${date}日 ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
+        // ==========================================
+        // AI 节日与日历事件感知系统 (支持双重关联)
+        // ==========================================
+        const holidays = {
+            "01-01": "元旦", "02-14": "情人节", "03-08": "妇女节", "04-01": "愚人节", 
+            "05-01": "劳动节", "05-20": "520表白日", "06-01": "儿童节", "10-01": "国庆节", 
+            "12-24": "平安夜", "12-25": "圣诞节", "12-31": "跨年夜"
+        };
+        const todayKey = `${String(month).padStart(2,'0')}-${String(date).padStart(2,'0')}`;
+        const todayHoliday = holidays[todayKey] || "";
+
+        const todayStr = `${year}-${String(month).padStart(2,'0')}-${String(date).padStart(2,'0')}`;
+        const todayEvents = (wcState.calendarEvents || []).filter(e => e.date === todayStr);
+
+        let specialDayPrompt = "";
+        if (todayHoliday) specialDayPrompt += `今天是【${todayHoliday}】。`;
         
+        todayEvents.forEach(e => {
+            if (e.inject === false) return; // 如果用户选择了不注入记忆，则跳过
+
+            let isRelevant = false;
+            let targetNames = [];
+
+            // 1. 检查我方 (User/Mask) 关联
+            if (e.userTarget) {
+                // 只要关联了我方，AI 就应该知道（因为 AI 在和 User 聊天）
+                isRelevant = true;
+                targetNames.push(e.userTarget.name);
+            }
+
+            // 2. 检查对方 (Char) 关联
+            if (e.charTarget) {
+                if (e.charTarget.id === charId) {
+                    // 关联的正是当前聊天的角色
+                    isRelevant = true;
+                    targetNames.push('你');
+                } else {
+                    // 关联的是其他角色，当前角色不应该知道
+                    // 但如果同时关联了 User，那当前角色还是可以知道这是 User 和别人的事
+                    if (!e.userTarget) return; 
+                    targetNames.push(e.charTarget.name);
+                }
+            }
+
+            // 3. 兼容旧数据
+            if (!e.userTarget && !e.charTarget) {
+                if (e.charId !== undefined) {
+                    if (e.isUser) { isRelevant = true; targetNames.push('User'); }
+                    else if (e.charId === charId) { isRelevant = true; targetNames.push('你'); }
+                } else {
+                    if (e.targetType === 'char') {
+                        if (e.targetId === charId) { isRelevant = true; targetNames.push('你'); }
+                    } else {
+                        isRelevant = true; targetNames.push(e.targetName || 'User');
+                    }
+                }
+            }
+
+            if (!isRelevant && targetNames.length === 0) return;
+
+            const subjectStr = targetNames.join(' 和 ');
+
+            if (e.type === 'period') specialDayPrompt += `今天是 ${subjectStr} 的【生理期/经期】。`;
+            if (e.type === 'todo') specialDayPrompt += `今天的待办事项：${e.title} (相关人: ${subjectStr})。`;
+            if (e.type === 'anniversary') specialDayPrompt += `今天是 ${subjectStr} 的【${e.title}纪念日】！`;
+            if (e.type === 'birthday') specialDayPrompt += `今天是 ${subjectStr} 的【生日】！`;
+        });
+
         let timeSlotVibe = "";
         if (hours >= 5 && hours < 8) timeSlotVibe = "清晨：可能带着慵懒、柔软或起床气，语速较慢。";
         else if (hours >= 8 && hours < 12) timeSlotVibe = "上午：清醒、有活力，适合正常交流。";
@@ -3128,6 +3294,13 @@ async function wcTriggerAI(charIdOverride = null) {
         else if (hours >= 18 && hours < 21) timeSlotVibe = "傍晚：放松，容易感怀，愿意聊闲话，可能注意到光线变化。";
         else if (hours >= 21 && hours < 24) timeSlotVibe = "夜晚：放松，更容易敞开心扉，话可能变少但更深私密。";
         else timeSlotVibe = "深夜/凌晨：如果醒着可能是睡不着或有心事。话少、简短、停顿长。";
+
+        if (specialDayPrompt) {
+            timeSlotVibe += `\n\n【⚠️ 核心记忆唤醒：特殊日子】\n${specialDayPrompt}\n请在接下来的聊天中，自然地提及或表现出你记得这件事，并给出极其符合你人设的反应！绝对不要生硬地播报，要融入日常对话中。`;
+        }
+        // ==========================================
+                
+        // ==========================================
 
         const msgs = wcState.chats[charId] || [];
         const timeGapPrompt = wcGenerateTimeGapPrompt(msgs, now.getTime());
@@ -5025,13 +5198,39 @@ function wcRenderMoments() {
     if (wcState.user.cover) document.getElementById('wc-moments-cover').src = wcState.user.cover;
     if (wcState.user.avatar) document.getElementById('wc-moments-user-avatar').src = wcState.user.avatar;
     
-    wcState.moments.forEach(moment => {
+    // 日期过滤逻辑
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterdayStart = todayStart - 86400000;
+    const dayBeforeStart = yesterdayStart - 86400000;
+
+    let filteredMoments = wcState.moments;
+    
+    if (wcState.momentFilter === 'today') {
+        filteredMoments = wcState.moments.filter(m => m.time >= todayStart);
+    } else if (wcState.momentFilter === 'yesterday') {
+        filteredMoments = wcState.moments.filter(m => m.time >= yesterdayStart && m.time < todayStart);
+    } else if (wcState.momentFilter === '2daysAgo') {
+        filteredMoments = wcState.moments.filter(m => m.time >= dayBeforeStart && m.time < yesterdayStart);
+    } else if (wcState.momentFilter === 'specificDate' && wcState.momentFilterDate) {
+        // 新增：具体日期过滤（点击日历后触发这里）
+        const targetStart = new Date(wcState.momentFilterDate.year, wcState.momentFilterDate.month, wcState.momentFilterDate.day).getTime();
+        const targetEnd = targetStart + 86400000;
+        filteredMoments = wcState.moments.filter(m => m.time >= targetStart && m.time < targetEnd);
+    }
+
+    if (filteredMoments.length === 0) {
+        feed.innerHTML = '<div style="text-align:center; color:#999; padding:60px 0; font-size:13px; font-style:italic; font-family: Georgia, serif;">这一天没有动态哦...</div>';
+        return;
+    }
+
+    filteredMoments.forEach(moment => {
         let mediaHtml = '';
         if (moment.image) mediaHtml = `<img src="${moment.image}" class="wc-moment-image">`;
         else if (moment.imageDesc) mediaHtml = `<div class="wc-moment-image-placeholder" style="width: 100px !important; height: 100px !important; max-width: none !important; padding: 5px !important; box-sizing: border-box;"><svg class="wc-icon" style="margin-bottom: 4px; width: 24px; height:24px;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${moment.imageDesc}</div></div>`;
         
         let likesHtml = '';
-        if (moment.likes && moment.likes.length > 0) likesHtml = `<div class="wc-moment-like-row"><svg class="wc-icon wc-icon-fill" style="width:14px; height:14px; margin-right:4px;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>${moment.likes.join(', ')}</div>`;
+        if (moment.likes && moment.likes.length > 0) likesHtml = `<div class="wc-moment-like-row"><svg class="wc-icon wc-icon-fill" style="width:14px; height:14px; margin-right:6px;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>${moment.likes.join(', ')}</div>`;
         
         let commentsHtml = '';
         if (moment.comments && moment.comments.length > 0) {
@@ -5045,31 +5244,34 @@ function wcRenderMoments() {
         const div = document.createElement('div');
         div.className = 'wc-moment-card';
         div.innerHTML = `
-            <img src="${moment.avatar || wcState.user.avatar}" class="wc-avatar" style="width: 40px; height: 40px; border-radius: 4px;">
-            <div class="wc-moment-content">
+            <div class="wc-moment-header-row">
+                <img src="${moment.avatar || wcState.user.avatar}" class="wc-avatar" style="width: 40px; height: 40px; border-radius: 50%;">
                 <div class="wc-moment-name">${moment.name || wcState.user.name}</div>
+            </div>
+            <div class="wc-moment-content">
                 <div class="wc-moment-text">${moment.text}</div>
                 ${mediaHtml}
                 <div class="wc-moment-actions">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 12px; color: #8E8E93;">${new Date(moment.time).toLocaleTimeString()}</span>
-                        <span style="font-size: 12px; color: #576B95; cursor: pointer;" onclick="wcDeleteMoment(${moment.id})">删除</span>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span style="font-size: 11px; color: #B2B2B2; font-family: monospace;">${new Date(moment.time).toLocaleString('zh-CN', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>
+                        <span style="font-size: 11px; color: #888; cursor: pointer; font-weight: bold;" onclick="wcDeleteMoment(${moment.id})">DELETE</span>
                     </div>
                     <div style="display: flex; gap: 16px;">
-                        <div onclick="wcToggleLike(${moment.id})"><svg class="wc-icon" style="width:20px; height:20px; color: #576B95;" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></div>
-                        <div onclick="wcToggleCommentBox(${moment.id})"><svg class="wc-icon" style="width:20px; height:20px; color: #576B95;" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></div>
+                        <div onclick="wcToggleLike(${moment.id})"><svg class="wc-icon" style="width:20px; height:20px; color: #111;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
+                        <div onclick="wcToggleCommentBox(${moment.id})"><svg class="wc-icon" style="width:20px; height:20px; color: #111;" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></div>
                     </div>
                 </div>
                 ${interactionArea}
                 <div id="wc-comment-box-${moment.id}" class="wc-comment-input-box" style="display: none;">
-                    <input type="text" id="wc-input-comment-${moment.id}" class="wc-comment-input" placeholder="评论...">
-                    <button class="wc-moment-action-btn" onclick="wcAddComment(${moment.id})">发送</button>
+                    <input type="text" id="wc-input-comment-${moment.id}" class="wc-comment-input" placeholder="Add a comment...">
+                    <button class="wc-moment-action-btn" onclick="wcAddComment(${moment.id})">POST</button>
                 </div>
             </div>
         `;
-        feed.prepend(div);
+        feed.appendChild(div);
     });
 }
+
 
 function wcRenderUser() { 
     if (wcState.user.avatar) document.getElementById('wc-user-center-avatar').src = wcState.user.avatar; 
@@ -5465,6 +5667,12 @@ function wcClosePhoneApp() {
     const browserApp = document.getElementById('wc-phone-app-browser');
     if(browserApp) browserApp.style.display = 'none';
     
+    // 👇 新增这一段：关闭钱包页面
+    const walletApp = document.getElementById('wc-phone-app-wallet');
+    if(walletApp) walletApp.style.display = 'none';
+    
+    document.getElementById('wc-phone-fingerprint-btn').style.display = 'flex';
+
     // 👇 新增这一段：关闭手机模拟器里的购物车页面
     const cartApp = document.getElementById('wc-phone-app-cart');
     if(cartApp) cartApp.style.display = 'none';
@@ -5485,9 +5693,12 @@ function wcClosePhoneSim() {
     const browserApp = document.getElementById('wc-phone-app-browser');
     if(browserApp) browserApp.style.display = 'none';
 
-    // 👇 新增这一段：确保彻底退出手机模拟器时，购物车也被重置隐藏
     const cartApp = document.getElementById('wc-phone-app-cart');
     if(cartApp) cartApp.style.display = 'none';
+
+    // 👇 新增这一段：确保彻底退出手机模拟器时，钱包也被重置隐藏
+    const walletApp = document.getElementById('wc-phone-app-wallet');
+    if(walletApp) walletApp.style.display = 'none';
 
     wcStopPhoneClock();
 }
@@ -13068,6 +13279,21 @@ function injectDreamToChar(cardId) {
 // --- 系统更新日志数据 ---
 const systemUpdateLogs = [
     {
+        version: "小元机 03.10",
+        date: "2026.03.10",
+        title: "小元机更新",
+        content: [
+            "这里是小元，本次更新在设置中更新日志中放置了一个教程，不会的宝宝建议先去看看教程啦^^", // 👈 这里必须加逗号！
+            "1. 朋友圈ui爆改，增加了朋友圈日历系统（可以查看对应日期的朋友圈），增加了纪念日等等。",
+            "2. 新增消息提示音，和全程真实系统通知和后台真实通知",
+            "3. 修复导入歌单只能导入50首的问题。"        
+        ],
+        notes: [
+            "请妥善保管您的数据，建议定期在设置中进行备份。",
+            "一机一码，禁止二传二贩"
+        ]
+    },
+    {
         version: "小元机 03.09",
         date: "2026.03.09",
         title: "欢迎来到小元机^",
@@ -13100,18 +13326,6 @@ const systemUpdateLogs = [
             "一机一码，禁止二传二贩"
         ]
     },
-    {
-        version: "小元机",
-        date: "2026.03.06",
-        title: "欢迎来到小元机^",
-        content: [
-            "全新梦境空间，支持沉浸式文字交互。",
-            "新增动态状态栏与正则替换功能。"
-        ],
-        notes: [
-            "梦境数据储存在本地，清除缓存会导致数据丢失。"
-        ]
-    }
 ];
 const CURRENT_VERSION = systemUpdateLogs[0].version;
 
@@ -13166,6 +13380,37 @@ function renderUpdateLogs() {
     const container = document.getElementById('updateLogContainer');
     container.innerHTML = '';
     
+    // --- 新增：固定在最顶部的实用指南卡片 ---
+    const tutorialCard = document.createElement('div');
+    tutorialCard.style.cssText = 'background: #F2F2F7; border-radius: 12px; padding: 16px; margin-bottom: 20px; color: #333; font-size: 14px; line-height: 1.6; text-align: left; box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);';
+    tutorialCard.innerHTML = `
+        <h3 style="margin-top: 0; margin-bottom: 12px; font-size: 16px; color: #000; border-bottom: 1px solid #E5E5EA; padding-bottom: 8px;">小元机食用指南：</h3>
+        
+        <div style="margin-bottom: 8px;"><strong>1. 底部Dock栏</strong>从左到右分别为桌面美化，设置，世界书</div>
+        
+        <div style="margin-bottom: 8px;"><strong>设置页面又分：</strong><br>
+        ① AppleID：备份的地方（可以备份桌面美化和全局）<br>
+        ② API设置，真实系统弹窗，系统提示音</div>
+        
+        <div style="margin-bottom: 8px;"><strong>桌面APP介绍：</strong></div>
+        <ul style="padding-left: 20px; margin: 0 0 12px 0;">
+            <li style="margin-bottom: 8px;"><strong>APP1为聊天：</strong>左上角圆形头像为创建角色，右上角的接听键为退出，删除角色前往contacts通讯录页面左滑角色删除，点击角色可以查手机，聊天页面点击对方头像可以快捷进入查手机。聊天设置中的心跳线是可以点击的！！！在心跳线页面里面关联世界书，导入聊天页面气泡美化，设置壁纸等等。回车键为用户发送键，那个小飞机图标是char回复键，拉黑角色后点击是以弹窗形式出现角色消息，角色消息会储存在chat页面（就是会话列表页面）的小卡片头像里面。</li>
+            <li style="margin-bottom: 8px;"><strong>APP2为情侣空间：</strong><br>
+            ① 可以选择开启桌面小组件（有便利贴和拍立得两种模式），选择发送概率，char就会在桌面发送消息或图片。<br>
+            ② 关联账号：开启后，char会实时感知用户和其他人聊天，你可以选择NPC回复频率（注意：这个比较耗费额度），你也可以知道NPC给char发送消息，并且可以进入查手机，帮char回复。</li>
+            <li style="margin-bottom: 8px;"><strong>APP3为音乐：</strong>主页面为邀请一起听歌，点击主页面的角色卡邀请对方听歌，个人页面的五角星符号为音乐胶囊，点击后桌面会有一个小胶囊（实则迷你音乐播放器）</li>
+            <li style="margin-bottom: 8px;"><strong>APP4还没做。</strong></li>
+        </ul>
+        
+        <div style="background: #E5E5EA; padding: 10px; border-radius: 8px;">
+            <strong>没有线下模式，但是有剧情模式：</strong><br>
+            梦境为剧情模式可以走点小番外（可以自己做状态栏走番位），总结梦境剧情后可以在总结的梦境卡片左上角的云图标，点击会以梦的方式注入给char。<br>
+            <span style="color: #888; font-size: 12px; display: block; margin-top: 4px;">*如果想要玩线下的宝宝比较多的话，会考虑把梦境改成线下和梦境双模式。</span>
+        </div>
+    `;
+    container.appendChild(tutorialCard);
+
+    // --- 原有的更新日志折叠栏渲染逻辑 ---
     systemUpdateLogs.forEach((log, index) => {
         const item = document.createElement('div');
         item.className = 'update-log-item';
@@ -13399,16 +13644,25 @@ function executeBlockToggle() {
             }
 
             // 将这段记忆作为一条“隐藏的系统消息”插入聊天记录，用户看不见，但 AI 下次读取上下文时能看到
-            wcAddMessage(char.id, 'system', 'system', blockedContext, { hidden: true });
+            wcAddMessage(char.id, 'system', 'system', blockedContext, { hidden: true });    
         }
         // 👆 修改结束 👆
     }
     closeBlockConfirmModal();
 }
 // ==========================================
-// 声音与触感逻辑
+// 声音与触感逻辑 (修复版)
 // ==========================================
+let isSoundEnabled = localStorage.getItem('ios_theme_sound_enabled') !== 'false'; // 默认开启
+
+function handleSoundToggle(checkbox) {
+    isSoundEnabled = checkbox.checked;
+    localStorage.setItem('ios_theme_sound_enabled', isSoundEnabled);
+}
+
 function openSoundSettings() {
+    const toggle = document.getElementById('toggle-sound-enabled');
+    if (toggle) toggle.checked = isSoundEnabled;
     document.getElementById('soundSettingsModal').classList.add('open');
 }
 
@@ -13451,23 +13705,453 @@ async function resetSound() {
     alert("已恢复默认提示音！");
 }
 
+// 修复：测试声音无视开关，直接播放当前选中的音频
 function playTestSound() {
-    playNotificationSound();
-}
-
-// 核心播放函数
-function playNotificationSound() {
     try {
         const audio = new Audio();
-        // 如果没有自定义声音，使用默认的清脆提示音
+        audio.src = customNotificationSound || "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"; 
+        audio.play().catch(e => alert("播放失败，请检查音频格式: " + e.message));
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    } catch (e) {
+        console.error("测试提示音失败", e);
+    }
+}
+
+// 核心播放函数 (受开关控制)
+function playNotificationSound() {
+    if (!isSoundEnabled) return; // 如果开关关闭，直接返回不播放
+    try {
+        const audio = new Audio();
         audio.src = customNotificationSound || "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"; 
         audio.play().catch(e => console.log("浏览器限制了自动播放:", e));
-        
-        // 触发手机震动触感 (如果设备支持)
-        if (navigator.vibrate) {
-            navigator.vibrate([100, 50, 100]); // 震动-停顿-震动
-        }
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
     } catch (e) {
         console.error("播放提示音失败", e);
     }
+}
+
+// ==========================================
+// 全新：全屏高级感日历 & 事件管理系统
+// ==========================================
+let currentCalYear = new Date().getFullYear();
+let currentCalMonth = new Date().getMonth();
+
+window.wcOpenCalendarModal = function() {
+    let view = document.getElementById('wc-view-full-calendar');
+    if (!view) {
+        view = document.createElement('div');
+        view.id = 'wc-view-full-calendar';
+        view.className = 'ins-full-calendar-view';
+        document.getElementById('wechat-root').appendChild(view);
+    }
+    
+    currentCalYear = new Date().getFullYear();
+    currentCalMonth = new Date().getMonth();
+    
+    view.innerHTML = `
+        <div class="ins-cal-navbar">
+            <div class="ins-cal-nav-btn" onclick="wcOpenAddEventModal()">
+                <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </div>
+            <div class="ins-cal-nav-title">CALENDAR</div>
+            <div class="ins-cal-nav-btn" onclick="wcCloseCalendarModal()">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </div>
+        </div>
+        
+        <div class="ins-cal-header-area">
+            <div class="ins-cal-month-selector">
+                <button onclick="wcChangeCalMonth(-1)"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                <div class="ins-cal-title-large" id="ins-cal-title">2023<br><span>OCTOBER</span></div>
+                <button onclick="wcChangeCalMonth(1)"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+            </div>
+            <div class="ins-cal-weekdays">
+                <span>SUN</span><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span>
+            </div>
+        </div>
+        
+        <div class="ins-cal-body-area">
+            <div class="ins-cal-days-grid" id="ins-cal-days"></div>
+            <!-- 事件列表区域 -->
+            <div class="ins-cal-events-list" id="ins-cal-events-list" style="margin-top: 30px; padding-bottom: 30px;"></div>
+        </div>
+        
+        <!-- 添加事件的底部弹窗 -->
+        <div id="ins-cal-add-modal" class="ins-cal-add-overlay hidden">
+            <div class="ins-cal-add-card">
+                <div class="ins-cal-add-header">
+                    <h3>添加记事</h3>
+                    <button onclick="wcCloseAddEventModal()">&times;</button>
+                </div>
+                <div class="wc-form-group">
+                    <label class="wc-form-label">日期</label>
+                    <input type="date" id="cal-event-date" class="wc-form-input">
+                </div>
+                <div class="wc-form-group">
+                    <label class="wc-form-label">类型</label>
+                    <select id="cal-event-type" class="wc-form-input" onchange="wcToggleEventCharSelect()">
+                        <option value="todo">待办事项</option>
+                        <option value="period">生理期</option>
+                        <option value="anniversary">纪念日</option>
+                        <option value="birthday">生日</option>
+                    </select>
+                </div>
+                <div class="wc-form-group" id="cal-event-title-group">
+                    <label class="wc-form-label">标题/内容</label>
+                    <input type="text" id="cal-event-title" class="wc-form-input" placeholder="例如：看电影 / 恋爱纪念日">
+                </div>
+                
+                <!-- 双重关联设置 -->
+                <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+                    <div style="flex: 1;">
+                        <label class="wc-form-label">关联我方</label>
+                        <select id="cal-event-user-target" class="wc-form-input" style="font-size: 14px; padding: 10px;">
+                            <!-- JS 动态注入 -->
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <label class="wc-form-label">关联对方</label>
+                        <select id="cal-event-char-target" class="wc-form-input" style="font-size: 14px; padding: 10px;">
+                            <!-- JS 动态注入 -->
+                        </select>
+                    </div>
+                </div>
+
+                <div class="wc-form-group" style="display: flex; align-items: center; gap: 10px; background: #F9F9F9; padding: 12px; border-radius: 10px; border: 1px solid #F0F0F0;">
+                    <input type="checkbox" id="cal-event-inject" checked style="width: 20px; height: 20px; accent-color: #111;">
+                    <label class="wc-form-label" style="margin: 0; font-size: 13px; color: #333;">注入角色记忆 (AI将感知此事件)</label>
+                </div>
+                <button class="wc-btn-primary" style="background:#111; border-radius: 16px; height: 50px;" onclick="wcSaveCalendarEvent()">保存</button>
+            </div>
+        </div>
+    `;
+
+    wcRenderCalendar();
+    
+    view.style.display = 'flex';
+    setTimeout(() => view.classList.add('active'), 10);
+}
+
+window.wcCloseCalendarModal = function() {
+    const view = document.getElementById('wc-view-full-calendar');
+    if (view) {
+        view.classList.remove('active');
+        setTimeout(() => view.style.display = 'none', 300);
+    }
+}
+
+window.wcChangeCalMonth = function(dir) {
+    currentCalMonth += dir;
+    if (currentCalMonth < 0) { currentCalMonth = 11; currentCalYear--; } 
+    else if (currentCalMonth > 11) { currentCalMonth = 0; currentCalYear++; }
+    wcRenderCalendar();
+}
+
+window.wcRenderCalendar = function() {
+    const monthNames = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+    document.getElementById('ins-cal-title').innerHTML = `${currentCalYear}<br><span>${monthNames[currentCalMonth]}</span>`;
+    
+    const daysContainer = document.getElementById('ins-cal-days');
+    daysContainer.innerHTML = '';
+
+    const firstDay = new Date(currentCalYear, currentCalMonth, 1).getDay();
+    const daysInMonth = new Date(currentCalYear, currentCalMonth + 1, 0).getDate();
+    
+    // 1. 找出有朋友圈的日期
+    const momentsDays = new Set();
+    wcState.moments.forEach(m => {
+        const d = new Date(m.time);
+        if (d.getFullYear() === currentCalYear && d.getMonth() === currentCalMonth) {
+            momentsDays.add(d.getDate());
+        }
+    });
+
+    // 2. 找出有事件的日期
+    const eventsMap = {};
+    if (!wcState.calendarEvents) wcState.calendarEvents = [];
+    wcState.calendarEvents.forEach(e => {
+        const [y, m, d] = e.date.split('-');
+        if (parseInt(y) === currentCalYear && parseInt(m) === currentCalMonth + 1) {
+            const dayNum = parseInt(d);
+            if (!eventsMap[dayNum]) eventsMap[dayNum] = [];
+            eventsMap[dayNum].push(e);
+        }
+    });
+
+    // 填充空白
+    for (let i = 0; i < firstDay; i++) {
+        daysContainer.innerHTML += `<div class="ins-cal-cell empty"></div>`;
+    }
+
+    const today = new Date();
+    const isCurrentMonth = today.getFullYear() === currentCalYear && today.getMonth() === currentCalMonth;
+
+    for (let i = 1; i <= daysInMonth; i++) {
+        const hasMoment = momentsDays.has(i);
+        const isToday = isCurrentMonth && today.getDate() === i;
+        const dayEvents = eventsMap[i] || [];
+        
+        let classes = 'ins-cal-cell';
+        if (isToday) classes += ' today';
+        
+        let indicatorsHtml = '';
+        
+        // 朋友圈提示点 (灰色)
+        if (hasMoment) indicatorsHtml += `<div class="cal-dot moment-dot"></div>`;
+        
+        // 事件提示点 (不同颜色)
+        dayEvents.forEach(e => {
+            if (e.type === 'period') indicatorsHtml += `<div class="cal-dot period-dot"></div>`;
+            else if (e.type === 'birthday') indicatorsHtml += `<div class="cal-dot bday-dot"></div>`;
+            else if (e.type === 'anniversary') indicatorsHtml += `<div class="cal-dot anniv-dot"></div>`;
+            else indicatorsHtml += `<div class="cal-dot todo-dot"></div>`;
+        });
+
+                // 节假日文字
+                const holiday = getHoliday(currentCalMonth, i);
+                const holidayHtml = holiday ? `<div class="cal-holiday-text">${holiday}</div>` : '';
+
+                daysContainer.innerHTML += `
+                    <div class="${classes}" onclick="wcSelectCalendarDate(${currentCalYear}, ${currentCalMonth}, ${i})">
+                        <span class="cal-num">${i}</span>
+                        ${holidayHtml}
+                        <div class="cal-indicators">${indicatorsHtml}</div>
+                    </div>
+                `;
+            }
+            
+            // 👇👇👇 就是在这里加上这一行 👇👇👇
+            wcRenderCalendarEventsList();
+        }
+
+function getHoliday(month, day) {
+    const holidays = {
+        "01-01": "元旦", "02-14": "情人节", "03-08": "妇女节", "04-01": "愚人节", 
+        "05-01": "劳动节", "05-20": "520", "06-01": "儿童节", "10-01": "国庆节", 
+        "12-24": "平安夜", "12-25": "圣诞节", "12-31": "跨年"
+    };
+    const key = `${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    return holidays[key] || "";
+}
+
+
+// ==========================================
+// 下方是全新的事件列表渲染与添加逻辑
+// ==========================================
+
+// ==========================================
+// 全新：高级感 INS 风事件列表与双重关联逻辑
+// ==========================================
+
+window.wcRenderCalendarEventsList = function() {
+    const listContainer = document.getElementById('ins-cal-events-list');
+    if (!listContainer) return;
+    
+    // 极简标题
+    listContainer.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px; padding: 0 5px;">
+            <div style="font-family: 'Georgia', serif; font-size: 18px; font-weight: bold; color: #111; letter-spacing: -0.5px;">Events</div>
+            <div style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 1px;">This Month</div>
+        </div>
+    `;
+    
+    if (!wcState.calendarEvents) wcState.calendarEvents = [];
+    
+    const monthEvents = wcState.calendarEvents.filter(e => {
+        const [y, m, d] = e.date.split('-');
+        return parseInt(y) === currentCalYear && parseInt(m) === currentCalMonth + 1;
+    });
+    
+    monthEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    if (monthEvents.length === 0) {
+        listContainer.innerHTML += `
+            <div style="background: #FAFAFA; border-radius: 20px; padding: 30px; text-align: center; border: 1px dashed #E5E5EA;">
+                <div style="font-size: 13px; color: #888; font-style: italic;">No events for this month.</div>
+            </div>`;
+        return;
+    }
+    
+    monthEvents.forEach(e => {
+        const typeMap = {
+            'todo': { label: 'TODO', color: '#111', bg: '#F5F5F5' },
+            'period': { label: 'PERIOD', color: '#FF3B30', bg: 'rgba(255,59,48,0.08)' },
+            'anniversary': { label: 'ANNIV', color: '#AF52DE', bg: 'rgba(175,82,222,0.08)' },
+            'birthday': { label: 'BDAY', color: '#FF9500', bg: 'rgba(255,149,0,0.08)' }
+        };
+        const tInfo = typeMap[e.type] || { label: 'EVENT', color: '#888', bg: '#F5F5F5' };
+        
+        // 解析双重关联文本
+        let relationTextArr = [];
+        if (e.userTarget) relationTextArr.push(e.userTarget.name);
+        if (e.charTarget) relationTextArr.push(e.charTarget.name);
+        
+        // 兼容旧数据
+        if (!e.userTarget && !e.charTarget) {
+            if (e.targetName) relationTextArr.push(e.targetName);
+            else if (e.isUser) relationTextArr.push('User');
+            else if (e.charId) {
+                const c = wcState.characters.find(ch => ch.id === e.charId);
+                if (c) relationTextArr.push(c.name);
+            }
+        }
+        
+        let relationHtml = '';
+        if (relationTextArr.length > 0) {
+            relationHtml = `<div style="font-size: 11px; color: #888; margin-top: 6px; display: flex; align-items: center; gap: 4px;">
+                <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                ${relationTextArr.join(' & ')}
+            </div>`;
+        }
+
+        const injectIcon = e.inject !== false 
+            ? `<svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: none; stroke: #34C759; stroke-width: 2;" title="已注入AI记忆"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>` 
+            : `<svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: none; stroke: #CCC; stroke-width: 2;" title="未注入AI记忆"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>`;
+
+        const dayNum = e.date.split('-')[2];
+
+        // 高级感卡片 HTML
+        const div = document.createElement('div');
+        div.style.cssText = "background: #FFF; border-radius: 20px; padding: 16px; margin-bottom: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #F9F9F9; display: flex; align-items: center; gap: 15px; position: relative; overflow: hidden;";
+        div.innerHTML = `
+            <!-- 左侧日期块 -->
+            <div style="width: 48px; height: 48px; border-radius: 14px; background: ${tInfo.bg}; color: ${tInfo.color}; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0;">
+                <span style="font-size: 18px; font-weight: 800; font-family: 'Georgia', serif; line-height: 1;">${dayNum}</span>
+            </div>
+            
+            <!-- 中间内容区 -->
+            <div style="flex: 1; overflow: hidden;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span style="font-size: 9px; font-weight: 800; letter-spacing: 1px; color: ${tInfo.color}; border: 1px solid ${tInfo.color}; padding: 2px 6px; border-radius: 6px;">${tInfo.label}</span>
+                    ${injectIcon}
+                </div>
+                <div style="font-size: 15px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${e.title}</div>
+                ${relationHtml}
+            </div>
+            
+            <!-- 右侧极简删除按钮 -->
+            <div onclick="wcDeleteCalendarEvent(${e.id})" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: #CCC; cursor: pointer; transition: color 0.2s;">
+                <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </div>
+        `;
+        listContainer.appendChild(div);
+    });
+}
+
+window.wcDeleteCalendarEvent = function(id) {
+    if (confirm("确定要删除这个事件吗？")) {
+        wcState.calendarEvents = wcState.calendarEvents.filter(e => e.id !== id);
+        wcSaveData();
+        wcRenderCalendar();
+    }
+}
+
+window.wcOpenAddEventModal = function() {
+    const userSelect = document.getElementById('cal-event-user-target');
+    const charSelect = document.getElementById('cal-event-char-target');
+    
+    // 填充我方下拉框
+    userSelect.innerHTML = '<option value="none">无</option><option value="user_default">默认 User</option>';
+    if (wcState.masks && wcState.masks.length > 0) {
+        const maskGroup = document.createElement('optgroup');
+        maskGroup.label = "我的面具";
+        wcState.masks.forEach(m => {
+            maskGroup.innerHTML += `<option value="mask_${m.id}">${m.name}</option>`;
+        });
+        userSelect.appendChild(maskGroup);
+    }
+
+    // 填充对方下拉框
+    charSelect.innerHTML = '<option value="none">无</option>';
+    if (wcState.characters && wcState.characters.length > 0) {
+        const charGroup = document.createElement('optgroup');
+        charGroup.label = "角色";
+        wcState.characters.forEach(c => {
+            charGroup.innerHTML += `<option value="char_${c.id}">${c.name}</option>`;
+        });
+        charSelect.appendChild(charGroup);
+    }
+    
+    // 默认选中今天
+    const today = new Date();
+    document.getElementById('cal-event-date').value = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    
+    document.getElementById('ins-cal-add-modal').classList.remove('hidden');
+    wcToggleEventCharSelect();
+}
+
+window.wcCloseAddEventModal = function() {
+    document.getElementById('ins-cal-add-modal').classList.add('hidden');
+}
+
+window.wcToggleEventCharSelect = function() {
+    const type = document.getElementById('cal-event-type').value;
+    const titleGroup = document.getElementById('cal-event-title-group');
+    if (type === 'period') titleGroup.style.display = 'none';
+    else titleGroup.style.display = 'block';
+}
+
+window.wcSaveCalendarEvent = function() {
+    const date = document.getElementById('cal-event-date').value;
+    const type = document.getElementById('cal-event-type').value;
+    let title = document.getElementById('cal-event-title').value.trim();
+    const userVal = document.getElementById('cal-event-user-target').value;
+    const charVal = document.getElementById('cal-event-char-target').value;
+    const inject = document.getElementById('cal-event-inject').checked;
+    
+    if (!date) return alert("请选择日期");
+    if (type !== 'period' && !title) return alert("请输入标题");
+    if (type === 'period') title = "生理期";
+
+    // 解析我方关联
+    let userTarget = null;
+    if (userVal === 'user_default') {
+        userTarget = { type: 'user', id: null, name: wcState.user.name };
+    } else if (userVal.startsWith('mask_')) {
+        const id = parseInt(userVal.replace('mask_', ''));
+        const mask = wcState.masks.find(m => m.id === id);
+        if (mask) userTarget = { type: 'mask', id: id, name: mask.name };
+    }
+
+    // 解析对方关联
+    let charTarget = null;
+    if (charVal.startsWith('char_')) {
+        const id = parseInt(charVal.replace('char_', ''));
+        const char = wcState.characters.find(c => c.id === id);
+        if (char) charTarget = { type: 'char', id: id, name: char.name };
+    }
+
+    // ... 前面的代码保持不变 ...
+    const newEvent = {
+        id: Date.now(),
+        date: date,
+        type: type,
+        title: title,
+        userTarget: userTarget,
+        charTarget: charTarget,
+        inject: inject
+    };
+
+    if (!wcState.calendarEvents) wcState.calendarEvents = [];
+    wcState.calendarEvents.push(newEvent);
+    wcSaveData();
+    
+    wcRenderCalendar();
+    wcCloseAddEventModal();
+    alert("添加成功！"); // <--- 加上这一行提示
+}
+
+// --- 新增：点击日历具体日期过滤朋友圈 ---
+window.wcSelectCalendarDate = function(year, month, day) {
+    wcState.momentFilter = 'specificDate';
+    wcState.momentFilterDate = { year, month, day };
+    
+    // 移除顶部导航栏的其他高亮
+    document.querySelectorAll('.cal-item').forEach(el => el.classList.remove('active'));
+    
+    // 关闭日历弹窗
+    wcCloseCalendarModal();
+    
+    // 重新渲染朋友圈
+    wcRenderMoments();
 }

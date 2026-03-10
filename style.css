@@ -3177,47 +3177,131 @@ input::-webkit-inner-spin-button {
 .update-log-list li { font-size: 13px; color: #333; line-height: 1.6; margin-bottom: 6px; position: relative; padding-left: 12px; text-align: justify; }
 .update-log-list li::before { content: '-'; position: absolute; left: 0; color: #888; }
 /* ========================================== */
-/* 🍎 苹果全系列机型自适应适配 (iPhone 尺寸) 🍎 */
+/* 🍎 苹果全系列机型 PWA 桌面级自适应终极版 🍎 */
+/* 涵盖 iPhone SE 到 iPhone 16 Pro Max */
 /* ========================================== */
 
-/* 1. 默认基础变量 (利用 vw 和 vh 实现真正的流式自适应，完美贴合任何屏幕比例) */
 :root {
-    --icon-size: clamp(50px, 15.5vw, 70px);
+    /* 默认流式计算 (兜底方案，适用于安卓或未匹配的机型) */
+    --icon-size: clamp(50px, 15.5vw, 68px);
     --icon-radius: clamp(12px, 3.5vw, 18px);
     --grid-gap-x: clamp(10px, 4vw, 25px);
-    --grid-gap-y: clamp(12px, 3vh, 30px);
-    --grid-padding: clamp(15px, 5vw, 30px);
-    --dock-height: clamp(80px, 11vh, 105px);
-    --dock-bottom: env(safe-area-inset-bottom, 20px);
+    --grid-gap-y: clamp(15px, 3vh, 35px);
+    --grid-padding-x: clamp(15px, 5vw, 25px);
+    --dock-height: clamp(80px, 10vh, 95px);
+    --dock-bottom: env(safe-area-inset-bottom, 15px);
+    --safe-top: env(safe-area-inset-top, 20px);
 }
 
-/* 2. 矮屏机型特殊适配 (针对带 Home 键的非全面屏手机，如 iPhone SE/8) */
-@media screen and (max-height: 700px) {
+/* 🌟 PWA 独立模式专属优化 (添加到桌面后生效) 🌟 */
+@media (display-mode: standalone) {
+    body, html {
+        /* 彻底阻止 PWA 模式下的下拉刷新和橡皮筋回弹露底色 */
+        overscroll-behavior: none !important;
+        -webkit-overflow-scrolling: auto !important;
+    }
+    .screen {
+        /* PWA 模式下状态栏是透明穿透的，必须强制留出刘海/灵动岛的高度 */
+        padding-top: max(var(--safe-top), 47px) !important;
+    }
+}
+
+/* ------------------------------------------ */
+/* 🍏 官方 iPhone 逻辑分辨率精准适配 🍏 */
+/* ------------------------------------------ */
+
+/* 1. 矮屏/带Home键机型 (iPhone SE 1/2/3, 8, 7) - 逻辑宽度 320~375px，高度 < 700px */
+@media screen and (max-width: 375px) and (max-height: 667px) {
     :root {
-        --grid-gap-y: clamp(8px, 2vh, 15px); 
-        --dock-height: 85px;
+        --icon-size: 56px;
+        --grid-gap-x: 16px;
+        --grid-gap-y: 18px;
+        --dock-height: 82px;
     }
-    .home-grid {
-        grid-template-rows: repeat(6, 1fr) !important; /* 矮屏改为 6 行，防止溢出 */
-    }
+    /* 矮屏只能放 6 行 APP，防止挤压 */
+    .home-grid { grid-template-rows: repeat(6, 1fr) !important; } 
 }
 
-/* 3. 超长屏机型适配 (如 iPhone Pro Max 系列) */
-@media screen and (min-height: 890px) {
+/* 2. 经典刘海屏 (iPhone X, XS, 11 Pro, 12 mini, 13 mini) - 逻辑宽度 375px, 高度 812px */
+@media screen and (width: 375px) and (min-height: 812px) {
     :root {
-        --grid-gap-y: clamp(20px, 3.5vh, 35px);
+        --icon-size: 60px;
+        --grid-gap-x: 18px;
+        --grid-gap-y: 26px;
     }
+    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
 }
 
-/* ========================================== */
-/* 将上面的变量应用到原有元素上 (覆盖旧样式) */
-/* ========================================== */
+/* 3. 主流标准屏 (iPhone 12, 13, 14) - 逻辑宽度 390px, 高度 844px */
+@media screen and (width: 390px) {
+    :root {
+        --icon-size: 60px;
+        --grid-gap-x: 22px;
+        --grid-gap-y: 28px;
+    }
+    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
+}
+
+/* 4. 灵动岛标准屏 (iPhone 14 Pro, 15, 15 Pro, 16) - 逻辑宽度 393px, 高度 852px */
+@media screen and (width: 393px) {
+    :root {
+        --icon-size: 60px;
+        --grid-gap-x: 23px;
+        --grid-gap-y: 30px;
+    }
+    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
+}
+
+/* 5. 新款大屏 (iPhone 16 Pro) - 逻辑宽度 402px, 高度 874px */
+@media screen and (width: 402px) {
+    :root {
+        --icon-size: 62px;
+        --grid-gap-x: 24px;
+        --grid-gap-y: 32px;
+    }
+    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
+}
+
+/* 6. 经典大屏 (iPhone 11 Pro Max, XS Max, 11, XR) - 逻辑宽度 414px, 高度 896px */
+@media screen and (width: 414px) {
+    :root {
+        --icon-size: 64px;
+        --grid-gap-x: 25px;
+        --grid-gap-y: 32px;
+    }
+    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
+}
+
+/* 7. 灵动岛大屏 (iPhone 14 Plus, 14 Pro Max, 15 Plus, 15 Pro Max, 16 Plus) - 逻辑宽度 428px / 430px */
+@media screen and (min-width: 428px) and (max-width: 430px) {
+    :root {
+        --icon-size: 66px;
+        --grid-gap-x: 26px;
+        --grid-gap-y: 35px;
+    }
+    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
+}
+
+/* 8. 最新超大屏 (iPhone 16 Pro Max) - 逻辑宽度 440px, 高度 956px */
+@media screen and (width: 440px) {
+    :root {
+        --icon-size: 68px;
+        --grid-gap-x: 28px;
+        --grid-gap-y: 38px;
+    }
+    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
+}
+
+/* ------------------------------------------ */
+/* 将变量应用到桌面元素 (覆盖旧样式) */
+/* ------------------------------------------ */
 
 .home-grid {
+    /* 顶部留出安全区，左右使用计算好的边距 */
+    padding: 10px var(--grid-padding-x) 0 var(--grid-padding-x) !important;
     gap: var(--grid-gap-y) var(--grid-gap-x) !important;
-    padding: var(--grid-padding) var(--grid-padding) 0 var(--grid-padding) !important;
-    /* 确保网格不会超出屏幕底部 Dock 栏的位置 */
-    margin-bottom: calc(var(--dock-height) + var(--dock-bottom) + 10px);
+    /* 核心：确保网格底部绝对不会被 Dock 栏遮挡 */
+    margin-bottom: calc(var(--dock-height) + var(--dock-bottom) + 20px) !important;
 }
 
 .app-icon {
@@ -3226,20 +3310,22 @@ input::-webkit-inner-spin-button {
     border-radius: var(--icon-radius) !important;
 }
 
+.dock-container {
+    bottom: 0 !important;
+    /* Dock栏底部顶着安全区，并加上微调间距 */
+    padding: 0 var(--grid-padding-x) calc(var(--dock-bottom) + 12px) var(--grid-padding-x) !important;
+}
+
 .dock {
     height: var(--dock-height) !important;
-    padding: 0 clamp(10px, 3vw, 20px) !important;
+    padding: 0 clamp(15px, 4vw, 25px) !important;
 }
 
-.dock-container {
-    bottom: var(--dock-bottom) !important;
-    padding: 0 var(--grid-padding) !important;
-}
-
-/* 确保小组件在不同屏幕下也能完美贴合网格 */
 .widget-item {
-    border-radius: calc(var(--icon-radius) + 8px) !important;
+    /* 小组件圆角比图标稍微大一点点，符合 iOS 视觉规范 */
+    border-radius: calc(var(--icon-radius) + 6px) !important;
 }
+
 /* ========================================== */
 /* 新增：Chat 页面定制化 UI (高级黑白灰卡片) */
 /* ========================================== */
@@ -4445,3 +4531,298 @@ body,
     --grid-gap-y: clamp(20px, 3.5vh, 35px);
   }
 }
+/* ========================================== */
+/* 🌟 朋友圈顶栏：韩系 INS 极简杂志风 🌟 */
+/* ========================================== */
+
+/* 顶栏背景：去除生硬边框，采用极致柔和的毛玻璃与微阴影 */
+.custom-moments-nav-mode {
+    background: rgba(255, 255, 255, 0.85) !important;
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border-bottom: none !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02) !important;
+}
+
+/* 导航容器：增加呼吸感留白 */
+.ins-calendar-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 4px 0 8px 0;
+}
+
+/* 单个日期块：平滑的弹性动画 */
+.cal-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex: 1;
+    gap: 6px; /* 数字和星期之间的间距 */
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.cal-item:active {
+    transform: scale(0.85); /* 点击时的微缩回弹效果 */
+}
+
+/* 日期数字：使用优雅的衬线体 (Serif)，默认状态为低调的高级灰 */
+.cal-day {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 16px;
+    color: #8E8E93;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%; /* 完美的圆形 */
+    transition: all 0.3s ease;
+    background: transparent;
+}
+
+/* 星期标签：极小字号、加粗、宽字距，纯正日杂排版 */
+.cal-label {
+    font-size: 9px;
+    color: #B2B2B2;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: color 0.3s ease;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* 🌟 选中状态 (Active)：纯黑圆底 + 纯白文字，视觉焦点 🌟 */
+.cal-item.active .cal-day {
+    background: #111111;
+    color: #FFFFFF;
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); /* 黑色小光晕 */
+    transform: translateY(-2px); /* 微微浮起 */
+}
+
+/* 选中状态的星期标签变深色 */
+.cal-item.active .cal-label {
+    color: #111111;
+    font-weight: 800;
+}
+.cal-item.active .cal-label {
+    color: #111;
+    font-weight: 700;
+}
+
+/* 头部背景与居中头像 */
+.wc-moments-header {
+    position: relative !important;
+    margin-bottom: 70px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+}
+.wc-moments-cover {
+    width: 100% !important;
+    height: 280px !important;
+    object-fit: cover !important;
+    border-bottom-left-radius: 30px !important;
+    border-bottom-right-radius: 30px !important;
+    filter: brightness(0.95) grayscale(10%) !important;
+}
+.wc-moments-user-avatar {
+    position: absolute !important;
+    bottom: -45px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 90px !important;
+    height: 90px !important;
+    border-radius: 50% !important;
+    border: 4px solid #F9F9F9 !important;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1) !important;
+    z-index: 2 !important;
+    right: auto !important; /* 覆盖旧样式 */
+}
+
+/* 朋友圈卡片重构 */
+.wc-moment-card {
+    background: #FFFFFF !important;
+    margin: 0 16px 24px 16px !important;
+    border-radius: 24px !important;
+    padding: 24px !important;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04) !important;
+    border: 1px solid #F5F5F5 !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+.wc-moment-header-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.wc-moment-header-row .wc-avatar {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 50% !important;
+    margin-right: 12px !important;
+    border: 1px solid #F0F0F0 !important;
+}
+.wc-moment-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+}
+.wc-moment-name {
+    font-size: 16px !important;
+    color: #111 !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.3px !important;
+}
+.wc-moment-text {
+    font-size: 14px !important;
+    color: #333 !important;
+    line-height: 1.6 !important;
+    margin-bottom: 16px !important;
+    text-align: justify !important;
+}
+.wc-moment-image {
+    border-radius: 16px !important;
+    max-width: 100% !important;
+    max-height: 350px !important;
+    object-fit: cover !important;
+    margin-bottom: 16px !important;
+}
+.wc-moment-actions {
+    margin-top: 4px !important;
+}
+.wc-moment-likes-comments {
+    background: #F9F9F9 !important; 
+    border-radius: 16px !important;
+    padding: 16px !important;
+    border: 1px solid #F0F0F0 !important;
+    margin-top: 16px !important;
+}
+.wc-moment-like-row {
+    font-size: 13px !important;
+    color: #111 !important;
+    font-weight: 600 !important;
+    margin-bottom: 10px !important;
+}
+.wc-moment-comment-row {
+    font-size: 13px !important;
+    color: #555 !important;
+    margin-bottom: 6px !important;
+    line-height: 1.5 !important;
+}
+.wc-moment-comment-name {
+    color: #111 !important;
+    font-weight: 700 !important;
+}
+.wc-comment-input-box {
+    margin-top: 16px !important;
+}
+.wc-comment-input {
+    background: #F5F5F5 !important;
+    border: none !important;
+    border-radius: 20px !important;
+    padding: 10px 16px !important;
+    font-size: 13px !important;
+}
+.wc-moment-action-btn {
+    background: #111 !important;
+    color: #FFF !important;
+    border: none !important;
+    border-radius: 20px !important;
+    padding: 0 16px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    letter-spacing: 1px !important;
+    cursor: pointer !important;
+}
+/* ========================================== */
+/* 全屏高级感日历 (Full Screen Calendar) */
+/* ========================================== */
+.ins-full-calendar-view {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: #FDFDFD; z-index: 1500; display: none; flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.ins-full-calendar-view.active { transform: translateY(0); }
+
+/* 顶部导航 */
+.ins-cal-navbar {
+    height: calc(54px + env(safe-area-inset-top, 20px));
+    padding-top: env(safe-area-inset-top, 20px);
+    display: flex; justify-content: space-between; align-items: center;
+    padding-left: 20px; padding-right: 20px;
+    background: transparent;
+}
+.ins-cal-nav-btn {
+    width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #111; border-radius: 50%; background: #F5F5F5;
+    transition: transform 0.2s;
+}
+.ins-cal-nav-btn:active { transform: scale(0.9); }
+.ins-cal-nav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+.ins-cal-nav-title { font-size: 12px; font-weight: 800; letter-spacing: 2px; color: #888; }
+
+/* 头部年月与星期 */
+.ins-cal-header-area { padding: 20px 20px 10px 20px; }
+.ins-cal-month-selector {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;
+}
+.ins-cal-month-selector button {
+    background: transparent; border: none; width: 40px; height: 40px;
+    cursor: pointer; color: #111;
+}
+.ins-cal-month-selector button svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+.ins-cal-title-large {
+    text-align: center; font-family: 'Georgia', serif; font-size: 36px; font-weight: bold; color: #111; line-height: 1.1;
+}
+.ins-cal-title-large span { font-size: 14px; font-family: sans-serif; font-weight: 600; color: #888; letter-spacing: 3px; text-transform: uppercase; }
+
+.ins-cal-weekdays {
+    display: grid; grid-template-columns: repeat(7, 1fr); text-align: center;
+    font-size: 10px; color: #B2B2B2; font-weight: 800; letter-spacing: 1px;
+}
+
+/* 日期网格 */
+.ins-cal-body-area { flex: 1; overflow-y: auto; padding: 0 10px 40px 10px; }
+.ins-cal-days-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px 5px; }
+
+.ins-cal-cell {
+    aspect-ratio: 0.8; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    padding-top: 10px; cursor: pointer; border-radius: 16px; transition: all 0.2s;
+    position: relative; border: 1px solid transparent;
+}
+.ins-cal-cell:not(.empty):active { background: #F9F9F9; transform: scale(0.95); }
+.ins-cal-cell.today { border: 1px solid #111; background: #FAFAFA; }
+.ins-cal-cell.today .cal-num { font-weight: 800; color: #111; }
+
+.cal-num { font-family: 'Georgia', serif; font-size: 18px; color: #333; z-index: 2; }
+.cal-holiday-text { font-size: 9px; color: #FF3B30; font-weight: bold; margin-top: 2px; transform: scale(0.9); white-space: nowrap; }
+
+/* 提示点容器 */
+.cal-indicators {
+    display: flex; gap: 3px; margin-top: auto; margin-bottom: 10px; flex-wrap: wrap; justify-content: center; width: 80%;
+}
+.cal-dot { width: 5px; height: 5px; border-radius: 50%; }
+.moment-dot { background: #D1D1D6; } /* 朋友圈：灰色 */
+.period-dot { background: #FF9A9E; } /* 生理期：粉色 */
+.bday-dot { background: #FFD700; }   /* 生日：金色 */
+.anniv-dot { background: #AF52DE; }  /* 纪念日：紫色 */
+.todo-dot { background: #5AC8FA; }   /* 待办：蓝色 */
+
+/* 添加事件弹窗 */
+.ins-cal-add-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4); backdrop-filter: blur(5px); z-index: 2000;
+    display: flex; align-items: flex-end; justify-content: center;
+}
+.ins-cal-add-overlay.hidden { display: none; }
+.ins-cal-add-card {
+    width: 100%; background: #FFF; border-radius: 24px 24px 0 0; padding: 24px;
+    animation: wcSlideUpModal 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.ins-cal-add-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.ins-cal-add-header h3 { font-size: 18px; font-weight: 700; color: #111; margin: 0; }
+.ins-cal-add-header button { background: none; border: none; font-size: 24px; color: #888; cursor: pointer; }
