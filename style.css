@@ -4531,11 +4531,12 @@ body,
     --grid-gap-y: clamp(20px, 3.5vh, 35px);
   }
 }
+
 /* ========================================== */
-/* 🌟 朋友圈顶栏：韩系 INS 极简杂志风 🌟 */
+/* 🌟 朋友圈 (Moments) 韩系 INS 极简杂志风 🌟 */
 /* ========================================== */
 
-/* 顶栏背景：去除生硬边框，采用极致柔和的毛玻璃与微阴影 */
+/* 1. 顶栏背景：极致柔和的毛玻璃 */
 .custom-moments-nav-mode {
     background: rgba(255, 255, 255, 0.85) !important;
     backdrop-filter: blur(25px);
@@ -4544,13 +4545,61 @@ body,
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02) !important;
 }
 
-/* 导航容器：增加呼吸感留白 */
-.ins-calendar-nav {
+/* 2. 头部背景与居中头像 */
+.wc-moments-header {
+    position: relative !important;
+    margin-bottom: 0 !important; /* 底部留白交给日历容器 */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+}
+.wc-moments-cover {
+    width: 100% !important;
+    height: 260px !important;
+    object-fit: cover !important;
+    border-bottom-left-radius: 30px !important;
+    border-bottom-right-radius: 30px !important;
+    filter: brightness(0.9) grayscale(10%) !important; /* 降低亮度，突出头像 */
+}
+.wc-moments-user-avatar {
+    position: absolute !important;
+    bottom: -5px !important; /* 头像往上移，大部分在背景图内 */
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 84px !important;
+    height: 84px !important;
+    border-radius: 50% !important;
+    border: 4px solid var(--wc-bg-color) !important; 
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08) !important;
+    z-index: 10 !important;
+    cursor: pointer !important;
+    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1) !important;
+}
+.wc-moments-user-avatar:active {
+    transform: translateX(-50%) scale(0.9) !important;
+}
+/* 点击头像展示 ALL 时的黑圈特效 */
+.wc-moments-user-avatar.all-active {
+    border-color: #111111 !important;
+}
+
+/* 3. 🌟 悬浮在头像下方的日历卡片 🌟 */
+#wc-moments-calendar-bar {
+    margin-top: -40px; /* 整个日历容器往上提，紧挨背景图 */
+    padding: 40px 16px 20px 16px; /* 缩小顶部留白，让日历紧挨着头像 */
+    background: transparent;
+    position: relative;
+    z-index: 5;
+}
+.moments-inline-cal {
+    background: #FFFFFF;
+    border-radius: 24px;
+    padding: 16px 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.04);
+    border: 1px solid #F5F5F5;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: 100%;
-    padding: 4px 0 8px 0;
 }
 
 /* 单个日期块：平滑的弹性动画 */
@@ -4561,14 +4610,15 @@ body,
     justify-content: center;
     cursor: pointer;
     flex: 1;
-    gap: 6px; /* 数字和星期之间的间距 */
+    gap: 6px; 
+    position: relative;
     transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 .cal-item:active {
-    transform: scale(0.85); /* 点击时的微缩回弹效果 */
+    transform: scale(0.85); 
 }
 
-/* 日期数字：使用优雅的衬线体 (Serif)，默认状态为低调的高级灰 */
+/* 日期数字：使用优雅的衬线体 (Serif) */
 .cal-day {
     font-family: 'Georgia', 'Times New Roman', serif;
     font-size: 16px;
@@ -4578,12 +4628,12 @@ body,
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%; /* 完美的圆形 */
+    border-radius: 50%; 
     transition: all 0.3s ease;
     background: transparent;
 }
 
-/* 星期标签：极小字号、加粗、宽字距，纯正日杂排版 */
+/* 星期标签：极小字号、加粗、宽字距 */
 .cal-label {
     font-size: 9px;
     color: #B2B2B2;
@@ -4594,56 +4644,30 @@ body,
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* 🌟 选中状态 (Active)：纯黑圆底 + 纯白文字，视觉焦点 🌟 */
+/* 🌟 选中状态 (Active)：纯黑圆底 + 纯白文字 🌟 */
 .cal-item.active .cal-day {
     background: #111111;
     color: #FFFFFF;
     font-weight: bold;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); /* 黑色小光晕 */
-    transform: translateY(-2px); /* 微微浮起 */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); 
+    transform: translateY(-2px); 
 }
-
-/* 选中状态的星期标签变深色 */
 .cal-item.active .cal-label {
     color: #111111;
     font-weight: 800;
 }
-.cal-item.active .cal-label {
-    color: #111;
-    font-weight: 700;
+
+/* 今天的特殊小黑点提示 */
+.cal-today-dot {
+    width: 4px;
+    height: 4px;
+    background: #111;
+    border-radius: 50%;
+    position: absolute;
+    bottom: -10px;
 }
 
-/* 头部背景与居中头像 */
-.wc-moments-header {
-    position: relative !important;
-    margin-bottom: 70px !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-}
-.wc-moments-cover {
-    width: 100% !important;
-    height: 280px !important;
-    object-fit: cover !important;
-    border-bottom-left-radius: 30px !important;
-    border-bottom-right-radius: 30px !important;
-    filter: brightness(0.95) grayscale(10%) !important;
-}
-.wc-moments-user-avatar {
-    position: absolute !important;
-    bottom: -45px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: 90px !important;
-    height: 90px !important;
-    border-radius: 50% !important;
-    border: 4px solid #F9F9F9 !important;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1) !important;
-    z-index: 2 !important;
-    right: auto !important; /* 覆盖旧样式 */
-}
-
-/* 朋友圈卡片重构 */
+/* 4. 朋友圈卡片重构 (高级留白) */
 .wc-moment-card {
     background: #FFFFFF !important;
     margin: 0 16px 24px 16px !important;
@@ -4737,6 +4761,7 @@ body,
     letter-spacing: 1px !important;
     cursor: pointer !important;
 }
+
 /* ========================================== */
 /* 全屏高级感日历 (Full Screen Calendar) */
 /* ========================================== */

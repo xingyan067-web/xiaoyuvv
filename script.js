@@ -2463,7 +2463,6 @@ function wcSwitchTab(tabId) {
             </div>
         `;
         if (btnExit) btnExit.innerHTML = `<svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>退出`;
-    // 找到这段代码并替换
     } else if (tabId === 'moments') {
         navbar.classList.remove('custom-chat-nav-mode');
         navbar.classList.add('custom-moments-nav-mode');
@@ -2471,41 +2470,11 @@ function wcSwitchTab(tabId) {
         if (btnExit) btnExit.style.display = 'none';
         if (btnCalendar) btnCalendar.style.display = 'flex';
         
-        const now = new Date();
-        const currentDay = now.getDay(); 
-        const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
-        const mondayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday);
+        // 顶栏恢复极简标题
+        titleEl.innerHTML = `<span style="font-family: 'Georgia', serif; font-style: italic; letter-spacing: 2px; font-size: 16px;">MOMENTS</span>`;
         
-        let weekHtml = '';
-        // 🌟 核心修改：换成极简高级的英文缩写，瞬间提升 INS 杂志感
-        const weekNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-        
-        for(let i = 0; i < 7; i++) {
-            const d = new Date(mondayDate.getTime() + i * 86400000);
-            const dayNum = d.getDate();
-            const isToday = d.toDateString() === now.toDateString();
-            const filterKey = `week_${i}`;
-            
-            weekHtml += `
-                <div class="cal-item ${isToday ? 'active' : ''}" id="cal-${filterKey}" onclick="wcFilterMoments('${filterKey}', ${d.getTime()})">
-                    <span class="cal-day">${dayNum}</span>
-                    <span class="cal-label">${weekNames[i]}</span>
-                </div>`;
-        }
-        
-        // 🌟 核心修改：ALL 按钮的专属排版
-        weekHtml += `
-            <div class="cal-item" id="cal-all" onclick="wcFilterMoments('all')">
-                <span class="cal-day" style="font-size: 11px; font-family: -apple-system, sans-serif; letter-spacing: 1px;">ALL</span>
-                <span class="cal-label">全部</span>
-            </div>`;
-        
-        titleEl.innerHTML = `
-            <div class="ins-calendar-nav">
-                ${weekHtml}
-            </div>
-        `;
-    } else { navbar.classList.remove('custom-chat-nav-mode');
+    } else {
+        navbar.classList.remove('custom-chat-nav-mode');
         navbar.classList.remove('custom-moments-nav-mode');
         titleEl.innerHTML = titleMap[tabId];
         if (btnExit) {
@@ -2532,38 +2501,24 @@ function wcSwitchTab(tabId) {
         
         // 默认选中今天
         const now = new Date();
-        const currentDay = now.getDay();
-        const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
-        wcState.momentFilter = `week_${distanceToMonday}`;
+        wcState.momentFilter = 'specificDate';
         wcState.momentFilterDate = { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
         wcRenderMoments();
     } else if (tabId === 'contacts' || tabId === 'user') {
         document.getElementById('wc-main-tabbar').style.display = 'flex';
     }
 }
-
-// --- 替换 wcFilterMoments 函数 ---
 window.wcFilterMoments = function(type, timestamp) {
-    wcState.momentFilter = type;
-    wcState.momentFilterDate = null; 
-    document.querySelectorAll('.cal-item').forEach(el => el.classList.remove('active'));
-    const activeEl = document.getElementById(`cal-${type}`);
-    if (activeEl) activeEl.classList.add('active');
-    
-    // 如果点击的是星期几，设置具体日期过滤
-    if (type.startsWith('week_') && timestamp) {
+    if (type === 'all') {
+        wcState.momentFilter = 'all';
+        wcState.momentFilterDate = null;
+    } else if (timestamp) {
         const d = new Date(timestamp);
         wcState.momentFilter = 'specificDate';
         wcState.momentFilterDate = { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
-    } else if (type === 'all') {
-        // 👇 核心新增：点击全部时，清空日期限制，展示所有朋友圈 👇
-        wcState.momentFilter = 'all';
-        wcState.momentFilterDate = null;
     }
-    
     wcRenderMoments();
 }
-
 
 function wcHandleBack() {
     // 如果在回忆页面，先关闭回忆页面
@@ -5192,28 +5147,76 @@ function wcRenderChats() {
     otherChars.forEach(char => list.appendChild(createChatItem(char)));
 }
 
+// --- 替换 wcRenderMoments 和 wcFilterMoments ---
 function wcRenderMoments() {
     const feed = document.getElementById('wc-moments-feed');
     feed.innerHTML = '';
-    if (wcState.user.cover) document.getElementById('wc-moments-cover').src = wcState.user.cover;
-    if (wcState.user.avatar) document.getElementById('wc-moments-user-avatar').src = wcState.user.avatar;
     
-    // 日期过滤逻辑
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const yesterdayStart = todayStart - 86400000;
-    const dayBeforeStart = yesterdayStart - 86400000;
+    const coverEl = document.getElementById('wc-moments-cover');
+    const avatarEl = document.getElementById('wc-moments-user-avatar');
+    
+    if (wcState.user.cover && coverEl) coverEl.src = wcState.user.cover;
+    if (wcState.user.avatar && avatarEl) avatarEl.src = wcState.user.avatar;
+    
+    // 🌟 核心：点击头像展示所有朋友圈 (ALL)
+    if (avatarEl) {
+        avatarEl.onclick = () => wcFilterMoments('all');
+        // 如果当前是 ALL 状态，给头像加个高级黑圈提示
+        if (wcState.momentFilter === 'all') {
+            avatarEl.classList.add('all-active');
+        } else {
+            avatarEl.classList.remove('all-active');
+        }
+    }
 
+    // 🌟 核心：在头像下方动态生成 7 天滚动日历
+    let calContainer = document.getElementById('wc-moments-calendar-bar');
+    if (!calContainer) {
+        calContainer = document.createElement('div');
+        calContainer.id = 'wc-moments-calendar-bar';
+        const header = document.querySelector('.wc-moments-header');
+        header.parentNode.insertBefore(calContainer, feed);
+    }
+
+    const now = new Date();
+    let weekHtml = '';
+    const weekNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    
+    // 生成以“今天”为中心的 7 天 (-3天 到 +3天)
+    for(let i = -3; i <= 3; i++) {
+        const d = new Date(now.getTime() + i * 86400000);
+        const dayNum = d.getDate();
+        const dayOfWeek = weekNames[d.getDay()];
+        const isToday = (i === 0);
+        
+        // 判断是否被选中
+        let isActive = false;
+        if (wcState.momentFilter === 'specificDate' && wcState.momentFilterDate) {
+            if (wcState.momentFilterDate.year === d.getFullYear() && 
+                wcState.momentFilterDate.month === d.getMonth() && 
+                wcState.momentFilterDate.day === d.getDate()) {
+                isActive = true;
+            }
+        }
+        
+        weekHtml += `
+            <div class="cal-item ${isActive ? 'active' : ''}" onclick="wcFilterMoments('date', ${d.getTime()})">
+                <span class="cal-day">${dayNum}</span>
+                <span class="cal-label">${dayOfWeek}</span>
+                ${isToday ? '<div class="cal-today-dot"></div>' : ''}
+            </div>`;
+    }
+    
+    calContainer.innerHTML = `
+        <div class="ins-calendar-nav moments-inline-cal">
+            ${weekHtml}
+        </div>
+    `;
+
+    // 日期过滤逻辑
     let filteredMoments = wcState.moments;
     
-    if (wcState.momentFilter === 'today') {
-        filteredMoments = wcState.moments.filter(m => m.time >= todayStart);
-    } else if (wcState.momentFilter === 'yesterday') {
-        filteredMoments = wcState.moments.filter(m => m.time >= yesterdayStart && m.time < todayStart);
-    } else if (wcState.momentFilter === '2daysAgo') {
-        filteredMoments = wcState.moments.filter(m => m.time >= dayBeforeStart && m.time < yesterdayStart);
-    } else if (wcState.momentFilter === 'specificDate' && wcState.momentFilterDate) {
-        // 新增：具体日期过滤（点击日历后触发这里）
+    if (wcState.momentFilter === 'specificDate' && wcState.momentFilterDate) {
         const targetStart = new Date(wcState.momentFilterDate.year, wcState.momentFilterDate.month, wcState.momentFilterDate.day).getTime();
         const targetEnd = targetStart + 86400000;
         filteredMoments = wcState.moments.filter(m => m.time >= targetStart && m.time < targetEnd);
@@ -5271,7 +5274,6 @@ function wcRenderMoments() {
         feed.appendChild(div);
     });
 }
-
 
 function wcRenderUser() { 
     if (wcState.user.avatar) document.getElementById('wc-user-center-avatar').src = wcState.user.avatar; 
@@ -13284,7 +13286,7 @@ const systemUpdateLogs = [
         title: "小元机更新",
         content: [
             "这里是小元，本次更新在设置中更新日志中放置了一个教程，不会的宝宝建议先去看看教程啦^^", // 👈 这里必须加逗号！
-            "1. 朋友圈ui爆改，增加了朋友圈日历系统（可以查看对应日期的朋友圈），增加了纪念日等等。",
+            "1. 朋友圈ui爆改，增加了朋友圈日历系统（可以查看对应日期的朋友圈）点击头像查看全部朋友圈，默认查看今日朋友圈，增加了纪念日等等。",
             "2. 新增消息提示音，和全程真实系统通知和后台真实通知",
             "3. 修复导入歌单只能导入50首的问题。"        
         ],
@@ -13394,7 +13396,7 @@ function renderUpdateLogs() {
         
         <div style="margin-bottom: 8px;"><strong>桌面APP介绍：</strong></div>
         <ul style="padding-left: 20px; margin: 0 0 12px 0;">
-            <li style="margin-bottom: 8px;"><strong>APP1为聊天：</strong>左上角圆形头像为创建角色，右上角的接听键为退出，删除角色前往contacts通讯录页面左滑角色删除，点击角色可以查手机，聊天页面点击对方头像可以快捷进入查手机。聊天设置中的心跳线是可以点击的！！！在心跳线页面里面关联世界书，导入聊天页面气泡美化，设置壁纸等等。回车键为用户发送键，那个小飞机图标是char回复键，拉黑角色后点击是以弹窗形式出现角色消息，角色消息会储存在chat页面（就是会话列表页面）的小卡片头像里面。</li>
+            <li style="margin-bottom: 8px;"><strong>APP1为聊天：</strong>左上角圆形头像为创建角色，右上角的接听键为退出，删除角色前往contacts通讯录页面左滑角色删除，点击角色可以查手机，聊天页面点击对方头像可以快捷进入查手机。聊天设置中的心跳线是可以点击的！！！在心跳线页面里面关联世界书，导入聊天页面气泡美化，设置壁纸等等。回车键为用户发送键，那个小飞机图标是char回复键，拉黑角色后点击是以弹窗形式出现角色消息，角色消息会储存在chat页面（就是会话列表页面）的小卡片头像里面。爆改了朋友圈UI，点击朋友圈头像显示全部朋友圈，点击单个日期可查看单日朋友圈</li>
             <li style="margin-bottom: 8px;"><strong>APP2为情侣空间：</strong><br>
             ① 可以选择开启桌面小组件（有便利贴和拍立得两种模式），选择发送概率，char就会在桌面发送消息或图片。<br>
             ② 关联账号：开启后，char会实时感知用户和其他人聊天，你可以选择NPC回复频率（注意：这个比较耗费额度），你也可以知道NPC给char发送消息，并且可以进入查手机，帮char回复。</li>
