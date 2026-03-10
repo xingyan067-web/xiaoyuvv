@@ -551,7 +551,8 @@
                         </div>
                         <div class="settings-row">
                             <div class="row-label">本地相册</div>
-                            <input type="file" id="bgFileInput" accept="image/*" style="display:none">
+                            <!-- 就在下面这行加上了 onchange="handleWallpaperUpload(this)" -->
+                            <input type="file" id="bgFileInput" accept="image/*" style="display:none" onchange="handleWallpaperUpload(this)">
                             <button class="action-btn secondary" onclick="document.getElementById('bgFileInput').click()">选择图片...</button>
                         </div>
                         <div class="settings-row">

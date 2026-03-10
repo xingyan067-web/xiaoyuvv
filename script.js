@@ -2194,6 +2194,27 @@ function setWallpaperFromUrl() {
         addWallpaperToGrid(url);
     }
 }
+// --- 新增：本地壁纸上传逻辑 ---
+function triggerWallpaperUpload() { 
+    document.getElementById('wallpaperInput').click(); 
+}
+
+function handleWallpaperUpload(input) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) { 
+            const base64Url = e.target.result;
+            // 1. 设置桌面背景
+            document.getElementById('mainScreen').style.backgroundImage = `url('${base64Url}')`; 
+            // 2. 保存到本地存储
+            saveThemeSettings(); 
+            // 3. 自动将这张本地图片加入到下方的壁纸历史网格中
+            addWallpaperToGrid(base64Url);
+        };
+        reader.readAsDataURL(file);
+    }
+}
 
 /* ==========================================================================
    WECHAT APP LOGIC (Prefix: wc)
@@ -3505,8 +3526,11 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         }
         // 👆 新增结束 👆
 
-        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+        // 【新增】：修复温度为 0 时失效的 Bug
+        let currentTemp = parseFloat(apiConfig.temp);
+        if (isNaN(currentTemp)) currentTemp = 0.7; // 默认值
 
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -3515,7 +3539,7 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: messages,
-                temperature: parseFloat(apiConfig.temp) || 0.7,
+                temperature: currentTemp, // <--- 修改这里，使用上面定义好的 currentTemp
                 max_tokens: 4000 
             })
         });
@@ -3928,7 +3952,7 @@ async function wcTriggerAIMoment(charId) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8
             })
         });
 
@@ -4290,7 +4314,8 @@ async function wcAutoGenerateSummary(charId, start, end) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.5
+                temperature: parseFloat(apiConfig.temp) || 0.5
+
             })
         });
 
@@ -5972,7 +5997,7 @@ async function wcGeneratePhonePrivacy() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                 temperature: parseFloat(apiConfig.temp) || 0.8
             })
         });
 
@@ -6493,7 +6518,8 @@ async function wcGeneratePhoneChats() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8
+
             })
         });
 
@@ -6740,7 +6766,8 @@ async function wcSimTriggerAI() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8
+
             })
         });
 
@@ -6964,7 +6991,8 @@ async function wcGeneratePhoneContacts() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8
+
             })
         });
 
@@ -7650,18 +7678,30 @@ function checkProactiveMessages() {
     const now = Date.now();
     wcState.characters.forEach(char => {
         if (char.chatConfig && char.chatConfig.proactiveEnabled) {
+            // 将设定的分钟数转换为毫秒
             const interval = (char.chatConfig.proactiveInterval || 60) * 60 * 1000; 
             const msgs = wcState.chats[char.id] || [];
             let lastTime = 0;
             
-            if (msgs.length > 0) {
-                lastTime = msgs[msgs.length - 1].time;
-            } else {
-                lastTime = char.id; 
+            // 【修复1】：准确找到最后一条非系统、非报错的实质性消息时间
+            for (let i = msgs.length - 1; i >= 0; i--) {
+                if (!msgs[i].isError && msgs[i].type !== 'system') {
+                    lastTime = msgs[i].time;
+                    break;
+                }
             }
 
-            if (now - lastTime > interval) {
+            // 如果完全没有聊天记录，使用当前时间兜底，防止一上来就疯狂触发
+            if (lastTime === 0) lastTime = now; 
+
+            // 【修复2】：判断时间间隔，并且确保当前没有正在生成回复
+            if (now - lastTime > interval && !aiGeneratingLocks[char.id]) {
                 console.log(`触发 ${char.name} 主动消息`);
+                
+                // 【核心修复3】：注入一条隐藏的系统提示，强制 AI 找话题
+                // 只有告诉 AI 距离上次聊天很久了，它才会主动开启新话题，否则它会不知道说什么
+                wcAddMessage(char.id, 'system', 'system', `[系统内部提示：距离上次聊天已经过去很久了，请你根据人设主动找User搭话，感觉人设开启一个新的话题、分享你现在的状态或表达思念。]`, { hidden: true });
+                
                 wcTriggerAI(char.id);
             }
         }
@@ -8349,7 +8389,8 @@ async function lsTriggerNpcMessage() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8
+
             })
         });
 
@@ -8930,7 +8971,7 @@ async function wcGeneratePrivacyAndFavorites() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8
             })
         });
 
@@ -9161,7 +9202,7 @@ async function wcGeneratePhoneFavorites() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8
             })
         });
 
@@ -9392,7 +9433,7 @@ async function wcGeneratePhoneBrowser() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8
             })
         });
 
@@ -9897,7 +9938,7 @@ async function wcGenerateShopItems() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8
             })
         });
 
@@ -10334,7 +10375,7 @@ async function wcGeneratePhoneCart() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8
             })
         });
 
@@ -10647,71 +10688,6 @@ function handleAlwaysNotifToggle(checkbox) {
         updateNotifUI();
     }
 }
-
-// 3. 发送真实通知的函数 (核心修复：解决保活状态下的后台判定)
-function sendRealSystemNotification(title, body, iconUrl) {
-    // 如果两个都没开，直接返回
-    if (!isRealNotifEnabled && !isAlwaysRealNotifEnabled) return;
-
-    let shouldSend = false;
-
-    // 1. 如果开启了“全程真实通知”，无视前后台状态，直接发送
-    if (isAlwaysRealNotifEnabled) {
-        shouldSend = true;
-    } 
-    // 2. 如果开启了“仅后台真实通知”，则判断当前页面是否不可见
-    // (使用 document.hidden 完美解决开启保活音频时，浏览器仍判定为活跃的问题)
-    else if (isRealNotifEnabled) {
-        if (document.hidden || document.visibilityState !== 'visible') {
-            shouldSend = true;
-        }
-    }
-
-    if (!shouldSend) return;
-
-    if (Notification.permission === "granted") {
-        navigator.serviceWorker.ready.then(function(registration) {
-            registration.showNotification(title, {
-                body: body,
-                icon: iconUrl || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg',
-                badge: 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg',
-                vibrate: [200, 100, 200],
-                tag: 'honey-chat',
-                renotify: true
-            });
-        });
-    }
-}
-
-// 4. 后台通知测试逻辑
-function testRealNotification() {
-    if (!isRealNotifEnabled && !isAlwaysRealNotifEnabled) {
-        alert("宝宝，请先开启上方的任意一个真实通知开关哦~");
-        return;
-    }
-    if (Notification.permission !== "granted") {
-        alert("浏览器通知权限未授予，请检查系统设置！");
-        return;
-    }
-    
-    alert("测试已启动！\n请在 5 秒内将浏览器切换到后台，或者锁屏...");
-    
-    setTimeout(() => {
-        if (Notification.permission === "granted") {
-            navigator.serviceWorker.ready.then(function(registration) {
-                registration.showNotification("后台通知测试", {
-                    body: "成功啦！你能在后台收到这条消息，说明通知功能正常工作哦~",
-                    icon: "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg",
-                    badge: "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg",
-                    vibrate: [200, 100, 200],
-                    tag: 'honey-chat-test',
-                    renotify: true
-                });
-            });
-        }
-    }, 5000);
-}
-
 // 3. 发送真实通知的函数 (核心修复：解决保活状态下的后台判定与通知覆盖)
 function sendRealSystemNotification(title, body, iconUrl) {
     // 如果两个都没开，直接返回
@@ -10775,7 +10751,6 @@ function testRealNotification() {
         }
     }, 5000);
 }
-
 // ==========================================
 // 5. 网页后台保活 (防休眠) 逻辑 (强化兼容版)
 // ==========================================
@@ -12694,7 +12669,7 @@ async function triggerDreamAI() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: messages,
-                temperature: 0.9 
+                temperature: parseFloat(apiConfig.temp) || 0.8
             })
         });
 

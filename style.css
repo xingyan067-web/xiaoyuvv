@@ -4445,23 +4445,21 @@ body {
 .wc-chat-scroll-area {
   flex: 1;
   overflow-y: auto;
-  padding-bottom: calc(var(--safe-bottom) + 80px) !important;
+  padding-bottom: 20px !important; /* 修复1：移除写死的80px，恢复正常内边距 */
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
 
 /* 微信输入栏固定在底部 */
 .wc-chat-footer {
-  position: absolute !important;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative !important; /* 修复2：改为 relative，让它在布局中自然推挤消息区域，不再悬浮遮挡 */
   width: 100%;
   background: #F7F7F7;
   border-top: 0.5px solid #C6C6C8;
   /* 关键：使用 max() 确保在 iOS 安全区正确 */
   padding: 8px 12px max(10px, env(safe-area-inset-bottom)) 12px !important;
   z-index: 1200;
+  flex-shrink: 0 !important; /* 修复3：确保输入框自身不会被挤压变形 */
 }
 
 /* 8. 底部 Tabbar 统一处理 */
