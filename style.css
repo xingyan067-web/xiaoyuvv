@@ -1783,9 +1783,10 @@ input::-webkit-inner-spin-button {
     transform: scale(0.9); 
 }
 
+/* 修改：将购物车按钮往上移 */
 .shop-cart-btn { 
     position: absolute; 
-    bottom: 30px; 
+    bottom: max(100px, calc(env(safe-area-inset-bottom) + 100px)); 
     right: 20px; 
     width: 56px; 
     height: 56px; 
@@ -1798,6 +1799,52 @@ input::-webkit-inner-spin-button {
     cursor: pointer; 
     z-index: 100; 
 }
+
+/* 新增：购物页面底部悬浮胶囊样式 */
+.shop-capsule-container {
+    position: absolute;
+    bottom: max(30px, env(safe-area-inset-bottom, 30px));
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    z-index: 100;
+    pointer-events: none;
+}
+.shop-capsule {
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 30px;
+    display: flex;
+    padding: 6px;
+    gap: 10px;
+    box-shadow: 0 10px 30px rgba(212, 196, 183, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    pointer-events: auto;
+}
+.shop-cap-tab {
+    padding: 8px 20px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: #8E8E93;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.shop-cap-tab svg {
+    width: 18px;
+    height: 18px;
+}
+.shop-cap-tab.active {
+    background: #5d5350;
+    color: #FFFFFF;
+    box-shadow: 0 4px 10px rgba(93, 83, 80, 0.2);
+}
+
 .shop-cart-badge { 
     position: absolute; 
     top: -5px; 
