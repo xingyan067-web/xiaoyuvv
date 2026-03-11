@@ -3368,7 +3368,13 @@ ${worldBookContent}
 5.  **纯线上互动**: 这是一个完全虚拟的线上聊天。严禁提出任何关于线下见面、现实世界互动或转为其他非本平台联系方式的建议。
 
 # 输出格式与风格 (Output Format & Style)
-1.  **格式要求 (强制)**: 你的回复 **必须且只能** 是一个标准的 JSON 数组。**严禁** 在 JSON 数组之外输出任何其他文本、注释或标记。
+1.  **格式要求 (最高优先级绝对强制)**: 你的回复 **必须且只能** 是一个合法的、可被 JSON.parse() 完美解析的 JSON 数组。
+    - **必须** 使用双引号 " 包裹键名(如 "type", "content")和字符串值。
+    - **必须** 确保所有的括号 {}、[] 和引号 "" 严格成对闭合。
+    - **必须** 确保 JSON 对象之间用逗号 , 隔开，且数组最后一个对象后**不能**有逗号。
+    - **严禁** 输出损坏的 JSON（如：{"type":"text", "content":"没闭合引号 } ）。
+    - **严禁** 在 JSON 数组外部输出任何多余的字符（除了 <thinking> 标签）。
+    
 2.  **对话节奏 (核心强制)**:
     -   **风格**: fragmentation、colloquialism,the reply must be concise and forceful.
     -   **绝对禁止长文本**: 你必须模拟真实人类在线聊天的碎片化习惯。
@@ -3659,6 +3665,13 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         
         if (start !== -1 && end !== -1) {
             cleanText = cleanText.substring(start, end + 1);
+            
+            // 👇【新增】：JSON 字符串容错修复，防止掉格式导致解析崩溃
+            cleanText = cleanText.replace(/,\s*]/g, ']'); // 修复末尾多余逗号
+            cleanText = cleanText.replace(/}\s*{/g, '},{'); // 修复对象间漏掉逗号
+            cleanText = cleanText.replace(/([^\\])"\s*}/g, '$1"}'); // 尝试修复内容末尾漏掉双引号的情况
+            // 👆新增结束
+            
             actions = JSON.parse(cleanText);
         } else {
             // 如果没有数组，尝试直接解析（可能是单个对象）
@@ -3666,11 +3679,13 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 const singleObj = JSON.parse(cleanText);
                 actions = Array.isArray(singleObj) ? singleObj : [singleObj];
             } catch (e2) {
-                // 如果直接解析失败，尝试用正则提取单个 JSON 对象
-                const regex = /\{"type":\s*"[^"]+",\s*"content":\s*"[^"]+"(?:,\s*"[^"]+":\s*[^}]+)?\}/g;
+                // 如果直接解析失败，尝试用正则提取单个 JSON 对象 (放宽正则限制，增强容错)
+                const regex = /\{[^{}]*"type"\s*:\s*"[^"]+"\s*,\s*"content"\s*:\s*"[^"]*"[^{}]*\}/g;
                 const matches = cleanText.match(regex);
                 if (matches) {
-                    actions = matches.map(m => JSON.parse(m));
+                    actions = matches.map(m => {
+                        try { return JSON.parse(m); } catch(err) { return null; }
+                    }).filter(Boolean);
                 } else {
                     throw new Error("No valid JSON found");
                 }
@@ -4702,17 +4717,52 @@ function wcRenderMemories() {
     char.memories.forEach((mem, index) => {
         const div = document.createElement('div');
         div.className = 'wc-memory-card';
+        
+        // 精准判断记忆类型
+        let displayType = '手动添加';
+        if (mem.type === 'summary') {
+            if (mem.content.includes('[自动总结')) {
+                displayType = '自动总结';
+            } else if (mem.content.includes('[手动总结')) {
+                displayType = '手动总结';
+            } else {
+                displayType = '总结';
+            }
+        } else if (mem.type === 'manual') {
+            displayType = '手动添加';
+        }
+
+        // 重新排版：左侧时间+类型标签，右侧修改+删除按钮，彻底解决重叠
         div.innerHTML = `
-            <div class="wc-memory-header">
-                <span>${new Date(mem.time).toLocaleString()}</span>
-                <span>${mem.type === 'summary' ? '自动总结' : '手动添加'}</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #F0F0F0; padding-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px; color: #8E8E93;">${new Date(mem.time).toLocaleString()}</span>
+                    <span style="font-size: 10px; background: #F2F2F7; color: #555; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${displayType}</span>
+                </div>
+                <div style="display: flex; gap: 15px;">
+                    <div style="color: #007AFF; cursor: pointer; font-size: 13px; font-weight: bold;" onclick="wcEditMemory(${index})">修改</div>
+                    <div style="color: #FF3B30; cursor: pointer; font-size: 13px; font-weight: bold;" onclick="wcDeleteMemory(${index})">删除</div>
+                </div>
             </div>
-            <div class="wc-memory-content">${mem.content}</div>
-            <div class="wc-memory-delete-btn" onclick="wcDeleteMemory(${index})">删除</div>
+            <div class="wc-memory-content" style="font-size: 14px; color: #333; line-height: 1.6;">${mem.content}</div>
         `;
         container.appendChild(div);
     });
 }
+
+window.wcEditMemory = function(index) {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char || !char.memories || !char.memories[index]) return;
+    
+    const mem = char.memories[index];
+    window.openIosTextEditModal("修改记忆", mem.content, (newText) => {
+        if (newText) {
+            mem.content = newText;
+            wcSaveData();
+            wcRenderMemories();
+        }
+    });
+};
 
 function wcDeleteMemory(index) {
     if (confirm("确定删除这条记忆吗？")) {
@@ -6744,7 +6794,8 @@ async function wcSimTriggerAI() {
         prompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
         prompt += `> 必须将长回复拆分成多条短消息（1-4条），严禁把所有话挤在一个气泡里！\n`;
         prompt += `> 【重要约束】：绝对不要凭空捏造没有发生过的事情。请严格基于现有的聊天记录上下文进行自然的日常问候、吐槽或顺延当前话题。\n`;
-        prompt += `> 【格式约束】：你必须先输出 <thinking> 标签进行思考，然后再输出 JSON 数组。严禁将一句话强行拆断！\n`;
+        prompt += `> 【格式约束 (最高优先级)】：你必须先输出 <thinking> 标签进行思考，然后再输出 JSON 数组。**必须且只能**输出合法的 JSON 数组，严禁漏掉引号、括号或逗号！严禁输出损坏的 JSON 格式！\n`;
+
         
         // 注入最近聊天记录 (增加读取条数)
         prompt += `\n【重点读取：最近聊天记录】：\n`;
@@ -8381,7 +8432,8 @@ async function lsTriggerNpcMessage() {
         prompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
         prompt += `> 必须将长回复拆分成多条短消息（1-4条），严禁把所有话挤在一个气泡里！\n`;
         prompt += `> 【重要约束】：绝对不要凭空捏造没有发生过的事情、没有做过的约定或不存在的剧情。请严格基于现有的聊天记录上下文进行自然的日常问候、吐槽或顺延当前话题。\n`;
-        prompt += `> 【格式约束】：你必须先输出 <thinking> 标签进行思考，然后再输出 JSON 数组。严禁将一句话强行拆断！\n`;
+        prompt += `> 【格式约束 (最高优先级)】：你必须先输出 <thinking> 标签进行思考，然后再输出 JSON 数组。**必须且只能**输出合法的 JSON 数组，严禁漏掉引号、括号或逗号！严禁输出损坏的 JSON 格式！\n`;
+
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -12349,11 +12401,26 @@ function dreamRenderCards() {
                 <svg viewBox="0 0 24 24"><path d="M17.5 19c2.48 0 4.5-2.02 4.5-4.5 0-2.33-1.77-4.26-4.05-4.48C17.2 6.52 13.9 4 10 4 6.14 4 3 7.14 3 11c0 .17.01.34.04.5C1.3 11.83 0 13.26 0 15c0 2.21 1.79 4 4 4h13.5z"/></svg>
                 <span>INJECT</span>
             </div>
-            <div style="position: absolute; top: 15px; right: 15px; color: #CCC; cursor: pointer; font-size: 18px;" onclick="dreamDeleteCard(${card.id})">×</div>
+            <div style="position: absolute; top: 15px; right: 15px; display: flex; gap: 12px; align-items: center; font-family: 'Courier New', monospace; font-weight: bold;">
+                <div style="color: #007AFF; cursor: pointer; font-size: 12px;" onclick="dreamEditCard(${card.id})">EDIT</div>
+                <div style="color: #CCC; cursor: pointer; font-size: 18px; line-height: 1;" onclick="dreamDeleteCard(${card.id})">×</div>
+            </div>
             <div class="dream-card-date">${dateStr}</div>
             <div class="dream-card-text">${card.content}</div>
         `;
         container.appendChild(div);
+    });
+}
+function dreamEditCard(id) {
+    const card = dreamState.cards.find(c => c.id === id);
+    if (!card) return;
+    
+    openIosTextEditModal("修改梦境", card.content, (newText) => {
+        if (newText) {
+            card.content = newText;
+            dreamSaveData();
+            dreamRenderCards();
+        }
     });
 }
 
@@ -14132,3 +14199,33 @@ window.wcSelectCalendarDate = function(year, month, day) {
     // 重新渲染朋友圈
     wcRenderMoments();
 }
+
+// ==========================================
+// 高级感长文本编辑弹窗逻辑 (全局挂载，防止找不到)
+// ==========================================
+window.currentTextEditCallback = null;
+
+window.openIosTextEditModal = function(title, initialText, callback) {
+    document.getElementById('ios-text-edit-title').innerText = title;
+    document.getElementById('ios-text-edit-textarea').value = initialText;
+    window.currentTextEditCallback = callback;
+    document.getElementById('ios-text-edit-modal').classList.add('active');
+};
+
+window.closeIosTextEditModal = function() {
+    document.getElementById('ios-text-edit-modal').classList.remove('active');
+    window.currentTextEditCallback = null;
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const confirmBtn = document.getElementById('ios-text-edit-confirm');
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', () => {
+            if (window.currentTextEditCallback) {
+                const newText = document.getElementById('ios-text-edit-textarea').value.trim();
+                window.currentTextEditCallback(newText);
+            }
+            window.closeIosTextEditModal();
+        });
+    }
+});

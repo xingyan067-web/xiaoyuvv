@@ -3124,6 +3124,21 @@
         <span>已收藏至 WeChat</span>
     </div>
 </div>
+<!-- ========================================== -->
+<!-- 新增：高级感长文本编辑弹窗 (用于记忆和梦境修改) -->
+<!-- ========================================== -->
+<div id="ios-text-edit-modal" class="ios-alert-overlay">
+    <div class="ios-alert-box" style="width: 320px;">
+        <div class="ios-alert-title" id="ios-text-edit-title">修改内容</div>
+        <div class="ios-alert-message" style="padding-bottom: 16px;">
+            <textarea id="ios-text-edit-textarea" class="ios-textarea" style="height: 180px; width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #E5E5EA; border-radius: 10px; font-size: 14px; background: #FFF; resize: none; color: #333; line-height: 1.5;"></textarea>
+        </div>
+        <div style="display: flex; border-top: 0.5px solid rgba(60, 60, 67, 0.29);">
+            <button class="ios-alert-btn" style="flex: 1; border-right: 0.5px solid rgba(60, 60, 67, 0.29); color: #8E8E93;" onclick="closeIosTextEditModal()">取消</button>
+            <button class="ios-alert-btn" style="flex: 1; font-weight: bold; color: #000;" id="ios-text-edit-confirm">保存</button>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>
