@@ -1904,88 +1904,165 @@ input::-webkit-inner-spin-button {
     cursor: pointer; 
     padding: 0 10px; 
 }
-
 /* ========================================== */
-/* 新增：购物卡片样式 (180x100px) */
+/* 新增：购物卡片样式 (200x180px 高级 INS 风) */
 /* ========================================== */
 .shopping-card {
-    width: 180px;
-    height: 100px;
-    border-radius: 12px;
-    padding: 12px;
+    width: 200px;
+    height: 180px;
+    border-radius: 16px;
+    padding: 20px;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
     position: relative;
     overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    box-sizing: border-box;
+}
+
+/* 顶部标签和图标容器 */
+.shopping-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.shopping-card-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    text-transform: uppercase;
 }
 
 .shopping-card-icon {
-    position: absolute;
-    top: -10px;
-    right: -10px;
-    font-size: 40px;
-    opacity: 0.1;
-    transform: rotate(-15deg);
+    width: 24px;
+    height: 24px;
+    opacity: 0.8;
+}
+
+.shopping-card-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+}
+
+/* 中间内容区 */
+.shopping-card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .shopping-card-title {
-    font-size: 8px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    font-family: 'Georgia', serif;
+    font-size: 18px;
+    font-weight: bold;
+    font-style: italic;
+    margin-bottom: 6px;
+    line-height: 1.2;
 }
 
 .shopping-card-desc {
-    font-size: 10px;
-    font-weight: 500;
-    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.5;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
 
-.shopping-card-price {
-    font-size: 10px;
-    font-weight: bold;
+/* 底部价格和状态 */
+.shopping-card-footer {
     margin-top: auto;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    padding-top: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+
+.shopping-card-price {
+    font-family: 'Georgia', serif;
+    font-size: 20px;
+    font-weight: bold;
+    letter-spacing: -0.5px;
 }
 
 .shopping-card-status {
-    font-size: 9px;
-    font-weight: 500;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     text-align: right;
-    opacity: 0.7;
+    line-height: 1.3;
 }
 
-/* 礼物卡片样式 (粉色系) */
+/* 礼物卡片样式 (低饱和灰粉/香槟金系) */
 .shopping-card.gift {
-    background: linear-gradient(135deg, #fff1f2, #ffe4e6);
-    color: #d6336c;
-    border: 1px solid #ffdeeb;
+    background: linear-gradient(145deg, #FCF9F8 0%, #F7EFEA 100%);
+    border: 1px solid #EFE5DF;
+    color: #5D4A45;
+}
+.shopping-card.gift .shopping-card-tag {
+    background: rgba(93, 74, 69, 0.08);
+    color: #5D4A45;
 }
 .shopping-card.gift .shopping-card-title {
-    color: #f06595;
+    color: #3A2E2B;
+}
+.shopping-card.gift .shopping-card-desc {
+    color: #8A7873;
 }
 .shopping-card.gift .shopping-card-price {
-    color: #c2255c;
+    color: #3A2E2B;
+}
+.shopping-card.gift .shopping-card-status {
+    color: #A3918C;
 }
 
-/* 代付卡片样式 (蓝色系) */
+/* 代付卡片样式 (低饱和灰蓝/雾霾蓝系) */
 .shopping-card.daifu {
-    background: linear-gradient(135deg, #e7f5ff, #d0ebff);
-    color: #1864ab;
-    border: 1px solid #d0ebff;
+    background: linear-gradient(145deg, #F5F7FA 0%, #E8EEF2 100%);
+    border: 1px solid #DFE6EC;
+    color: #4A5568;
+}
+.shopping-card.daifu .shopping-card-tag {
+    background: rgba(74, 85, 104, 0.08);
+    color: #4A5568;
 }
 .shopping-card.daifu .shopping-card-title {
-    color: #1c7ed6;
+    color: #2D3748;
+}
+.shopping-card.daifu .shopping-card-desc {
+    color: #718096;
 }
 .shopping-card.daifu .shopping-card-price {
-    color: #1971c2;
+    color: #2D3748;
 }
+.shopping-card.daifu .shopping-card-status {
+    color: #A0AEC0;
+}
+
+/* 装饰性背景图案 */
+.shopping-card::after {
+    content: '';
+    position: absolute;
+    bottom: -30px;
+    right: -30px;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 70%);
+    pointer-events: none;
+}
+
 /* ========================================== */
 /* 新增：购物流程高级卡片弹窗样式 */
 /* ========================================== */

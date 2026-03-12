@@ -6983,7 +6983,7 @@ function renderSimHistory(history, meAvatar, themAvatar, isGroup = false) {
             bubble.style.color = 'black';
         }
         
-        bubble.innerText = msg.content;
+                bubble.innerHTML = msg.content;
         
         contentDiv.appendChild(bubble);
         
@@ -10275,13 +10275,23 @@ function wcPayAndSend(method, deliveryText) {
         // 用户支付，生成粉色礼物卡片
         cardHtml = `
             <div class="shopping-card gift">
-                <div class="shopping-card-icon">🎁</div>
-                <div class="shopping-card-title">FOR YOU</div>
-                <div class="shopping-card-desc">一份包含 ${itemNames[0]} 等的礼物</div>
-                <div class="shopping-card-price">¥${total.toFixed(2)}</div>
-                <div class="shopping-card-status">已支付 · ${deliveryText}</div>
+                <div class="shopping-card-header">
+                    <div class="shopping-card-tag">GIFT</div>
+                    <div class="shopping-card-icon">
+                        <svg viewBox="0 0 24 24"><path d="M20 12v10H4V12M20 7H4V4h16v3M12 22V7m-4 0h8v0a4 4 0 0 1-8 0v0Z"></path></svg>
+                    </div>
+                </div>
+                <div class="shopping-card-body">
+                    <div class="shopping-card-title">For You</div>
+                    <div class="shopping-card-desc">一份包含 ${itemNames[0]} 等的礼物</div>
+                </div>
+                <div class="shopping-card-footer">
+                    <div class="shopping-card-price">¥${total.toFixed(2)}</div>
+                    <div class="shopping-card-status">已支付<br>${deliveryText}</div>
+                </div>
             </div>
         `;
+
         aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚为你购买了以下物品：${itemsStr}。配送方式：${deliveryText}。]`;
 
         // 支付流程
@@ -10320,13 +10330,23 @@ function wcPayAndSend(method, deliveryText) {
         // 代付，生成蓝色请求卡片
         cardHtml = `
             <div class="shopping-card daifu">
-                <div class="shopping-card-icon">🛒</div>
-                <div class="shopping-card-title">PAYMENT REQUEST</div>
-                <div class="shopping-card-desc">包含 ${itemNames[0]} 等的订单</div>
-                <div class="shopping-card-price">¥${total.toFixed(2)}</div>
-                <div class="shopping-card-status">待支付 · ${deliveryText}</div>
+                <div class="shopping-card-header">
+                    <div class="shopping-card-tag">REQUEST</div>
+                    <div class="shopping-card-icon">
+                        <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                    </div>
+                </div>
+                <div class="shopping-card-body">
+                    <div class="shopping-card-title">Payment</div>
+                    <div class="shopping-card-desc">包含 ${itemNames[0]} 等的订单</div>
+                </div>
+                <div class="shopping-card-footer">
+                    <div class="shopping-card-price">¥${total.toFixed(2)}</div>
+                    <div class="shopping-card-status">待支付<br>${deliveryText}</div>
+                </div>
             </div>
         `;
+
         aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚向你发送了一个代付请求，希望你帮忙支付以下物品：${itemsStr}。总价：¥${total.toFixed(2)}。配送方式：${deliveryText}。请在回复中做出回应（同意付款或拒绝付款等）。]`;
 
         // 清空购物车并发送消息
@@ -10545,14 +10565,23 @@ function wcBuyCharCartItem(index) {
         // 5. 在聊天记录中生成一张高级感礼物卡片，并通知 AI
         const cardHtml = `
             <div class="shopping-card gift">
-                <div class="shopping-card-icon">🎁</div>
-                <div class="shopping-card-title">SURPRISE GIFT</div>
-                <div class="shopping-card-desc">我偷偷清空了你的购物车：${item.name}</div>
-                <div class="shopping-card-price">¥${price.toFixed(2)}</div>
-                <div class="shopping-card-status">已支付 · 惊喜送达</div>
+                <div class="shopping-card-header">
+                    <div class="shopping-card-tag">SURPRISE</div>
+                    <div class="shopping-card-icon">
+                        <svg viewBox="0 0 24 24"><path d="M20 12v10H4V12M20 7H4V4h16v3M12 22V7m-4 0h8v0a4 4 0 0 1-8 0v0Z"></path></svg>
+                    </div>
+                </div>
+                <div class="shopping-card-body">
+                    <div class="shopping-card-title">Surprise Gift</div>
+                    <div class="shopping-card-desc">我偷偷清空了你的购物车：${item.name}</div>
+                </div>
+                <div class="shopping-card-footer">
+                    <div class="shopping-card-price">¥${price.toFixed(2)}</div>
+                    <div class="shopping-card-status">已支付<br>惊喜送达</div>
+                </div>
             </div>
         `;
-        
+
         // 给 AI 发送隐藏的系统提示，强制让它做出反应
         const aiSystemMessage = `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机购物车，并花钱帮你买下了你一直想买的物品："${item.name}" (价格: ¥${price.toFixed(2)})。]`;
 
