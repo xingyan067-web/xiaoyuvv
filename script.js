@@ -3432,6 +3432,15 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 \n\n`;
         systemPrompt += musicContextPrompt; 
              systemPrompt += blockPrompt; // 注入拉黑提示  
+                     if (config.bilingualEnabled) {
+            const sourceLang = config.bilingualSource || '英语';
+            const targetLang = config.bilingualTarget || '中文';
+            systemPrompt += `\n【双语翻译模式强制指令】\n`;
+            systemPrompt += `你必须以双语形式回复。上面是${sourceLang}，下面是${targetLang}。\n`;
+            systemPrompt += `在 JSON 的 "content" 字段中，请严格使用以下 HTML 格式输出文本消息：\n`;
+            systemPrompt += `${sourceLang}内容<br><span style='font-size: 0.85em; opacity: 0.7;'>${targetLang}内容</span>\n`;
+            systemPrompt += `例如：{"type":"text", "content":"Hello!<br><span style='font-size: 0.85em; opacity: 0.7;'>你好！</span>"}\n`;
+        }
         systemPrompt += `【你的角色设定】\n名字：${char.name}\n人设：${char.prompt || '无'}\n\n`;
         systemPrompt += `【对方(用户)设定】\n名字：${config.userName || wcState.user.name}\n人设：${config.userPersona || '无'}\n\n`;
 
@@ -3444,9 +3453,8 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         }
 
         let availableStickers = [];
-        const targetStickerGroups = (config.stickerGroupIds && config.stickerGroupIds.length > 0) 
-            ? config.stickerGroupIds 
-            : wcState.stickerCategories.map((_, i) => i);
+        // 【修复】：如果用户没有勾选任何表情包，就不传给AI
+        const targetStickerGroups = config.stickerGroupIds || [];
         targetStickerGroups.forEach(groupId => {
             const group = wcState.stickerCategories[groupId];
             if (group && group.list) {
@@ -4066,6 +4074,9 @@ function wcAIHandleTransfer(charId, status) {
 }
 
 function wcFindStickerUrlMulti(groupIds, desc) {
+    // 【修复】：如果明确传入了空数组，说明没有勾选任何表情包，不应该去全部里找
+    if (groupIds && groupIds.length === 0) return null;
+
     const groupsToSearch = (groupIds && groupIds.length > 0) 
         ? groupIds.map(id => wcState.stickerCategories[id]).filter(g => g)
         : wcState.stickerCategories;
@@ -6789,6 +6800,15 @@ async function wcSimTriggerAI() {
         
         prompt += `\n【当前时间】：${timeString}\n`;
         
+        if (char.chatConfig && char.chatConfig.bilingualEnabled) {
+            const sourceLang = char.chatConfig.bilingualSource || '英语';
+            const targetLang = char.chatConfig.bilingualTarget || '中文';
+            prompt += `\n【双语翻译模式强制指令】\n`;
+            prompt += `你必须以双语形式回复。上面是${sourceLang}，下面是${targetLang}。\n`;
+            prompt += `在 JSON 的 "content" 字段中，请严格使用以下 HTML 格式输出文本消息：\n`;
+            prompt += `${sourceLang}内容<br><span style='font-size: 0.85em; opacity: 0.7;'>${targetLang}内容</span>\n`;
+            prompt += `例如：[{"content":"Hello!<br><span style='font-size: 0.85em; opacity: 0.7;'>你好！</span>"}]\n`;
+        }
         // 注入活人运转规则
         prompt += `\n【角色活人运转规则】\n`;
         prompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
@@ -7377,7 +7397,9 @@ function wcOpenChatSettings() {
     });
 
     document.getElementById('wc-setting-context-limit').value = char.chatConfig.contextLimit || 0;
-    
+        char.chatConfig.bilingualEnabled = document.getElementById('wc-setting-bilingual-toggle').checked;
+    char.chatConfig.bilingualSource = document.getElementById('wc-setting-bilingual-source').value.trim();
+    char.chatConfig.bilingualTarget = document.getElementById('wc-setting-bilingual-target').value.trim();
     document.getElementById('wc-setting-proactive-toggle').checked = char.chatConfig.proactiveEnabled || false;
     document.getElementById('wc-setting-proactive-interval').value = char.chatConfig.proactiveInterval || 60;
     document.getElementById('wc-setting-moment-freq').value = char.chatConfig.momentFreq || 0;
@@ -7782,7 +7804,6 @@ function wcHandleTouchEndSwipe(evt) { wcXDown = null; wcYDown = null; }
    ========================================================================== */
 
 // --- Lovers Space State ---
-// --- Lovers Space State ---
 const lsState = {
     boundCharId: null, 
     pendingCharId: null, 
@@ -7791,7 +7812,7 @@ const lsState = {
     locationSyncEnabled: false, 
     npcFreq: 30, 
     npcInterval: null, 
-    feed: [], // <--- 【新增这一行】防止 undefined 报错
+    feed: [], 
     widgetEnabled: false,
     widgetUpdateFreq: 20, 
     widgetData: {
@@ -7806,7 +7827,10 @@ const lsState = {
     charWidgetData: {
         type: 'photo',
         content: ''
-    }
+    },
+    qaScore: 0,
+    qaCurrentSession: null, // 存储当前未答完的题目
+    qaHistory: []           // 存储历史记录
 };
 
 // --- Lovers Space Core Functions ---
@@ -7826,6 +7850,10 @@ async function lsLoadData() {
         
         lsState.charWidgetEnabled = data.charWidgetEnabled || false;
         if (data.charWidgetData) lsState.charWidgetData = data.charWidgetData;
+        
+        lsState.qaScore = data.qaScore || 0;
+        lsState.qaCurrentSession = data.qaCurrentSession || null;
+        lsState.qaHistory = data.qaHistory || [];
     }
 }
 
@@ -7842,7 +7870,10 @@ async function lsSaveData() {
         widgetUpdateFreq: lsState.widgetUpdateFreq,
         widgetData: lsState.widgetData,
         charWidgetEnabled: lsState.charWidgetEnabled,
-        charWidgetData: lsState.charWidgetData
+        charWidgetData: lsState.charWidgetData,
+        qaScore: lsState.qaScore,
+        qaCurrentSession: lsState.qaCurrentSession,
+        qaHistory: lsState.qaHistory
     });
 }
 
@@ -8426,7 +8457,15 @@ async function lsTriggerNpcMessage() {
         prompt += `【${char.name} 的人设】：${char.prompt}\n`;
         prompt += `${wbInfo}\n`;
         prompt += `内容要求：口语化，生活化，符合你(${npc.name})的人设。拒绝油腻和AI味。\n`;
-        
+        if (chatConfig.bilingualEnabled) {
+            const sourceLang = chatConfig.bilingualSource || '英语';
+            const targetLang = chatConfig.bilingualTarget || '中文';
+            prompt += `\n【双语翻译模式强制指令】\n`;
+            prompt += `你必须以双语形式回复。上面是${sourceLang}，下面是${targetLang}。\n`;
+            prompt += `在 JSON 的 "content" 字段中，请严格使用以下 HTML 格式输出文本消息：\n`;
+            prompt += `${sourceLang}内容<br><span style='font-size: 0.85em; opacity: 0.7;'>${targetLang}内容</span>\n`;
+            prompt += `例如：[{"type":"text", "content":"Hello!<br><span style='font-size: 0.85em; opacity: 0.7;'>你好！</span>"}]\n`;
+        }
         // 注入活人运转与思维链规则
         prompt += `【角色活人运转规则】\n`;
         prompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
@@ -13323,11 +13362,25 @@ function injectDreamToChar(cardId) {
 // --- 系统更新日志数据 ---
 const systemUpdateLogs = [
     {
+        version: "小元机 03.12",
+        date: "2026.03.12",
+        title: "欢迎来到小元机^这里是小元。",
+        content: [
+            "1.增加了双语翻译模式（可以自定义翻译和被翻译的语言，你甚至可以把中文翻译成英文。英文翻译成日语。）",
+            "2.情侣空间新增默契大挑战。",
+            "3.强化了输出格式防止掉格式，以及修复了一点小问题。"
+        ],
+        notes: [
+            "请妥善保管您的数据，建议定期在设置中进行备份。",
+            "一机一码，禁止二传二贩"
+        ]
+    },
+    {
         version: "小元机 03.10",
         date: "2026.03.10",
         title: "小元机更新",
         content: [
-            "这里是小元，本次更新在设置中更新日志中放置了一个教程，不会的宝宝建议先去看看教程啦^^", // 👈 这里必须加逗号！
+            "这里是小元，本次更新在设置中更新日志中放置了一个教程，不会的宝宝建议先去看看教程啦^^", 
             "1. 朋友圈ui爆改，增加了朋友圈日历系统（可以查看对应日期的朋友圈）点击头像查看全部朋友圈，默认查看今日朋友圈，增加了纪念日等等。",
             "2. 新增消息提示音，和全程真实系统通知和后台真实通知",
             "3. 修复导入歌单只能导入50首的问题。"        
@@ -14229,3 +14282,538 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+// ==========================================
+// 恋人空间：默契大挑战 (Q&A) 逻辑 (支持存档与历史)
+// ==========================================
+
+function openLsQaView() {
+    if (!lsState.boundCharId) {
+        alert("请先在首页绑定一位恋人哦~");
+        return;
+    }
+    document.getElementById('ls-view-main').classList.remove('active');
+    document.getElementById('ls-view-qa').classList.add('active');
+    document.getElementById('ls-qa-score-display').innerText = lsState.qaScore;
+    
+    // 检查是否有未完成的会话
+    if (lsState.qaCurrentSession && lsState.qaCurrentSession.questions && lsState.qaCurrentSession.questions.length > 0) {
+        renderQaList(lsState.qaCurrentSession.source);
+    } else {
+        document.getElementById('ls-qa-list').innerHTML = `
+            <div class="ls-empty-state" style="margin-top: 50px;">
+                <svg viewBox="0 0 24 24" style="width:48px;height:48px;stroke:#CCC;fill:none;stroke-width:1;margin-bottom:10px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                <p style="font-family: 'Georgia', serif; font-style: italic; color: #999;">点击上方按钮开始挑战</p>
+            </div>
+        `;
+    }
+}
+
+function closeLsQaView() {
+    document.getElementById('ls-view-qa').classList.remove('active');
+    document.getElementById('ls-view-main').classList.add('active');
+}
+
+function updateQaScore(points) {
+    lsState.qaScore += points;
+    lsSaveData();
+    document.getElementById('ls-qa-score-display').innerText = lsState.qaScore;
+}
+
+// --- AI 出题逻辑 ---
+async function generateCharQa() {
+    if (lsState.qaCurrentSession) {
+        if (!confirm("当前还有未完成的挑战，重新出题将覆盖当前进度，确定吗？")) return;
+    }
+
+    const charId = lsState.boundCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("Ta 正在认真思考题目...");
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-40).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
+
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        const topics = [
+            "基于我们最近聊天的某个极其微小的细节（比如我随口提过的一句话、某个小动作）",
+            "极端的假设性脑洞题（比如：如果我变成了一只猫/丧尸爆发，我第一件事会做什么？）",
+            "关于我内心深处的情感、小怪癖或不为人知的秘密",
+            "情境反应题（比如：如果我们在街上遇到前任/我突然生气了，我会怎么做？）",
+            "送命题（故意挖坑给 User 跳，选项里充满陷阱）"
+        ];
+        const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `现在你和User正在玩“情侣默契大挑战”。请根据你的人设、User的设定以及你们最近的聊天记录，出 5 道单选题来考验 User。\n`;
+        
+        prompt += `【核心出题要求（最高优先级）】：\n`;
+        prompt += `1. 本次出题请侧重于这个方向：**${randomTopic}**。\n`;
+        prompt += `2. 【绝对禁止】：严禁出老套、无聊、表面的题目（绝对不要问：我最喜欢的颜色、食物、季节、动物、想去哪里玩）。\n`;
+        prompt += `3. 题目必须刁钻、有趣、有画面感，选项要具有迷惑性。\n`;
+        prompt += `4. 语气要完全符合你的人设（可以调皮、傲娇、温柔、腹黑等），在 explanation (解析) 中要对 User 的回答进行吐槽或撒娇。\n`;
+        prompt += `5. 必须返回纯 JSON 数组，格式如下：\n`;
+        prompt += `[
+  {
+    "q": "如果明天就是世界末日，你觉得我今晚会拉着你做什么？",
+    "options": {"A": "疯狂囤积物资", "B": "躺在床上相拥等死", "C": "去抢劫超市"},
+    "answer": "B",
+    "explanation": "笨蛋，末日都要来了，我只想和你待在一起呀。"
+  }
+]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const questions = JSON.parse(content);
+        
+        // 初始化当前会话并保存
+        lsState.qaCurrentSession = {
+            id: Date.now(),
+            source: 'char',
+            scoreEarned: 0,
+            questions: questions.map(q => ({ ...q, userChoice: null, isCorrect: null }))
+        };
+        lsSaveData();
+
+        renderQaList('char');
+        wcShowSuccess("出题完成！");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("出题失败，请重试");
+    }
+}
+
+// --- 渲染题目列表 (支持恢复状态) ---
+function renderQaList(source) {
+    const container = document.getElementById('ls-qa-list');
+    container.innerHTML = '';
+
+    const session = lsState.qaCurrentSession;
+    if (!session || !session.questions) return;
+
+    let titleHtml = `<div style="font-size: 18px; font-weight: bold; margin-bottom: 20px; color: #111;">${source === 'char' ? 'Ta 的考验' : 'Ta 的作答结果'}</div>`;
+    container.innerHTML = titleHtml;
+
+    session.questions.forEach((item, index) => {
+        const div = document.createElement('div');
+        div.className = 'qa-item-card';
+        div.id = `qa-card-${index}`;
+        
+        // 如果已经答过，标记状态
+        if (item.userChoice) {
+            div.dataset.answered = 'true';
+        }
+        
+        let optionsHtml = '';
+        ['A', 'B', 'C'].forEach(key => {
+            if (item.options[key]) {
+                let optClass = 'qa-option';
+                // 恢复已答状态的样式
+                if (item.userChoice) {
+                    if (key === item.answer) optClass += ' correct';
+                    else if (key === item.userChoice && !item.isCorrect) optClass += ' wrong';
+                }
+
+                optionsHtml += `
+                    <div class="${optClass}" id="qa-opt-${index}-${key}" onclick="answerQa(${index}, '${key}', '${item.answer}', '${source}')">
+                        <span class="qa-option-letter">${key}</span>
+                        <span class="qa-option-text">${item.options[key]}</span>
+                    </div>
+                `;
+            }
+        });
+
+        const expDisplay = item.userChoice ? 'block' : 'none';
+        let expContent = `<strong>解析：</strong>${item.explanation || '无'}`;
+        if (source === 'user') {
+            expContent = `<strong>Ta 的内心OS：</strong>${item.os || '无'}<br><br><strong>正确答案：</strong>${item.answer}`;
+        }
+
+        div.innerHTML = `
+            <div class="qa-question-text">${index + 1}. ${item.q}</div>
+            <div class="qa-options-container">${optionsHtml}</div>
+            <div class="qa-explanation" id="qa-exp-${index}" style="display: ${expDisplay};">
+                ${expContent}
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// --- 答题逻辑 (带保存) ---
+function answerQa(qIndex, selectedKey, correctKey, source) {
+    if (source === 'user') return; // 用户出题模式下，是AI答题，用户不能点
+
+    const session = lsState.qaCurrentSession;
+    if (!session) return;
+
+    const card = document.getElementById(`qa-card-${qIndex}`);
+    if (card.dataset.answered === 'true') return; 
+    card.dataset.answered = 'true';
+
+    const isCorrect = (selectedKey === correctKey);
+    
+    // 记录状态
+    session.questions[qIndex].userChoice = selectedKey;
+    session.questions[qIndex].isCorrect = isCorrect;
+
+    const selectedOpt = document.getElementById(`qa-opt-${qIndex}-${selectedKey}`);
+    const correctOpt = document.getElementById(`qa-opt-${qIndex}-${correctKey}`);
+    const expDiv = document.getElementById(`qa-exp-${qIndex}`);
+
+    if (isCorrect) {
+        selectedOpt.classList.add('correct');
+        updateQaScore(20);
+        session.scoreEarned += 20;
+    } else {
+        selectedOpt.classList.add('wrong');
+        if (correctOpt) correctOpt.classList.add('correct');
+        updateQaScore(-10);
+        session.scoreEarned -= 10;
+    }
+
+    if (expDiv) expDiv.style.display = 'block';
+    
+    lsSaveData(); // 实时保存进度
+    checkAllAnswered();
+}
+
+function checkAllAnswered() {
+    const session = lsState.qaCurrentSession;
+    if (!session) return;
+
+    const allAnswered = session.questions.every(q => q.userChoice !== null);
+    
+    if (allAnswered) {
+        const correctCount = session.questions.filter(q => q.isCorrect).length;
+        
+        setTimeout(() => {
+            if (correctCount === 5) {
+                alert("太棒了！5题全对，额外奖励 20 积分！");
+                updateQaScore(20);
+                session.scoreEarned += 20;
+            } else {
+                alert(`挑战结束！答对了 ${correctCount} 题。`);
+            }
+            
+            // 归档到历史记录
+            archiveCurrentSession();
+        }, 500);
+    }
+}
+
+// --- 修复：深拷贝归档，确保数据不丢失 ---
+function archiveCurrentSession() {
+    if (!lsState.qaCurrentSession) return;
+    
+    if (!lsState.qaHistory) lsState.qaHistory = [];
+    
+    // 【关键修复】：使用 JSON 深拷贝，防止当前会话清空时影响历史记录
+    const sessionSnapshot = JSON.parse(JSON.stringify(lsState.qaCurrentSession));
+    sessionSnapshot.date = Date.now();
+    
+    // 将当前会话推入历史最前面
+    lsState.qaHistory.unshift(sessionSnapshot);
+    
+    // 清空当前会话
+    lsState.qaCurrentSession = null;
+    lsSaveData();
+}
+
+// --- 用户出题逻辑 ---
+function openUserQaInput() {
+    if (lsState.qaCurrentSession) {
+        if (!confirm("当前还有未完成的挑战，重新出题将覆盖当前进度，确定吗？")) return;
+    }
+
+    const container = document.getElementById('ls-qa-input-container');
+    container.innerHTML = '';
+
+    for (let i = 0; i < 5; i++) {
+        container.innerHTML += `
+            <div class="qa-input-block">
+                <div class="qa-input-block-title">QUESTION ${i + 1}</div>
+                <input type="text" class="qa-input-field" id="uqa-q-${i}" placeholder="输入问题...">
+                <input type="text" class="qa-input-field" id="uqa-a-${i}" placeholder="选项 A">
+                <input type="text" class="qa-input-field" id="uqa-b-${i}" placeholder="选项 B">
+                <input type="text" class="qa-input-field" id="uqa-c-${i}" placeholder="选项 C">
+                <select class="qa-select-field" id="uqa-ans-${i}" style="margin-top: 8px;">
+                    <option value="A">正确答案：A</option>
+                    <option value="B">正确答案：B</option>
+                    <option value="C">正确答案：C</option>
+                </select>
+            </div>
+        `;
+    }
+    wcOpenModal('ls-modal-qa-input');
+}
+
+async function submitUserQa() {
+    const userQuestions = [];
+    for (let i = 0; i < 5; i++) {
+        const q = document.getElementById(`uqa-q-${i}`).value.trim();
+        const a = document.getElementById(`uqa-a-${i}`).value.trim();
+        const b = document.getElementById(`uqa-b-${i}`).value.trim();
+        const c = document.getElementById(`uqa-c-${i}`).value.trim();
+        const ans = document.getElementById(`uqa-ans-${i}`).value;
+
+        if (!q || !a || !b || !c) {
+            return alert(`请完整填写第 ${i + 1} 题的所有内容！`);
+        }
+
+        userQuestions.push({
+            q: q,
+            options: { "A": a, "B": b, "C": c },
+            answer: ans
+        });
+    }
+
+    wcCloseModal('ls-modal-qa-input');
+    await aiAnswerUserQa(userQuestions);
+}
+
+async function aiAnswerUserQa(questions) {
+    const charId = lsState.boundCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("Ta 正在紧张作答中...");
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n\n`;
+        prompt += `User 给你出了 5 道默契测试题，请你根据人设和对 User 的了解进行作答。\n`;
+        prompt += `题目如下：\n${JSON.stringify(questions, null, 2)}\n\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 返回纯 JSON 数组，包含你选择的答案和你的内心OS。\n`;
+        prompt += `2. 格式如下：\n`;
+        prompt += `[
+  {"choice": "A", "os": "这题太简单了，肯定是A！"},
+  {"choice": "B", "os": "有点拿不准，猜个B吧。"}
+]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const aiAnswers = JSON.parse(content);
+        
+        // 构造完整的会话数据
+        let scoreEarned = 0;
+        const fullQuestions = questions.map((q, i) => {
+            const aiAns = aiAnswers[i];
+            const isCorrect = (aiAns.choice === q.answer);
+            if (isCorrect) scoreEarned += 20;
+            else scoreEarned -= 10;
+            
+            return {
+                ...q,
+                userChoice: aiAns.choice, // AI的选择存在 userChoice 里方便复用渲染逻辑
+                isCorrect: isCorrect,
+                os: aiAns.os
+            };
+        });
+
+        if (fullQuestions.filter(q => q.isCorrect).length === 5) {
+            scoreEarned += 20; // 全对额外奖励
+        }
+
+        // 存入当前会话并立即归档
+        lsState.qaCurrentSession = {
+            id: Date.now(),
+            source: 'user',
+            scoreEarned: scoreEarned,
+            questions: fullQuestions
+        };
+        
+        // 渲染界面播放动画
+        renderQaList('user');
+        wcShowSuccess("作答完毕！");
+        
+        // 模拟动画展示
+        let correctCount = 0;
+        for (let i = 0; i < 5; i++) {
+            await wcDelay(800);
+            const q = fullQuestions[i];
+            const selectedOpt = document.getElementById(`qa-opt-${i}-${q.userChoice}`);
+            const correctOpt = document.getElementById(`qa-opt-${i}-${q.answer}`);
+            const expDiv = document.getElementById(`qa-exp-${i}`);
+            
+            if (q.isCorrect) {
+                selectedOpt.classList.add('correct');
+                correctCount++;
+            } else {
+                selectedOpt.classList.add('wrong');
+                if (correctOpt) correctOpt.classList.add('correct');
+            }
+            expDiv.style.display = 'block';
+        }
+
+        setTimeout(() => {
+            if (correctCount === 5) {
+                alert(`Ta 竟然全答对了！看来你们真的很默契！\n为你增加 20 积分！`);
+            } else {
+                alert(`Ta 答对了 ${correctCount} 题。继续培养默契吧！`);
+            }
+            updateQaScore(scoreEarned);
+            archiveCurrentSession(); // 动画播完后归档
+        }, 1000);
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("Ta 思考太久睡着了，请重试");
+    }
+}
+
+// --- 历史仓库逻辑 ---
+function openQaArchive() {
+    document.getElementById('ls-view-qa').classList.remove('active');
+    document.getElementById('ls-view-qa-archive').classList.add('active');
+    renderQaArchive();
+}
+
+function closeQaArchive() {
+    document.getElementById('ls-view-qa-archive').classList.remove('active');
+    document.getElementById('ls-view-qa').classList.add('active');
+}
+
+// --- 新增：极致丝滑的动态高度折叠引擎 ---
+window.toggleQaArchiveCard = function(headerEl) {
+    const card = headerEl.parentElement;
+    const body = card.querySelector('.qa-archive-body');
+    const inner = card.querySelector('.qa-archive-content-inner');
+    
+    if (card.classList.contains('expanded')) {
+        // 【收起动作】
+        // 1. 先把高度固定为当前的真实高度
+        body.style.height = body.scrollHeight + 'px';
+        // 2. 强制浏览器重绘
+        void body.offsetHeight; 
+        // 3. 触发动画，高度变为 0
+        body.style.height = '0px';
+        card.classList.remove('expanded');
+    } else {
+        // 【展开动作】
+        card.classList.add('expanded');
+        // 1. 精准获取内部内容的真实高度，并赋值给外层
+        body.style.height = inner.scrollHeight + 'px';
+        
+        // 2. 动画结束后，把高度设为 auto，防止后续内容变化被截断
+        body.addEventListener('transitionend', function handler(e) {
+            if (e.propertyName === 'height' && card.classList.contains('expanded')) {
+                body.style.height = 'auto';
+            }
+            body.removeEventListener('transitionend', handler);
+        });
+    }
+};
+
+// --- 修复：适配 JS 动画引擎的渲染逻辑 ---
+function renderQaArchive() {
+    const container = document.getElementById('ls-qa-archive-list');
+    container.innerHTML = '';
+
+    if (!lsState.qaHistory || lsState.qaHistory.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; margin-top:50px; font-style:italic;">仓库空空如也，快去挑战吧~</div>';
+        return;
+    }
+
+    lsState.qaHistory.forEach((session, index) => {
+        const dateStr = new Date(session.date).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const title = session.source === 'char' ? 'Ta 的考验' : '我的出题';
+        const scoreClass = session.scoreEarned >= 0 ? '' : 'negative';
+        const scoreSign = session.scoreEarned >= 0 ? '+' : '';
+
+        let questionsHtml = '';
+        session.questions.forEach((q, qIdx) => {
+            const isCorrect = q.isCorrect;
+            const statusIcon = isCorrect 
+                ? '<span style="color:#34C759; font-weight:bold;">✅ 答对了</span>' 
+                : '<span style="color:#FF3B30; font-weight:bold;">❌ 答错了</span>';
+            
+            let expHtml = '';
+            if (session.source === 'char') {
+                expHtml = `<div class="qa-archive-exp"><strong>解析:</strong> ${q.explanation || '无'}</div>`;
+            } else {
+                expHtml = `<div class="qa-archive-exp"><strong>Ta的OS:</strong> ${q.os || '无'}</div>`;
+            }
+
+            questionsHtml += `
+                <div class="qa-archive-q-block">
+                    <div class="qa-archive-q-text">${qIdx + 1}. ${q.q}</div>
+                    <div class="qa-archive-ans-row">正确答案: <strong style="color:#111;">${q.answer}</strong></div>
+                    <div class="qa-archive-ans-row">作答选择: <strong>${q.userChoice || '未作答'}</strong> ${statusIcon}</div>
+                    ${expHtml}
+                </div>
+            `;
+        });
+
+        const card = document.createElement('div');
+        card.className = 'qa-archive-card';
+        card.innerHTML = `
+            <!-- 👇 注意这里：onclick 改成了调用我们新写的 JS 引擎 👇 -->
+            <div class="qa-archive-header" onclick="toggleQaArchiveCard(this)">
+                <div class="qa-archive-info">
+                    <div class="qa-archive-title">${title}</div>
+                    <div class="qa-archive-meta">${dateStr}</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="qa-archive-score ${scoreClass}">${scoreSign}${session.scoreEarned}</div>
+                    <svg class="qa-archive-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+            </div>
+            <div class="qa-archive-body">
+                <div class="qa-archive-content-inner">
+                    ${questionsHtml}
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}

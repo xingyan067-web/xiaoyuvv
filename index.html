@@ -210,9 +210,40 @@
 
                     <!-- Tab 2: 纪念 (简单展示) -->
                     <div id="ls-tab-album" class="ls-tab-content">
-                        <div class="ls-empty-state">
-                            <div class="ls-icon-placeholder"><svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><circle cx="12" cy="12" r="3.2"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg></div>
-                            <p>相册功能开发中</p>
+                        <div class="ls-section-title">Interactive Space</div>
+                        <div class="ls-album-grid">
+                            <!-- 卡片 1：默契大挑战 -->
+                            <div class="ls-album-card" onclick="openLsQaView()">
+                                <div class="ls-album-card-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path><path d="M15 9h.01"></path><path d="M9 9h.01"></path><path d="M12 13.5c-1.5 0-2.5-.5-3-1.5"></path></svg>
+                                </div>
+                                <div class="ls-album-card-title">默契大挑战</div>
+                                <div class="ls-album-card-desc">Telepathy Challenge</div>
+                            </div>
+                            <!-- 卡片 2：时光相册 (占位) -->
+                            <div class="ls-album-card">
+                                <div class="ls-album-card-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                </div>
+                                <div class="ls-album-card-title">时光相册</div>
+                                <div class="ls-album-card-desc">Photo Album</div>
+                            </div>
+                            <!-- 卡片 3：纪念日 (占位) -->
+                            <div class="ls-album-card">
+                                <div class="ls-album-card-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                </div>
+                                <div class="ls-album-card-title">专属纪念</div>
+                                <div class="ls-album-card-desc">Anniversaries</div>
+                            </div>
+                            <!-- 卡片 4：未来信件 (占位) -->
+                            <div class="ls-album-card">
+                                <div class="ls-album-card-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                </div>
+                                <div class="ls-album-card-title">未来信件</div>
+                                <div class="ls-album-card-desc">Future Letters</div>
+                            </div>
                         </div>
                     </div>
 
@@ -317,6 +348,71 @@
                 </div>
             </div>
         </div>
+            <!-- 4. 默契大挑战全屏页面 -->
+            <div id="ls-view-qa" class="ls-view" style="z-index: 5000; position: absolute; top: 0; left: 0; background: #FAFAFA;">
+                <div class="ls-navbar" style="background: #FFF; border-bottom: 1px solid #F0F0F0;">
+                    <div class="ls-nav-btn" onclick="closeLsQaView()">
+                        <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:#111;stroke-width:2;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </div>
+                    <div class="ls-nav-title" style="font-family: 'Georgia', serif; font-style: italic;">Telepathy</div>
+                    <!-- 👇 这里修改了：积分旁边加了仓库图标 👇 -->
+                    <div class="ls-nav-btn" style="text-align: right; width: auto; display: flex; align-items: center; gap: 12px;">
+                        <span style="font-weight: bold; font-family: monospace; font-size: 14px; color: #111;">Score: <span id="ls-qa-score-display">0</span></span>
+                        <svg onclick="openQaArchive()" viewBox="0 0 24 24" style="width:22px;height:22px;cursor:pointer;stroke:#111;fill:none;stroke-width:2;"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path></svg>
+                    </div>
+                </div>        
+                    <!-- 顶部操作区 -->
+                    <div class="ls-qa-actions">
+                        <button class="ls-qa-btn ai" onclick="generateCharQa()">
+                            <svg viewBox="0 0 24 24"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+                            让 Ta 出题
+                        </button>
+                        <button class="ls-qa-btn user" onclick="openUserQaInput()">
+                            <svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                            我来出题
+                        </button>
+                    </div>
+                    <!-- 题目列表区 -->
+                    <div id="ls-qa-list" style="flex: 1; overflow-y: auto; padding: 20px;">
+                        <div class="ls-empty-state" style="margin-top: 50px;">
+                            <svg viewBox="0 0 24 24" style="width:48px;height:48px;stroke:#CCC;fill:none;stroke-width:1;margin-bottom:10px;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                            <p style="font-family: 'Georgia', serif; font-style: italic; color: #999;">点击上方按钮开始挑战</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 用户出题弹窗 -->
+            <div id="ls-modal-qa-input" class="wc-modal hidden" style="z-index: 6000; align-items: flex-end;">
+                <div class="wc-modal-content" style="height: 85vh; border-radius: 24px 24px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column;">
+                    <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                        <h3 style="color: #111; font-size: 18px; font-weight: 700;">编写我的题目</h3>
+                        <button class="wc-close-btn" onclick="wcCloseModal('ls-modal-qa-input')">&times;</button>
+                    </div>
+                    <div class="wc-modal-body" id="ls-qa-input-container" style="flex: 1; overflow-y: auto; padding: 20px; background: #FAFAFA;">
+                        <!-- JS 动态生成 5 道题的输入框 -->
+                    </div>
+                    <div style="padding: 15px 20px; background: #FFF; border-top: 1px solid #F0F0F0;">
+                        <button class="wc-btn-primary" style="background: #111; color: #FFF; margin: 0;" onclick="submitUserQa()">邀请 Ta 作答</button>
+                    </div>
+                </div>
+            </div>
+         </div>
+            <!-- 5. 默契大挑战历史仓库全屏页 -->
+            <div id="ls-view-qa-archive" class="ls-view" style="z-index: 5500; position: absolute; top: 0; left: 0; background: #FAFAFA;">
+                <div class="ls-navbar" style="background: #FFF; border-bottom: 1px solid #F0F0F0;">
+                    <!-- 左上角留空，保持标题居中 -->
+                    <div class="ls-nav-btn"></div>
+                    <div class="ls-nav-title" style="font-family: 'Georgia', serif; font-style: italic;">Archive</div>
+                    <!-- 👇 右上角返回键 👇 -->
+                    <div class="ls-nav-btn" onclick="closeQaArchive()" style="text-align: right; width: auto; font-size: 15px; font-weight: bold; color: #111; cursor: pointer;">
+                        返回
+                    </div>
+                </div>
+<div class="ls-content" id="ls-qa-archive-list" style="padding: 20px; display: block;">
+                    <!-- 历史记录将在这里生成 -->
+                </div>
+            </div>
 
         <!-- ========================================== -->
         <!-- Phone Simulator View (移出 WeChat，置于顶层) -->
@@ -2409,6 +2505,23 @@
                                 <!-- Advanced Settings -->
                                 <div class="wc-settings-section">
                                     <div class="wc-settings-section-title">高级设置</div>
+                                    
+                                    <!-- 新增：双语翻译模式 -->
+                                    <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between;">
+                                        <label class="wc-form-label" style="margin: 0;">双语翻译模式</label>
+                                        <input type="checkbox" id="wc-setting-bilingual-toggle" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);" onchange="document.getElementById('wc-bilingual-options').style.display = this.checked ? 'block' : 'none'">
+                                    </div>
+                                    <div id="wc-bilingual-options" style="display: none; background: #F9F9F9; padding: 12px; border-radius: 10px; margin-bottom: 16px; border: 1px solid #F0F0F0;">
+                                        <div class="wc-form-group" style="margin-bottom: 10px;">
+                                            <label class="wc-form-label" style="font-size: 12px;">原语种 (如: 英语)</label>
+                                            <input type="text" id="wc-setting-bilingual-source" class="wc-form-input" placeholder="输入原语种" style="padding: 8px; font-size: 14px;">
+                                        </div>
+                                        <div class="wc-form-group" style="margin-bottom: 0;">
+                                            <label class="wc-form-label" style="font-size: 12px;">目标语种 (如: 中文)</label>
+                                            <input type="text" id="wc-setting-bilingual-target" class="wc-form-input" placeholder="输入目标语种" style="padding: 8px; font-size: 14px;">
+                                        </div>
+                                    </div>
+
                                     <div class="wc-form-group">
                                         <label class="wc-form-label">上下文条数限制 (0为不限制)</label>
                                         <input type="number" id="wc-setting-context-limit" class="wc-form-input" value="0">

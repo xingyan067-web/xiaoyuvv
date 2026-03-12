@@ -4849,3 +4849,357 @@ body,
 .ins-cal-add-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .ins-cal-add-header h3 { font-size: 18px; font-weight: 700; color: #111; margin: 0; }
 .ins-cal-add-header button { background: none; border: none; font-size: 24px; color: #888; cursor: pointer; }
+/* ========================================== */
+/* Lovers Space - 交互卡片与默契问答 (INS 极简风) */
+/* ========================================== */
+
+/* 150x150 卡片网格 */
+.ls-album-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+    padding: 10px 0;
+}
+
+.ls-album-card {
+    aspect-ratio: 1; /* 保持正方形 */
+    background: #FFFFFF;
+    border-radius: 24px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.04);
+    border: 1px solid #F9F9F9;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1), box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.ls-album-card:active {
+    transform: scale(0.95);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+}
+
+.ls-album-card-icon {
+    width: 48px;
+    height: 48px;
+    background: #F5F5F5;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #111;
+    margin-bottom: 12px;
+    transition: background 0.3s, color 0.3s;
+}
+
+.ls-album-card:hover .ls-album-card-icon {
+    background: #111;
+    color: #FFF;
+}
+
+.ls-album-card-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.ls-album-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #111;
+    margin-bottom: 4px;
+}
+
+.ls-album-card-desc {
+    font-size: 10px;
+    color: #999;
+    font-family: 'Georgia', serif;
+    font-style: italic;
+    letter-spacing: 0.5px;
+}
+
+/* Q&A 页面顶部操作区 */
+.ls-qa-actions {
+    display: flex;
+    gap: 15px;
+    padding: 20px;
+    background: #FFF;
+    border-bottom: 1px dashed #E5E5EA;
+}
+
+.ls-qa-btn {
+    flex: 1;
+    height: 48px;
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s;
+    border: none;
+}
+
+.ls-qa-btn:active { transform: scale(0.96); }
+
+.ls-qa-btn.ai {
+    background: #111;
+    color: #FFF;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.ls-qa-btn.user {
+    background: #FFF;
+    color: #111;
+    border: 1px solid #E5E5EA;
+}
+
+.ls-qa-btn svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+/* Q&A 题目卡片 */
+.qa-item-card {
+    background: #FFF;
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+    border: 1px solid #F5F5F5;
+}
+
+.qa-question-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: #111;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.qa-option {
+    background: #F9F9F9;
+    border: 1px solid #E5E5EA;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+}
+
+.qa-option:last-child { margin-bottom: 0; }
+
+.qa-option:active { background: #F0F0F0; }
+
+.qa-option-letter {
+    font-weight: 800;
+    font-family: 'Georgia', serif;
+    margin-right: 12px;
+    color: #888;
+}
+
+/* 答题状态 */
+.qa-option.correct {
+    background: rgba(52, 199, 89, 0.1);
+    border-color: #34C759;
+    color: #111;
+}
+.qa-option.correct .qa-option-letter { color: #34C759; }
+
+.qa-option.wrong {
+    background: rgba(255, 59, 48, 0.1);
+    border-color: #FF3B30;
+    color: #111;
+}
+.qa-option.wrong .qa-option-letter { color: #FF3B30; }
+
+.qa-explanation {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px dashed #E5E5EA;
+    font-size: 13px;
+    color: #666;
+    font-style: italic;
+    display: none;
+}
+
+/* 出题表单样式 */
+.qa-input-block {
+    background: #FFF;
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid #E5E5EA;
+}
+.qa-input-block-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #888;
+    margin-bottom: 12px;
+    letter-spacing: 1px;
+}
+.qa-input-field {
+    width: 100%;
+    background: #F9F9F9;
+    border: 1px solid #F0F0F0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    margin-bottom: 8px;
+    outline: none;
+    color: #111;
+}
+.qa-input-field:focus { border-color: #111; }
+.qa-select-field {
+    width: 100%;
+    background: #F9F9F9;
+    border: 1px solid #F0F0F0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    outline: none;
+    color: #111;
+}
+/* ========================================== */
+/* 默契大挑战 - 历史仓库折叠样式 (终极防压缩版) */
+/* ========================================== */
+
+#ls-qa-archive-list {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* 苹果专属：开启硬件加速的惯性滑动 */
+    overscroll-behavior: contain;
+    padding-bottom: 120px !important; /* 底部留出足够的安全距离 */
+    display: block !important; /* 强制块级布局，拒绝 flex 压缩 */
+}
+
+.qa-archive-card {
+    background: #FFF;
+    border-radius: 16px;
+    border: 1px solid #E5E5EA;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    overflow: hidden;
+    transition: all 0.3s ease;
+    margin-bottom: 15px; /* 替代原来的 gap */
+    
+    /* 👇 核心修复：绝对禁止卡片被系统强行压扁 👇 */
+    flex-shrink: 0; 
+    display: block;
+}
+
+.qa-archive-header {
+    padding: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    background: #FFF;
+    position: relative;
+    z-index: 2;
+}
+
+.qa-archive-header:active { background: #F9F9F9; }
+
+.qa-archive-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.qa-archive-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #111;
+}
+
+.qa-archive-meta {
+    font-size: 11px;
+    color: #888;
+    font-family: monospace;
+}
+
+.qa-archive-score {
+    font-size: 14px;
+    font-weight: bold;
+    color: #34C759;
+}
+.qa-archive-score.negative { color: #FF3B30; }
+
+.qa-archive-chevron {
+    width: 20px;
+    height: 20px;
+    stroke: #CCC;
+    fill: none;
+    stroke-width: 2;
+    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.qa-archive-body {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease;
+    background: #FAFAFA;
+}
+
+.qa-archive-card.expanded .qa-archive-body {
+    max-height: 4000px; /* 设得足够大，绝对不会截断任何内容 */
+    opacity: 1;
+}
+
+.qa-archive-card.expanded .qa-archive-chevron {
+    transform: rotate(180deg);
+}
+
+.qa-archive-content-inner {
+    padding: 16px;
+    border-top: 1px solid #F0F0F0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.qa-archive-q-block {
+    background: #FFF;
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid #E5E5EA;
+}
+
+.qa-archive-q-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+.qa-archive-ans-row {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.qa-archive-exp {
+    font-size: 12px;
+    color: #888;
+    font-style: italic;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #F0F0F0;
+    line-height: 1.5;
+}
