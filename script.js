@@ -2480,7 +2480,7 @@ function wcSwitchTab(tabId) {
                 <div class="chat-nav-call" onclick="closeWechat()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                 </div>
-                <img src="${wcState.user.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="chat-nav-avatar" onclick="wcOpenModal('wc-modal-add-char')">
+                <img src="${wcState.user.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="chat-nav-avatar" onclick="wcOpenModal('wc-modal-create-choice')">
             </div>
         `;
         if (btnExit) btnExit.innerHTML = `<svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>退出`;
@@ -2595,7 +2595,7 @@ function wcHandleBack() {
                 <div class="chat-nav-call" onclick="closeWechat()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                 </div>
-                <img src="${wcState.user.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="chat-nav-avatar" onclick="wcOpenModal('wc-modal-add-char')">
+                <img src="${wcState.user.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="chat-nav-avatar" onclick="wcOpenModal('wc-modal-create-choice')">
             </div>
         `;
         titleEl.onclick = null;
@@ -2640,8 +2640,12 @@ function wcOpenChat(charId) {
     if (btnExit) btnExit.style.display = 'none'; // 确保隐藏退出键
     
     const titleEl = document.getElementById('wc-nav-title');
-    titleEl.innerText = char.note || char.name;
-    titleEl.innerText = char.note || char.name;
+    let displayName = char.note || char.name;
+    // 【新增】：如果是群聊，在名字后面加上人数
+    if (char.isGroup && char.members) {
+        displayName += ` (${char.members.length})`;
+    }
+    titleEl.innerText = displayName;
     titleEl.onclick = null;
     titleEl.style.cursor = 'default';    
     const rightContainer = document.getElementById('wc-nav-right-container');
@@ -2778,7 +2782,15 @@ function wcRenderMessages(charId) {
         }
 
         row.className = `wc-message-row ${msg.sender === 'me' ? 'me' : 'them'}`;
-        const avatarUrl = msg.sender === 'me' ? userAvatar : char.avatar;
+        let avatarUrl = msg.sender === 'me' ? userAvatar : char.avatar;
+        
+        // 👇 新增：如果是群聊，且有发送者名字，尝试匹配具体成员的头像
+        let displayNameHtml = '';
+        if (char.isGroup && msg.sender === 'them' && msg.senderName) {
+            const member = wcState.characters.find(c => c.name === msg.senderName);
+            if (member) avatarUrl = member.avatar;
+            displayNameHtml = `<div style="font-size: 11px; color: #888; margin-bottom: 4px; margin-left: 4px;">${msg.senderName}</div>`;
+        }
         
         let quoteHtml = '';
         if (msg.quote) {
@@ -2884,7 +2896,7 @@ function wcRenderMessages(charId) {
 
         const bubbleWrapper = document.createElement('div');
         bubbleWrapper.className = 'wc-bubble-container';
-        bubbleWrapper.innerHTML = contentHtml;
+        bubbleWrapper.innerHTML = displayNameHtml + contentHtml; // 👈 把名字拼进去
         
         bubbleWrapper.addEventListener('touchstart', (e) => wcHandleTouchStart(e, msg.id));
         bubbleWrapper.addEventListener('touchend', wcHandleTouchEnd);
@@ -2898,7 +2910,16 @@ function wcRenderMessages(charId) {
             row.appendChild(bubbleWrapper);
             row.insertAdjacentHTML('beforeend', timeHtml);
         } else {
-            row.innerHTML = `${checkboxHtml}<img src="${avatarUrl}" class="wc-chat-avatar" onclick="wcPromptEnterPhone(${charId}, '${char.name}')" style="cursor: pointer;">`;
+            // 【新增】：群聊模式下绑定长按 @ 事件，单聊保留查手机
+            let avatarHtml = '';
+            if (char.isGroup && msg.senderName) {
+                avatarHtml = `<img src="${avatarUrl}" class="wc-chat-avatar" style="cursor: pointer;" oncontextmenu="event.preventDefault(); wcAtMember('${msg.senderName}');" ontouchstart="wcAvatarTouchStart(event, '${msg.senderName}')" ontouchend="wcAvatarTouchEnd(event)">`;
+            } else {
+                const clickAction = char.isGroup ? '' : `onclick="wcPromptEnterPhone(${charId}, '${char.name}')" style="cursor: pointer;"`;
+                avatarHtml = `<img src="${avatarUrl}" class="wc-chat-avatar" ${clickAction}>`;
+            }
+            
+            row.innerHTML = `${checkboxHtml}${avatarHtml}`;
             row.appendChild(bubbleWrapper);
             row.insertAdjacentHTML('beforeend', timeHtml);
         }
@@ -2906,6 +2927,41 @@ function wcRenderMessages(charId) {
         container.insertBefore(row, anchor);
     });
 }
+// ==========================================
+// 新增：群聊长按头像 @ 成员逻辑 (带防抖修复)
+// ==========================================
+let avatarLongPressTimer = null;
+let lastAtTime = 0; // 新增：记录上次触发的时间
+
+window.wcAvatarTouchStart = function(e, name) {
+    avatarLongPressTimer = setTimeout(() => {
+        wcAtMember(name);
+    }, 500); // 长按 0.5 秒触发
+};
+
+window.wcAvatarTouchEnd = function(e) {
+    if (avatarLongPressTimer) {
+        clearTimeout(avatarLongPressTimer);
+        avatarLongPressTimer = null;
+    }
+};
+
+window.wcAtMember = function(name) {
+    const now = Date.now();
+    // 【修复】：如果距离上次触发不到 500 毫秒，直接拦截，防止手机端事件连发
+    if (now - lastAtTime < 500) return; 
+    lastAtTime = now;
+
+    const input = document.getElementById('wc-chat-input');
+    if (input) {
+        // 在输入框追加 @名字
+        input.value += `@${name} `;
+        input.focus();
+        // 触发震动反馈
+        if (navigator.vibrate) navigator.vibrate(50);
+    }
+};
+
 
 function wcScrollToBottom(force = false) {
     const area = document.getElementById('wc-chat-messages');
@@ -3330,8 +3386,8 @@ async function wcTriggerAI(charIdOverride = null) {
             
             // 提取小黑屋里的记忆，让 AI 知道自己刚才像个小丑一样发了什么
             if (char.blockedMessages && char.blockedMessages.length > 0) {
-                // 取最近的 5 条拦截记录（注意：blockedMessages 是 unshift 插入的，所以前面的是最新的，需要反转一下时间线）
-                const recentBlocked = char.blockedMessages.slice(0, 5).reverse();
+                // 取最近的 10 条拦截记录（注意：blockedMessages 是 unshift 插入的，所以前面的是最新的，需要反转一下时间线）
+                const recentBlocked = char.blockedMessages.slice(0, 10).reverse();
                 blockPrompt += `\n【你被拉黑后，刚刚发出的无效消息记录 (对方未读)】：\n`;
                 recentBlocked.forEach(msg => {
                     let content = msg.content;
@@ -3341,6 +3397,28 @@ async function wcTriggerAI(charIdOverride = null) {
                 blockPrompt += `(注意：以上消息对方都没看到，请继续你被拉黑后的反应)\n`;
             }
         }
+        // 👇 新增：群聊模式强制指令 (包含用户人设)
+                if (char.isGroup) {
+            let groupMembersInfo = (char.members || []).map(id => {
+                if (id === 'user') return `${config.userName || wcState.user.name}: ${config.userPersona || wcState.user.persona}`;
+                const m = wcState.characters.find(c => c.id === id);
+                return m ? `${m.name}: ${m.prompt}` : '';
+            }).filter(Boolean).join('\n');
+
+            groupPrompt = `\n【群聊模式强制指令 (最高优先级)】\n`;
+            groupPrompt += `这是一个名为【${char.name}】的微信群聊。\n`;
+            groupPrompt += `群成员设定如下：\n${groupMembersInfo}\n`;
+            
+            // 👇【新增这一行】：强制 AI 多人发言
+            groupPrompt += `【活跃群聊铁律】：这是一个多人活跃群聊！当 User 发话时，绝对不能只有一个人回复！你必须让群里**至少 2 到 3 个不同的成员**出来接话、互相吐槽或回应 User。严禁冷场！\n`;            
+            groupPrompt += `【角色扮演铁律】：你必须严格区分每个人的性格！绝对禁止角色A用角色B的语气说话，或者说出属于角色B的设定！每个人只能基于自己的设定发言。\n`;
+            groupPrompt += `【丰富互动】：群里的每一个成员都可以发送文本(text)、表情包(sticker)、图片(image)、语音(voice)或转账(transfer)。\n`;
+            groupPrompt += `【主动私聊机制】：如果在群聊中发生了某件事，某个群成员想要**私下**找 User 聊天，该成员可以使用指令 {"type":"private_chat", "senderName":"该成员名字", "content":"私聊的第一句话"}。这会在后台自动给 User 发送私聊消息。\n`;
+            groupPrompt += `【格式要求】：你必须返回 JSON 数组，且**每一个**对象都必须包含 "senderName" 字段标明是谁在操作！\n`;
+            groupPrompt += `示例：\n[\n  {"type":"text", "senderName":"张三", "content":"大家晚上好"},\n  {"type":"sticker", "senderName":"李四", "content":"开心"},\n  {"type":"private_chat", "senderName":"张三", "content":"User，刚才群里那件事你怎么看？"}\n]\n\n`;
+        }
+
+
         // 👆 修复结束 👆
         let systemPrompt = `# 核心指令 (Core Directives)
 你是一位专业的角色扮演专家。你的首要目标是真实且一致地扮演一个角色。
@@ -3419,7 +3497,8 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
             systemPrompt += `\n【桌面小组件互动】\n你和用户绑定了恋人空间，并且用户在手机桌面上放置了你的专属小组件。你有 ${lsState.widgetUpdateFreq}% 的概率在回复时顺便更新这个小组件。\n如果决定更新，请在JSON数组中加入一条指令：\n- 发送便利贴：{"type":"widget_note", "content":"留言内容"}\n- 发送拍立得照片：{"type":"widget_photo", "content":"照片画面描述"}\n注意：每次最多只发一个组件更新指令。\n`;
         }
-
+ 
+        systemPrompt += groupPrompt; // 👈 加上这一行
         systemPrompt += `\n示例输出：
 <thinking>
 ...思考过程...
@@ -3453,8 +3532,25 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         }
 
         let availableStickers = [];
-        // 【修复】：如果用户没有勾选任何表情包，就不传给AI
-        const targetStickerGroups = config.stickerGroupIds || [];
+        let targetStickerGroups = [];
+
+        if (char.isGroup) {
+            // 【核心逻辑】：如果是群聊，遍历所有 NPC 成员，收集他们各自配置的表情包分组
+            (char.members || []).forEach(memberId => {
+                if (memberId === 'user') return;
+                const memberChar = wcState.characters.find(c => c.id === memberId);
+                if (memberChar && memberChar.chatConfig && memberChar.chatConfig.stickerGroupIds) {
+                    targetStickerGroups.push(...memberChar.chatConfig.stickerGroupIds);
+                }
+            });
+            // 去重，防止多个成员用了同一个表情包分组导致重复
+            targetStickerGroups = [...new Set(targetStickerGroups)];
+        } else {
+            // 单聊，直接读取当前聊天的配置
+            targetStickerGroups = config.stickerGroupIds || [];
+        }
+
+        // 将收集到的分组 ID 转换为具体的表情包描述
         targetStickerGroups.forEach(groupId => {
             const group = wcState.stickerCategories[groupId];
             if (group && group.list) {
@@ -3463,9 +3559,12 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         });
         
         if (availableStickers.length > 0) {
-            // 【修复】：将原本的 50 改大，比如 400，这样 AI 就能读取到后面几组的表情包了
+            // 提取前 400 个表情包供 AI 使用
             const limitedStickers = availableStickers.slice(0, 400); 
             systemPrompt += `【可用表情包】\n你可以发送表情包，当前可用的表情包描述有：${limitedStickers.join(', ')}。\n`;
+            if (char.isGroup) {
+                systemPrompt += `(注意：在群聊中，你可以根据发言人的性格，从上述表情包中挑选合适的发送。)\n`;
+            }
         }
         
         const recentMoments = wcState.moments.slice(0, 5); 
@@ -3732,7 +3831,11 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         if (action.quote) {
             extra.quote = action.quote;
         }
-        
+        // 保存群聊发送者名字
+        if (char.isGroup && action.senderName) {
+            extra.senderName = action.senderName;
+        }
+
         if (action.type === 'transfer_action') { // 兼容旧逻辑
         } // <--- 🌟 补上这个右大括号！
         // --- 新增：处理换头像指令 (通过唯一ID精准匹配真实图片) ---
@@ -3803,8 +3906,8 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             if (url) {
                 wcAddMessage(charId, 'them', 'sticker', url, extra);
             } else {
-                // 找不到表情包，转为文本描述
-                wcAddMessage(charId, 'them', 'text', `[表情: ${action.content}]`, extra);
+                // 【修复】：如果没有关联表情包，直接拦截丢弃，不发文字描述
+                console.warn("未关联表情包，拦截文字描述输出");
             }
         } else if (action.type === 'text') {
             wcAddMessage(charId, 'them', 'text', action.content, extra);
@@ -3814,8 +3917,24 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                     lsConfirmBind(charId);
                 }
             }
+        // 👇👇👇 从这里开始插入新增的代码 👇👇👇
+        } else if (action.type === 'private_chat') {
+            // 处理群聊中 AI 主动发起的私聊
+            if (action.senderName) {
+                // 找到发起私聊的那个单人角色
+                const privateChar = wcState.characters.find(c => c.name === action.senderName && !c.isGroup);
+                if (privateChar) {
+                    // 1. 向该角色的私聊记录中添加消息 (这会自动触发系统的未读红点和横幅通知)
+                    wcAddMessage(privateChar.id, 'them', 'text', action.content);
+                    
+                    // 2. 在当前的群聊中插入一条仅 AI 可见的提示，让 AI 知道私聊已经成功发出，防止它在群里重复说
+                    wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): ${action.senderName} 已经私下给 User 发送了消息: "${action.content}"]`, { hidden: true });
+                }
+            }
+        // 👆👆👆 插入结束 👆👆👆
         // ================= 新增：处理听歌邀请回应 =================
         } else if (action.type === 'music_accept' || action.type === 'music_reject') {
+
             // 【修复】：检查最近的聊天记录中，是否有用户发出的听歌邀请卡片
             const msgs = wcState.chats[charId] || [];
             const recentMsgs = msgs.slice(-10); // 检查最近10条消息
@@ -4139,33 +4258,78 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
     }
 
     // ==========================================
-    // 核心修复：恋人空间面具隔离逻辑
-    // 只有绑定的恋人才能看到系统提示，且必须是同一个面具（身份）
+    // 核心修复：群聊记忆同步 & 恋人空间面具隔离逻辑
     // ==========================================
-    if (lsState.isLinked && lsState.boundCharId && type !== 'system' && !extra.isError) {
-        if (charId !== lsState.boundCharId) {
-            const targetChar = wcState.characters.find(c => c.id === charId);
-            const boundChar = wcState.characters.find(c => c.id === lsState.boundCharId);
-            
-            if (targetChar && boundChar) {
-                // 获取当前聊天使用的面具头像和绑定恋人使用的面具头像
-                const currentMask = (targetChar.chatConfig && targetChar.chatConfig.userAvatar) ? targetChar.chatConfig.userAvatar : wcState.user.avatar;
-                const boundMask = (boundChar.chatConfig && boundChar.chatConfig.userAvatar) ? boundChar.chatConfig.userAvatar : wcState.user.avatar;
+    if (type !== 'system' && !extra.isError) {
+        const targetChar = wcState.characters.find(c => c.id === charId);
+        
+        if (targetChar) {
+            let senderNameStr = "";
+            if (sender === 'me') {
+                senderNameStr = (targetChar.chatConfig && targetChar.chatConfig.userName) ? targetChar.chatConfig.userName : wcState.user.name;
+            } else {
+                senderNameStr = extra.senderName || targetChar.name;
+            }
+
+            let contentStr = content;
+            if (type === 'sticker') contentStr = '[表情包]';
+            else if (type === 'image') contentStr = '[图片]';
+            else if (type === 'voice') contentStr = '[语音]';
+            else if (type === 'transfer') contentStr = '[转账]';
+
+            // 1. 如果是群聊，将消息同步给群里的所有 NPC 成员的单聊记忆中
+            if (targetChar.isGroup && targetChar.members) {
+                targetChar.members.forEach(memberId => {
+                    if (memberId === 'user') return;
+                    wcAddMessage(memberId, 'system', 'system', 
+                        `[群聊记忆同步: 在【${targetChar.name}】群聊中，${senderNameStr} 发送了消息: "${contentStr}"]`, 
+                        { hidden: true }
+                    );
+                });
+            }
+
+            // 2. 恋人空间同步逻辑
+            if (lsState.isLinked && lsState.boundCharId && charId !== lsState.boundCharId) {
+                const boundChar = wcState.characters.find(c => c.id === lsState.boundCharId);
                 
-                // 只有面具相同时，才同步消息到恋人空间
-                if (currentMask === boundMask) {
-                    if (sender === 'me') {
-                        lsAddFeed(`你给 ${targetChar.name} 发送了消息: "${content}"`, null, msg.id);
-                        wcAddMessage(lsState.boundCharId, 'system', 'system', 
-                            `[系统提示: 你的恋人(User)刚刚给 ${targetChar.name} 发送了一条消息: "${content}"。请注意，你们开启了账号关联，你能感知到这一切。]`, 
-                            { hidden: true }
-                        );
-                    } else if (sender === 'them') {
-                        lsAddFeed(`${targetChar.name} 给你发送了消息: "${content}"`, targetChar.avatar, msg.id);
-                        wcAddMessage(lsState.boundCharId, 'system', 'system', 
-                            `[系统提示: ${targetChar.name} 刚刚给你的恋人(User)发送了一条消息: "${content}"。请注意，你们开启了账号关联，你能感知到这一切。]`, 
-                            { hidden: true }
-                        );
+                if (boundChar) {
+                    const currentMask = (targetChar.chatConfig && targetChar.chatConfig.userAvatar) ? targetChar.chatConfig.userAvatar : wcState.user.avatar;
+                    const boundMask = (boundChar.chatConfig && boundChar.chatConfig.userAvatar) ? boundChar.chatConfig.userAvatar : wcState.user.avatar;
+                    
+                    if (currentMask === boundMask) {
+                        const isLoverInGroup = targetChar.isGroup && targetChar.members && targetChar.members.includes(lsState.boundCharId);
+                        
+                        if (!isLoverInGroup) {
+                            if (targetChar.isGroup) {
+                                if (sender === 'me') {
+                                    lsAddFeed(`你在 ${targetChar.name} 群聊发送了消息: "${contentStr}"`, null, msg.id);
+                                    wcAddMessage(lsState.boundCharId, 'system', 'system', 
+                                        `[系统提示: 你的恋人(User)刚刚在【${targetChar.name}】群聊中发送了一条消息: "${contentStr}"。请注意，你们开启了账号关联，你能感知到这一切。]`, 
+                                        { hidden: true }
+                                    );
+                                } else if (sender === 'them') {
+                                    lsAddFeed(`${targetChar.name} 群聊的 ${senderNameStr} 发送了消息: "${contentStr}"`, targetChar.avatar, msg.id);
+                                    wcAddMessage(lsState.boundCharId, 'system', 'system', 
+                                        `[系统提示: 你的恋人(User)所在的【${targetChar.name}】群聊中，${senderNameStr} 发送了一条消息: "${contentStr}"。请注意，你们开启了账号关联，你能感知到这一切。]`, 
+                                        { hidden: true }
+                                    );
+                                }
+                            } else {
+                                if (sender === 'me') {
+                                    lsAddFeed(`你给 ${targetChar.name} 发送了消息: "${contentStr}"`, null, msg.id);
+                                    wcAddMessage(lsState.boundCharId, 'system', 'system', 
+                                        `[系统提示: 你的恋人(User)刚刚给 ${targetChar.name} 发送了一条消息: "${contentStr}"。请注意，你们开启了账号关联，你能感知到这一切。]`, 
+                                        { hidden: true }
+                                    );
+                                } else if (sender === 'them') {
+                                    lsAddFeed(`${targetChar.name} 给你发送了消息: "${contentStr}"`, targetChar.avatar, msg.id);
+                                    wcAddMessage(lsState.boundCharId, 'system', 'system', 
+                                        `[系统提示: ${targetChar.name} 刚刚给你的恋人(User)发送了一条消息: "${contentStr}"。请注意，你们开启了账号关联，你能感知到这一切。]`, 
+                                        { hidden: true }
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -4701,8 +4865,12 @@ function wcCloseMemoryPage() {
     const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     
     const titleEl = document.getElementById('wc-nav-title');
-    titleEl.innerText = char.note || char.name;
-    titleEl.innerText = char.note || char.name;
+    let displayName = char.note || char.name;
+    // 【新增】：如果是群聊，在名字后面加上人数
+    if (char.isGroup && char.members) {
+        displayName += ` (${char.members.length})`;
+    }
+    titleEl.innerText = displayName;
     titleEl.onclick = null;
     titleEl.style.cursor = 'default';    
     const rightContainer = document.getElementById('wc-nav-right-container');
@@ -5158,7 +5326,7 @@ function wcRenderChats() {
     const avatarScroll = document.getElementById('wc-char-avatar-scroll');
     if (avatarScroll) {
         avatarScroll.innerHTML = '';
-        wcState.characters.forEach(char => {
+        wcState.characters.filter(c => !c.isGroup).forEach(char => {
             const img = document.createElement('img');
             img.className = 'wc-char-avatar-item';
             img.src = char.avatar;
@@ -5214,7 +5382,7 @@ function wcRenderChats() {
                     ${badgeHtml}
                 </div>
                 <div class="wc-item-content">
-                    <div class="wc-item-title">${char.note || char.name}</div>
+                    <div class="wc-item-title">${char.note || char.name}${char.isGroup && char.members ? ` (${char.members.length})` : ''}</div>
                     <div class="wc-item-subtitle">${subtitle}</div>
                 </div>
                 <div style="font-size: 12px; color: #C7C7CC;">${timeStr}</div>
@@ -5381,6 +5549,10 @@ async function wcHandleFileSelect(event, type) {
             document.getElementById('wc-preview-char-avatar').src = base64;
             document.getElementById('wc-preview-char-avatar').style.display = 'block';
             document.getElementById('wc-icon-char-upload').style.display = 'none';
+        } else if (type === 'group') { // 👈 新增这段
+            document.getElementById('wc-preview-group-avatar').src = base64;
+            document.getElementById('wc-preview-group-avatar').style.display = 'block';
+            document.getElementById('wc-icon-group-upload').style.display = 'none';
         } else if (type === 'edit-char') {
             document.getElementById('wc-edit-char-avatar').src = base64;
         } else if (type === 'user') {
@@ -5441,6 +5613,259 @@ async function wcHandleFileSelect(event, type) {
     } catch (err) {
         alert("图片处理失败");
     }
+}
+// ==========================================
+// 新增：群聊创建与管理逻辑
+// ==========================================
+function wcOpenAddGroupModal() {
+    document.getElementById('wc-preview-group-avatar').style.display = 'none';
+    document.getElementById('wc-icon-group-upload').style.display = 'block';
+    document.getElementById('wc-input-group-name').value = '';
+    wcState.tempImage = '';
+    wcState.tempImageType = 'group';
+
+    const list = document.getElementById('wc-group-member-select-list');
+    list.innerHTML = '';
+    
+    // 过滤掉已经是群聊的角色
+    const singleChars = wcState.characters.filter(c => !c.isGroup);
+    if (singleChars.length === 0) {
+        list.innerHTML = '<div style="color:#999; font-size:13px; text-align:center; padding: 10px;">暂无单人角色，请先创建角色</div>';
+    } else {
+        singleChars.forEach(char => {
+            list.innerHTML += `
+                <div class="wc-checkbox-item" style="padding: 8px 0; border-bottom: 1px solid #eee;">
+                    <input type="checkbox" value="${char.id}" class="group-member-checkbox" style="width: 20px; height: 20px;">
+                    <img src="${char.avatar}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                    <span style="font-size: 15px;">${char.name}</span>
+                </div>
+            `;
+        });
+    }
+    wcOpenModal('wc-modal-add-group');
+}
+
+function wcSaveGroupChat() {
+    const name = document.getElementById('wc-input-group-name').value.trim();
+    if (!name) return alert('请输入群聊名称');
+
+    const checkboxes = document.querySelectorAll('.group-member-checkbox:checked');
+    const members = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    if (members.length === 0) return alert('请至少选择一个群成员');
+
+    // 【新增】：默认将用户(User)加入群聊成员列表的最前面
+    members.unshift('user'); 
+
+    const defaultAvatarSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#E5E5EA"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#888" font-size="24" font-weight="bold">群聊</text></svg>`;
+    const defaultAvatar = 'data:image/svg+xml;base64,' + window.btoa(unescape(encodeURIComponent(defaultAvatarSvg)));
+
+    const newGroup = {
+        id: Date.now(),
+        name: name,
+        note: name,
+        prompt: `这是一个名为【${name}】的微信群聊。群成员包括你和其他人。请根据群成员的性格进行多人对话模拟。`,
+        avatar: wcState.tempImage || defaultAvatar,
+        isPinned: false,
+        isGroup: true,
+        members: members,
+        ownerId: 'user' // 【新增】：默认群主为用户
+    };
+
+    wcState.characters.push(newGroup);
+    wcSaveData();
+    wcCloseModal('wc-modal-add-group');
+    wcRenderAll();
+}
+
+function renderGroupMembersInSettings(groupChar) {
+    const section = document.getElementById('wc-setting-group-members-section');
+    if(section) section.style.display = 'block';
+    const grid = document.getElementById('wc-group-members-grid');
+    if(!grid) return;
+    grid.innerHTML = '';
+
+    const members = groupChar.members || [];
+
+    // 1. 渲染用户(User)
+    if (members.includes('user')) {
+        const isUserOwner = groupChar.ownerId === 'user';
+        grid.innerHTML += `
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative;">
+                <img src="${wcState.user.avatar}" style="width: 44px; height: 44px; border-radius: 12px; object-fit: cover; border: 1px solid #eee;">
+                <span style="font-size: 10px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${wcState.user.name}</span>
+                ${isUserOwner ? '<div style="position: absolute; top: -6px; right: -6px; background: #F5A623; color: white; font-size: 8px; padding: 2px 4px; border-radius: 6px; font-weight: bold; border: 1px solid #fff;">群主</div>' : ''}
+            </div>
+        `;
+    }
+
+    // 2. 渲染其他现有成员
+    members.forEach(memberId => {
+        if (memberId === 'user') return;
+        const member = wcState.characters.find(c => c.id === memberId);
+        if (member) {
+            const isOwner = groupChar.ownerId === memberId;
+            grid.innerHTML += `
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative;">
+                    <img src="${member.avatar}" style="width: 44px; height: 44px; border-radius: 12px; object-fit: cover; border: 1px solid #eee;">
+                    <span style="font-size: 10px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${member.name}</span>
+                    ${isOwner ? '<div style="position: absolute; top: -6px; right: -6px; background: #F5A623; color: white; font-size: 8px; padding: 2px 4px; border-radius: 6px; font-weight: bold; border: 1px solid #fff;">群主</div>' : ''}
+                </div>
+            `;
+        }
+    });
+
+    // 3. 渲染 + 按钮 (邀请)
+    grid.innerHTML += `
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;" onclick="wcManageGroupMembers('add')">
+            <div style="width: 44px; height: 44px; border-radius: 12px; border: 1px dashed #CCC; display: flex; align-items: center; justify-content: center; color: #888; font-size: 24px; background: #FAFAFA;">+</div>
+            <span style="font-size: 10px; color: #888;">邀请</span>
+        </div>
+    `;
+
+    // 4. 渲染 - 按钮 (踢人)
+    grid.innerHTML += `
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;" onclick="wcManageGroupMembers('remove')">
+            <div style="width: 44px; height: 44px; border-radius: 12px; border: 1px dashed #CCC; display: flex; align-items: center; justify-content: center; color: #888; font-size: 24px; background: #FAFAFA;">-</div>
+            <span style="font-size: 10px; color: #888;">移出</span>
+        </div>
+    `;
+
+    // 5. 渲染群主选择下拉框
+    const ownerSelect = document.getElementById('wc-setting-group-owner');
+    if(ownerSelect) {
+        ownerSelect.innerHTML = '';
+        if (members.includes('user')) {
+            ownerSelect.innerHTML += `<option value="user" ${groupChar.ownerId === 'user' ? 'selected' : ''}>${wcState.user.name}</option>`;
+        }
+        members.forEach(memberId => {
+            if (memberId === 'user') return;
+            const member = wcState.characters.find(c => c.id === memberId);
+            if (member) {
+                const selected = groupChar.ownerId === memberId ? 'selected' : '';
+                ownerSelect.innerHTML += `<option value="${member.id}" ${selected}>${member.name}</option>`;
+            }
+        });
+    }
+}
+
+function wcChangeGroupOwner(newOwnerId) {
+    const groupChar = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (groupChar && groupChar.isGroup) {
+        // 【新增】：支持将 'user' 设为群主
+        groupChar.ownerId = newOwnerId === 'user' ? 'user' : parseInt(newOwnerId);
+        wcSaveData();
+        renderGroupMembersInSettings(groupChar);
+    }
+}
+
+function wcManageGroupMembers(action) {
+    const groupChar = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!groupChar) return;
+
+    const list = document.getElementById('wc-manage-group-list');
+    list.innerHTML = '';
+    const title = document.getElementById('wc-manage-group-title');
+    const confirmBtn = document.getElementById('wc-manage-group-confirm-btn');
+
+    const members = groupChar.members || [];
+    const ownerId = groupChar.ownerId;
+
+    if (action === 'add') {
+        title.innerText = '邀请新成员';
+        let availableChars = [];
+
+        // 【核心逻辑】：判断群主身份决定可邀请列表
+        if (ownerId === 'user') {
+            // 用户是群主：可以邀请所有未进群的单人角色
+            availableChars = wcState.characters.filter(c => !c.isGroup && !members.includes(c.id));
+        } else {
+            // NPC是群主：只能邀请其手机通讯录中的角色
+            const ownerChar = wcState.characters.find(c => c.id === ownerId);
+            if (ownerChar && ownerChar.phoneData && ownerChar.phoneData.contacts) {
+                const contactNames = ownerChar.phoneData.contacts.map(c => c.name);
+                availableChars = wcState.characters.filter(c => !c.isGroup && !members.includes(c.id) && contactNames.includes(c.name));
+            }
+        }
+
+        if (availableChars.length === 0) {
+            list.innerHTML = '<div style="color:#999; font-size:13px; text-align:center; padding: 20px;">没有可邀请的角色了 (若NPC为群主，需确保其通讯录中有其他角色)</div>';
+        } else {
+            availableChars.forEach(char => {
+                list.innerHTML += `
+                    <div class="wc-checkbox-item" style="padding: 10px 0; border-bottom: 1px solid #eee;">
+                        <input type="checkbox" value="${char.id}" class="manage-member-checkbox" style="width: 20px; height: 20px;">
+                        <img src="${char.avatar}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                        <span style="font-size: 15px;">${char.name}</span>
+                    </div>
+                `;
+            });
+        }
+        confirmBtn.onclick = () => {
+            const checkboxes = document.querySelectorAll('.manage-member-checkbox:checked');
+            const newMembers = Array.from(checkboxes).map(cb => parseInt(cb.value));
+            if (newMembers.length === 0) return; // 如果没选人直接返回
+
+            if (!groupChar.members) groupChar.members = [];
+            groupChar.members.push(...newMembers);
+            
+            // 👇 新增：获取群主名字和被邀请人名字，生成系统提示
+            let ownerName = "群主";
+            if (ownerId === 'user') {
+                ownerName = wcState.user.name;
+            } else {
+                const ownerChar = wcState.characters.find(c => c.id === ownerId);
+                if (ownerChar) ownerName = ownerChar.name;
+            }
+
+            const newMemberNames = newMembers.map(id => {
+                const c = wcState.characters.find(ch => ch.id === id);
+                return c ? c.name : "未知";
+            }).join('、');
+
+            // 插入系统提示消息
+            wcAddMessage(groupChar.id, 'system', 'system', `[系统提示: ${ownerName} 邀请了 ${newMemberNames} 进入群聊]`, { style: 'transparent' });
+            // 👆 新增结束
+
+            wcSaveData();
+            wcCloseModal('wc-modal-manage-group-members');
+            renderGroupMembersInSettings(groupChar);
+        };
+    } else if (action === 'remove') {
+        title.innerText = '移出群成员';
+        
+        // 渲染用户(如果用户在群里且不是群主)
+        if (ownerId !== 'user' && members.includes('user')) {
+            list.innerHTML += `
+                <div class="wc-checkbox-item" style="padding: 10px 0; border-bottom: 1px solid #eee;">
+                    <input type="checkbox" value="user" class="manage-member-checkbox" style="width: 20px; height: 20px;">
+                    <img src="${wcState.user.avatar}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                    <span style="font-size: 15px;">${wcState.user.name}</span>
+                </div>
+            `;
+        }
+
+        const currentMembers = wcState.characters.filter(c => members.includes(c.id));
+        currentMembers.forEach(char => {
+            const disabled = char.id === ownerId ? 'disabled' : '';
+            const label = char.id === ownerId ? '(群主)' : '';
+            list.innerHTML += `
+                <div class="wc-checkbox-item" style="padding: 10px 0; border-bottom: 1px solid #eee; ${disabled ? 'opacity:0.5;' : ''}">
+                    <input type="checkbox" value="${char.id}" class="manage-member-checkbox" ${disabled} style="width: 20px; height: 20px;">
+                    <img src="${char.avatar}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                    <span style="font-size: 15px;">${char.name} <span style="color:#F5A623; font-size:12px; font-weight:bold;">${label}</span></span>
+                </div>
+            `;
+        });
+        confirmBtn.onclick = () => {
+            const checkboxes = document.querySelectorAll('.manage-member-checkbox:checked');
+            const removeMembers = Array.from(checkboxes).map(cb => cb.value === 'user' ? 'user' : parseInt(cb.value));
+            groupChar.members = members.filter(id => !removeMembers.includes(id));
+            wcSaveData();
+            wcCloseModal('wc-modal-manage-group-members');
+            renderGroupMembersInSettings(groupChar);
+        };
+    }
+    wcOpenModal('wc-modal-manage-group-members');
 }
 
 function wcSaveCharacter() {
@@ -5587,10 +6012,21 @@ function wcShowCharDetail(id) {
     document.getElementById('wc-detail-char-avatar').src = char.avatar;
     document.getElementById('wc-detail-char-name').innerText = char.name;
     document.getElementById('wc-detail-char-note').innerText = char.note || "暂无备注";
+    
+    const checkPhoneBtn = document.getElementById('wc-detail-check-phone-btn');
+    if (checkPhoneBtn) {
+        checkPhoneBtn.style.display = char.isGroup ? 'none' : 'block';
+    }
+    
     wcOpenModal('wc-modal-char-detail');
 }
 
 function wcCheckPhoneAction() {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (char && char.isGroup) {
+        alert("群聊无法查看手机哦~");
+        return;
+    }
     wcCloseModal('wc-modal-char-detail');
     wcOpenPhoneSim();
 }
@@ -7375,14 +7811,59 @@ function wcOpenChatSettings() {
     document.getElementById('wc-setting-char-note').value = char.note || "";
         document.getElementById('wc-setting-char-prompt').value = char.prompt || "";
     // 读取拉黑状态并更新按钮
+    // 获取需要隐藏的元素容器
+    const nameRow = document.getElementById('wc-setting-char-name').closest('.wc-avatar-row');
+    const noteRow = document.getElementById('wc-setting-char-note').closest('.wc-form-group');
+    const promptRow = document.getElementById('wc-setting-char-prompt').closest('.wc-form-group');
+    const proactiveSection = document.getElementById('wc-setting-proactive-toggle').closest('.wc-settings-section');
+    const stickerSection = document.getElementById('wc-setting-sticker-group-list').closest('.wc-form-group');
+
     const blockBtn = document.getElementById('wc-setting-block-btn');
-    if (char.isBlocked) {
-        blockBtn.innerText = "你已拉黑该角色";
-        blockBtn.classList.add('blocked');
+    const groupMembersSection = document.getElementById('wc-setting-group-members-section');
+
+    if (char.isGroup) {
+        // 【群聊模式】：保留头像和名称，隐藏备注、人设、主动性、表情包、拉黑
+        if(nameRow) {
+            nameRow.style.display = 'flex'; // 恢复显示头像和名称
+            const nameLabel = nameRow.querySelector('.wc-form-label');
+            if(nameLabel) nameLabel.innerText = '群聊名称'; // 动态改个字，防止误解
+        }
+        if(noteRow) noteRow.style.display = 'none';
+        if(promptRow) promptRow.style.display = 'none';
+        if(proactiveSection) proactiveSection.style.display = 'none';
+        if(stickerSection) stickerSection.style.display = 'none';
+        
+        if(blockBtn) blockBtn.style.display = 'none';
+        renderGroupMembersInSettings(char);
     } else {
-        blockBtn.innerText = "拉黑该角色 (Block)";
-        blockBtn.classList.remove('blocked');
+        // 【单聊模式】：恢复显示所有设置
+        if(nameRow) {
+            nameRow.style.display = 'flex';
+            const nameLabel = nameRow.querySelector('.wc-form-label');
+            if(nameLabel) nameLabel.innerText = '名称'; // 恢复为单聊的名称
+        }
+        if(noteRow) noteRow.style.display = 'block';
+        if(promptRow) promptRow.style.display = 'block';
+        if(proactiveSection) proactiveSection.style.display = 'block';
+        if(stickerSection) stickerSection.style.display = 'block';
+
+        if(blockBtn) blockBtn.style.display = 'block';
+        if (groupMembersSection) groupMembersSection.style.display = 'none';
+        
+        if (char.isBlocked) {
+            if(blockBtn) {
+                blockBtn.innerText = "你已拉黑该角色";
+                blockBtn.classList.add('blocked');
+            }
+        } else {
+            if(blockBtn) {
+                blockBtn.innerText = "拉黑该角色 (Block)";
+                blockBtn.classList.remove('blocked');
+            }
+        }
     }
+
+
     document.getElementById('wc-setting-user-avatar').src = char.chatConfig.userAvatar || wcState.user.avatar;
     document.getElementById('wc-setting-user-name').value = char.chatConfig.userName || wcState.user.name;
     document.getElementById('wc-setting-user-prompt').value = char.chatConfig.userPersona || wcState.user.persona;
@@ -7397,9 +7878,12 @@ function wcOpenChatSettings() {
     });
 
     document.getElementById('wc-setting-context-limit').value = char.chatConfig.contextLimit || 0;
-        char.chatConfig.bilingualEnabled = document.getElementById('wc-setting-bilingual-toggle').checked;
-    char.chatConfig.bilingualSource = document.getElementById('wc-setting-bilingual-source').value.trim();
-    char.chatConfig.bilingualTarget = document.getElementById('wc-setting-bilingual-target').value.trim();
+    
+    // 【修复】：正确读取双语设置到界面，而不是覆盖数据
+    document.getElementById('wc-setting-bilingual-toggle').checked = char.chatConfig.bilingualEnabled || false;
+    document.getElementById('wc-setting-bilingual-source').value = char.chatConfig.bilingualSource || '英语';
+    document.getElementById('wc-setting-bilingual-target').value = char.chatConfig.bilingualTarget || '中文';
+    
     document.getElementById('wc-setting-proactive-toggle').checked = char.chatConfig.proactiveEnabled || false;
     document.getElementById('wc-setting-proactive-interval').value = char.chatConfig.proactiveInterval || 60;
     document.getElementById('wc-setting-moment-freq').value = char.chatConfig.momentFreq || 0;
@@ -7490,6 +7974,11 @@ function wcSaveChatSettings() {
 
     char.chatConfig.contextLimit = parseInt(document.getElementById('wc-setting-context-limit').value) || 0;
     
+    // 【修复】：在这里真正保存双语设置
+    char.chatConfig.bilingualEnabled = document.getElementById('wc-setting-bilingual-toggle').checked;
+    char.chatConfig.bilingualSource = document.getElementById('wc-setting-bilingual-source').value.trim();
+    char.chatConfig.bilingualTarget = document.getElementById('wc-setting-bilingual-target').value.trim();
+    
     char.chatConfig.proactiveEnabled = document.getElementById('wc-setting-proactive-toggle').checked;
     char.chatConfig.proactiveInterval = parseInt(document.getElementById('wc-setting-proactive-interval').value) || 60;
     char.chatConfig.momentFreq = parseInt(document.getElementById('wc-setting-moment-freq').value) || 0;
@@ -7513,7 +8002,12 @@ function wcSaveChatSettings() {
     }
     wcSaveData();
     
-    document.getElementById('wc-nav-title').innerText = char.note || char.name;
+    let displayName = char.note || char.name;
+    // 【新增】：如果是群聊，在名字后面加上人数
+    if (char.isGroup && char.members) {
+        displayName += ` (${char.members.length})`;
+    }
+    document.getElementById('wc-nav-title').innerText = displayName;
     wcApplyChatConfig(char);
     wcRenderMessages(char.id); 
     wcRenderChats(); 
@@ -7830,7 +8324,8 @@ const lsState = {
     },
     qaScore: 0,
     qaCurrentSession: null, // 存储当前未答完的题目
-    qaHistory: []           // 存储历史记录
+    qaHistory: [],          // 存储历史记录
+    letters: []
 };
 
 // --- Lovers Space Core Functions ---
@@ -7854,6 +8349,7 @@ async function lsLoadData() {
         lsState.qaScore = data.qaScore || 0;
         lsState.qaCurrentSession = data.qaCurrentSession || null;
         lsState.qaHistory = data.qaHistory || [];
+        lsState.letters = data.letters || []; // <--- 【新增这一行】
     }
 }
 
@@ -7873,7 +8369,8 @@ async function lsSaveData() {
         charWidgetData: lsState.charWidgetData,
         qaScore: lsState.qaScore,
         qaCurrentSession: lsState.qaCurrentSession,
-        qaHistory: lsState.qaHistory
+        qaHistory: lsState.qaHistory,
+        letters: lsState.letters // <--- 【新增这一行】
     });
 }
 
@@ -7906,12 +8403,13 @@ function lsRenderBindList() {
     const list = document.getElementById('ls-bind-list');
     list.innerHTML = '';
     
-    if (wcState.characters.length === 0) {
-        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">请先在 WeChat 中添加角色</div>';
+    const availableChars = wcState.characters.filter(c => !c.isGroup);
+    if (availableChars.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">请先在 WeChat 中添加单人角色</div>';
         return;
     }
 
-    wcState.characters.forEach(char => {
+    availableChars.forEach(char => {
         const div = document.createElement('div');
         div.className = 'ls-char-item';
         div.innerHTML = `
@@ -10685,6 +11183,11 @@ function wcBuyCharCartItem(index) {
 })();
 // --- 快捷进入手机的 iOS 风格通用弹窗 ---
 window.wcPromptEnterPhone = function(charId, charName) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (char && char.isGroup) {
+        alert("群聊无法查看手机哦~");
+        return;
+    }
     let modal = document.getElementById('wc-modal-ios-confirm');
     if (!modal) {
         modal = document.createElement('div');
@@ -11146,12 +11649,13 @@ function musicRenderHomeChars() {
     const grid = document.getElementById('music-char-grid');
     grid.innerHTML = '';
     
-    if (wcState.characters.length === 0) {
+    const availableChars = wcState.characters.filter(c => !c.isGroup);
+    if (availableChars.length === 0) {
         grid.innerHTML = '<div style="grid-column: span 2; text-align: center; color: #888; padding: 20px;">No characters available.</div>';
         return;
     }
 
-    wcState.characters.forEach(char => {
+    availableChars.forEach(char => {
         const card = document.createElement('div');
         card.className = 'ins-music-char-card';
         card.innerHTML = `
@@ -13391,6 +13895,22 @@ function injectDreamToChar(cardId) {
 // --- 系统更新日志数据 ---
 const systemUpdateLogs = [
     {
+        version: "小元机 03.13",
+        date: "2026.03.13",
+        title: "欢迎来到小元机^这里是小元。",
+        content: [
+            "1. 新增微信群聊功能。支持拉入多个角色一起聊天。（因为我没玩过群聊，一直是一个char，所以可能做的不太好）",
+            "2. 情侣空间新增未来信件（时空信箱）功能。可以互相写信。嗯嗯对",
+            "3. 有问题请多多反馈啦orz"
+        ],
+        notes: [
+            "更新后若遇到界面显示异常，请尝试清除浏览器缓存。",
+            "请妥善保管您的数据，建议定期在设置中进行备份。",
+            "一机一码，禁止二传二贩"
+        ]
+    },
+
+    {
         version: "小元机 03.12",
         date: "2026.03.12",
         title: "欢迎来到小元机^这里是小元。",
@@ -14845,4 +15365,582 @@ function renderQaArchive() {
         `;
         container.appendChild(card);
     });
+}
+// ==========================================
+// 恋人空间：时空信箱 (Shrine & Stars) 核心逻辑
+// ==========================================
+
+// 1. 打开时空信箱全屏主页
+function lsOpenLettersView() {
+    if (!lsState.boundCharId) return alert("请先在首页绑定一位恋人哦~");
+    
+    let view = document.getElementById('ls-view-letters');
+    if (!view) {
+        view = document.createElement('div');
+        view.id = 'ls-view-letters';
+        view.className = 'ins-shrine-view';
+        document.getElementById('loversSpaceModal').appendChild(view);
+    }
+    
+    view.innerHTML = `
+        <!-- 日式神社星空背景 -->
+        <div class="shrine-bg">
+            <div class="shrine-torii"></div> <!-- 底部鸟居剪影 -->
+        </div>
+        
+        <div class="shrine-nav">
+            <div class="shrine-nav-btn" onclick="lsCloseLettersView()">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </div>
+            <div class="shrine-nav-title">TIME MAILBOX</div>
+            <div style="width: 40px;"></div>
+        </div>
+
+        <div class="shrine-header">
+            <h2>星の神社</h2>
+            <p>跨越时空的信，化作星光坠落</p>
+        </div>
+
+        <!-- 星光与中心神体容器 -->
+        <div class="shrine-space" id="ls-shrine-space">
+            <!-- 中心神体 (点击打开弹窗) -->
+            <div class="center-moon-container" id="ls-center-moon-container" onclick="lsOpenShrineModal()">
+                <div class="center-moon"></div>
+                <div class="center-moon-halo"></div>
+                <div class="center-moon-label">祈愿 / PRAY</div>
+                
+                <!-- 新增：生成中环绕的小星球 -->
+                <div class="orbit-planets" id="ls-orbit-planets" style="display: none;">
+                    <div class="orbit-planet p1"></div>
+                    <div class="orbit-planet p2"></div>
+                    <div class="orbit-planet p3"></div>
+                </div>
+            </div>
+
+            <!-- 新增：生成完毕后的信件展示 (带头像、星光、蝴蝶) -->
+            <div class="new-letter-arrival" id="ls-new-letter-arrival" style="display: none;">
+                <div class="arrival-avatar-wrap">
+                    <img src="" id="ls-arrival-avatar" class="arrival-avatar">
+                </div>
+                <div class="arrival-text">Ta 的回音已送达</div>
+                <!-- 蝴蝶和星光由 CSS/JS 动态控制 -->
+                <div class="arrival-effects">
+                    <!-- SVG 星光 ✨ -->
+                    <svg class="arrival-star s1" viewBox="0 0 24 24"><path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" fill="#FFF"/></svg>
+                    <svg class="arrival-star s2" viewBox="0 0 24 24"><path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" fill="#FFF"/></svg>
+                    <svg class="arrival-star s3" viewBox="0 0 24 24"><path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" fill="#FFF"/></svg>
+                    <!-- SVG 蝴蝶 -->
+                    <svg class="arrival-butterfly b1" viewBox="0 0 64 64"><path d="M32 32 C20 10, 0 20, 10 40 C15 50, 30 40, 32 32 C34 40, 49 50, 54 40 C64 20, 44 10, 32 32 Z" fill="rgba(255,255,255,0.8)"/></svg>
+                    <svg class="arrival-butterfly b2" viewBox="0 0 64 64"><path d="M32 32 C20 10, 0 20, 10 40 C15 50, 30 40, 32 32 C34 40, 49 50, 54 40 C64 20, 44 10, 32 32 Z" fill="rgba(255,255,255,0.6)"/></svg>
+                </div>
+            </div>
+
+            <!-- 闪烁的星光将在这里动态生成 -->
+        </div>
+
+
+        <div class="shrine-footer">
+            <button class="shrine-write-btn" onclick="lsOpenUserLetterInput()">
+                <svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 4 1-4L16.5 3.5z"></path></svg>
+                <span>提笔写信</span>
+            </button>
+        </div>
+
+        <!-- 神社祈愿弹窗 (选择生成信件或查看列表) -->
+        <div id="ls-shrine-modal" class="shrine-modal-overlay">
+            <div class="shrine-modal-box">
+                <div class="shrine-modal-title">神明の指引</div>
+                <div class="shrine-modal-desc">请选择你的祈愿</div>
+                <button class="shrine-modal-btn primary" onclick="lsGenerateAILetter()" id="btn-ai-pray">
+                    聆听 Ta 的心声 (生成信件)
+                </button>
+                <button class="shrine-modal-btn secondary" onclick="lsOpenLetterList()">
+                    翻阅星空档案 (信件列表)
+                </button>
+                <button class="shrine-modal-btn cancel" onclick="lsCloseShrineModal()">离开</button>
+            </div>
+        </div>
+
+        <!-- 信件列表全屏页 -->
+        <div id="ls-letter-list-view" class="shrine-list-view">
+            <div class="shrine-nav" style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                <div class="shrine-nav-btn" onclick="lsCloseLetterList()">
+                    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </div>
+                <div class="shrine-nav-title">STAR ARCHIVES</div>
+                <div style="width: 40px;"></div>
+            </div>
+            <div class="shrine-list-content" id="ls-shrine-list-content"></div>
+        </div>
+        
+        <!-- 用户写信全屏页面 (仿信纸) -->
+        <div id="ls-user-write-view" class="ins-paper-view">
+            <div class="ins-paper-nav">
+                <div onclick="lsCloseUserLetterInput()" style="cursor:pointer; color:#888;">CANCEL</div>
+                <div onclick="lsSubmitUserLetter()" style="cursor:pointer; color:#111; font-weight:bold;">SEND</div>
+            </div>
+            <div class="ins-paper-content">
+                <input type="text" id="ls-write-title" class="ins-paper-title-input" placeholder="信件标题 (如：写在失眠的夜)">
+                <textarea id="ls-write-body" class="ins-paper-textarea" placeholder="提笔写下你想对 Ta 说的话..."></textarea>
+            </div>
+        </div>
+
+        <!-- 阅读信件全屏页面 (仿信纸) -->
+        <div id="ls-letter-detail-modal" class="ins-paper-view">
+            <div class="ins-paper-nav">
+                <div onclick="lsCloseLetterDetail()" style="cursor:pointer; color:#888;">CLOSE</div>
+                <div id="ls-letter-detail-date" style="font-family: monospace; color:#CCC;"></div>
+            </div>
+            <div class="ins-paper-content">
+                <h3 id="ls-letter-detail-title" class="ins-paper-read-title"></h3>
+                <div id="ls-letter-detail-content" class="ins-paper-read-text"></div>
+                <div class="ins-paper-read-author" id="ls-letter-detail-author"></div>
+            </div>
+            
+            <!-- 底部操作区 -->
+            <div class="ins-paper-actions">
+                <div class="ins-paper-action-btn delete" onclick="lsDeleteCurrentLetter()">销毁此信</div>
+                <!-- 只有阅读用户自己写的信时，才会显示这个回信按钮 -->
+                <div class="ins-paper-action-btn reply" id="ls-btn-request-reply" onclick="lsRequestReply()">祈求 Ta 的回信</div>
+            </div>
+        </div>
+    `;
+    
+    lsRenderStarlights();
+    view.style.display = 'flex';
+    setTimeout(() => view.classList.add('active'), 10);
+}
+
+function lsCloseLettersView() {
+    const view = document.getElementById('ls-view-letters');
+    if (view) {
+        view.classList.remove('active');
+        setTimeout(() => view.style.display = 'none', 400);
+    }
+}
+
+// 2. 渲染闪烁且瞬移的星光
+function lsRenderStarlights() {
+    const space = document.getElementById('ls-shrine-space');
+    if (!space) return;
+
+    const oldStars = space.querySelectorAll('.shrine-starlight');
+    oldStars.forEach(star => star.remove());
+
+    if (!lsState.letters) lsState.letters = [];
+
+    lsState.letters.forEach((letter) => {
+        const isFromChar = letter.from === 'char';
+        const star = document.createElement('div');
+        
+        star.className = `shrine-starlight ${isFromChar ? 'star-gold' : 'star-blue'}`;
+        // 👇 注入纯净的 SVG 四角星光 (✨形状)
+        star.innerHTML = `<svg viewBox="0 0 24 24" style="width:100%; height:100%;"><path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" fill="#FFF"/></svg>`;
+        
+        star.style.left = Math.random() * 90 + 5 + '%';
+        star.style.top = Math.random() * 70 + 10 + '%';
+        
+        const duration = 3 + Math.random() * 3; 
+        const delay = Math.random() * 5;
+        star.style.animationDuration = `${duration}s`;
+        star.style.animationDelay = `${delay}s`;
+
+        star.addEventListener('animationiteration', () => {
+            star.style.left = Math.random() * 90 + 5 + '%';
+            star.style.top = Math.random() * 70 + 10 + '%';
+        });
+        
+        star.onclick = () => lsOpenLetterDetail(letter.id);
+        space.appendChild(star);
+    });
+}
+
+// 3. 弹窗与列表控制
+function lsOpenShrineModal() {
+    const modal = document.getElementById('ls-shrine-modal');
+    modal.style.display = 'flex'; // 👈 先显示出来
+    setTimeout(() => modal.classList.add('active'), 10); // 👈 再触发透明度动画
+}
+function lsCloseShrineModal() {
+    const modal = document.getElementById('ls-shrine-modal');
+    modal.classList.remove('active'); // 👈 先触发透明度消失动画
+    setTimeout(() => modal.style.display = 'none', 300); // 👈 动画结束后彻底隐藏
+}
+
+function lsOpenLetterList() {
+    lsCloseShrineModal();
+    const container = document.getElementById('ls-shrine-list-content');
+    container.innerHTML = '';
+
+    if (!lsState.letters || lsState.letters.length === 0) {
+        container.innerHTML = '<div class="shrine-list-empty">星空档案室空空如也</div>';
+    } else {
+        const sortedLetters = [...lsState.letters].sort((a, b) => b.time - a.time);
+        sortedLetters.forEach(letter => {
+            const dateStr = new Date(letter.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const isFromChar = letter.from === 'char';
+            const tagText = isFromChar ? 'FROM TA' : 'FROM ME';
+            const tagClass = isFromChar ? 'tag-gold' : 'tag-blue';
+
+            const div = document.createElement('div');
+            div.className = 'shrine-list-card';
+            div.innerHTML = `
+                <div class="shrine-list-card-top">
+                    <span class="shrine-list-tag ${tagClass}">${tagText}</span>
+                    <span class="shrine-list-date">${dateStr}</span>
+                </div>
+                <div class="shrine-list-card-title">${letter.title}</div>
+                <div class="shrine-list-card-preview">${letter.content.substring(0, 30)}...</div>
+            `;
+            div.onclick = () => lsOpenLetterDetail(letter.id);
+            container.appendChild(div);
+        });
+    }
+
+    // 👇 修改这里：先设置为 flex 显示，再延迟触发滑入动画
+    const view = document.getElementById('ls-letter-list-view');
+    view.style.display = 'flex';
+    setTimeout(() => view.classList.add('active'), 10);
+}
+
+function lsCloseLetterList() {
+    // 👇 修改这里：先触发滑出动画，等动画结束（400ms）后再彻底隐藏
+    const view = document.getElementById('ls-letter-list-view');
+    view.classList.remove('active');
+    setTimeout(() => view.style.display = 'none', 400);
+}
+
+// 4. AI 生成信件 (主动祈愿)
+async function lsGenerateAILetter() {
+    const charId = lsState.boundCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const btn = document.getElementById('btn-ai-pray');
+    const originalText = btn.innerText;
+    btn.innerText = "神明正在传递信号...";
+    btn.style.pointerEvents = 'none';
+
+    // --- 新增：显示环绕小星球特效 ---
+    const orbitPlanets = document.getElementById('ls-orbit-planets');
+    const moonLabel = document.querySelector('.center-moon-label');
+    const centerMoon = document.querySelector('.center-moon');
+    if (orbitPlanets) orbitPlanets.style.display = 'block';
+    if (moonLabel) moonLabel.style.opacity = '0';
+    if (centerMoon) centerMoon.classList.add('receiving');
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        // 读取最近 100 条聊天记录
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-100).map(m => {
+            if (m.isError || m.type === 'system') return null;
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return `${m.sender==='me'?'User':char.name}: ${content}`;
+        }).filter(Boolean).join('\n');
+
+        // 读取关联的世界书
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 读取记忆系统中的记忆
+        let memoryText = "暂无特殊记忆。";
+        let memoryCount = 0;
+        if (char.memories && char.memories.length > 0) {
+            memoryCount = char.memories.length;
+            memoryText = char.memories.slice(0, 15).map(m => `- ${m.content}`).join('\n');
+        }
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)面具/设定】：${userPersona}\n`;
+        prompt += `【你们的共同记忆（共 ${memoryCount} 条记录）】：\n${memoryText}\n\n`;
+        prompt += `【最近的聊天记录（100条上下文）】：\n${recentMsgs}\n\n`;
+        
+        prompt += `请以 ${char.name} 的口吻，给 User 写一封跨越时空的信。\n`;
+        prompt += `【核心要求】：\n`;
+        prompt += `1. 文风要求：极具高级感、日系/韩系文艺风、意识流、细腻且克制。不要太直白，要像深夜里的呢喃或散文诗。\n`;
+        prompt += `2. 内容要求：必须结合【共同记忆】和【聊天记录】中的细节，表达你对 User 的深层情感。\n`;
+        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `4. 必须严格按照以下 JSON 格式返回：\n`;
+        prompt += `{
+  "title": "信件标题（如：写在星轨交汇时 / 听雨时的随笔）",
+  "salutation": "对User的亲昵称呼：\\n见字如晤，",
+  "content": "信件正文内容（支持使用 \\n 换行，字数400-600字左右）",
+  "signature": "你的署名（如：永远爱你的 ${char.name}）"
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const letterData = JSON.parse(content);
+
+        const newLetterId = Date.now();
+        if (!lsState.letters) lsState.letters = [];
+        lsState.letters.push({
+            id: newLetterId,
+            from: 'char',
+            title: letterData.title || '无题',
+            salutation: letterData.salutation || '',
+            content: letterData.content || '...',
+            signature: letterData.signature || '',
+            time: Date.now()
+        });
+        
+        lsSaveData();
+        lsRenderStarlights();
+        lsCloseShrineModal();
+        
+        // --- 新增：展示信件到达特效 ---
+        const moonContainer = document.getElementById('ls-center-moon-container');
+        const arrivalBox = document.getElementById('ls-new-letter-arrival');
+        const arrivalAvatar = document.getElementById('ls-arrival-avatar');
+        
+        if (moonContainer && arrivalBox && arrivalAvatar) {
+            // 隐藏月亮，显示信件
+            moonContainer.style.display = 'none';
+            arrivalAvatar.src = char.avatar;
+            arrivalBox.style.display = 'flex';
+            
+            // 触发动画
+            setTimeout(() => {
+                arrivalBox.classList.add('show');
+            }, 50);
+
+            // 绑定点击事件：打开信件并恢复月亮
+            arrivalBox.onclick = () => {
+                lsOpenLetterDetail(newLetterId);
+                arrivalBox.classList.remove('show');
+                setTimeout(() => {
+                    arrivalBox.style.display = 'none';
+                    moonContainer.style.display = 'flex';
+                }, 500);
+            };
+        }
+        
+        if (typeof showMainSystemNotification === 'function') {
+            showMainSystemNotification("星の神社", `夜空中多了一颗来自 ${char.name} 的星光`, char.avatar);
+        }
+
+    } catch (e) {
+        console.error(e);
+        alert("祈愿失败，请重试...");
+    } finally {
+        btn.innerText = originalText;
+        btn.style.pointerEvents = 'auto';
+        
+        // --- 新增：恢复月亮状态 ---
+        if (orbitPlanets) orbitPlanets.style.display = 'none';
+        if (moonLabel) moonLabel.style.opacity = '1';
+        if (centerMoon) centerMoon.classList.remove('receiving');
+    }
+}
+
+// 5. 用户写信逻辑
+function lsOpenUserLetterInput() {
+    document.getElementById('ls-write-title').value = '';
+    document.getElementById('ls-write-body').value = '';
+    
+    const view = document.getElementById('ls-user-write-view');
+    view.style.display = 'flex';
+    setTimeout(() => view.classList.add('active'), 10);
+}
+
+function lsCloseUserLetterInput() {
+    const view = document.getElementById('ls-user-write-view');
+    view.classList.remove('active');
+    setTimeout(() => view.style.display = 'none', 400);
+}
+
+function lsSubmitUserLetter() {
+    const title = document.getElementById('ls-write-title').value.trim() || '写给你的信';
+    const text = document.getElementById('ls-write-body').value.trim();
+    
+    if (!text) return alert("信件内容不能为空哦~");
+
+    if (!lsState.letters) lsState.letters = [];
+    lsState.letters.push({
+        id: Date.now(),
+        from: 'user',
+        title: title,
+        content: text,
+        time: Date.now()
+    });
+    
+    lsSaveData();
+    lsRenderStarlights();
+    lsCloseUserLetterInput();
+    alert("信件已化作星光投递。你可以在星空中点击它，并祈求 Ta 的回信。");
+}
+
+// 6. 阅读信件与手动请求回信
+let currentReadingLetterId = null;
+
+function lsOpenLetterDetail(id) {
+    const letter = lsState.letters.find(l => l.id === id);
+    if (!letter) return;
+
+    currentReadingLetterId = id;
+    const char = wcState.characters.find(c => c.id === lsState.boundCharId);
+    const authorName = letter.from === 'char' ? (char ? char.name : 'Ta') : 'Me';
+
+    document.getElementById('ls-letter-detail-date').innerText = new Date(letter.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    document.getElementById('ls-letter-detail-title').innerText = letter.title;
+    
+    // 拼装称呼和正文
+    let fullContent = '';
+    if (letter.salutation) {
+        fullContent += `<div style="font-weight: bold; margin-bottom: 15px; color: #3A3533;">${letter.salutation.replace(/\n/g, '<br>')}</div>`;
+    }
+    fullContent += letter.content.replace(/\n/g, '<br>');
+    document.getElementById('ls-letter-detail-content').innerHTML = fullContent;
+
+    // 渲染署名
+    if (letter.signature) {
+        document.getElementById('ls-letter-detail-author').innerHTML = letter.signature.replace(/\n/g, '<br>');
+    } else {
+        document.getElementById('ls-letter-detail-author').innerText = `— ${authorName}`;
+    }
+
+    // 控制回信按钮的显示与隐藏
+    const replyBtn = document.getElementById('ls-btn-request-reply');
+    if (letter.from === 'user') {
+        replyBtn.style.display = 'block';
+    } else {
+        replyBtn.style.display = 'none';
+    }
+
+    const modal = document.getElementById('ls-letter-detail-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function lsCloseLetterDetail() {
+    const modal = document.getElementById('ls-letter-detail-modal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 400);
+    currentReadingLetterId = null;
+}
+
+function lsDeleteCurrentLetter() {
+    if (!currentReadingLetterId) return;
+    if (confirm("确定要将这封信化作宇宙尘埃吗？")) {
+        lsState.letters = lsState.letters.filter(l => l.id !== currentReadingLetterId);
+        lsSaveData();
+        lsRenderStarlights();
+        lsCloseLetterDetail();
+    }
+}
+
+// 7. 手动点击按钮，请求 AI 回信
+async function lsRequestReply() {
+    if (!currentReadingLetterId) return;
+    const letter = lsState.letters.find(l => l.id === currentReadingLetterId);
+    if (!letter || letter.from !== 'user') return;
+
+    const charId = lsState.boundCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const replyBtn = document.getElementById('ls-btn-request-reply');
+    const originalText = replyBtn.innerText;
+    replyBtn.innerText = "Ta 正在提笔回信...";
+    replyBtn.style.pointerEvents = 'none';
+    replyBtn.style.opacity = '0.5';
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)面具/设定】：${userPersona}\n\n`;
+        
+        prompt += `【核心事件】：User 刚刚在时空信箱中给你写了一封信，并祈求你的回信。\n`;
+        prompt += `User 的信件标题：【${letter.title}】\n`;
+        prompt += `User 的信件内容：\n${letter.content}\n\n`;
+        
+        prompt += `请你仔细阅读 User 的信件后，以 ${char.name} 的身份给 User 写一封回信。\n`;
+        prompt += `【核心要求】：\n`;
+        prompt += `1. 文风要求：极具高级感、日系/韩系文艺风、意识流、细腻且克制。要针对 User 信中的内容进行深情的回应。\n`;
+        prompt += `2. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `3. 必须严格按照以下 JSON 格式返回：\n`;
+        prompt += `{
+  "title": "回信标题（如：展信佳 / 见字如面）",
+  "salutation": "对User的亲昵称呼：\\n见字如晤，",
+  "content": "回信正文内容（支持使用 \\n 换行，字数400-600字左右）",
+  "signature": "你的署名（如：永远爱你的 ${char.name}）"
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const letterData = JSON.parse(content);
+
+        lsState.letters.push({
+            id: Date.now(),
+            from: 'char',
+            title: letterData.title || '回信',
+            salutation: letterData.salutation || '',
+            content: letterData.content || '...',
+            signature: letterData.signature || '',
+            time: Date.now()
+        });
+        
+        lsSaveData();
+        lsRenderStarlights();
+        
+        alert("回信已送达！请退出当前信件，在星空中寻找那颗新出现的金色星光吧。");
+        lsCloseLetterDetail();
+
+    } catch (e) {
+        console.error("回信失败", e);
+        alert("回信在时空中迷失了，请重试...");
+    } finally {
+        replyBtn.innerText = originalText;
+        replyBtn.style.pointerEvents = 'auto';
+        replyBtn.style.opacity = '1';
+    }
 }

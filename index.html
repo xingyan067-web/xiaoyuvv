@@ -236,17 +236,16 @@
                                 <div class="ls-album-card-title">专属纪念</div>
                                 <div class="ls-album-card-desc">Anniversaries</div>
                             </div>
-                            <!-- 卡片 4：未来信件 (占位) -->
-                            <div class="ls-album-card">
-                                <div class="ls-album-card-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                                </div>
-                                <div class="ls-album-card-title">未来信件</div>
-                                <div class="ls-album-card-desc">Future Letters</div>
-                            </div>
-                        </div>
-                    </div>
-
+<!-- 未来信件入口卡片 -->
+<div class="ls-album-card" onclick="lsOpenLettersView()">
+    <div class="ls-album-card-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+    </div>
+    <div class="ls-album-card-title">未来信件</div>
+    <div class="ls-album-card-desc">Time Mailbox</div>
+</div>
+</div>
+</div> <!-- 👈 宝宝，就是在这里补上这行闭合标签！ -->
                     <!-- Tab 3: 设置 -->
                     <div id="ls-tab-settings" class="ls-tab-content">
                         <div class="ls-setting-group">
@@ -1977,6 +1976,67 @@
                         </div>
                     </div>
                 </div>
+                <!-- 选择创建类型弹窗 -->
+                <div id="wc-modal-create-choice" class="wc-modal hidden" style="z-index: 3500; align-items: flex-end;">
+                    <div class="wc-modal-content" style="height: auto; border-radius: 12px 12px 0 0; width: 100%; max-width: 100%; background-color: transparent;">
+                        <div class="wc-ios-list-group" style="margin: 0 10px; border-radius: 12px; overflow: hidden;">
+                            <div class="wc-list-item center-content" onclick="wcCloseModal('wc-modal-create-choice'); wcOpenModal('wc-modal-add-char');" style="background: white; height: 56px;">
+                                <span style="font-size: 18px; color: #007AFF;">创建单人角色</span>
+                            </div>
+                            <div class="wc-list-item center-content" onclick="wcCloseModal('wc-modal-create-choice'); wcOpenAddGroupModal();" style="background: white; height: 56px;">
+                                <span style="font-size: 18px; color: #007AFF;">创建群聊</span>
+                            </div>
+                        </div>
+                        <div class="wc-ios-list-group" style="margin: 10px 10px 20px 10px; border-radius: 12px; overflow: hidden;">
+                            <div class="wc-list-item center-content" onclick="wcCloseModal('wc-modal-create-choice')" style="background: white; height: 56px;">
+                                <span style="font-size: 18px; font-weight: bold; color: #007AFF;">取消</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 创建群聊弹窗 -->
+                <div id="wc-modal-add-group" class="wc-modal-overlay" style="z-index: 3600;">
+                    <div class="wc-modal-content" style="border-radius: 16px 16px 0 0; position: absolute; bottom: 0; width: 100%; max-width: 100%;">
+                        <div class="wc-modal-header">
+                            <h3>发起群聊</h3>
+                            <button class="wc-close-btn" onclick="wcCloseModal('wc-modal-add-group')">&times;</button>
+                        </div>
+                        <div class="wc-modal-body">
+                            <div class="wc-upload-placeholder" onclick="wcTriggerUpload('group')">
+                                <img id="wc-preview-group-avatar" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                                <svg id="wc-icon-group-upload" class="wc-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                            </div>
+                            <div class="wc-form-group">
+                                <label class="wc-form-label">群聊名称</label>
+                                <input type="text" id="wc-input-group-name" class="wc-form-input" placeholder="给群聊取个名字">
+                            </div>
+                            <div class="wc-form-group">
+                                <label class="wc-form-label">选择群成员 (多选)</label>
+                                <div id="wc-group-member-select-list" class="wc-checkbox-list" style="max-height: 200px; overflow-y: auto;">
+                                    <!-- JS 动态注入 -->
+                                </div>
+                            </div>
+                            <button class="wc-btn-primary" onclick="wcSaveGroupChat()">完成创建</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 群成员管理弹窗 (邀请/踢人) -->
+                <div id="wc-modal-manage-group-members" class="wc-modal hidden" style="z-index: 3700;">
+                    <div class="wc-modal-content">
+                        <div class="wc-modal-header">
+                            <h3 id="wc-manage-group-title">管理群成员</h3>
+                            <button class="wc-close-btn" onclick="wcCloseModal('wc-modal-manage-group-members')">&times;</button>
+                        </div>
+                        <div class="wc-modal-body">
+                            <div id="wc-manage-group-list" class="wc-checkbox-list" style="max-height: 300px; overflow-y: auto;">
+                                <!-- JS 动态注入 -->
+                            </div>
+                            <button class="wc-btn-primary" id="wc-manage-group-confirm-btn">确定</button>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Add Character Modal -->
                 <div id="wc-modal-add-char" class="wc-modal-overlay">
@@ -2022,7 +2082,7 @@
                         <div class="wc-contact-card-info">
                             <div class="wc-contact-card-name" id="wc-detail-char-name">Name</div>
                             <div class="wc-contact-card-note" id="wc-detail-char-note">Note</div>
-                            <button class="wc-ios-btn-block" onclick="wcCheckPhoneAction()">查看对方手机</button>
+                            <button class="wc-ios-btn-block" id="wc-detail-check-phone-btn" onclick="wcCheckPhoneAction()">查看对方手机</button>
                         </div>
                     </div>
                 </div>
@@ -2469,6 +2529,20 @@
                                         <label class="wc-form-label">人设 (Prompt)</label>
                                         <textarea id="wc-setting-char-prompt" class="wc-form-textarea" style="height: 80px;"></textarea>                                    
                                     </div>
+                                            <!-- 👇 新增：群聊专属设置区域 👇 -->
+                                    <div id="wc-setting-group-members-section" class="wc-settings-section" style="display: none; margin-top: 20px;">
+                                        <div class="wc-settings-section-title">群聊成员</div>
+                                        <div id="wc-group-members-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 15px;">
+                                            <!-- JS 注入头像和 +/- -->
+                                        </div>
+                                        <div class="wc-form-group" style="margin-top: 15px; border-top: 1px solid #F0F0F0; padding-top: 15px;">
+                                            <label class="wc-form-label">选择群主</label>
+                                            <select id="wc-setting-group-owner" class="wc-form-input" onchange="wcChangeGroupOwner(this.value)">
+                                                <!-- JS 注入 -->
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <!-- 👆 新增结束 👆 -->                           
 <!-- 👇 修改：拉黑功能按钮 👇 -->
 <div class="wc-form-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #F0F0F0;">
     <button id="wc-setting-block-btn" class="ins-block-btn" onclick="handleBlockBtnClick()">拉黑该角色 (Block)</button>
@@ -2680,8 +2754,10 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Hidden Inputs -->
+                 <input type="file" id="wc-file-input-group" accept="image/*" onchange="wcHandleFileSelect(event, 'group')" style="display:none;">
+
                 <input type="file" id="wc-file-input-char" accept="image/*" onchange="wcHandleFileSelect(event, 'char')" style="display:none;">
                 <input type="file" id="wc-file-input-edit-char" accept="image/*" onchange="wcHandleFileSelect(event, 'edit-char')" style="display:none;">
                 <input type="file" id="wc-file-input-user" accept="image/*" onchange="wcHandleFileSelect(event, 'user')" style="display:none;">

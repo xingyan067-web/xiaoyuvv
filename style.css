@@ -5280,3 +5280,409 @@ body,
     border-top: 1px dashed #F0F0F0;
     line-height: 1.5;
 }
+/* ========================================== */
+/* 恋人空间：时空信箱 (Shrine & Stars) - 日式神社星空风 */
+/* ========================================== */
+
+/* 1. 神社星空主页视图 */
+.ins-shrine-view {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: #0B0C10; /* 深邃夜空底色 */
+    z-index: 2000; display: none; flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", serif;
+    transform: translateY(100%); transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+    overflow: hidden;
+}
+.ins-shrine-view.active { transform: translateY(0); }
+
+/* 神社背景特效 (渐变星空 + 底部鸟居剪影) */
+.shrine-bg {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(to bottom, #050508 0%, #16213E 60%, #0F3460 100%);
+    z-index: 0; pointer-events: none;
+}
+.shrine-torii {
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 100%; height: 30vh;
+    /* 用纯 CSS 绘制一个极简的鸟居剪影 */
+    background-image: 
+        linear-gradient(#050508, #050508), /* 顶横梁 */
+        linear-gradient(#050508, #050508), /* 次横梁 */
+        linear-gradient(#050508, #050508), /* 左柱 */
+        linear-gradient(#050508, #050508); /* 右柱 */
+    background-size: 
+        200px 12px, 
+        160px 8px, 
+        16px 150px, 
+        16px 150px;
+    background-position: 
+        center top 20px, 
+        center top 45px, 
+        calc(50% - 60px) bottom, 
+        calc(50% + 60px) bottom;
+    background-repeat: no-repeat;
+    opacity: 0.4; filter: blur(1px);
+}
+
+/* 导航栏 */
+.shrine-nav {
+    position: relative; z-index: 10;
+    height: calc(54px + env(safe-area-inset-top, 20px));
+    padding-top: env(safe-area-inset-top, 20px);
+    display: flex; justify-content: space-between; align-items: center;
+    padding-left: 20px; padding-right: 20px;
+}
+.shrine-nav-btn {
+    width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #FFF; border-radius: 50%; background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(10px); transition: transform 0.2s;
+}
+.shrine-nav-btn:active { transform: scale(0.9); }
+.shrine-nav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+.shrine-nav-title { font-size: 11px; font-weight: 800; letter-spacing: 4px; color: rgba(255,255,255,0.6); }
+
+/* 标题区 */
+.shrine-header {
+    position: relative; z-index: 10; padding: 20px 30px; text-align: center; margin-top: 10px;
+}
+.shrine-header h2 {
+    font-family: 'Kaiti', 'STKaiti', '楷体', serif; font-size: 36px; font-weight: bold;
+    color: #FFF; margin-bottom: 8px; letter-spacing: 4px; text-shadow: 0 0 20px rgba(255,255,255,0.5);
+}
+.shrine-header p {
+    font-size: 12px; color: rgba(255,255,255,0.6); letter-spacing: 2px; font-family: 'Georgia', serif;
+}
+
+/* 星光交互区 */
+.shrine-space {
+    flex: 1; position: relative; z-index: 5;
+    display: flex; align-items: center; justify-content: center;
+}
+
+/* 中心神体 (发光月亮) */
+.center-moon-container {
+    position: relative; display: flex; flex-direction: column; align-items: center;
+    cursor: pointer; transition: transform 0.3s;
+}
+.center-moon-container:active { transform: scale(0.95); }
+.center-moon {
+    width: 100px; height: 100px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #FFF, #E0E5EC);
+    box-shadow: 0 0 50px rgba(255, 255, 255, 0.6), inset -10px -10px 20px rgba(0,0,0,0.2);
+    position: relative; z-index: 2;
+}
+.center-moon.receiving {
+    animation: moonPulse 1.5s infinite alternate;
+}
+@keyframes moonPulse {
+    0% { box-shadow: 0 0 50px rgba(255, 255, 255, 0.6); }
+    100% { box-shadow: 0 0 100px rgba(255, 255, 255, 1); }
+}
+.center-moon-halo {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 140px; height: 140px; border-radius: 50%;
+    border: 1px dashed rgba(255,255,255,0.3); z-index: 1;
+    animation: haloSpin 15s linear infinite;
+}
+@keyframes haloSpin { 100% { transform: translate(-50%, -50%) rotate(360deg); } }
+.center-moon-label {
+    margin-top: 25px; font-size: 11px; color: rgba(255,255,255,0.8);
+    letter-spacing: 4px; text-transform: uppercase; font-weight: bold;
+}
+
+/* 闪烁瞬移的星光 (信件) */
+.shrine-starlight {
+    position: absolute; cursor: pointer; z-index: 3;
+    width: 20px; height: 20px; /* 给 SVG 留出空间 */
+    display: flex; align-items: center; justify-content: center;
+    animation-name: starBlink;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+}
+@keyframes starBlink {
+    0% { opacity: 0; transform: scale(0.5); filter: brightness(0.5); }
+    50% { opacity: 1; transform: scale(1.2); filter: brightness(1.2); }
+    100% { opacity: 0; transform: scale(0.5); filter: brightness(0.5); }
+}
+/* Char 的信：纯白星光 + 极微弱的暖色光晕 */
+.star-gold {
+    filter: drop-shadow(0 0 6px #FFF) drop-shadow(0 0 12px rgba(255, 215, 0, 0.5));
+}
+/* User 的信：纯白星光 + 极微弱的冷色光晕 */
+.star-blue {
+    filter: drop-shadow(0 0 6px #FFF) drop-shadow(0 0 12px rgba(135, 206, 250, 0.5));
+}
+
+/* 底部写信按钮 */
+.shrine-footer {
+    position: relative; z-index: 10;
+    padding: 20px 30px calc(30px + env(safe-area-inset-bottom, 20px)) 30px;
+    display: flex; justify-content: center;
+}
+.shrine-write-btn {
+    background: rgba(255,255,255,0.15); backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.3); color: #FFF;
+    height: 54px; border-radius: 27px; padding: 0 30px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; letter-spacing: 2px;
+    cursor: pointer; transition: all 0.2s; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+.shrine-write-btn:active { transform: scale(0.96); background: rgba(255,255,255,0.25); }
+.shrine-write-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
+
+/* ========================================== */
+/* 神社祈愿弹窗 (居中毛玻璃) */
+/* ========================================== */
+.shrine-modal-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); z-index: 2500;
+    display: none; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.3s ease;
+}
+.shrine-modal-overlay.active { opacity: 1; }
+.shrine-modal-box {
+    width: 280px; background: rgba(255,255,255,0.95); border-radius: 24px;
+    padding: 30px 20px; display: flex; flex-direction: column; align-items: center;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.3); transform: scale(0.95); transition: transform 0.3s ease;
+}
+.shrine-modal-overlay.active .shrine-modal-box { transform: scale(1); }
+
+.shrine-modal-title { font-family: 'Kaiti', serif; font-size: 22px; font-weight: bold; color: #111; margin-bottom: 8px; }
+.shrine-modal-desc { font-size: 12px; color: #888; margin-bottom: 24px; letter-spacing: 1px; }
+
+.shrine-modal-btn {
+    width: 100%; height: 48px; border-radius: 24px; font-size: 14px; font-weight: bold;
+    cursor: pointer; border: none; margin-bottom: 12px; transition: transform 0.1s;
+}
+.shrine-modal-btn:active { transform: scale(0.96); }
+.shrine-modal-btn.primary { background: #111; color: #FFF; box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
+.shrine-modal-btn.secondary { background: #F5F5F5; color: #111; border: 1px solid #EAEAEA; }
+.shrine-modal-btn.cancel { background: transparent; color: #888; margin-bottom: 0; }
+
+/* ========================================== */
+/* 信件列表全屏页 (深色模式) */
+/* ========================================== */
+.shrine-list-view {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: #0B0C10; z-index: 2200; display: none; flex-direction: column;
+    transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.shrine-list-view.active { transform: translateX(0); }
+
+.shrine-list-content {
+    flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px;
+}
+.shrine-list-empty { text-align: center; color: rgba(255,255,255,0.3); margin-top: 60px; font-size: 14px; letter-spacing: 1px; }
+
+.shrine-list-card {
+    background: rgba(255,255,255,0.05); border-radius: 16px; padding: 20px;
+    border: 1px solid rgba(255,255,255,0.1); cursor: pointer; transition: background 0.2s;
+}
+.shrine-list-card:active { background: rgba(255,255,255,0.1); }
+.shrine-list-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.shrine-list-tag { font-size: 9px; font-weight: bold; letter-spacing: 1px; padding: 4px 8px; border-radius: 8px; }
+.tag-gold { background: rgba(255, 215, 0, 0.2); color: #FFD700; }
+.tag-blue { background: rgba(135, 206, 250, 0.2); color: #87CEFA; }
+.shrine-list-date { font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.5); }
+.shrine-list-card-title { font-family: 'Georgia', serif; font-size: 16px; font-weight: bold; color: #FFF; margin-bottom: 6px; }
+.shrine-list-card-preview { font-size: 13px; color: rgba(255,255,255,0.6); }
+
+/* ========================================== */
+/* 读信/写信全屏视图 (高级仿信纸风) */
+/* ========================================== */
+.ins-paper-view {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: #FDFBF7; /* 奶油白信纸底色 */
+    z-index: 3000; display: none; flex-direction: column;
+    opacity: 0; transition: opacity 0.4s ease;
+}
+.ins-paper-view.active { opacity: 1; }
+
+.ins-paper-nav {
+    height: calc(60px + env(safe-area-inset-top, 20px));
+    padding-top: env(safe-area-inset-top, 20px);
+    display: flex; justify-content: space-between; align-items: center;
+    padding-left: 24px; padding-right: 24px;
+    font-size: 12px; font-weight: 800; letter-spacing: 2px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.ins-paper-content {
+    flex: 1; overflow-y: auto; padding: 30px 24px 20px 24px;
+    display: flex; flex-direction: column;
+}
+
+/* 写信输入框 */
+.ins-paper-title-input {
+    width: 100%; background: transparent; border: none;
+    font-family: 'Georgia', serif; font-size: 24px; font-weight: bold; color: #3A3533;
+    margin-bottom: 20px; outline: none; font-style: italic;
+}
+.ins-paper-title-input::placeholder { color: #C2B8B2; }
+
+.ins-paper-textarea {
+    flex: 1; width: 100%; background: transparent; border: none;
+    font-family: 'Kaiti', 'STKaiti', '楷体', serif; font-size: 16px; color: #4A413E;
+    line-height: 32px; resize: none; outline: none; text-align: justify;
+    /* 核心：信纸横线背景 */
+    background-image: repeating-linear-gradient(transparent, transparent 31px, #EAE3DE 31px, #EAE3DE 32px);
+    background-attachment: local;
+}
+.ins-paper-textarea::placeholder { color: #C2B8B2; font-family: -apple-system, sans-serif; }
+
+/* 读信展示区 */
+.ins-paper-read-title {
+    font-family: 'Georgia', serif; font-size: 26px; color: #3A3533;
+    margin-bottom: 30px; text-align: center; font-style: italic;
+}
+.ins-paper-read-text {
+    font-family: 'Kaiti', 'STKaiti', '楷体', serif; font-size: 16px; color: #4A413E;
+    line-height: 32px; text-align: justify; letter-spacing: 1px;
+    background-image: repeating-linear-gradient(transparent, transparent 31px, #EAE3DE 31px, #EAE3DE 32px);
+    background-attachment: local; 
+    /* 删除了 min-height，让署名自然紧跟在正文末尾 */
+}
+.ins-paper-read-author {
+    margin-top: 40px; text-align: right; font-family: 'Georgia', serif;
+    font-size: 16px; font-style: italic; color: #8A7F7A;
+}
+
+/* 底部操作区 (销毁 / 求回信) */
+.ins-paper-actions {
+    padding: 10px 24px calc(20px + env(safe-area-inset-bottom, 20px)) 24px;
+    display: flex; justify-content: space-between; align-items: center;
+    background: #FDFBF7;
+}
+
+.ins-paper-action-btn {
+    font-size: 13px; font-weight: bold; letter-spacing: 1px; cursor: pointer;
+    padding: 8px 16px; border-radius: 20px; transition: all 0.2s;
+}
+.ins-paper-action-btn:active { transform: scale(0.95); }
+
+.ins-paper-action-btn.delete {
+    color: #FF3B30; border: 1px solid rgba(255, 59, 48, 0.3);
+}
+.ins-paper-action-btn.reply {
+    background: #111; color: #FFF; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+/* ========================================== */
+/* 时空信箱：生成中与生成完毕特效 */
+/* ========================================== */
+
+/* 环绕的小星球 */
+.orbit-planets {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 200px; height: 200px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    animation: orbitSpin 4s linear infinite;
+}
+@keyframes orbitSpin {
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+.orbit-planet {
+    position: absolute;
+    border-radius: 50%;
+    background: #FFF;
+    box-shadow: 0 0 10px #FFF, 0 0 20px #87CEFA;
+}
+.orbit-planet.p1 { width: 8px; height: 8px; top: 0; left: 50%; transform: translateX(-50%); }
+.orbit-planet.p2 { width: 6px; height: 6px; bottom: 20%; left: 10%; }
+.orbit-planet.p3 { width: 10px; height: 10px; bottom: 20%; right: 10%; box-shadow: 0 0 10px #FFF, 0 0 20px #FFD700; }
+
+/* 新信件到达展示 */
+.new-letter-arrival {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    display: flex; flex-direction: column; align-items: center;
+    z-index: 100;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.new-letter-arrival.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+.arrival-avatar-wrap {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    padding: 4px;
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 0 30px rgba(255,255,255,0.5);
+    position: relative;
+    z-index: 2;
+}
+.arrival-avatar {
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.arrival-text {
+    margin-top: 15px;
+    font-size: 14px;
+    color: #FFF;
+    letter-spacing: 2px;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(255,255,255,0.8);
+    z-index: 2;
+}
+
+/* 特效容器 */
+.arrival-effects {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 150px; height: 150px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* 星光 ✨ */
+.arrival-star {
+    position: absolute;
+    width: 20px; height: 20px;
+    animation: starTwinkle 1.5s ease-in-out infinite alternate;
+}
+.arrival-star.s1 { top: 10%; left: 20%; animation-delay: 0s; }
+.arrival-star.s2 { top: 20%; right: 10%; width: 14px; height: 14px; animation-delay: 0.5s; }
+.arrival-star.s3 { bottom: 10%; left: 30%; width: 16px; height: 16px; animation-delay: 1s; }
+
+@keyframes starTwinkle {
+    0% { transform: scale(0.5); opacity: 0.3; filter: drop-shadow(0 0 2px #FFF); }
+    100% { transform: scale(1.2); opacity: 1; filter: drop-shadow(0 0 8px #FFF); }
+}
+
+/* 蝴蝶飞舞 */
+.arrival-butterfly {
+    position: absolute;
+    width: 24px; height: 24px;
+    top: 50%; left: 50%;
+    transform-origin: center;
+}
+.arrival-butterfly.b1 {
+    animation: flyB1 4s linear infinite;
+}
+.arrival-butterfly.b2 {
+    width: 18px; height: 18px;
+    animation: flyB2 5s linear infinite reverse;
+}
+
+@keyframes flyB1 {
+    0% { transform: rotate(0deg) translateX(60px) rotate(0deg) scaleX(1); }
+    25% { transform: rotate(90deg) translateX(60px) rotate(-90deg) scaleX(0.3); }
+    50% { transform: rotate(180deg) translateX(60px) rotate(-180deg) scaleX(1); }
+    75% { transform: rotate(270deg) translateX(60px) rotate(-270deg) scaleX(0.3); }
+    100% { transform: rotate(360deg) translateX(60px) rotate(-360deg) scaleX(1); }
+}
+@keyframes flyB2 {
+    0% { transform: rotate(0deg) translateX(70px) rotate(0deg) scaleX(1); }
+    25% { transform: rotate(90deg) translateX(70px) rotate(-90deg) scaleX(0.3); }
+    50% { transform: rotate(180deg) translateX(70px) rotate(-180deg) scaleX(1); }
+    75% { transform: rotate(270deg) translateX(70px) rotate(-270deg) scaleX(0.3); }
+    100% { transform: rotate(360deg) translateX(70px) rotate(-360deg) scaleX(1); }
+}
