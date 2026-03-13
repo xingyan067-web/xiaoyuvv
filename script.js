@@ -3398,7 +3398,8 @@ async function wcTriggerAI(charIdOverride = null) {
             }
         }
         // 👇 新增：群聊模式强制指令 (包含用户人设)
-                if (char.isGroup) {
+        let groupPrompt = ""; // 👈 就是加了这一行！
+        if (char.isGroup) {
             let groupMembersInfo = (char.members || []).map(id => {
                 if (id === 'user') return `${config.userName || wcState.user.name}: ${config.userPersona || wcState.user.persona}`;
                 const m = wcState.characters.find(c => c.id === id);
@@ -13899,6 +13900,7 @@ const systemUpdateLogs = [
         date: "2026.03.13",
         title: "欢迎来到小元机^这里是小元。",
         content: [
+            "非常非常抱歉！orz滑跪，报错bug已修复",
             "1. 新增微信群聊功能。支持拉入多个角色一起聊天。（因为我没玩过群聊，一直是一个char，所以可能做的不太好）",
             "2. 情侣空间新增未来信件（时空信箱）功能。可以互相写信。嗯嗯对",
             "3. 有问题请多多反馈啦orz"
