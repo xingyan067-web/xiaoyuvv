@@ -3583,6 +3583,9 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         let limit = config.contextLimit > 0 ? config.contextLimit : 30;
         const recentMsgs = msgs.slice(-limit);
         
+
+        // 修复：自动识别是否为视觉模型，防止纯文本模型收到图片导致 400 错误
+        const isVisionModel = /vision|gpt-4o|claude-3|gemini|pixtral|qwen-vl|llava/i.test(apiConfig.model);
         const messages = [{ role: "system", content: systemPrompt }];
         
         recentMsgs.forEach(m => {
@@ -3590,7 +3593,7 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 
             if (m.type === 'system') {
                 messages.push({
-                    role: "system",
+                    role: "user", // 修复：将中间的 system 角色改为 user，防止 API 报 400 错误
                     content: `[系统提示]: ${m.content}`
                 });
                 return;
@@ -3601,25 +3604,42 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             if (m.type === 'sticker') {
                 const stickerDesc = wcFindStickerDescByUrl(m.content);
                 content = stickerDesc ? `[发送了一个表情: ${stickerDesc}]` : `[发送了一个表情]`;
+            } else if (m.type === 'voice') {
+                content = `[语音] ${m.content}`;
+            } else if (m.type === 'transfer') {
+                content = `[转账: ${m.amount}元, 备注: ${m.note}, 状态: ${m.status}]`;
+            } else if (m.type === 'invite') {
+                content = `[系统提示: 用户向你发送了“恋人空间”开启邀请。如果同意，请回复“我同意”或类似的话；如果拒绝，请回复拒绝理由。]`;
+            } else if (m.type === 'music_invite') {
+                content = `[系统提示: 用户向你发送了“一起听歌”邀请，歌曲名：《${m.songTitle || '未知'}》。请务必回复 {"type":"music_accept", "content":"同意的话"} 或 {"type":"music_reject", "content":"拒绝的话"}]`;                         
+            } else if (m.type === 'receipt') {
+                content = `[发送了一张应用内卡片]`; // 修复：防止发送大量 HTML 导致 400 错误
             }
-            
-            if (m.type === 'voice') content = `[语音] ${m.content}`;
-            if (m.type === 'transfer') content = `[转账: ${m.amount}元, 备注: ${m.note}, 状态: ${m.status}]`;
-            if (m.type === 'invite') content = `[系统提示: 用户向你发送了“恋人空间”开启邀请。如果同意，请回复“我同意”或类似的话；如果拒绝，请回复拒绝理由。]`;
-            if (m.type === 'music_invite') content = `[系统提示: 用户向你发送了“一起听歌”邀请，歌曲名：《${m.songTitle || '未知'}》。请务必回复 {"type":"music_accept", "content":"同意的话"} 或 {"type":"music_reject", "content":"拒绝的话"}]`;                         
                            
             if (m.type === 'image') {
-                const imageContent = [
-                    { type: "text", text: `[发送了一张图片, 图片ID: ${m.id}]` },
-                    { type: "image_url", image_url: { url: m.content } }
-                ];
-                if (m.quote) {
-                    imageContent[0].text = `[引用了消息: "${m.quote.replace(/<[^>]*>?/gm, '')}"]\n` + imageContent[0].text;
+                if (m.sender === 'me' && isVisionModel) { // 修复：只有视觉模型才发送 image_url，且仅限 user 角色
+                    const imageContent = [
+                        { type: "text", text: `[发送了一张图片, 图片ID: ${m.id}]` },
+                        { type: "image_url", image_url: { url: m.content } }
+                    ];
+                    if (m.quote) {
+                        imageContent[0].text = `[引用了消息: "${m.quote.replace(/<[^>]*>?/gm, '')}"]\n` + imageContent[0].text;
+                    }
+                    messages.push({
+                        role: 'user',
+                        content: imageContent
+                    });
+                } else {
+                    // 降级处理：如果是纯文本模型，或者图片是 AI 发的，只发送文本描述
+                    let textContent = `[发送了一张图片, 图片ID: ${m.id}]`;
+                    if (m.quote) {
+                        textContent = `[引用了消息: "${m.quote.replace(/<[^>]*>?/gm, '')}"]\n` + textContent;
+                    }
+                    messages.push({
+                        role: m.sender === 'me' ? 'user' : 'assistant',
+                        content: textContent
+                    });
                 }
-                messages.push({
-                    role: m.sender === 'me' ? 'user' : 'assistant',
-                    content: imageContent
-                });
             } else {
                 if (m.quote) {
                     content = `[引用了消息: "${m.quote.replace(/<[^>]*>?/gm, '')}"]\n${content}`;
@@ -3629,15 +3649,16 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
                     content: content
                 });
             }
-        }); // <--- 🌟 就是在这里补上这一行！闭合上面的 forEach 循环！
+        });
 
         // 👇 新增：在对话记录最末尾，强行注入被拉黑的系统警告 👇
         if (char.isBlocked) {
             messages.push({
-                role: "system",
+                role: "user", // 修复：将 system 角色改为 user
                 content: "【系统强制警告】：你刚才尝试发送消息，但系统提示“消息已发出，但被对方拒收”。你意识到自己已经被 User 拉黑了！请在接下来的回复中，强烈表现出你发现被拉黑后的真实反应（例如：错愕、愤怒、委屈、疯狂发消息试探等，必须符合你的人设）。"
             });
         }
+
         // 👆 新增结束 👆
 
         // 【新增】：修复温度为 0 时失效的 Bug
