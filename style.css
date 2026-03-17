@@ -5281,13 +5281,13 @@ body,
     line-height: 1.5;
 }
 /* ========================================== */
-/* 恋人空间：时空信箱 (Shrine & Stars) - 日式神社星空风 */
+/* 恋人空间：时空信箱 (Shrine & Stars) - 星际拼贴高级风 */
 /* ========================================== */
 
-/* 1. 神社星空主页视图 */
+/* 1. 星空主页视图 */
 .ins-shrine-view {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: #0B0C10; /* 深邃夜空底色 */
+    background: #0B0C10; 
     z-index: 2000; display: none; flex-direction: column;
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", serif;
     transform: translateY(100%); transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
@@ -5295,34 +5295,41 @@ body,
 }
 .ins-shrine-view.active { transform: translateY(0); }
 
-/* 神社背景特效 (渐变星空 + 底部鸟居剪影) */
+/* 星际背景 */
 .shrine-bg {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: linear-gradient(to bottom, #050508 0%, #16213E 60%, #0F3460 100%);
+    background: linear-gradient(to bottom, #1a1a24 0%, #2b2b3c 100%); 
     z-index: 0; pointer-events: none;
+    overflow: hidden;
 }
-.shrine-torii {
-    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
-    width: 100%; height: 30vh;
-    /* 用纯 CSS 绘制一个极简的鸟居剪影 */
-    background-image: 
-        linear-gradient(#050508, #050508), /* 顶横梁 */
-        linear-gradient(#050508, #050508), /* 次横梁 */
-        linear-gradient(#050508, #050508), /* 左柱 */
-        linear-gradient(#050508, #050508); /* 右柱 */
-    background-size: 
-        200px 12px, 
-        160px 8px, 
-        16px 150px, 
-        16px 150px;
-    background-position: 
-        center top 20px, 
-        center top 45px, 
-        calc(50% - 60px) bottom, 
-        calc(50% + 60px) bottom;
-    background-repeat: no-repeat;
-    opacity: 0.4; filter: blur(1px);
+
+/* 星际轨迹 */
+.orbit-ring {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    pointer-events: none;
 }
+.orbit-ring.ring1 {
+    width: 300px; height: 100px;
+    transform: translate(-50%, -50%) rotate(30deg);
+    animation: orbitRotate1 20s linear infinite;
+}
+.orbit-ring.ring2 {
+    width: 400px; height: 150px;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    animation: orbitRotate2 30s linear infinite;
+}
+.orbit-ring.ring3 {
+    width: 500px; height: 200px;
+    transform: translate(-50%, -50%) rotate(60deg);
+    animation: orbitRotate3 40s linear infinite;
+}
+@keyframes orbitRotate1 { 100% { transform: translate(-50%, -50%) rotate(390deg); } }
+@keyframes orbitRotate2 { 100% { transform: translate(-50%, -50%) rotate(315deg); } }
+@keyframes orbitRotate3 { 100% { transform: translate(-50%, -50%) rotate(420deg); } }
 
 /* 导航栏 */
 .shrine-nav {
@@ -5341,76 +5348,160 @@ body,
 .shrine-nav-btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
 .shrine-nav-title { font-size: 11px; font-weight: 800; letter-spacing: 4px; color: rgba(255,255,255,0.6); }
 
-/* 标题区 */
-.shrine-header {
-    position: relative; z-index: 10; padding: 20px 30px; text-align: center; margin-top: 10px;
-}
-.shrine-header h2 {
-    font-family: 'Kaiti', 'STKaiti', '楷体', serif; font-size: 36px; font-weight: bold;
-    color: #FFF; margin-bottom: 8px; letter-spacing: 4px; text-shadow: 0 0 20px rgba(255,255,255,0.5);
-}
-.shrine-header p {
-    font-size: 12px; color: rgba(255,255,255,0.6); letter-spacing: 2px; font-family: 'Georgia', serif;
-}
-
 /* 星光交互区 */
 .shrine-space {
     flex: 1; position: relative; z-index: 5;
     display: flex; align-items: center; justify-content: center;
 }
 
-/* 中心神体 (发光月亮) */
-.center-moon-container {
-    position: relative; display: flex; flex-direction: column; align-items: center;
-    cursor: pointer; transition: transform 0.3s;
-}
-.center-moon-container:active { transform: scale(0.95); }
-.center-moon {
-    width: 100px; height: 100px; border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #FFF, #E0E5EC);
-    box-shadow: 0 0 50px rgba(255, 255, 255, 0.6), inset -10px -10px 20px rgba(0,0,0,0.2);
-    position: relative; z-index: 2;
-}
-.center-moon.receiving {
-    animation: moonPulse 1.5s infinite alternate;
-}
-@keyframes moonPulse {
-    0% { box-shadow: 0 0 50px rgba(255, 255, 255, 0.6); }
-    100% { box-shadow: 0 0 100px rgba(255, 255, 255, 1); }
-}
-.center-moon-halo {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 140px; height: 140px; border-radius: 50%;
-    border: 1px dashed rgba(255,255,255,0.3); z-index: 1;
-    animation: haloSpin 15s linear infinite;
-}
-@keyframes haloSpin { 100% { transform: translate(-50%, -50%) rotate(360deg); } }
-.center-moon-label {
-    margin-top: 25px; font-size: 11px; color: rgba(255,255,255,0.8);
-    letter-spacing: 4px; text-transform: uppercase; font-weight: bold;
+/* 拼贴组合容器 */
+.ins-collage-container {
+    position: relative;
+    width: 320px;
+    height: 350px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    z-index: 10;
 }
 
-/* 闪烁瞬移的星光 (信件) */
-.shrine-starlight {
-    position: absolute; cursor: pointer; z-index: 3;
-    width: 20px; height: 20px; /* 给 SVG 留出空间 */
+/* 150x150 相框 (微圆角) */
+.ins-collage-img2 {
+    width: 150px; height: 150px;
+    background-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    background-size: cover;
+    background-position: center;
     display: flex; align-items: center; justify-content: center;
-    animation-name: starBlink;
-    animation-timing-function: ease-in-out;
-    animation-iteration-count: infinite;
+    cursor: pointer; z-index: 11;
+    overflow: hidden; 
+    transition: transform 0.2s;
+    margin-left: 5px;
+    margin-top: 5px;
+    position: relative;
+    border-radius: 12px; /* 微圆角 */
 }
-@keyframes starBlink {
-    0% { opacity: 0; transform: scale(0.5); filter: brightness(0.5); }
-    50% { opacity: 1; transform: scale(1.2); filter: brightness(1.2); }
-    100% { opacity: 0; transform: scale(0.5); filter: brightness(0.5); }
+.ins-collage-img2:active { transform: scale(0.95); }
+
+/* 左上角上传按钮图片 (100x100 覆盖在相框上) */
+.ins-upload-trigger {
+    position: absolute;
+    top: -30px;
+    left: -30px;
+    width: 80px;
+    height: 80px;
+    cursor: pointer;
+    z-index: 13;
+    transition: transform 0.2s;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.3));
 }
-/* Char 的信：纯白星光 + 极微弱的暖色光晕 */
-.star-gold {
-    filter: drop-shadow(0 0 6px #FFF) drop-shadow(0 0 12px rgba(255, 215, 0, 0.5));
+.ins-upload-trigger:active {
+    transform: scale(0.95);
 }
-/* User 的信：纯白星光 + 极微弱的冷色光晕 */
-.star-blue {
-    filter: drop-shadow(0 0 6px #FFF) drop-shadow(0 0 12px rgba(135, 206, 250, 0.5));
+
+/* 英文诗句 (可点击) */
+.ins-collage-poem {
+    margin-top: -150px;
+    margin-left: 200px;
+    font-family: 'Georgia', serif;
+    font-style: italic;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.6;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.ins-collage-poem:active { opacity: 0.5; }
+
+/* 250x150 白边圆角图片 (覆盖在相框右下角) */
+.ins-collage-img1 {
+    position: absolute;
+    top: 100px; /* 覆盖在 img2 的右下角 */
+    left: 80px;
+    width: 250px; height: 150px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 4px solid #FFF;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    background-size: cover;
+    background-position: center;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 12;
+    cursor: pointer;
+}
+
+/* 底部文案 */
+.ins-collage-text {
+    position: absolute;
+    bottom: -30px; left: 10px;
+    font-family: 'Georgia', serif; font-style: italic;
+    font-size: 14px; color: #FFF;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    white-space: nowrap;
+    cursor: text;
+}
+
+/* 右上角音乐符号装饰 (黑色) */
+.ins-music-decor {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    color: #111; /* 纯黑色 */
+    opacity: 0.85;
+    pointer-events: none;
+}
+.ins-music-decor svg {
+    width: 30px;
+    height: 30px;
+    filter: drop-shadow(0 1px 2px rgba(255,255,255,0.6)); 
+}
+
+/* 右下角播放按钮 (黑色图标 + 毛玻璃底圈) */
+.ins-music-play-btn {
+    position: absolute;
+    bottom: -10px;
+    right: -10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.6); 
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #111; 
+    cursor: pointer;
+    z-index: 15;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.ins-music-play-btn:active {
+    transform: scale(0.9);
+    background: rgba(255, 255, 255, 0.8);
+}
+.ins-music-play-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* 水滴涟漪效果 */
+.water-ripple {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+    transform: scale(0);
+    animation: rippleAnim 0.6s linear;
+    pointer-events: none;
+}
+@keyframes rippleAnim {
+    to { transform: scale(2.5); opacity: 0; }
 }
 
 /* 底部写信按钮 */
@@ -5431,7 +5522,7 @@ body,
 .shrine-write-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
 
 /* ========================================== */
-/* 神社祈愿弹窗 (居中毛玻璃) */
+/* 祈愿与上传弹窗 (居中毛玻璃) */
 /* ========================================== */
 .shrine-modal-overlay {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -5458,6 +5549,79 @@ body,
 .shrine-modal-btn.primary { background: #111; color: #FFF; box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
 .shrine-modal-btn.secondary { background: #F5F5F5; color: #111; border: 1px solid #EAEAEA; }
 .shrine-modal-btn.cancel { background: transparent; color: #888; margin-bottom: 0; }
+
+/* ========================================== */
+/* 祈愿生成动画覆盖层 (打字机、碎裂、信封) */
+/* ========================================== */
+.pray-anim-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); z-index: 2600;
+    display: flex; align-items: center; justify-content: center;
+}
+
+/* 打字机文字 */
+.pray-anim-text {
+    position: absolute;
+    bottom: 20%; left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Kaiti', 'STKaiti', '楷体', serif;
+    font-size: 18px; color: #FFF;
+    letter-spacing: 2px; white-space: nowrap;
+    text-shadow: 0 0 10px rgba(255,255,255,0.5);
+    transition: all 1.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+/* 移动到中央 */
+.pray-anim-text.move-center {
+    bottom: 50%;
+    transform: translate(-50%, 50%);
+    font-size: 22px;
+}
+/* 碎裂消失动画 */
+.pray-anim-text.shatter {
+    animation: textShatter 0.8s forwards;
+}
+@keyframes textShatter {
+    0% { opacity: 1; filter: blur(0); transform: translate(-50%, 50%) scale(1); letter-spacing: 2px; }
+    100% { opacity: 0; filter: blur(10px); transform: translate(-50%, 50%) scale(1.5); letter-spacing: 15px; }
+}
+
+/* 最终信封 */
+.pray-anim-envelope {
+    width: 260px; height: 340px;
+    background: #FDFBF7; border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px; cursor: pointer;
+    animation: envIn 1s cubic-bezier(0.25, 1, 0.5, 1) forwards, envFloat 4s infinite ease-in-out alternate;
+}
+@keyframes envIn {
+    0% { opacity: 0; transform: scale(0.8) translateY(20px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes envFloat {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-10px); }
+}
+
+.env-avatar {
+    width: 90px; height: 90px; border-radius: 50%; object-fit: cover;
+    border: 3px solid #EAE3DE; margin-bottom: 20px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+.env-heartbeat {
+    width: 80px; height: 30px; margin-bottom: 20px;
+    animation: envPulse 1.5s infinite linear;
+}
+@keyframes envPulse {
+    0% { stroke-dasharray: 0 100; stroke-dashoffset: 0; opacity: 0.5; }
+    50% { stroke-dasharray: 100 0; stroke-dashoffset: 0; opacity: 1; }
+    100% { stroke-dasharray: 0 100; stroke-dashoffset: -100; opacity: 0.5; }
+}
+.env-text {
+    font-family: 'Kaiti', 'STKaiti', '楷体', serif;
+    font-size: 16px; color: #3A3533; letter-spacing: 3px;
+    font-weight: bold;
+}
 
 /* ========================================== */
 /* 信件列表全屏页 (深色模式) */
@@ -5524,7 +5688,6 @@ body,
     flex: 1; width: 100%; background: transparent; border: none;
     font-family: 'Kaiti', 'STKaiti', '楷体', serif; font-size: 16px; color: #4A413E;
     line-height: 32px; resize: none; outline: none; text-align: justify;
-    /* 核心：信纸横线背景 */
     background-image: repeating-linear-gradient(transparent, transparent 31px, #EAE3DE 31px, #EAE3DE 32px);
     background-attachment: local;
 }
@@ -5540,7 +5703,6 @@ body,
     line-height: 32px; text-align: justify; letter-spacing: 1px;
     background-image: repeating-linear-gradient(transparent, transparent 31px, #EAE3DE 31px, #EAE3DE 32px);
     background-attachment: local; 
-    /* 删除了 min-height，让署名自然紧跟在正文末尾 */
 }
 .ins-paper-read-author {
     margin-top: 40px; text-align: right; font-family: 'Georgia', serif;
@@ -5566,244 +5728,3 @@ body,
 .ins-paper-action-btn.reply {
     background: #111; color: #FFF; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 }
-/* ========================================== */
-/* 时空信箱：生成中与生成完毕特效 */
-/* ========================================== */
-
-/* 环绕的小星球 */
-.orbit-planets {
-    position: absolute;
-    top: 50%; left: 50%;
-    width: 200px; height: 200px;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    animation: orbitSpin 4s linear infinite;
-}
-@keyframes orbitSpin {
-    100% { transform: translate(-50%, -50%) rotate(360deg); }
-}
-.orbit-planet {
-    position: absolute;
-    border-radius: 50%;
-    background: #FFF;
-    box-shadow: 0 0 10px #FFF, 0 0 20px #87CEFA;
-}
-.orbit-planet.p1 { width: 8px; height: 8px; top: 0; left: 50%; transform: translateX(-50%); }
-.orbit-planet.p2 { width: 6px; height: 6px; bottom: 20%; left: 10%; }
-.orbit-planet.p3 { width: 10px; height: 10px; bottom: 20%; right: 10%; box-shadow: 0 0 10px #FFF, 0 0 20px #FFD700; }
-
-/* 新信件到达展示 */
-.new-letter-arrival {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%) scale(0.8);
-    display: flex; flex-direction: column; align-items: center;
-    z-index: 100;
-    cursor: pointer;
-    opacity: 0;
-    transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.new-letter-arrival.show {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-}
-.arrival-avatar-wrap {
-    width: 80px; height: 80px;
-    border-radius: 50%;
-    padding: 4px;
-    background: rgba(255,255,255,0.2);
-    backdrop-filter: blur(10px);
-    box-shadow: 0 0 30px rgba(255,255,255,0.5);
-    position: relative;
-    z-index: 2;
-}
-.arrival-avatar {
-    width: 100%; height: 100%;
-    border-radius: 50%;
-    object-fit: cover;
-}
-.arrival-text {
-    margin-top: 15px;
-    font-size: 14px;
-    color: #FFF;
-    letter-spacing: 2px;
-    font-weight: bold;
-    text-shadow: 0 0 10px rgba(255,255,255,0.8);
-    z-index: 2;
-}
-
-/* 特效容器 */
-.arrival-effects {
-    position: absolute;
-    top: 50%; left: 50%;
-    width: 150px; height: 150px;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    z-index: 1;
-}
-
-/* 星光 ✨ */
-.arrival-star {
-    position: absolute;
-    width: 20px; height: 20px;
-    animation: starTwinkle 1.5s ease-in-out infinite alternate;
-}
-.arrival-star.s1 { top: 10%; left: 20%; animation-delay: 0s; }
-.arrival-star.s2 { top: 20%; right: 10%; width: 14px; height: 14px; animation-delay: 0.5s; }
-.arrival-star.s3 { bottom: 10%; left: 30%; width: 16px; height: 16px; animation-delay: 1s; }
-
-@keyframes starTwinkle {
-    0% { transform: scale(0.5); opacity: 0.3; filter: drop-shadow(0 0 2px #FFF); }
-    100% { transform: scale(1.2); opacity: 1; filter: drop-shadow(0 0 8px #FFF); }
-}
-
-/* 蝴蝶飞舞 */
-.arrival-butterfly {
-    position: absolute;
-    width: 24px; height: 24px;
-    top: 50%; left: 50%;
-    transform-origin: center;
-}
-.arrival-butterfly.b1 {
-    animation: flyB1 4s linear infinite;
-}
-.arrival-butterfly.b2 {
-    width: 18px; height: 18px;
-    animation: flyB2 5s linear infinite reverse;
-}
-
-@keyframes flyB1 {
-    0% { transform: rotate(0deg) translateX(60px) rotate(0deg) scaleX(1); }
-    25% { transform: rotate(90deg) translateX(60px) rotate(-90deg) scaleX(0.3); }
-    50% { transform: rotate(180deg) translateX(60px) rotate(-180deg) scaleX(1); }
-    75% { transform: rotate(270deg) translateX(60px) rotate(-270deg) scaleX(0.3); }
-    100% { transform: rotate(360deg) translateX(60px) rotate(-360deg) scaleX(1); }
-}
-@keyframes flyB2 {
-    0% { transform: rotate(0deg) translateX(70px) rotate(0deg) scaleX(1); }
-    25% { transform: rotate(90deg) translateX(70px) rotate(-90deg) scaleX(0.3); }
-    50% { transform: rotate(180deg) translateX(70px) rotate(-180deg) scaleX(1); }
-    75% { transform: rotate(270deg) translateX(70px) rotate(-270deg) scaleX(0.3); }
-    100% { transform: rotate(360deg) translateX(70px) rotate(-360deg) scaleX(1); }
-}
-/* ========================================== */
-/* App 4: INS Forum Styles (Black & White iOS) */
-/* ========================================== */
-.ins-forum-root {
-    width: 100%; height: 100%; position: relative; overflow: hidden;
-    background-color: #FAFAFA; color: #000; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-}
-.ins-forum-view {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    display: none; flex-direction: column; overflow-y: auto;
-    background-color: #FAFAFA; padding-bottom: 100px;
-}
-.ins-forum-view.active { display: flex; animation: wcFadeIn 0.3s ease; }
-
-.ins-forum-header { padding: 60px 20px 10px 20px; background: #FAFAFA; position: sticky; top: 0; z-index: 10; }
-.ins-forum-title { font-size: 24px; font-weight: 800; color: #000; letter-spacing: -0.5px; }
-.ins-forum-subtitle { font-size: 13px; color: #8E8E93; margin-top: 4px; }
-
-.ins-forum-content { padding: 0 20px; flex: 1; }
-
-/* 帖子卡片 (推特/INS 极简风) */
-.ins-forum-post-card {
-    background: #FFF; border-radius: 16px; padding: 16px; margin-bottom: 16px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.02); border: 1px solid #E5E5EA;
-}
-.ins-forum-post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.ins-forum-post-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1px solid #F0F0F0; }
-.ins-forum-post-author { font-size: 15px; font-weight: 700; color: #000; }
-.ins-forum-post-time { font-size: 12px; color: #8E8E93; }
-
-.ins-forum-post-title { font-size: 17px; font-weight: 700; color: #000; margin-bottom: 6px; line-height: 1.4; }
-.ins-forum-post-text { font-size: 15px; color: #333; line-height: 1.6; margin-bottom: 12px; text-align: justify; word-break: break-word; }
-.ins-forum-post-image { width: 100%; border-radius: 12px; margin-bottom: 12px; object-fit: cover; max-height: 300px; border: 1px solid #F0F0F0; }
-
-/* 论坛帖子操作栏 (左右分布) */
-.ins-forum-post-actions { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center;
-    border-top: 1px solid #F5F5F5; 
-    padding-top: 12px; 
-}
-.ins-forum-action-btn { display: flex; align-items: center; gap: 6px; color: #8E8E93; font-size: 13px; font-weight: 600; cursor: pointer; transition: color 0.2s; }
-.ins-forum-action-btn:active { color: #000; }
-.ins-forum-action-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; }
-
-/* 发布页输入框 */
-.ins-forum-input {
-    width: 100%; background: transparent; border: none; border-bottom: 1px solid #E5E5EA;
-    padding: 15px 0; font-size: 18px; font-weight: 700; color: #000; margin-bottom: 20px; outline: none;
-}
-.ins-forum-input::placeholder { color: #C7C7CC; font-weight: normal; }
-.ins-forum-textarea {
-    width: 100%; height: 150px; background: #F9F9F9; border: 1px solid #E5E5EA; border-radius: 12px;
-    padding: 15px; font-size: 16px; color: #000; line-height: 1.6; resize: none; outline: none; margin-bottom: 20px;
-}
-.ins-forum-image-upload {
-    width: 100%; height: 100px; background: #F9F9F9; border: 1px dashed #C7C7CC; border-radius: 12px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8E8E93; font-size: 13px;
-    cursor: pointer; margin-bottom: 30px; position: relative; text-align: center;
-}
-.ins-forum-btn-primary {
-    width: 100%; height: 50px; background: #000; color: #FFF; border: none; border-radius: 25px;
-    font-size: 16px; font-weight: 700; letter-spacing: 1px; cursor: pointer; transition: transform 0.2s;
-}
-.ins-forum-btn-primary:active { transform: scale(0.98); background: #333; }
-
-/* 个人信息页头部增强 */
-.ins-forum-profile-header {
-    display: flex; flex-direction: column; align-items: center; padding: 60px 20px 30px 20px;
-    background: #FFF; border-bottom: 1px solid #E5E5EA; margin-bottom: 20px;
-}
-.ins-forum-profile-avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px; border: 1px solid #E5E5EA; }
-.ins-forum-profile-name { font-size: 20px; font-weight: 800; color: #000; margin-bottom: 6px; }
-.ins-forum-profile-bio { font-size: 14px; color: #8E8E93; margin-bottom: 20px; text-align: center; padding: 0 20px; }
-
-.ins-forum-profile-actions { display: flex; gap: 10px; }
-.ins-forum-profile-btn {
-    background: #FFF; border: 1px solid #E5E5EA; color: #000; padding: 8px 20px;
-    border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
-}
-.ins-forum-profile-btn:active { background: #F5F5F5; }
-.ins-forum-profile-btn.icon { padding: 8px; display: flex; align-items: center; justify-content: center; }
-.ins-forum-profile-btn.icon svg { width: 18px; height: 18px; fill: currentColor; }
-
-/* 顶部图标按钮 */
-.ins-forum-icon-btn {
-    width: 36px; height: 36px; border-radius: 50%; background: #F5F5F5;
-    display: flex; align-items: center; justify-content: center; cursor: pointer; color: #000; transition: transform 0.2s;
-}
-.ins-forum-icon-btn:active { transform: scale(0.9); background: #E5E5EA; }
-.ins-forum-icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
-
-/* 底部导航栏 */
-.ins-forum-tabbar {
-    position: absolute; bottom: 0; left: 0; width: 100%; height: 85px;
-    background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border-top: 0.5px solid #E5E5EA; display: flex; justify-content: space-around; align-items: center;
-    padding-bottom: env(safe-area-inset-bottom); z-index: 20;
-}
-.ins-forum-tab { width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; color: #C7C7CC; cursor: pointer; transition: all 0.3s; }
-.ins-forum-tab svg { width: 26px; height: 26px; fill: currentColor; }
-.ins-forum-tab.active { color: #000; transform: translateY(-2px); }
-
-/* 详情页底部评论输入框 */
-.ins-forum-comment-bar {
-    position: absolute; bottom: 0; left: 0; width: 100%;
-    background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border-top: 0.5px solid #E5E5EA;
-    padding: 10px 15px calc(10px + env(safe-area-inset-bottom));
-    display: flex; align-items: center; gap: 10px; z-index: 40;
-}
-.ins-forum-comment-bar input {
-    flex: 1; background: #F2F2F7; border: none; border-radius: 20px;
-    padding: 10px 16px; font-size: 15px; color: #000; outline: none;
-}
-.ins-forum-comment-bar button {
-    background: transparent; border: none; color: #007AFF; font-weight: 600;
-    font-size: 15px; cursor: pointer; padding: 5px 10px;
-}
-.ins-forum-comment-bar button:active { opacity: 0.5; }

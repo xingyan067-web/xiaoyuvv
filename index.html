@@ -3075,22 +3075,14 @@
             </div>
         </div>
          <!-- ========================================== -->
-        <!-- App 4: INS Forum (高级感论坛) -->
+        <!-- App 4: INS Forum (论坛) -->
         <!-- ========================================== -->
-        <div class="settings-modal" id="forumModal" style="padding: 0; z-index: 3600; background: #FAFAFA;">
+        <div class="settings-modal" id="forumModal" style="padding: 0; z-index: 3500; background: #FAFAFA;">
             <div id="forum-root" class="ins-forum-root">
-                
                 <!-- 视图 1：主页 (帖子列表) -->
                 <div id="forum-view-home" class="ins-forum-view active">
-                    <div class="ins-forum-header" style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <div class="ins-forum-title" onclick="closeForumApp()" style="cursor: pointer;">社区广场</div>
-                            <div class="ins-forum-subtitle">发现新灵感</div>
-                        </div>
-                        <!-- AI 生成按钮 -->
-                        <div class="ins-forum-icon-btn" onclick="forumGeneratePosts()" title="生成帖子">
-                            <svg viewBox="0 0 24 24"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
-                        </div>
+                    <div class="ins-forum-header">
+                        <div class="ins-forum-title" onclick="closeForumApp()" style="cursor: pointer;">动态</div>
                     </div>
                     <div class="ins-forum-content" id="forum-post-list">
                         <!-- 帖子列表由 JS 注入 -->
@@ -3099,84 +3091,37 @@
 
                 <!-- 视图 2：发布帖子 -->
                 <div id="forum-view-post" class="ins-forum-view">
-                    <div class="ins-forum-header" style="border-bottom: 1px solid #E5E5EA; padding-bottom: 15px;">
-                        <div class="ins-forum-title" style="font-size: 24px;">发布新帖</div>
+                    <div class="ins-forum-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div class="ins-forum-title" style="margin-bottom: 0;">发布</div>
+                        <button class="ins-forum-btn-publish" onclick="forumSubmitPost()">发布</button>
                     </div>
                     <div class="ins-forum-content" style="padding: 20px;">
-                        <input type="text" id="forum-input-title" class="ins-forum-input" placeholder="填写标题...">
-                        <textarea id="forum-input-content" class="ins-forum-textarea" placeholder="分享你的想法..."></textarea>
-                        
+                        <textarea id="forum-post-input" class="ins-forum-textarea" placeholder="分享新鲜事..."></textarea>
                         <div class="ins-forum-image-upload" onclick="document.getElementById('forum-image-input').click()">
-                            <img id="forum-preview-image" src="" style="display: none; width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
-                            <span id="forum-upload-text">
-                                <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; margin-bottom: 8px; stroke: currentColor; fill: none;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><br>
-                                上传图片
-                            </span>
+                            <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: none; stroke: #888; stroke-width: 1.5;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                            <span style="margin-left: 8px; color: #888; font-size: 14px;">添加图片</span>
                         </div>
-                        <input type="file" id="forum-image-input" style="display: none;" accept="image/*" onchange="handleForumImageUpload(this)">
-                        
-                        <button class="ins-forum-btn-primary" onclick="submitForumPost()">发 布</button>
+                        <img id="forum-post-image-preview" style="display: none; width: 100%; border-radius: 12px; margin-top: 15px; object-fit: cover;">
+                        <input type="file" id="forum-image-input" style="display: none;" accept="image/*" onchange="forumHandleImageUpload(this)">
                     </div>
                 </div>
 
                 <!-- 视图 3：个人信息 -->
                 <div id="forum-view-profile" class="ins-forum-view">
-                    <div class="ins-forum-profile-header">
-                        <img src="" id="forum-profile-avatar" class="ins-forum-profile-avatar">
-                        <div class="ins-forum-profile-name" id="forum-profile-name">User</div>
-                        <div class="ins-forum-profile-bio" id="forum-profile-bio">记录生活的每一个瞬间。</div>
-                        
-                        <!-- 个人主页操作按钮 (更换了编辑图标) -->
-                        <div class="ins-forum-profile-actions">
-                            <button class="ins-forum-profile-btn" onclick="forumOpenEditProfile()" style="display: flex; align-items: center;">
-                                <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; margin-right: 6px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                                编辑资料
-                            </button>
-                            <button class="ins-forum-profile-btn icon" onclick="forumOpenSettings()">
-                                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2 2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                            </button>
-                        </div>
+                    <div class="ins-forum-header">
+                        <div class="ins-forum-title">我的</div>
                     </div>
                     <div class="ins-forum-content">
-                        <div class="ins-forum-section-title" style="font-size: 13px; color: #888; font-weight: bold; margin-bottom: 10px;">我的发布</div>
-                        <div id="forum-my-post-list"></div>
-                    </div>
-                </div>
-
-                <!-- 视图 4：帖子详情页 -->
-                <div id="forum-view-detail" class="ins-forum-view" style="z-index: 30; background: #FFF;">
-                    <div class="ins-forum-header" style="border-bottom: 1px solid #E5E5EA; padding: 50px 20px 15px 20px; display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <div class="ins-forum-icon-btn" onclick="closeForumPostDetail()">
-                                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        <div class="ins-forum-profile-header">
+                            <img src="" id="forum-profile-avatar" class="ins-forum-profile-avatar">
+                            <div class="ins-forum-profile-info">
+                                <div class="ins-forum-profile-name" id="forum-profile-name">User</div>
+                                <div class="ins-forum-profile-bio" id="forum-profile-bio">记录生活的美好</div>
                             </div>
-                            <div class="ins-forum-title" style="font-size: 16px; margin: 0; font-style: normal;">帖子详情</div>
                         </div>
-                        <div class="ins-forum-icon-btn" onclick="forumOpenShareModal()" style="background: transparent;">
-                            <svg viewBox="0 0 24 24" style="width: 20px; height: 20px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
-                        </div>
-                    </div>
-                    
-                    <div class="ins-forum-content" id="forum-detail-content" style="padding: 0; padding-bottom: 80px;">
-                        <!-- 详情内容由 JS 注入 -->
-                    </div>
-
-                    <!-- 底部评论输入框 -->
-                    <div class="ins-forum-comment-bar">
-                        <input type="text" id="forum-comment-input" placeholder="说点什么...">
-                        <button onclick="forumSubmitComment()">发送</button>
-                    </div>
-                </div>
-
-                <!-- 弹窗：分享给角色 -->
-                <div id="forum-modal-share" class="wc-modal hidden" style="z-index: 4000; align-items: flex-end;">
-                    <div class="wc-modal-content" style="height: auto; border-radius: 20px 20px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column; max-height: 70vh;">
-                        <div class="wc-modal-header" style="border-bottom: 1px solid #E5E5EA; padding: 20px;">
-                            <h3 style="color: #111; font-size: 16px; font-weight: 700;">分享给...</h3>
-                            <button class="wc-close-btn" onclick="wcCloseModal('forum-modal-share')">&times;</button>
-                        </div>
-                        <div class="wc-modal-body" id="forum-share-char-list" style="flex: 1; overflow-y: auto; padding: 10px 20px;">
-                            <!-- 角色列表由 JS 注入 -->
+                        <div class="ins-forum-section-title" style="padding: 0 20px; margin-top: 20px;">我的发布</div>
+                        <div id="forum-my-post-list">
+                            <!-- 我的帖子列表 -->
                         </div>
                     </div>
                 </div>
@@ -3184,69 +3129,17 @@
                 <!-- 底部导航栏 -->
                 <div class="ins-forum-tabbar">
                     <div class="ins-forum-tab active" onclick="forumSwitchTab('home')" id="forum-tab-home">
-                        <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
                     </div>
                     <div class="ins-forum-tab" onclick="forumSwitchTab('post')" id="forum-tab-post">
-                        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </div>
                     <div class="ins-forum-tab" onclick="forumSwitchTab('profile')" id="forum-tab-profile">
-                        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-                    </div>
-                </div>
-
-                <!-- 弹窗：编辑个人资料 -->
-                <div id="forum-modal-edit-profile" class="wc-modal hidden" style="z-index: 4000;">
-                    <div class="wc-modal-content" style="background: #FFF;">
-                        <div class="wc-modal-header" style="border-bottom: 1px solid #E5E5EA;">
-                            <h3 style="color: #111; font-weight: 700;">编辑资料</h3>
-                            <button class="wc-close-btn" onclick="wcCloseModal('forum-modal-edit-profile')">&times;</button>
-                        </div>
-                        <div class="wc-modal-body">
-                            <div class="wc-form-group">
-                                <label class="wc-form-label" style="color: #888;">昵称</label>
-                                <input type="text" id="forum-edit-name" class="wc-form-input" style="background: #F5F5F5; border: none;">
-                            </div>
-                            <div class="wc-form-group">
-                                <label class="wc-form-label" style="color: #888;">简介</label>
-                                <input type="text" id="forum-edit-bio" class="wc-form-input" style="background: #F5F5F5; border: none;">
-                            </div>
-                            <div class="wc-form-group">
-                                <label class="wc-form-label" style="color: #888;">头像</label>
-                                <div class="ins-forum-image-upload" style="height: 80px; margin-bottom: 10px;" onclick="document.getElementById('forum-edit-avatar-input').click()">
-                                    <img id="forum-edit-avatar-preview" src="" style="display: none; width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
-                                    <span id="forum-edit-avatar-text">点击上传本地图片</span>
-                                </div>
-                                <input type="file" id="forum-edit-avatar-input" style="display: none;" accept="image/*" onchange="forumHandleAvatarUpload(this)">
-                            </div>
-                            <button class="wc-btn-primary" style="background: #111; color: #FFF;" onclick="forumSaveProfile()">保存修改</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 弹窗：关联设置 -->
-                <div id="forum-modal-settings" class="wc-modal hidden" style="z-index: 4000;">
-                    <div class="wc-modal-content" style="background: #FFF; max-height: 80vh; display: flex; flex-direction: column;">
-                        <div class="wc-modal-header" style="border-bottom: 1px solid #E5E5EA;">
-                            <h3 style="color: #111; font-weight: 700;">数据关联设置</h3>
-                            <button class="wc-close-btn" onclick="wcCloseModal('forum-modal-settings')">&times;</button>
-                        </div>
-                        <div class="wc-modal-body" style="flex: 1; overflow-y: auto;">
-                            <div class="ins-forum-section-title" style="font-size: 12px; color: #888; margin-bottom: 8px;">关联世界书</div>
-                            <div id="forum-setting-wb-list" class="wc-checkbox-list" style="margin-bottom: 20px; background: #F9F9F9;"></div>
-                            
-                            <div class="ins-forum-section-title" style="font-size: 12px; color: #888; margin-bottom: 8px;">关联角色</div>
-                            <div id="forum-setting-char-list" class="wc-checkbox-list" style="margin-bottom: 20px; background: #F9F9F9;"></div>
-                            
-                            <div class="ins-forum-section-title" style="font-size: 12px; color: #888; margin-bottom: 8px;">关联面具</div>
-                            <div id="forum-setting-mask-list" class="wc-checkbox-list" style="margin-bottom: 20px; background: #F9F9F9;"></div>
-                        </div>
-                        <div style="padding: 15px 20px; border-top: 1px solid #E5E5EA;">
-                            <button class="wc-btn-primary" style="background: #111; color: #FFF; margin: 0;" onclick="forumSaveSettings()">保存设置</button>
-                        </div>
+                        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                     </div>
                 </div>
             </div>
-        </div>     
+        </div>
     </div> <!-- End of #app-root -->
 
     <style id="dynamic-font-style"></style>

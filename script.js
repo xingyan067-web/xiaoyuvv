@@ -8354,9 +8354,16 @@ const lsState = {
         content: ''
     },
     qaScore: 0,
-    qaCurrentSession: null, // 存储当前未答完的题目
-    qaHistory: [],          // 存储历史记录
-    letters: []
+    qaCurrentSession: null,
+    qaHistory: [],
+    letters: [],
+    // 👇 新增这一段
+    lettersConfig: {
+        bg: 'https://i.postimg.cc/KvnvwWS3/dong-tai-bei-jing1.gif',
+        img1: 'https://i.postimg.cc/7YgYdR84/Image-1770474411684-498.jpg',
+        img2: 'https://i.postimg.cc/GhkhVfwd/Image-1770474415295-455.jpg',
+        text: '休戀逝水 早悟蘭因'
+    }
 };
 
 // --- Lovers Space Core Functions ---
@@ -8380,7 +8387,9 @@ async function lsLoadData() {
         lsState.qaScore = data.qaScore || 0;
         lsState.qaCurrentSession = data.qaCurrentSession || null;
         lsState.qaHistory = data.qaHistory || [];
-        lsState.letters = data.letters || []; // <--- 【新增这一行】
+        lsState.letters = data.letters || [];
+        // 👇 新增这一行
+        if (data.lettersConfig) lsState.lettersConfig = data.lettersConfig;
     }
 }
 
@@ -8401,7 +8410,9 @@ async function lsSaveData() {
         qaScore: lsState.qaScore,
         qaCurrentSession: lsState.qaCurrentSession,
         qaHistory: lsState.qaHistory,
-        letters: lsState.letters // <--- 【新增这一行】
+        letters: lsState.letters,
+        // 👇 新增这一行
+        lettersConfig: lsState.lettersConfig
     });
 }
 
@@ -15418,7 +15429,6 @@ function renderQaArchive() {
 // ==========================================
 // 恋人空间：时空信箱 (Shrine & Stars) 核心逻辑
 // ==========================================
-
 // 1. 打开时空信箱全屏主页
 function lsOpenLettersView() {
     if (!lsState.boundCharId) return alert("请先在首页绑定一位恋人哦~");
@@ -15428,13 +15438,27 @@ function lsOpenLettersView() {
         view = document.createElement('div');
         view.id = 'ls-view-letters';
         view.className = 'ins-shrine-view';
+        view.addEventListener('click', lsGlobalRipple); // <--- 加上这一行，绑定全局涟漪
         document.getElementById('loversSpaceModal').appendChild(view);
     }
     
+    const config = lsState.lettersConfig || {};
+    const bgUrl = config.bg || 'https://i.postimg.cc/KvnvwWS3/dong-tai-bei-jing1.gif';
+    const img1Url = config.img1 || 'https://i.postimg.cc/7YgYdR84/Image-1770474411684-498.jpg';
+    const img2Url = config.img2 || 'https://i.postimg.cc/GhkhVfwd/Image-1770474415295-455.jpg';
+    const textStr = config.text || '休戀逝水 早悟蘭因';
+    const poemStr = config.poem || 'In the universe of time,<br>we will eventually meet.';
+
+    const bgStyle = `background-image: url('${bgUrl}'); background-size: cover; background-position: center;`;
+    const img1Style = `background-image: url('${img1Url}');`;
+    const img2Style = `background-image: url('${img2Url}');`;
+
     view.innerHTML = `
-        <!-- 日式神社星空背景 -->
-        <div class="shrine-bg">
-            <div class="shrine-torii"></div> <!-- 底部鸟居剪影 -->
+        <!-- 自定义背景与星际轨迹 -->
+        <div class="shrine-bg" id="ls-letters-bg" style="${bgStyle}">
+            <div class="orbit-ring ring1"></div>
+            <div class="orbit-ring ring2"></div>
+            <div class="orbit-ring ring3"></div>
         </div>
         
         <div class="shrine-nav">
@@ -15445,60 +15469,74 @@ function lsOpenLettersView() {
             <div style="width: 40px;"></div>
         </div>
 
-        <div class="shrine-header">
-            <h2>星の神社</h2>
-            <p>跨越时空的信，化作星光坠落</p>
-        </div>
+        <!-- 隐藏的上传输入框 -->
+        <input type="file" id="ls-letters-bg-input" style="display:none" accept="image/*" onchange="lsHandleLettersUpload(this, 'bg')">
+        <input type="file" id="ls-letters-img1-input" style="display:none" accept="image/*" onchange="lsHandleLettersUpload(this, 'img1')">
+        <input type="file" id="ls-letters-img2-input" style="display:none" accept="image/*" onchange="lsHandleLettersUpload(this, 'img2')">
 
-        <!-- 星光与中心神体容器 -->
+        <!-- 拼贴容器 -->
         <div class="shrine-space" id="ls-shrine-space">
-            <!-- 中心神体 (点击打开弹窗) -->
-            <div class="center-moon-container" id="ls-center-moon-container" onclick="lsOpenShrineModal()">
-                <div class="center-moon"></div>
-                <div class="center-moon-halo"></div>
-                <div class="center-moon-label">祈愿 / PRAY</div>
+            
+            <div class="ins-collage-container" id="ls-collage-container">
+                <!-- 150x150 相框 (微圆角) -->
+                <div class="ins-collage-img2" id="ls-letters-img2" style="${img2Style}" onclick="lsTriggerRippleAndModal(event)">
+                    <span id="ls-img2-placeholder" style="display: none; color:#999; font-size:12px; font-weight:bold;">点击祈愿</span>
+                </div>
                 
-                <!-- 新增：生成中环绕的小星球 -->
-                <div class="orbit-planets" id="ls-orbit-planets" style="display: none;">
-                    <div class="orbit-planet p1"></div>
-                    <div class="orbit-planet p2"></div>
-                    <div class="orbit-planet p3"></div>
+                <!-- 左上角上传按钮图片 (100x100 覆盖在相框上) -->
+                <img src="https://i.postimg.cc/vHQc0zgt/retouch_2026031701240566.png" class="ins-upload-trigger" onclick="event.stopPropagation(); lsOpenUploadMenu()">
+                
+                <!-- 英文诗句 (可点击编辑) -->
+                <div class="ins-collage-poem" id="ls-letters-poem" onclick="event.stopPropagation(); lsEditLettersPoem()">
+                    ${poemStr}
+                </div>
+
+                <!-- 250x150 白边圆角图片 -->
+                <div class="ins-collage-img1" id="ls-letters-img1" style="${img1Style}" onclick="document.getElementById('ls-letters-img1-input').click()">
+                    <span id="ls-img1-placeholder" style="display: none; color:#999; font-size:12px; font-weight:bold;">250x150</span>
+                    
+                    <!-- 底部文案 -->
+                    <div class="ins-collage-text" id="ls-letters-text" onclick="event.stopPropagation(); lsEditLettersText()">${textStr}</div>                   
+                    
+                    <!-- 右上角音乐符号装饰 (黑色) -->
+                    <div class="ins-music-decor">
+                        <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" fill="currentColor"/></svg>
+                        <svg viewBox="0 0 24 24" style="width:12px;height:12px;margin-top:-6px;"><path d="M9 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3H9z" fill="currentColor"/></svg>
+                    </div>
+
+                    <!-- 右下角播放按钮 (黑色) -->
+                    <div class="ins-music-play-btn" onclick="event.stopPropagation(); lsToggleLettersMusic()">
+                        <svg id="ls-letters-play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                    </div>
+                    
+                    <!-- 隐藏的音频标签 -->
+                    <audio id="ls-letters-audio" src="https://img.heliar.top/file/1773691226155_Y8m1ok-time_machine__feat._aren_park_-mj_apanay_aren_park.mp3" loop></audio>
                 </div>
             </div>
-
-            <!-- 新增：生成完毕后的信件展示 (带头像、星光、蝴蝶) -->
-            <div class="new-letter-arrival" id="ls-new-letter-arrival" style="display: none;">
-                <div class="arrival-avatar-wrap">
-                    <img src="" id="ls-arrival-avatar" class="arrival-avatar">
-                </div>
-                <div class="arrival-text">Ta 的回音已送达</div>
-                <!-- 蝴蝶和星光由 CSS/JS 动态控制 -->
-                <div class="arrival-effects">
-                    <!-- SVG 星光 ✨ -->
-                    <svg class="arrival-star s1" viewBox="0 0 24 24"><path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" fill="#FFF"/></svg>
-                    <svg class="arrival-star s2" viewBox="0 0 24 24"><path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" fill="#FFF"/></svg>
-                    <svg class="arrival-star s3" viewBox="0 0 24 24"><path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" fill="#FFF"/></svg>
-                    <!-- SVG 蝴蝶 -->
-                    <svg class="arrival-butterfly b1" viewBox="0 0 64 64"><path d="M32 32 C20 10, 0 20, 10 40 C15 50, 30 40, 32 32 C34 40, 49 50, 54 40 C64 20, 44 10, 32 32 Z" fill="rgba(255,255,255,0.8)"/></svg>
-                    <svg class="arrival-butterfly b2" viewBox="0 0 64 64"><path d="M32 32 C20 10, 0 20, 10 40 C15 50, 30 40, 32 32 C34 40, 49 50, 54 40 C64 20, 44 10, 32 32 Z" fill="rgba(255,255,255,0.6)"/></svg>
-                </div>
-            </div>
-
-            <!-- 闪烁的星光将在这里动态生成 -->
         </div>
-
 
         <div class="shrine-footer">
             <button class="shrine-write-btn" onclick="lsOpenUserLetterInput()">
-                <svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 4 1-4L16.5 3.5z"></path></svg>
+                <svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                 <span>提笔写信</span>
             </button>
         </div>
 
-        <!-- 神社祈愿弹窗 (选择生成信件或查看列表) -->
+        <!-- 上传菜单弹窗 -->
+        <div id="ls-upload-menu-modal" class="shrine-modal-overlay" onclick="lsCloseUploadMenu()">
+            <div class="shrine-modal-box" onclick="event.stopPropagation()">
+                <div class="shrine-modal-title">自定义外观</div>
+                <button class="shrine-modal-btn secondary" onclick="document.getElementById('ls-letters-bg-input').click(); lsCloseUploadMenu()">上传背景图</button>
+                <button class="shrine-modal-btn secondary" onclick="document.getElementById('ls-letters-img1-input').click(); lsCloseUploadMenu()">上传白边圆角图片</button>
+                <button class="shrine-modal-btn secondary" onclick="document.getElementById('ls-letters-img2-input').click(); lsCloseUploadMenu()">上传相框图片</button>
+                <button class="shrine-modal-btn cancel" onclick="lsCloseUploadMenu()">取消</button>
+            </div>
+        </div>
+
+        <!-- 祈愿弹窗 -->
         <div id="ls-shrine-modal" class="shrine-modal-overlay">
             <div class="shrine-modal-box">
-                <div class="shrine-modal-title">神明の指引</div>
+                <div class="shrine-modal-title">星空の指引</div>
                 <div class="shrine-modal-desc">请选择你的祈愿</div>
                 <button class="shrine-modal-btn primary" onclick="lsGenerateAILetter()" id="btn-ai-pray">
                     聆听 Ta 的心声 (生成信件)
@@ -15507,6 +15545,18 @@ function lsOpenLettersView() {
                     翻阅星空档案 (信件列表)
                 </button>
                 <button class="shrine-modal-btn cancel" onclick="lsCloseShrineModal()">离开</button>
+            </div>
+        </div>
+
+        <!-- 祈愿生成动画覆盖层 (打字机、碎裂、信封) -->
+        <div id="ls-pray-animation-overlay" class="pray-anim-overlay" style="display: none;">
+            <div id="pray-anim-text" class="pray-anim-text"></div>
+            <div id="pray-anim-envelope" class="pray-anim-envelope" style="display: none;">
+                <img src="" id="pray-env-avatar" class="env-avatar">
+                <svg class="env-heartbeat" viewBox="0 0 100 30">
+                    <polyline points="0,15 20,15 30,5 40,25 50,15 60,15 70,0 80,30 90,15 100,15" fill="none" stroke="#FF3B30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div class="env-text">这是我给你的誓言</div>
             </div>
         </div>
 
@@ -15522,7 +15572,7 @@ function lsOpenLettersView() {
             <div class="shrine-list-content" id="ls-shrine-list-content"></div>
         </div>
         
-        <!-- 用户写信全屏页面 (仿信纸) -->
+        <!-- 用户写信全屏页面 -->
         <div id="ls-user-write-view" class="ins-paper-view">
             <div class="ins-paper-nav">
                 <div onclick="lsCloseUserLetterInput()" style="cursor:pointer; color:#888;">CANCEL</div>
@@ -15534,7 +15584,7 @@ function lsOpenLettersView() {
             </div>
         </div>
 
-        <!-- 阅读信件全屏页面 (仿信纸) -->
+        <!-- 阅读信件全屏页面 -->
         <div id="ls-letter-detail-modal" class="ins-paper-view">
             <div class="ins-paper-nav">
                 <div onclick="lsCloseLetterDetail()" style="cursor:pointer; color:#888;">CLOSE</div>
@@ -15545,17 +15595,13 @@ function lsOpenLettersView() {
                 <div id="ls-letter-detail-content" class="ins-paper-read-text"></div>
                 <div class="ins-paper-read-author" id="ls-letter-detail-author"></div>
             </div>
-            
-            <!-- 底部操作区 -->
             <div class="ins-paper-actions">
                 <div class="ins-paper-action-btn delete" onclick="lsDeleteCurrentLetter()">销毁此信</div>
-                <!-- 只有阅读用户自己写的信时，才会显示这个回信按钮 -->
                 <div class="ins-paper-action-btn reply" id="ls-btn-request-reply" onclick="lsRequestReply()">祈求 Ta 的回信</div>
             </div>
         </div>
     `;
     
-    lsRenderStarlights();
     view.style.display = 'flex';
     setTimeout(() => view.classList.add('active'), 10);
 }
@@ -15566,8 +15612,125 @@ function lsCloseLettersView() {
         view.classList.remove('active');
         setTimeout(() => view.style.display = 'none', 400);
     }
+    const audio = document.getElementById('ls-letters-audio');
+    if (audio) audio.pause();
 }
 
+// 音乐播放控制
+function lsToggleLettersMusic() {
+    const audio = document.getElementById('ls-letters-audio');
+    const icon = document.getElementById('ls-letters-play-icon');
+    if (!audio || !icon) return;
+
+    if (audio.paused) {
+        audio.play();
+        icon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/>';
+    } else {
+        audio.pause();
+        icon.innerHTML = '<path d="M8 5v14l11-7z" fill="currentColor"/>';
+    }
+}
+
+// 图片上传、文案编辑
+function lsHandleLettersUpload(input, type) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if (!lsState.lettersConfig) lsState.lettersConfig = {};
+            lsState.lettersConfig[type] = e.target.result;
+            lsSaveData();
+            
+            if (type === 'bg') {
+                document.getElementById('ls-letters-bg').style.backgroundImage = `url('${e.target.result}')`;
+                document.getElementById('ls-letters-bg').style.backgroundSize = 'cover';
+                document.getElementById('ls-letters-bg').style.backgroundPosition = 'center';
+            } else if (type === 'img1') {
+                const el = document.getElementById('ls-letters-img1');
+                el.style.backgroundImage = `url('${e.target.result}')`;
+                const placeholder = document.getElementById('ls-img1-placeholder');
+                if (placeholder) placeholder.style.display = 'none';
+            } else if (type === 'img2') {
+                const el = document.getElementById('ls-letters-img2');
+                el.style.backgroundImage = `url('${e.target.result}')`;
+                const placeholder = document.getElementById('ls-img2-placeholder');
+                if (placeholder) placeholder.style.display = 'none';
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function lsEditLettersText() {
+    const currentText = lsState.lettersConfig?.text || '在这个宇宙，我们终会相遇';
+    openTextEditModal("编辑文案", "请输入图片下方的文案", currentText, (val) => {
+        if (val) {
+            if (!lsState.lettersConfig) lsState.lettersConfig = {};
+            lsState.lettersConfig.text = val;
+            lsSaveData();
+            const textEl = document.getElementById('ls-letters-text');
+            if (textEl) textEl.innerText = val;
+        }
+    });
+}
+
+function lsEditLettersPoem() {
+    const currentPoem = lsState.lettersConfig?.poem || 'In the universe of time,<br>we will eventually meet.';
+    // 将 <br> 转换回换行符方便编辑
+    const plainText = currentPoem.replace(/<br>/g, '\n');
+    
+    openIosTextEditModal("编辑诗句", plainText, (val) => {
+        if (val) {
+            // 将换行符转换为 <br>
+            const htmlText = val.replace(/\n/g, '<br>');
+            if (!lsState.lettersConfig) lsState.lettersConfig = {};
+            lsState.lettersConfig.poem = htmlText;
+            lsSaveData();
+            const poemEl = document.getElementById('ls-letters-poem');
+            if (poemEl) poemEl.innerHTML = htmlText;
+        }
+    });
+}
+
+window.lsGlobalRipple = function(e) {
+    const target = document.getElementById('ls-view-letters');
+    if (!target) return;
+
+    const ripple = document.createElement('div');
+    ripple.className = 'water-ripple';
+    
+    const size = 150; 
+    ripple.style.width = ripple.style.height = `${size}px`;
+    
+    const rect = target.getBoundingClientRect();
+    const x = e.clientX - rect.left - size / 2;
+    const y = e.clientY - rect.top - size / 2;
+    ripple.style.left = `${x}px`;
+    ripple.style.top = `${y}px`;
+    ripple.style.zIndex = '9999'; // 确保涟漪在最上层显示
+    
+    target.appendChild(ripple);
+    
+    setTimeout(() => { ripple.remove(); }, 600);
+};
+
+function lsTriggerRippleAndModal(e) {
+    e.stopPropagation(); // 阻止冒泡，防止触发两次涟漪
+    lsGlobalRipple(e);   // 触发涟漪
+    lsOpenShrineModal(); // 打开祈愿弹窗
+}
+
+function lsOpenUploadMenu() {
+    const modal = document.getElementById('ls-upload-menu-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function lsCloseUploadMenu() {
+    const modal = document.getElementById('ls-upload-menu-modal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
 // 2. 渲染闪烁且瞬移的星光
 function lsRenderStarlights() {
     const space = document.getElementById('ls-shrine-space');
@@ -15582,23 +15745,17 @@ function lsRenderStarlights() {
         const isFromChar = letter.from === 'char';
         const star = document.createElement('div');
         
-        star.className = `shrine-starlight ${isFromChar ? 'star-gold' : 'star-blue'}`;
-        // 👇 注入纯净的 SVG 四角星光 (✨形状)
-        star.innerHTML = `<svg viewBox="0 0 24 24" style="width:100%; height:100%;"><path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" fill="#FFF"/></svg>`;
+        // 改为小圆点类名
+        star.className = `shrine-starlight dot-star ${isFromChar ? 'star-gold' : 'star-blue'}`;
         
         star.style.left = Math.random() * 90 + 5 + '%';
-        star.style.top = Math.random() * 70 + 10 + '%';
+        star.style.top = Math.random() * 90 + 5 + '%';
         
-        const duration = 3 + Math.random() * 3; 
-        const delay = Math.random() * 5;
+        const duration = 1.5 + Math.random() * 2; 
+        const delay = Math.random() * 2;
         star.style.animationDuration = `${duration}s`;
         star.style.animationDelay = `${delay}s`;
 
-        star.addEventListener('animationiteration', () => {
-            star.style.left = Math.random() * 90 + 5 + '%';
-            star.style.top = Math.random() * 70 + 10 + '%';
-        });
-        
         star.onclick = () => lsOpenLetterDetail(letter.id);
         space.appendChild(star);
     });
@@ -15659,7 +15816,7 @@ function lsCloseLetterList() {
     setTimeout(() => view.style.display = 'none', 400);
 }
 
-// 4. AI 生成信件 (主动祈愿)
+// 4. AI 生成信件 (带打字机、移动、碎裂、信封动画)
 async function lsGenerateAILetter() {
     const charId = lsState.boundCharId;
     const char = wcState.characters.find(c => c.id === charId);
@@ -15668,33 +15825,47 @@ async function lsGenerateAILetter() {
     const apiConfig = await idb.get('ios_theme_api_config');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
-    const btn = document.getElementById('btn-ai-pray');
-    const originalText = btn.innerText;
-    btn.innerText = "神明正在传递信号...";
-    btn.style.pointerEvents = 'none';
+    // 1. 关闭祈愿菜单，显示动画覆盖层
+    lsCloseShrineModal();
+    const animOverlay = document.getElementById('ls-pray-animation-overlay');
+    const animText = document.getElementById('pray-anim-text');
+    const animEnvelope = document.getElementById('pray-anim-envelope');
+    
+    animOverlay.style.display = 'flex';
+    animEnvelope.style.display = 'none';
+    
+    // 重置文字状态
+    animText.className = 'pray-anim-text';
+    animText.innerHTML = '';
+    animText.style.display = 'block';
 
-    // --- 新增：显示环绕小星球特效 ---
-    const orbitPlanets = document.getElementById('ls-orbit-planets');
-    const moonLabel = document.querySelector('.center-moon-label');
-    const centerMoon = document.querySelector('.center-moon');
-    if (orbitPlanets) orbitPlanets.style.display = 'block';
-    if (moonLabel) moonLabel.style.opacity = '0';
-    if (centerMoon) centerMoon.classList.add('receiving');
+    // 2. 启动打字机动画
+    const textStr = "能永远缠绕在一起吗 发丝 命运 我和你";
+    let typeIndex = 0;
+    const typeInterval = setInterval(() => {
+        animText.innerHTML += textStr[typeIndex];
+        typeIndex++;
+        if (typeIndex >= textStr.length) {
+            clearInterval(typeInterval);
+            // 打字完成后，延迟 500ms 触发移动到中央的动画
+            setTimeout(() => {
+                animText.classList.add('move-center');
+            }, 500);
+        }
+    }, 150);
 
     try {
         const chatConfig = char.chatConfig || {};
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
-        
-        // 读取最近 100 条聊天记录
-        const msgs = wcState.chats[char.id] || [];
-        const recentMsgs = msgs.slice(-100).map(m => {
+       
+                const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-40).map(m => { // <--- 把 -100 改成 -40
             if (m.isError || m.type === 'system') return null;
             let content = m.content;
             if (m.type !== 'text') content = `[${m.type}]`;
             return `${m.sender==='me'?'User':char.name}: ${content}`;
         }).filter(Boolean).join('\n');
 
-        // 读取关联的世界书
         let wbInfo = "";
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
@@ -15703,7 +15874,6 @@ async function lsGenerateAILetter() {
             }
         }
 
-        // 读取记忆系统中的记忆
         let memoryText = "暂无特殊记忆。";
         let memoryCount = 0;
         if (char.memories && char.memories.length > 0) {
@@ -15714,7 +15884,7 @@ async function lsGenerateAILetter() {
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)面具/设定】：${userPersona}\n`;
         prompt += `【你们的共同记忆（共 ${memoryCount} 条记录）】：\n${memoryText}\n\n`;
-        prompt += `【最近的聊天记录（100条上下文）】：\n${recentMsgs}\n\n`;
+        prompt += `【最近的聊天记录（40条上下文）】：\n${recentMsgs}\n\n`;
         
         prompt += `请以 ${char.name} 的口吻，给 User 写一封跨越时空的信。\n`;
         prompt += `【核心要求】：\n`;
@@ -15758,53 +15928,36 @@ async function lsGenerateAILetter() {
         });
         
         lsSaveData();
-        lsRenderStarlights();
-        lsCloseShrineModal();
         
-        // --- 新增：展示信件到达特效 ---
-        const moonContainer = document.getElementById('ls-center-moon-container');
-        const arrivalBox = document.getElementById('ls-new-letter-arrival');
-        const arrivalAvatar = document.getElementById('ls-arrival-avatar');
+        // 3. API 返回成功，触发碎裂动画
+        animText.classList.add('shatter');
         
-        if (moonContainer && arrivalBox && arrivalAvatar) {
-            // 隐藏月亮，显示信件
-            moonContainer.style.display = 'none';
-            arrivalAvatar.src = char.avatar;
-            arrivalBox.style.display = 'flex';
+        // 4. 碎裂动画结束后 (800ms)，显示信封
+        setTimeout(() => {
+            animText.style.display = 'none';
+            document.getElementById('pray-env-avatar').src = char.avatar;
+            animEnvelope.style.display = 'flex';
             
-            // 触发动画
-            setTimeout(() => {
-                arrivalBox.classList.add('show');
-            }, 50);
-
-            // 绑定点击事件：打开信件并恢复月亮
-            arrivalBox.onclick = () => {
+            // 绑定信封点击事件：打开信件并关闭动画层
+            animEnvelope.onclick = () => {
                 lsOpenLetterDetail(newLetterId);
-                arrivalBox.classList.remove('show');
-                setTimeout(() => {
-                    arrivalBox.style.display = 'none';
-                    moonContainer.style.display = 'flex';
-                }, 500);
+                animOverlay.style.display = 'none';
+                animEnvelope.style.display = 'none';
             };
-        }
-        
+        }, 800);
+
         if (typeof showMainSystemNotification === 'function') {
-            showMainSystemNotification("星の神社", `夜空中多了一颗来自 ${char.name} 的星光`, char.avatar);
+            showMainSystemNotification("星の神社", `收到了一封来自 ${char.name} 的誓言信件`, char.avatar);
         }
 
     } catch (e) {
         console.error(e);
-        alert("祈愿失败，请重试...");
-    } finally {
-        btn.innerText = originalText;
-        btn.style.pointerEvents = 'auto';
-        
-        // --- 新增：恢复月亮状态 ---
-        if (orbitPlanets) orbitPlanets.style.display = 'none';
-        if (moonLabel) moonLabel.style.opacity = '1';
-        if (centerMoon) centerMoon.classList.remove('receiving');
+        alert("祈愿失败，信号在星空中迷失了...");
+        animOverlay.style.display = 'none';
+        clearInterval(typeInterval);
     }
 }
+
 
 // 5. 用户写信逻辑
 function lsOpenUserLetterInput() {
@@ -15992,762 +16145,4 @@ async function lsRequestReply() {
         replyBtn.style.pointerEvents = 'auto';
         replyBtn.style.opacity = '1';
     }
-}
-/* ==========================================================================
-   APP 4: INS FORUM LOGIC (Black & White iOS Style - Enhanced)
-   ========================================================================== */
-
-const forumState = {
-    posts: [],
-    tempImage: null,
-    tempAvatar: null,
-    profile: {
-        name: 'Aesthetic User',
-        bio: 'Record every moment of life.',
-        avatar: 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'
-    },
-    config: {
-        worldbookIds: [],
-        charIds: [],
-        maskIds: []
-    }
-};
-let forumCurrentPostId = null; // 记录当前正在查看或操作的帖子ID
-async function forumLoadData() {
-    const data = await idb.get('ins_forum_data');
-    if (data) {
-        if (data.posts) forumState.posts = data.posts;
-        if (data.profile) forumState.profile = data.profile;
-        if (data.config) forumState.config = data.config;
-    }
-}
-
-async function forumSaveData() {
-    await idb.set('ins_forum_data', {
-        posts: forumState.posts,
-        profile: forumState.profile,
-        config: forumState.config
-    });
-}
-
-async function openForumApp() {
-    await forumLoadData();
-    document.getElementById('forumModal').classList.add('open');
-    forumSwitchTab('home');
-}
-
-function closeForumApp() {
-    document.getElementById('forumModal').classList.remove('open');
-}
-
-function forumSwitchTab(tab) {
-    document.querySelectorAll('.ins-forum-view').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.ins-forum-tab').forEach(el => el.classList.remove('active'));
-    
-    document.getElementById(`forum-view-${tab}`).classList.add('active');
-    const tabBtn = document.getElementById(`forum-tab-${tab}`);
-    if (tabBtn) tabBtn.classList.add('active');
-    
-    if (tab === 'home') {
-        forumRenderPosts();
-    } else if (tab === 'profile') {
-        forumRenderProfile();
-    }
-}
-
-// --- 渲染帖子列表 ---
-function forumRenderPosts() {
-    const container = document.getElementById('forum-post-list');
-    container.innerHTML = '';
-    
-    if (forumState.posts.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 50px; font-style: italic; font-family: Georgia, serif;">No posts yet. Be the first to share.</div>';
-        return;
-    }
-    
-    const sortedPosts = [...forumState.posts].sort((a, b) => b.time - a.time);
-    
-    sortedPosts.forEach(post => {
-        const dateStr = new Date(post.time).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        let imgHtml = '';
-        if (post.image) {
-            imgHtml = `<img src="${post.image}" class="ins-forum-post-image">`;
-        }
-        
-        const commentCount = post.comments ? post.comments.length : 0;
-        
-        const div = document.createElement('div');
-        div.className = 'ins-forum-post-card';
-        div.innerHTML = `
-            <div class="ins-forum-post-header">
-                <img src="${post.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="ins-forum-post-avatar">
-                <div>
-                    <div class="ins-forum-post-author">${post.author}</div>
-                    <div class="ins-forum-post-time">${dateStr}</div>
-                </div>
-            </div>
-            <div style="cursor: pointer;" onclick="forumOpenPostDetail(${post.id})">
-                <div class="ins-forum-post-title">${post.title}</div>
-                <div class="ins-forum-post-text" style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">${post.content}</div>
-                ${imgHtml}
-            </div>
-            <div class="ins-forum-post-actions">
-                <div style="display: flex; gap: 20px;">
-                    <div class="ins-forum-action-btn" onclick="forumToggleLike(${post.id}, this)">
-                        <svg viewBox="0 0 24 24" style="fill: ${post.isLiked ? '#111' : 'none'}; stroke: ${post.isLiked ? '#111' : 'currentColor'};"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                        <span>${post.likes || 0}</span>
-                    </div>
-                    <div class="ins-forum-action-btn" onclick="forumOpenPostDetail(${post.id})">
-                        <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                        <span>${commentCount}</span>
-                    </div>
-                </div>
-                <div class="ins-forum-action-btn" onclick="forumOpenShareModal(${post.id})">
-                    <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
-                </div>
-            </div>
-        `;
-        container.appendChild(div);
-    });
-}
-
-// --- 帖子详情页 ---
-function forumOpenPostDetail(id) {
-    forumCurrentPostId = id; // 记录当前帖子ID
-    const post = forumState.posts.find(p => p.id === id);
-    if (!post) return;
-
-    const dateStr = new Date(post.time).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    let imgHtml = post.image ? `<img src="${post.image}" class="ins-forum-post-image" style="margin-top: 15px;">` : '';
-
-    let commentsHtml = '';
-    if (post.comments && post.comments.length > 0) {
-        post.comments.forEach(c => {
-            commentsHtml += `
-                <div style="padding: 15px 20px; border-bottom: 1px solid #F9F9F9; display: flex; gap: 12px;">
-                    <div style="width: 32px; height: 32px; border-radius: 50%; background: #F5F5F5; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #888; flex-shrink: 0;">${c.author.charAt(0)}</div>
-                    <div>
-                        <div style="font-size: 13px; font-weight: 700; color: #111; margin-bottom: 4px;">${c.author}</div>
-                        <div style="font-size: 14px; color: #555; line-height: 1.5;">${c.content}</div>
-                    </div>
-                </div>
-            `;
-        });
-    } else {
-        commentsHtml = '<div style="text-align: center; color: #CCC; padding: 30px; font-size: 13px; font-style: italic;">No comments yet.</div>';
-    }
-
-    const contentEl = document.getElementById('forum-detail-content');
-    contentEl.innerHTML = `
-        <div style="padding: 20px; background: #FFF; border-bottom: 8px solid #FAFAFA;">
-            <div class="ins-forum-post-header">
-                <img src="${post.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="ins-forum-post-avatar">
-                <div>
-                    <div class="ins-forum-post-author">${post.author}</div>
-                    <div class="ins-forum-post-time">${dateStr}</div>
-                </div>
-            </div>
-            <div class="ins-forum-post-title" style="font-size: 22px;">${post.title}</div>
-            <div class="ins-forum-post-text" style="font-size: 16px;">${post.content}</div>
-            ${imgHtml}
-        </div>
-        <div style="background: #FFF;">
-            <div style="padding: 15px 20px; font-size: 12px; font-weight: 800; color: #999; letter-spacing: 1px; border-bottom: 1px solid #F0F0F0;">COMMENTS (${post.comments ? post.comments.length : 0})</div>
-            ${commentsHtml}
-        </div>
-    `;
-
-    document.getElementById('forum-view-detail').classList.add('active');
-}
-
-function closeForumPostDetail() {
-    document.getElementById('forum-view-detail').classList.remove('active');
-    forumCurrentPostId = null;
-}
-// --- 发布与上传 ---
-function handleForumImageUpload(input) {
-    const file = input.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            forumState.tempImage = e.target.result;
-            document.getElementById('forum-preview-image').src = e.target.result;
-            document.getElementById('forum-preview-image').style.display = 'block';
-            document.getElementById('forum-upload-text').style.display = 'none';
-        };
-        reader.readAsDataURL(file);
-    }
-}
-
-function submitForumPost() {
-    const title = document.getElementById('forum-input-title').value.trim();
-    const content = document.getElementById('forum-input-content').value.trim();
-    
-    if (!title || !content) {
-        alert("Title and content cannot be empty.");
-        return;
-    }
-    
-    const newPost = {
-        id: Date.now(),
-        author: forumState.profile.name,
-        avatar: forumState.profile.avatar,
-        title: title,
-        content: content,
-        image: forumState.tempImage,
-        time: Date.now(),
-        likes: 0,
-        isLiked: false,
-        comments: []
-    };
-    
-    forumState.posts.unshift(newPost);
-    forumSaveData();
-    
-    document.getElementById('forum-input-title').value = '';
-    document.getElementById('forum-input-content').value = '';
-    forumState.tempImage = null;
-    document.getElementById('forum-preview-image').style.display = 'none';
-    document.getElementById('forum-upload-text').style.display = 'block';
-    
-    forumSwitchTab('home');
-}
-
-function forumToggleLike(id, btnElement) {
-    const post = forumState.posts.find(p => p.id === id);
-    if (post) {
-        post.isLiked = !post.isLiked;
-        post.likes += post.isLiked ? 1 : -1;
-        forumSaveData();
-        
-        const svg = btnElement.querySelector('svg');
-        const span = btnElement.querySelector('span');
-        svg.style.fill = post.isLiked ? '#111' : 'none';
-        svg.style.stroke = post.isLiked ? '#111' : 'currentColor';
-        span.innerText = post.likes;
-    }
-}
-
-// --- 个人主页与设置 ---
-function forumRenderProfile() {
-    document.getElementById('forum-profile-avatar').src = forumState.profile.avatar;
-    document.getElementById('forum-profile-name').innerText = forumState.profile.name;
-    document.getElementById('forum-profile-bio').innerText = forumState.profile.bio;
-    
-    const container = document.getElementById('forum-my-post-list');
-    container.innerHTML = '';
-    
-    const myPosts = forumState.posts.filter(p => p.author === forumState.profile.name).sort((a, b) => b.time - a.time);
-    
-    if (myPosts.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 30px; font-style: italic; font-family: Georgia, serif;">No posts yet.</div>';
-        return;
-    }
-    
-    myPosts.forEach(post => {
-        const dateStr = new Date(post.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        const div = document.createElement('div');
-        div.style.cssText = "background: #FFF; border-radius: 12px; padding: 15px; margin-bottom: 15px; border: 1px solid #F0F0F0; display: flex; justify-content: space-between; align-items: center;";
-        div.innerHTML = `
-            <div style="flex: 1; overflow: hidden; padding-right: 15px; cursor: pointer;" onclick="forumOpenPostDetail(${post.id})">
-                <div style="font-size: 15px; font-weight: 700; color: #111; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${post.title}</div>
-                <div style="font-size: 12px; color: #888; font-family: monospace;">${dateStr}</div>
-            </div>
-            <div style="color: #FF3B30; font-size: 12px; font-weight: bold; cursor: pointer; padding: 5px;" onclick="forumDeletePost(${post.id})">DELETE</div>
-        `;
-        container.appendChild(div);
-    });
-}
-
-function forumDeletePost(id) {
-    if (confirm("Are you sure you want to delete this post?")) {
-        forumState.posts = forumState.posts.filter(p => p.id !== id);
-        forumSaveData();
-        forumRenderProfile();
-    }
-}
-
-// --- 编辑个人资料 ---
-function forumOpenEditProfile() {
-    document.getElementById('forum-edit-name').value = forumState.profile.name;
-    document.getElementById('forum-edit-bio').value = forumState.profile.bio;
-    forumState.tempAvatar = null;
-    document.getElementById('forum-edit-avatar-preview').style.display = 'none';
-    document.getElementById('forum-edit-avatar-text').style.display = 'block';
-    wcOpenModal('forum-modal-edit-profile');
-}
-
-function forumHandleAvatarUpload(input) {
-    const file = input.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            forumState.tempAvatar = e.target.result;
-            document.getElementById('forum-edit-avatar-preview').src = e.target.result;
-            document.getElementById('forum-edit-avatar-preview').style.display = 'block';
-            document.getElementById('forum-edit-avatar-text').style.display = 'none';
-        };
-        reader.readAsDataURL(file);
-    }
-}
-
-function forumSaveProfile() {
-    const name = document.getElementById('forum-edit-name').value.trim();
-    const bio = document.getElementById('forum-edit-bio').value.trim();
-    
-    if (name) forumState.profile.name = name;
-    if (bio) forumState.profile.bio = bio;
-    if (forumState.tempAvatar) forumState.profile.avatar = forumState.tempAvatar;
-    
-    forumSaveData();
-    forumRenderProfile();
-    wcCloseModal('forum-modal-edit-profile');
-}
-
-// --- 关联设置 ---
-function forumOpenSettings() {
-    // 渲染世界书
-    const wbList = document.getElementById('forum-setting-wb-list');
-    wbList.innerHTML = '';
-    if (typeof worldbookEntries !== 'undefined' && worldbookEntries.length > 0) {
-        worldbookEntries.forEach(entry => {
-            const isChecked = forumState.config.worldbookIds.includes(entry.id.toString());
-            wbList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" class="forum-wb-cb" value="${entry.id}" ${isChecked ? 'checked' : ''}><span>${entry.title}</span></div>`;
-        });
-    } else {
-        wbList.innerHTML = '<div style="color:#999; font-size:12px;">暂无世界书</div>';
-    }
-
-    // 渲染角色
-    const charList = document.getElementById('forum-setting-char-list');
-    charList.innerHTML = '';
-    if (typeof wcState !== 'undefined' && wcState.characters.length > 0) {
-        wcState.characters.forEach(c => {
-            const isChecked = forumState.config.charIds.includes(c.id.toString());
-            charList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" class="forum-char-cb" value="${c.id}" ${isChecked ? 'checked' : ''}><span>${c.name}</span></div>`;
-        });
-    } else {
-        charList.innerHTML = '<div style="color:#999; font-size:12px;">暂无角色</div>';
-    }
-
-    // 渲染面具
-    const maskList = document.getElementById('forum-setting-mask-list');
-    maskList.innerHTML = '';
-    if (typeof wcState !== 'undefined' && wcState.masks.length > 0) {
-        wcState.masks.forEach(m => {
-            const isChecked = forumState.config.maskIds.includes(m.id.toString());
-            maskList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" class="forum-mask-cb" value="${m.id}" ${isChecked ? 'checked' : ''}><span>${m.name}</span></div>`;
-        });
-    } else {
-        maskList.innerHTML = '<div style="color:#999; font-size:12px;">暂无面具</div>';
-    }
-
-    wcOpenModal('forum-modal-settings');
-}
-
-function forumSaveSettings() {
-    const wbCbs = document.querySelectorAll('.forum-wb-cb:checked');
-    forumState.config.worldbookIds = Array.from(wbCbs).map(cb => cb.value);
-
-    const charCbs = document.querySelectorAll('.forum-char-cb:checked');
-    forumState.config.charIds = Array.from(charCbs).map(cb => cb.value);
-
-    const maskCbs = document.querySelectorAll('.forum-mask-cb:checked');
-    forumState.config.maskIds = Array.from(maskCbs).map(cb => cb.value);
-
-    forumSaveData();
-    wcCloseModal('forum-modal-settings');
-    alert("Settings saved successfully.");
-}
-
-// --- AI 批量生成帖子与评论 (防崩溃强化版) ---
-async function forumGeneratePosts() {
-    const apiConfig = await idb.get('ios_theme_api_config');
-    if (!apiConfig || !apiConfig.key) return alert("请先在设置中配置 API");
-
-    wcShowLoading("正在生成社区动态...");
-
-    try {
-        // 收集背景信息
-        let bgInfo = "";
-        
-        if (forumState.config.worldbookIds.length > 0 && typeof worldbookEntries !== 'undefined') {
-            const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
-            if (wbs.length > 0) {
-                bgInfo += "【世界观背景】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
-            }
-        }
-
-        let participants = [];
-        if (forumState.config.charIds.length > 0 && typeof wcState !== 'undefined') {
-            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
-            chars.forEach(c => participants.push(`${c.name} (人设: ${c.prompt})`));
-        }
-        if (forumState.config.maskIds.length > 0 && typeof wcState !== 'undefined') {
-            const masks = wcState.masks.filter(m => forumState.config.maskIds.includes(m.id.toString()));
-            masks.forEach(m => participants.push(`${m.name} (人设: ${m.prompt})`));
-        }
-
-        if (participants.length > 0) {
-            bgInfo += "【活跃用户/角色池】:\n" + participants.join('\n') + "\n\n";
-        }
-
-        let prompt = `你是一个高级感 INS/Twitter 风格论坛的内容生成器。\n`;
-        prompt += `${bgInfo}`;
-        // 【核心修改 1】：大幅减少生成数量，防止 JSON 被截断报错
-        prompt += `请生成 3 到 5 个具有高度多样性的论坛帖子。每个帖子包含 2 到 4 条评论。\n`;
-        prompt += `【核心要求（最高优先级）】：\n`;
-        prompt += `1. 帖子内容要极具“活人感”和“真实感”，仿造真实网友的日常动态、吐槽、吃瓜、求助、深夜emo等。\n`;
-        prompt += `2. 发帖人和评论人必须穿插大量的【活跃用户/角色池】中的 NPC，让他们互相评论、互动、甚至吵架、玩梗、阴阳怪气。\n`;
-        prompt += `3. 语言风格要求：极简、克制、高级感，或者带有强烈的当代网友发疯/吃瓜属性（如：救命、笑死、蹲一个、谁懂啊等）。拒绝浓重的 AI 味和书面语。\n`;
-        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
-        prompt += `5. 必须严格返回纯 JSON 数组，不要输出任何其他废话，格式如下：\n`;
-        prompt += `[
-  {
-    "title": "写在失眠的夜",
-    "content": "窗外的雨声很大，突然想起了很久以前的一件事...",
-    "author": "某个角色的名字 或 匿名",
-    "comments": [
-      {"author": "路人A", "content": "深有同感。"},
-      {"author": "某个角色的名字", "content": "早点休息吧。"}
-    ]
-  }
-]\n`;
-
-        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
-            body: JSON.stringify({
-                model: apiConfig.model,
-                messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8,
-                max_tokens: 4000 
-            })
-        });
-
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.error?.message || `HTTP Error: ${response.status}`);
-        }
-
-        if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
-            throw new Error("API 返回格式异常，未找到 choices 数据。");
-        }
-
-        let content = data.choices[0].message.content;
-        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
-        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        
-        // 【核心修改 2】：强大的 JSON 截断修复逻辑
-        const start = content.indexOf('[');
-        let end = content.lastIndexOf(']');
-        
-        if (start !== -1) {
-            if (end === -1 || end < start) {
-                // 如果找不到结尾的 ']'，说明被截断了，强行补全
-                content = content.substring(start);
-                // 找到最后一个完整的对象结尾 '}'
-                const lastBrace = content.lastIndexOf('}');
-                if (lastBrace !== -1) {
-                    content = content.substring(0, lastBrace + 1) + ']';
-                } else {
-                    content += ']'; // 极端情况兜底
-                }
-            } else {
-                content = content.substring(start, end + 1);
-            }
-        }
-        
-        const generatedPosts = JSON.parse(content);
-        
-        if (!Array.isArray(generatedPosts)) {
-            throw new Error("AI 没有返回正确的数组格式。");
-        }
-        
-        // 将生成的帖子加入列表
-        generatedPosts.forEach(p => {
-            let avatarUrl = 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg';
-            if (typeof wcState !== 'undefined') {
-                const char = wcState.characters.find(c => c.name === p.author);
-                if (char) avatarUrl = char.avatar;
-                else {
-                    const mask = wcState.masks.find(m => m.name === p.author);
-                    if (mask) avatarUrl = mask.avatar;
-                }
-            }
-
-            forumState.posts.unshift({
-                id: Date.now() + Math.random(),
-                author: p.author || '匿名用户',
-                avatar: avatarUrl,
-                title: p.title || '无题',
-                content: p.content || '...',
-                image: null,
-                time: Date.now() - Math.floor(Math.random() * 10000000), 
-                likes: Math.floor(Math.random() * 100),
-                isLiked: false,
-                comments: p.comments || []
-            });
-        });
-
-        forumSaveData();
-        forumRenderPosts();
-        wcShowSuccess("生成成功");
-
-    } catch (e) {
-        console.error("Forum Generate Error:", e);
-        wcShowError(e.message || "生成失败，请重试");
-    }
-}
-
-// --- 渲染帖子列表 (中文化) ---
-function forumRenderPosts() {
-    const container = document.getElementById('forum-post-list');
-    container.innerHTML = '';
-    
-    if (forumState.posts.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 50px; font-size: 14px;">暂无帖子，快来分享第一条动态吧。</div>';
-        return;
-    }
-    
-    const sortedPosts = [...forumState.posts].sort((a, b) => b.time - a.time);
-    
-    sortedPosts.forEach(post => {
-        const dateStr = new Date(post.time).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        let imgHtml = '';
-        if (post.image) {
-            imgHtml = `<img src="${post.image}" class="ins-forum-post-image">`;
-        }
-        
-        const commentCount = post.comments ? post.comments.length : 0;
-        
-        const div = document.createElement('div');
-        div.className = 'ins-forum-post-card';
-        div.innerHTML = `
-            <div class="ins-forum-post-header">
-                <img src="${post.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="ins-forum-post-avatar">
-                <div>
-                    <div class="ins-forum-post-author">${post.author}</div>
-                    <div class="ins-forum-post-time">${dateStr}</div>
-                </div>
-            </div>
-            <div style="cursor: pointer;" onclick="forumOpenPostDetail(${post.id})">
-                <div class="ins-forum-post-title">${post.title}</div>
-                <div class="ins-forum-post-text" style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">${post.content}</div>
-                ${imgHtml}
-            </div>
-            <div class="ins-forum-post-actions">
-                <div style="display: flex; gap: 20px;">
-                    <div class="ins-forum-action-btn" onclick="forumToggleLike(${post.id}, this)">
-                        <svg viewBox="0 0 24 24" style="fill: ${post.isLiked ? '#000' : 'none'}; stroke: ${post.isLiked ? '#000' : 'currentColor'};"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                        <span>${post.likes || 0}</span>
-                    </div>
-                    <div class="ins-forum-action-btn" onclick="forumOpenPostDetail(${post.id})">
-                        <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                        <span>${commentCount}</span>
-                    </div>
-                </div>
-                <div class="ins-forum-action-btn" onclick="forumOpenShareModal(${post.id})">
-                    <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
-                </div>
-            </div>
-        `;
-        container.appendChild(div);
-    });
-}
-
-// --- 帖子详情页 (中文化) ---
-function forumOpenPostDetail(id) {
-    forumCurrentPostId = id; 
-    const post = forumState.posts.find(p => p.id === id);
-    if (!post) return;
-
-    const dateStr = new Date(post.time).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    let imgHtml = post.image ? `<img src="${post.image}" class="ins-forum-post-image" style="margin-top: 15px;">` : '';
-
-    let commentsHtml = '';
-    if (post.comments && post.comments.length > 0) {
-        post.comments.forEach(c => {
-            commentsHtml += `
-                <div style="padding: 15px 20px; border-bottom: 1px solid #F9F9F9; display: flex; gap: 12px;">
-                    <div style="width: 36px; height: 36px; border-radius: 50%; background: #F5F5F5; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #888; flex-shrink: 0;">${c.author.charAt(0)}</div>
-                    <div>
-                        <div style="font-size: 14px; font-weight: 700; color: #000; margin-bottom: 4px;">${c.author}</div>
-                        <div style="font-size: 15px; color: #333; line-height: 1.5;">${c.content}</div>
-                    </div>
-                </div>
-            `;
-        });
-    } else {
-        commentsHtml = '<div style="text-align: center; color: #8E8E93; padding: 30px; font-size: 13px;">还没有人评论，快来抢沙发吧。</div>';
-    }
-
-    const contentEl = document.getElementById('forum-detail-content');
-    contentEl.innerHTML = `
-        <div style="padding: 20px; background: #FFF; border-bottom: 8px solid #FAFAFA;">
-            <div class="ins-forum-post-header">
-                <img src="${post.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="ins-forum-post-avatar">
-                <div>
-                    <div class="ins-forum-post-author">${post.author}</div>
-                    <div class="ins-forum-post-time">${dateStr}</div>
-                </div>
-            </div>
-            <div class="ins-forum-post-title" style="font-size: 20px;">${post.title}</div>
-            <div class="ins-forum-post-text" style="font-size: 16px;">${post.content}</div>
-            ${imgHtml}
-        </div>
-        <div style="background: #FFF;">
-            <div style="padding: 15px 20px; font-size: 13px; font-weight: 800; color: #8E8E93; border-bottom: 1px solid #F0F0F0;">全部评论 (${post.comments ? post.comments.length : 0})</div>
-            ${commentsHtml}
-        </div>
-    `;
-
-    document.getElementById('forum-view-detail').classList.add('active');
-}
-
-// --- 个人主页与设置 (中文化) ---
-function forumRenderProfile() {
-    document.getElementById('forum-profile-avatar').src = forumState.profile.avatar;
-    document.getElementById('forum-profile-name').innerText = forumState.profile.name;
-    document.getElementById('forum-profile-bio').innerText = forumState.profile.bio;
-    
-    const container = document.getElementById('forum-my-post-list');
-    container.innerHTML = '';
-    
-    const myPosts = forumState.posts.filter(p => p.author === forumState.profile.name).sort((a, b) => b.time - a.time);
-    
-    if (myPosts.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 30px; font-size: 14px;">你还没有发布过动态。</div>';
-        return;
-    }
-    
-    myPosts.forEach(post => {
-        const dateStr = new Date(post.time).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-        const div = document.createElement('div');
-        div.style.cssText = "background: #FFF; border-radius: 12px; padding: 15px; margin-bottom: 15px; border: 1px solid #E5E5EA; display: flex; justify-content: space-between; align-items: center;";
-        div.innerHTML = `
-            <div style="flex: 1; overflow: hidden; padding-right: 15px; cursor: pointer;" onclick="forumOpenPostDetail(${post.id})">
-                <div style="font-size: 16px; font-weight: 700; color: #000; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${post.title}</div>
-                <div style="font-size: 12px; color: #8E8E93;">${dateStr}</div>
-            </div>
-            <div style="color: #FF3B30; font-size: 13px; font-weight: bold; cursor: pointer; padding: 5px;" onclick="forumDeletePost(${post.id})">删除</div>
-        `;
-        container.appendChild(div);
-    });
-}
-
-function forumDeletePost(id) {
-    if (confirm("确定要删除这条动态吗？")) {
-        forumState.posts = forumState.posts.filter(p => p.id !== id);
-        forumSaveData();
-        forumRenderProfile();
-    }
-}
-// ==========================================
-// 论坛补充功能：评论、分享到微信
-// ==========================================
-
-// 1. 提交评论功能
-function forumSubmitComment() {
-    if (!forumCurrentPostId) return;
-    const input = document.getElementById('forum-comment-input');
-    const text = input.value.trim();
-    
-    if (!text) {
-        alert("评论内容不能为空哦~");
-        return;
-    }
-
-    const post = forumState.posts.find(p => p.id === forumCurrentPostId);
-    if (post) {
-        if (!post.comments) post.comments = [];
-        // 将用户的评论推入数组
-        post.comments.push({
-            author: forumState.profile.name,
-            content: text
-        });
-        
-        forumSaveData();
-        
-        // 重新渲染详情页和主页，清空输入框
-        forumOpenPostDetail(forumCurrentPostId); 
-        input.value = ''; 
-        forumRenderPosts(); 
-    }
-}
-
-// 2. 打开分享弹窗
-let forumPendingSharePostId = null;
-
-function forumOpenShareModal(postId = null) {
-    // 兼容主页列表点击和详情页点击
-    forumPendingSharePostId = postId || forumCurrentPostId; 
-    if (!forumPendingSharePostId) return;
-
-    const list = document.getElementById('forum-share-char-list');
-    list.innerHTML = '';
-
-    // 获取所有微信角色（排除群聊，只分享给单人）
-    const chars = wcState.characters.filter(c => !c.isGroup);
-
-    if (chars.length === 0) {
-        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">暂无联系人，请先在微信添加角色</div>';
-    } else {
-        chars.forEach(c => {
-            list.innerHTML += `
-                <div class="wc-list-item" style="background: #FFF; border-bottom: 1px solid #F0F0F0; padding: 12px 0; cursor: pointer;" onclick="forumShareToChar(${c.id})">
-                    <img src="${c.avatar}" style="width: 40px; height: 40px; border-radius: 8px; object-fit: cover;">
-                    <div style="flex: 1; margin-left: 15px; font-size: 15px; font-weight: 600; color: #111;">${c.name}</div>
-                    <div style="color: #007AFF; font-size: 13px; font-weight: bold; background: #F2F2F7; padding: 6px 12px; border-radius: 12px;">发送</div>
-                </div>
-            `;
-        });
-    }
-    wcOpenModal('forum-modal-share');
-}
-
-// 3. 执行分享给 Char 的逻辑
-function forumShareToChar(charId) {
-    if (!forumPendingSharePostId) return;
-    
-    const post = forumState.posts.find(p => p.id === forumPendingSharePostId);
-    const char = wcState.characters.find(c => c.id === charId);
-    if (!post || !char) return;
-
-    // 构造一张高级感的分享卡片，发送到微信聊天界面
-    const cardHtml = `
-        <div class="shopping-card" style="background: #F9F9F9; border: 1px solid #E5E5EA; border-radius: 12px; overflow: hidden;">
-            <div class="shopping-card-header" style="border-bottom: 1px solid #E5E5EA; padding: 10px 12px; background: #FFF;">
-                <div class="shopping-card-tag" style="background: #111; color: #FFF; font-size: 10px; padding: 2px 6px; border-radius: 4px;">FORUM POST</div>
-            </div>
-            <div class="shopping-card-body" style="padding: 12px;">
-                <div class="shopping-card-title" style="font-size: 15px; font-weight: bold; color: #000; margin-bottom: 6px;">${post.title}</div>
-                <div class="shopping-card-desc" style="color: #555; font-size: 13px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">${post.content}</div>
-                <div style="font-size: 11px; color: #999; margin-top: 10px; font-family: monospace;">Author: ${post.author}</div>
-            </div>
-        </div>
-    `;
-
-    // 1. 关闭论坛和弹窗
-    wcCloseModal('forum-modal-share');
-    closeForumApp();
-
-    // 2. 将卡片作为 receipt 类型发送到聊天界面 (receipt 类型支持直接渲染 HTML)
-    wcAddMessage(charId, 'me', 'receipt', cardHtml);
-
-    // 3. 给 AI 发送隐藏的系统提示，强制让它读取帖子内容并做出反应
-    const aiPrompt = `[系统内部信息(仅AI可见): 用户刚刚在微信上给你分享了一篇论坛帖子。帖子标题是《${post.title}》，内容是：“${post.content}”，发帖人是：${post.author}。请在接下来的回复中，针对这篇帖子的内容给出你的看法、吐槽或反应。]`;
-    wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
-
-    // 4. 提示用户并自动跳转到聊天界面
-    setTimeout(() => {
-        alert(`已成功将帖子分享给 ${char.name}！快去看看 Ta 的反应吧~`);
-        if (!document.getElementById('wechatModal').classList.contains('open')) {
-            openWechat();
-        }
-        wcOpenChat(charId);
-    }, 300);
-    
-    forumPendingSharePostId = null;
 }
