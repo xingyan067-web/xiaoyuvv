@@ -1624,11 +1624,11 @@
 <div class="wc-nav-left">
     <button class="wc-nav-btn" id="wc-btn-exit" onclick="closeWechat()">
         <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        退出
+        
     </button>
     <button class="wc-nav-btn" id="wc-btn-back" onclick="wcHandleBack()" style="display: none;">
         <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        返回
+        
     </button>
     <!-- 👇 在这里插入新的日历按钮 👇 -->
     <button class="wc-nav-btn" id="wc-btn-calendar" onclick="wcOpenCalendarModal()" style="display: none; padding-left: 5px;">
@@ -2481,7 +2481,7 @@
                     <div class="wc-modal-content" style="background: #F2F2F7; display: flex; flex-direction: column; height: 100%; width: 100%; max-width: 100%; border-radius: 0; margin: 0;">
                         <div class="wc-navbar" style="position: sticky; top: 0; flex-shrink: 0;">
                             <div class="wc-nav-left">
-                                <button class="wc-nav-btn" onclick="wcCloseModal('wc-modal-chat-settings')">关闭</button>
+                                <button class="wc-nav-btn" onclick="wcCloseModal('wc-modal-chat-settings')"></button>
                             </div>
                             <div class="wc-nav-title">聊天设置</div>
                             <div class="wc-nav-right">
@@ -3139,7 +3139,7 @@
                     </div>
                 </div>
             </div>
-        </div>
+        </div>        
     </div> <!-- End of #app-root -->
 
     <style id="dynamic-font-style"></style>
