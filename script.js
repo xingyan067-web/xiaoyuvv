@@ -2693,8 +2693,42 @@ function wcFormatTime(timestamp) {
     const minutes = date.getMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
 }
+// 新增：专门用于系统居中时间戳的格式化函数（带日期智能显示）
+function wcFormatSystemTime(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
 
-// --- 新增/强化：时间感知计算器 (融合 v2.0 规则) ---
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const timeStr = `${hours}:${minutes}`;
+
+    // 判断是否是今天
+    if (date.getFullYear() === now.getFullYear() &&
+        date.getMonth() === now.getMonth() &&
+        date.getDate() === now.getDate()) {
+        return timeStr; // 当天只显示时间
+    }
+
+    // 判断是否是昨天
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (date.getFullYear() === yesterday.getFullYear() &&
+        date.getMonth() === yesterday.getMonth() &&
+        date.getDate() === yesterday.getDate()) {
+        return `昨天 ${timeStr}`;
+    }
+
+    // 其他日期 (同一年不显示年份)
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    if (date.getFullYear() === now.getFullYear()) {
+        return `${month}月${day}日 ${timeStr}`;
+    } else {
+        return `${date.getFullYear()}年${month}月${day}日 ${timeStr}`;
+    }
+}
+
+// --- 新增/强化：时间感知计算器 (融合 v2.0 规则，增强跨天感知) ---
 function wcGenerateTimeGapPrompt(msgs, referenceTime = Date.now()) {
     if (!msgs || msgs.length === 0) return "";
     
@@ -2709,26 +2743,38 @@ function wcGenerateTimeGapPrompt(msgs, referenceTime = Date.now()) {
 
     if (lastMsgTime === 0) return "";
 
+    const lastDate = new Date(lastMsgTime);
+    const nowDate = new Date(referenceTime);
+
     const gapMs = referenceTime - lastMsgTime;
     const gapHours = Math.floor(gapMs / (1000 * 60 * 60));
     const gapDays = Math.floor(gapHours / 24);
 
-    // 如果间隔小于 2 小时，视为连续聊天，不触发强烈的断联感知
-    if (gapHours < 2) return "";
+    // 核心：判断是否跨天了（即使只隔了几个小时，只要过了零点就是新的一天）
+    const isSameDay = lastDate.getFullYear() === nowDate.getFullYear() &&
+                      lastDate.getMonth() === nowDate.getMonth() &&
+                      lastDate.getDate() === nowDate.getDate();
 
     let prompt = `\n【时间感知与断联反应 (最高优先级)】\n`;
-    prompt += `> 内部信息：距离你们上一次聊天已经过去了 ${gapDays > 0 ? gapDays + ' 天' : gapHours + ' 个小时'}。\n`;
+
+    if (!isSameDay) {
+        prompt += `> 📅 日期变动提示：注意！你们的对话已经跨天了。上次聊天是在 ${lastDate.getMonth()+1}月${lastDate.getDate()}日，现在已经是新的一天（${nowDate.getMonth()+1}月${nowDate.getDate()}日）。\n`;
+        prompt += `> 状态要求：请务必表现出“新的一天”的真实感。如果是早晨，可以自然地道早安、询问昨晚睡得好不好或分享今天的计划；如果是其他时间，也要体现出隔天聊天的感觉。\n`;
+    } else {
+        prompt += `> 内部信息：距离你们上一次聊天已经过去了 ${gapHours > 0 ? gapHours + ' 个小时' : Math.floor(gapMs / 60000) + ' 分钟'}。\n`;
+    }
     
     if (gapDays >= 3) {
         prompt += `> 状态要求：这是一个很长的空白期！请在回复中强烈且自然地体现出“久别重逢”、“漫长等待”或“断联后的情绪”（如：担忧、思念、生气、试探、冷淡等，必须符合你的人设）。\n`;
-    } else if (gapDays >= 1) {
-        prompt += `> 状态要求：自然地体现出隔天聊天的感觉（如：关心对方昨天/这几天去哪了，或者分享自己这几天的状态）。\n`;
-    } else if (gapHours >= 2) {
+    } else if (gapHours >= 2 && isSameDay) {
         prompt += `> 状态要求：自然地体现出半天没联系的时间流逝感（如：问问对方这半天去忙什么了，或者顺着当前时间打招呼）。\n`;
     }
 
     prompt += `> 【硬性禁止】：绝对不要机械地报出具体数字（禁止说“我们已经3天没说话了”或“过了5个小时”）。\n`;
     prompt += `> 【表现手法】：时间必须自然融入对话。通过语气、微动作（MicroActions）、或者对当前环境/光线的描写来侧面烘托时间感。情绪是底色，自然流露，而非刻意展示。\n`;
+
+    // 如果是同一天且间隔小于2小时，不输出这段提示，避免AI过度反应
+    if (isSameDay && gapHours < 2) return "";
 
     return prompt;
 }
@@ -2763,7 +2809,8 @@ function wcRenderMessages(charId) {
         if (msg.time - lastTime > 5 * 60 * 1000) {
             const timeDiv = document.createElement('div');
             timeDiv.className = 'wc-message-row system';
-            timeDiv.innerHTML = `<div class="wc-system-msg-text transparent">${wcFormatTime(msg.time)}</div>`;
+            // 👇 这里把 wcFormatTime 改成了我们刚刚新建的 wcFormatSystemTime
+            timeDiv.innerHTML = `<div class="wc-system-msg-text transparent">${wcFormatSystemTime(msg.time)}</div>`;
             container.insertBefore(timeDiv, anchor);
             lastTime = msg.time;
         }
@@ -3428,13 +3475,16 @@ async function wcTriggerAI(charIdOverride = null) {
             groupPrompt += `示例：\n[\n  {"type":"text", "senderName":"张三", "content":"大家晚上好"},\n  {"type":"sticker", "senderName":"李四", "content":"开心"},\n  {"type":"private_chat", "senderName":"张三", "content":"User，刚才群里那件事你怎么看？"}\n]\n\n`;
         }
 
-
         // 👆 修复结束 👆
         let systemPrompt = `# 核心指令 (Core Directives)
 你是一位专业的角色扮演专家。你的首要目标是真实且一致地扮演一个角色。
-1.  **身份约束 (Identity Constraint)**：你 **必须** 严格扮演 [你的角色设定] 中定义的角色。任何情况下都不能脱离角色。**严禁** 提及你是一个AI、语言模型或机器。
-2.  **禁止元思维 (No Meta-thinking)**：**严禁** 在你的回复中展示任何思考过程、推理或自我修正。直接提供最终的、符合角色的回复。
-3.  **情境感知 (Context Awareness)**：你的所有回应 **必须** 基于 [世界观设定]、[你的角色设定] 和 [用户设定] 中提供的信息。
+1. **身份约束 (Identity Constraint)**：你 **必须** 严格扮演 [你的角色设定（${char.name}）] 中定义的角色。任何情况下都不能脱离角色。**严禁** 提及你是一个AI、语言模型或机器。
+2. **强制独立思考 (Mandatory Inner Monologue)**：在给出回复前，你 **必须** 使用 <thinking> 标签进行内心独白。在思考时，你必须：
+   - 审视当前的时间（${timeString}）和你的 [世界观设定]，确定你现在所处的环境和状态。
+   - 严格代入你的人设性格，思考你对 User 当前话语或行为的真实心理反应。
+   - 思考完毕后，再输出最终的 JSON 回复。
+3. **现实与世界观感知 (Reality & World Awareness)**：你的所有回应 **必须** 深度融合当前的时间流逝感以及 [世界观设定]。不要把设定当成死板的说明书，要将其化作你生活中的常识自然流露。
+4. **绝对防 OOC (Anti-OOC)**：你的语气、用词习惯、对待 User 的态度必须与人设 100% 吻合。如果人设是冷酷的，绝不能突然热情；如果人设是傲娇的，绝不能直白表达爱意。
 
 # 情境信息 (Contextual Information)
 -   **当前时间**: ${timeString} ${dayString}
@@ -8296,9 +8346,17 @@ function checkProactiveMessages() {
             if (now - lastTime > interval && !aiGeneratingLocks[char.id]) {
                 console.log(`触发 ${char.name} 主动消息`);
                 
-                // 【核心修复3】：注入一条隐藏的系统提示，强制 AI 找话题
-                // 只有告诉 AI 距离上次聊天很久了，它才会主动开启新话题，否则它会不知道说什么
-                wcAddMessage(char.id, 'system', 'system', `[系统内部提示：距离上次聊天已经过去很久了，请你根据人设主动找User搭话，感觉人设开启一个新的话题、分享你现在的状态或表达思念。]`, { hidden: true });
+                // 【核心强化】：注入极强的现实感知与强制思考指令，防止主动发消息时 OOC
+                const nowStr = new Date().toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const proactivePrompt = `[系统内部强制指令：现实时间已经来到了 ${nowStr}，距离你们上次聊天已经过去很久了。
+请你现在**主动**给 User 发送消息。
+【行动前必须在 <thinking> 标签中进行深度思考】：
+1. 现实感知：结合你的人设（${char.name}）和当前的时间点，你现在应该在做什么？（工作、休息、吃饭、还是失眠？）
+2. 动机分析：你为什么会突然想起 User 并给 Ta 发消息？（是因为看到了某样东西、遇到了某件事、还是单纯的思念/无聊？）
+3. 绝对防 OOC：你的语气必须 100% 符合人设！绝对不要说“好久不见”这种AI味重的话，要像真人一样自然地切入话题（例如分享一张照片、吐槽一件事、或者直接问对方在干嘛）。
+思考完毕后，再输出符合你人设的 JSON 消息数组！]`;
+                
+                wcAddMessage(char.id, 'system', 'system', proactivePrompt, { hidden: true });
                 
                 wcTriggerAI(char.id);
             }
@@ -8993,10 +9051,10 @@ async function lsTriggerNpcMessage() {
             prompt += `示例：[{"type":"text", "content":"在吗？"}, {"type":"text", "content":"有个事想跟你说"}]\n`;
         }
         
-        prompt += `\n【当前时间】：${timeString} ${dayString}\n`;
+        prompt += `\n【现实感知】：当前时间是 ${timeString} ${dayString}。你的发言必须符合这个时间点的常理（如深夜不要说刚起床）。\n`;
         prompt += `【${char.name} 的人设】：${char.prompt}\n`;
         prompt += `${wbInfo}\n`;
-        prompt += `内容要求：口语化，生活化，符合你(${npc.name})的人设。拒绝油腻和AI味。\n`;
+        prompt += `【防OOC要求】：你是一个拥有独立生活的真人。发言必须极度口语化、生活化，完全符合你(${npc.name})的人设。绝对拒绝油腻、做作和AI味。不要像客服一样说话！\n`;
         if (chatConfig.bilingualEnabled) {
             const sourceLang = chatConfig.bilingualSource || '英语';
             const targetLang = chatConfig.bilingualTarget || '中文';
