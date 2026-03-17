@@ -2899,18 +2899,20 @@ function wcRenderMessages(charId) {
             const tagText = isReceived ? 'RECEIVED' : (isRejected ? 'REJECTED' : 'TRANSFER');
 
             contentHtml = `
-                <div class="wc-bubble transfer ins-transfer-card ${statusClass}" onclick="wcHandleTransferClick(${msg.id})">
+                <div class="wc-bubble transfer" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important;">
                     ${quoteHtml}
-                    <div class="ins-transfer-header">
-                        <div class="ins-transfer-tag">${tagText}</div>
-                    </div>
-                    <div class="ins-transfer-body">
-                        <div class="ins-transfer-amount">¥${parseFloat(msg.amount).toFixed(2)}</div>
-                        <div class="ins-transfer-note">${msg.note || '转账'}</div>
-                    </div>
-                    <div class="ins-transfer-footer">
-                        <span class="ins-transfer-brand">WeChat Pay</span>
-                        <span class="ins-transfer-status">${statusText}</span>
+                    <div class="ins-transfer-card ${statusClass}" onclick="wcHandleTransferClick(${msg.id})">
+                        <div class="ins-transfer-header">
+                            <div class="ins-transfer-tag">${tagText}</div>
+                        </div>
+                        <div class="ins-transfer-body">
+                            <div class="ins-transfer-amount">¥${parseFloat(msg.amount).toFixed(2)}</div>
+                            <div class="ins-transfer-note">${msg.note || '转账'}</div>
+                        </div>
+                        <div class="ins-transfer-footer">
+                            <span class="ins-transfer-brand">WeChat Pay</span>
+                            <span class="ins-transfer-status">${statusText}</span>
+                        </div>
                     </div>
                 </div>`;
         }

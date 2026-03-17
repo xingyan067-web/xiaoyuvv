@@ -767,26 +767,23 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-voice-bar:nth-child(3) { height: 10px; animation-delay: 0.4s; }
 @keyframes wcVoiceWave { 0%, 100% { height: 6px; } 50% { height: 16px; } }
 
-/* /* ========================================== */
-/* 高级感 INS 韩系风转账卡片 (220x150px) */
+/* ========================================== */
+/* 高级感 INS 韩系风转账卡片 (严格锁定 220x150px) */
 /* ========================================== */
 .wc-bubble.transfer {
     background: transparent !important;
     border: none !important;
     padding: 0 !important;
     box-shadow: none !important;
-    width: 220px; /* 强制宽度 */
-    height: 150px; /* 强制高度 */
-    max-width: 100%;
 }
 
 .ins-transfer-card {
-    width: 100%;
-    height: 100%;
+    width: 180px !important;
+    height: 120px !important;
     background: #FFFFFF;
-    border-radius: 18px; /* 稍微小一点的圆角显得更精致 */
+    border-radius: 18px;
     border: 1px solid #F0F0F0;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.03); /* 极其柔和的阴影 */
+    box-shadow: 0 10px 30px rgba(0,0,0,0.03);
     display: flex;
     flex-direction: column;
     position: relative;
@@ -794,6 +791,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     cursor: pointer;
     box-sizing: border-box;
     overflow: hidden;
+    margin-top: 4px;
 }
 
 .ins-transfer-card:active {
@@ -869,8 +867,11 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     font-weight: 600;
 }
 
-/* 状态颜色变体 (韩系低饱和) */
-/* 1. 待收款 (Pending) - 柔和的奶茶色/香槟色 */
+/* ========================================== */
+/* 状态颜色变体 (韩系低饱和调色盘) */
+/* ========================================== */
+
+/* 1. 待收款 (Pending) - 柔和奶茶色 */
 .ins-transfer-card.pending {
     background: linear-gradient(135deg, #FCFBF9 0%, #F7F4F0 100%);
     border-color: #EFEBE6;
@@ -879,7 +880,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .ins-transfer-card.pending .ins-transfer-amount { color: #4A413E; }
 .ins-transfer-card.pending .ins-transfer-status { color: #C28E7E; }
 
-/* 2. 已收款 (Received) - 极简白+低饱和灰绿 */
+/* 2. 已收款 (Received) - 极简白 + 灰绿 */
 .ins-transfer-card.received {
     background: #FFFFFF;
     border-color: #F0F5F1;
@@ -888,7 +889,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .ins-transfer-card.received .ins-transfer-amount { color: #555; opacity: 0.8; }
 .ins-transfer-card.received .ins-transfer-status { color: #8F9E8B; }
 
-/* 3. 已退还 (Rejected) - 极简白+低饱和灰粉 */
+/* 3. 已退还 (Rejected) - 极简白 + 灰粉 */
 .ins-transfer-card.rejected {
     background: #FFFFFF;
     border-color: #F9F0F0;
