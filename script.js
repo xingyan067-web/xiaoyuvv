@@ -11273,7 +11273,9 @@ function wcBuyCharCartItem(index) {
                 @font-face { font-family: 'CustomFont'; src: url('${finalUrl}'); } 
                 body, input, textarea, button, select, 
                 .ls-view, #wechat-root, #wc-view-phone-sim, .wc-page, .wc-bubble, 
-                .ls-feed-text, .ls-widget-note-text, .wc-system-msg-text { 
+                .ls-feed-text, .ls-widget-note-text, .wc-system-msg-text,
+                .ins-forum-root, .ins-forum-view, .ins-forum-post-text, .ins-forum-story-text,
+                .ins-forum-profile-name, .ins-forum-profile-bio, .ins-forum-comment-text { 
                     font-family: 'CustomFont', sans-serif !important; 
                 }
             `;
@@ -16202,5 +16204,1165 @@ async function lsRequestReply() {
         replyBtn.innerText = originalText;
         replyBtn.style.pointerEvents = 'auto';
         replyBtn.style.opacity = '1';
+    }
+}
+/* ==========================================================================
+   APP 4: INS FORUM LOGIC (Advanced iOS Style - Twitter/INS Clone)
+   ========================================================================== */
+
+const forumState = {
+    profile: {
+        name: 'User',
+        handle: '@user_id',
+        avatar: '',
+        bio: '记录生活的美好'
+    },
+    config: {
+        worldbookIds: [],
+        charIds: [],
+        maskIds: [],
+        // 👇 新增：同人文预设字段 👇
+        fanficStyle: '',
+        fanficCharA: '',
+        fanficCharB: '',
+        fanficTrope: ''
+    },
+    posts: [], 
+    tempImage: null,
+    tempAvatar: null,
+    currentDetailPostId: null,
+    pendingSharePostId: null,
+    profileTab: 'posts'
+};
+
+
+async function forumLoadData() {
+    const data = await idb.get('ins_forum_data');
+    if (data) {
+        if (data.profile) forumState.profile = { ...forumState.profile, ...data.profile };
+        if (data.config) forumState.config = { ...forumState.config, ...data.config };
+        if (data.posts) forumState.posts = data.posts;
+    }
+    // 如果没有头像，默认使用微信头像
+    if (!forumState.profile.avatar) {
+        forumState.profile.avatar = wcState.user.avatar;
+        forumState.profile.name = wcState.user.name;
+    }
+}
+
+async function forumSaveData() {
+    await idb.set('ins_forum_data', {
+        profile: forumState.profile,
+        config: forumState.config,
+        posts: forumState.posts
+    });
+}
+// 生成虚拟的初始点赞数据，让帖子看起来有活人感
+function forumGenerateFakeLikes() {
+    const count = Math.floor(Math.random() * 80) + 15; // 随机 15 到 95 个赞
+    const likes = [];
+    for(let i = 0; i < count; i++) {
+        likes.push(`fake_user_${Math.random().toString(36).substr(2, 5)}`);
+    }
+    return likes;
+}
+
+async function openForumApp() {
+    await forumLoadData();
+    document.getElementById('forumModal').classList.add('open');
+    forumSwitchTab('home');
+}
+
+function closeForumApp() {
+    document.getElementById('forumModal').classList.remove('open');
+}
+
+function forumSwitchTab(tab) {
+    document.querySelectorAll('.ins-forum-view').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.ins-forum-tab').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById(`forum-view-${tab}`).classList.add('active');
+    document.getElementById(`forum-tab-${tab}`).classList.add('active');
+    
+    if (tab === 'home') {
+        forumRenderPosts('home');
+    } else if (tab === 'fanfic') {
+        forumRenderPosts('fanfic');
+    } else if (tab === 'post') {
+        document.getElementById('forum-post-user-avatar').src = forumState.profile.avatar;
+        document.getElementById('forum-post-user-name').innerText = forumState.profile.name;
+    } else if (tab === 'profile') {
+        forumRenderProfile();
+    }
+}
+
+// --- 渲染帖子列表 (推特风) ---
+function forumRenderPosts(type) {
+    const container = document.getElementById(`forum-post-list-${type}`);
+    container.innerHTML = '';
+    
+    const filteredPosts = forumState.posts.filter(p => p.type === type).sort((a, b) => b.time - a.time);
+    
+    if (filteredPosts.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #888; padding: 60px 20px; font-size: 14px; font-style: italic;">这里空空如也<br>点击右上角让 AI 注入灵魂吧</div>';
+        return;
+    }
+    
+    filteredPosts.forEach(post => {
+        container.appendChild(forumCreatePostElement(post));
+    });
+}
+
+function forumCreatePostElement(post) {
+    const div = document.createElement('div');
+    div.className = 'ins-forum-post-card';
+    
+    const timeStr = new Date(post.time).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    
+    const isLiked = Array.isArray(post.likes) && post.likes.includes(forumState.profile.name);
+    const likeIconFill = isLiked ? '#FF3B30' : 'none';
+    const likeIconStroke = isLiked ? '#FF3B30' : '#888';
+
+    const isSaved = Array.isArray(post.saves) && post.saves.includes(forumState.profile.name);
+    const saveIconFill = isSaved ? '#111' : 'none';
+    const saveIconStroke = isSaved ? '#111' : '#888';
+
+    let imageHtml = '';
+    if (post.image) {
+        imageHtml = `<img src="${post.image}" class="ins-forum-post-image" onclick="event.stopPropagation(); wcPreviewImage('${post.image}')">`;
+    }
+
+    // 如果是同人小说，增加专属 Tag 和排版类名
+    let tagHtml = '';
+    let textClass = 'ins-forum-post-text';
+    if (post.isStory) {
+        tagHtml = `<div style="font-size: 10px; color: #AF52DE; background: rgba(175,82,222,0.1); padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-bottom: 8px; display: inline-block;">📖 同人小说</div>`;
+        textClass += ' ins-forum-story-text line-clamp-5'; // 列表页截断显示
+    }
+
+    // 👇 新增：如果是用户自己发的帖子，且还没有评论，显示 AI 注入按钮 👇
+    let aiInjectBtnHtml = '';
+    if (post.author.name === forumState.profile.name && (!post.comments || post.comments.length === 0)) {
+        aiInjectBtnHtml = `
+            <div class="ins-forum-action-btn" onclick="event.stopPropagation(); forumGenerateInteractions(${post.id})" title="让AI注入互动">
+                <svg viewBox="0 0 24 24" style="stroke: #AF52DE;"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+            </div>
+        `;
+    }
+    
+    div.innerHTML = `
+        <div class="ins-forum-post-header">
+            <img src="${post.author.avatar}" class="ins-forum-avatar-small">
+            <div class="ins-forum-post-info">
+                <div style="display: flex; align-items: baseline; gap: 6px;">
+                    <span class="ins-forum-post-name">${post.author.name}</span>
+                    <span class="ins-forum-post-handle">${post.author.handle || '@' + post.author.name}</span>
+                    <span class="ins-forum-post-time">· ${timeStr}</span>
+                </div>
+            </div>
+            <div class="ins-forum-post-delete" onclick="event.stopPropagation(); forumDeletePost(${post.id})">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </div>
+        </div>
+        <div class="ins-forum-post-body" onclick="forumOpenPostDetail(${post.id})">
+            ${tagHtml}
+            <div class="${textClass}">${post.content}</div>
+            ${imageHtml}
+        </div>
+        <div class="ins-forum-post-actions">
+            <div style="display: flex; gap: 24px;">
+                <div class="ins-forum-action-btn" onclick="forumOpenPostDetail(${post.id})">
+                    <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                    <span>${post.comments ? post.comments.length : 0}</span>
+                </div>
+                <div class="ins-forum-action-btn" onclick="event.stopPropagation(); forumToggleLike(${post.id})">
+                    <svg viewBox="0 0 24 24" style="fill: ${likeIconFill}; stroke: ${likeIconStroke};"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                    <span style="color: ${isLiked ? '#FF3B30' : '#888'}">${Array.isArray(post.likes) ? post.likes.length : (post.likes || 0)}</span>
+                </div>
+                <div class="ins-forum-action-btn" onclick="event.stopPropagation(); forumOpenShareModal(${post.id})">
+                    <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+                </div>
+                ${aiInjectBtnHtml}
+            </div>
+            <div class="ins-forum-action-btn" onclick="event.stopPropagation(); forumToggleSave(${post.id})">
+                <svg viewBox="0 0 24 24" style="fill: ${saveIconFill}; stroke: ${saveIconStroke};"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+        </div>
+    `;
+    return div;
+}
+
+// --- 发布与上传 ---
+function forumHandleImageUpload(input) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            forumState.tempImage = e.target.result;
+            document.getElementById('forum-post-image-preview').src = e.target.result;
+            document.getElementById('forum-post-image-preview').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function forumSubmitPost() {
+    const content = document.getElementById('forum-post-input').value.trim();
+    const postType = document.getElementById('forum-post-type-select').value; // 获取选择的板块
+    
+    if (!content && !forumState.tempImage) {
+        return alert("请输入内容或上传图片");
+    }
+    
+    const newPost = {
+        id: Date.now(),
+        type: postType, // 根据用户的选择发布到 home 或 fanfic
+        isStory: postType === 'fanfic', // 如果发到同人区，自动打上小说排版标签
+        author: {
+            name: forumState.profile.name,
+            handle: forumState.profile.handle,
+            avatar: forumState.profile.avatar
+        },
+        content: content,
+        image: forumState.tempImage,
+        time: Date.now(),
+        likes: [], // 自己发的帖子初始 0 赞
+        saves: [],
+        comments: []
+    };
+    
+    forumState.posts.unshift(newPost);
+    forumSaveData();
+    
+    document.getElementById('forum-post-input').value = '';
+    document.getElementById('forum-post-image-preview').style.display = 'none';
+    forumState.tempImage = null;
+    
+    forumSwitchTab(postType); // 跳转到对应的板块
+}
+
+
+// --- 互动：点赞、评论、分享 ---
+function forumToggleLike(postId) {
+    const post = forumState.posts.find(p => p.id === postId);
+    if (!post) return;
+    
+    if (!Array.isArray(post.likes)) post.likes = [];
+    const idx = post.likes.indexOf(forumState.profile.name);
+    
+    if (idx > -1) {
+        post.likes.splice(idx, 1);
+    } else {
+        post.likes.push(forumState.profile.name);
+    }
+    
+    forumSaveData();
+    
+    if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+    if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+    if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+    if (document.getElementById('forum-post-detail-view').classList.contains('active')) forumRenderPostDetailContent();
+}
+function forumToggleSave(postId) {
+    const post = forumState.posts.find(p => p.id === postId);
+    if (!post) return;
+    
+    if (!Array.isArray(post.saves)) post.saves = [];
+    const idx = post.saves.indexOf(forumState.profile.name);
+    if (idx > -1) {
+        post.saves.splice(idx, 1);
+    } else {
+        post.saves.push(forumState.profile.name);
+    }
+    
+    forumSaveData();
+    
+    // 刷新当前视图
+    if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+    if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+    if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+    if (document.getElementById('forum-post-detail-view').classList.contains('active')) forumRenderPostDetailContent();
+}
+
+function forumOpenPostDetail(postId) {
+    forumState.currentDetailPostId = postId;
+    document.getElementById('forum-post-detail-view').classList.add('active');
+    forumRenderPostDetailContent();
+}
+
+function forumClosePostDetail() {
+    document.getElementById('forum-post-detail-view').classList.remove('active');
+    forumState.currentDetailPostId = null;
+    
+    if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+    if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+    if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+}
+// --- 删除帖子逻辑 ---
+function forumDeletePost(postId, isFromDetail = false) {
+    if (confirm("确定要将这条帖子化作赛博尘埃吗？")) {
+        // 从数据中过滤掉该帖子
+        forumState.posts = forumState.posts.filter(p => p.id !== postId);
+        forumSaveData();
+        
+        if (isFromDetail) {
+            // 如果是在详情页删除的，关闭详情页（关闭时会自动刷新列表）
+            forumClosePostDetail();
+        } else {
+            // 如果是在列表页删除的，直接刷新当前激活的 Tab
+            if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+            if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+            if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+        }
+    }
+}
+
+function forumRenderPostDetailContent() {
+    const post = forumState.posts.find(p => p.id === forumState.currentDetailPostId);
+    if (!post) return;
+    
+    const container = document.getElementById('forum-post-detail-content');
+    
+    const timeStr = new Date(post.time).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    
+    const isLiked = Array.isArray(post.likes) && post.likes.includes(forumState.profile.name);
+    const likeIconFill = isLiked ? '#FF3B30' : 'none';
+    const likeIconStroke = isLiked ? '#FF3B30' : '#888';
+
+    const isSaved = Array.isArray(post.saves) && post.saves.includes(forumState.profile.name);
+    const saveIconFill = isSaved ? '#111' : 'none';
+    const saveIconStroke = isSaved ? '#111' : '#888';
+    
+    let imageHtml = '';
+    if (post.image) {
+        imageHtml = `<img src="${post.image}" class="ins-forum-post-image" style="margin-top: 15px;" onclick="wcPreviewImage('${post.image}')">`;
+    }
+
+    let tagHtml = '';
+    let textClass = 'ins-forum-post-text';
+    if (post.isStory) {
+        tagHtml = `<div style="font-size: 12px; color: #AF52DE; background: rgba(175,82,222,0.1); padding: 4px 10px; border-radius: 6px; font-weight: bold; margin-bottom: 12px; display: inline-block;">📖 同人小说</div>`;
+        textClass += ' ins-forum-story-text'; // 详情页不截断
+    }
+    
+    let commentsHtml = '';
+    if (post.comments && post.comments.length > 0) {
+        post.comments.forEach(c => {
+            // 👇 修改：给评论加上点击事件，触发回复 👇
+            commentsHtml += `
+                <div class="ins-forum-comment-item" onclick="forumPrepareReplyComment('${c.name}')" style="cursor: pointer;">
+                    <img src="${c.avatar}" class="ins-forum-avatar-small">
+                    <div class="ins-forum-comment-info">
+                        <div style="display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px;">
+                            <span class="ins-forum-comment-name">${c.name}</span>
+                            <span class="ins-forum-post-handle">${c.handle || '@'+c.name}</span>
+                        </div>
+                        <div class="ins-forum-comment-text">${c.content}</div>
+                    </div>
+                </div>
+            `;
+        });
+    } else {
+        commentsHtml = '<div style="text-align: center; color: #888; padding: 20px; font-size: 13px;">暂无评论，快来抢沙发</div>';
+    }
+
+    // 👇 新增：底部 AI 互动按钮 👇
+    let aiActionHtml = '';
+    if (!post.comments || post.comments.length === 0) {
+        aiActionHtml = `
+            <div style="text-align: center; padding: 20px 15px;">
+                <button class="wc-btn-primary" style="background: #111; color: #FFF; border-radius: 20px; padding: 10px 24px; font-size: 14px; width: auto; margin: 0 auto; display: inline-flex; align-items: center; gap: 8px;" onclick="forumGenerateInteractions(${post.id})">
+                    <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+                    让 AI 注入点赞与评论
+                </button>
+            </div>
+        `;
+    } else {
+        aiActionHtml = `
+            <div style="text-align: center; padding: 20px 15px;">
+                <button class="wc-btn-primary" style="background: #F5F5F5; color: #111; border: 1px solid #EAEAEA; border-radius: 20px; padding: 10px 24px; font-size: 14px; width: auto; margin: 0 auto; display: inline-flex; align-items: center; gap: 8px;" onclick="forumGenerateMoreComments(${post.id})">
+                    <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+                    加载更多 AI 评论
+                </button>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = `
+        <div class="ins-forum-post-header" style="padding: 20px 20px 10px 20px;">
+            <img src="${post.author.avatar}" class="ins-forum-avatar-small">
+            <div class="ins-forum-post-info">
+                <div class="ins-forum-post-name">${post.author.name}</div>
+                <div class="ins-forum-post-handle">${post.author.handle || '@'+post.author.name}</div>
+            </div>
+            <div class="ins-forum-post-delete" onclick="forumDeletePost(${post.id}, true)">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </div>
+        </div>
+        <div class="ins-forum-post-body" style="padding: 0 20px 20px 20px; border-bottom: 1px solid #F0F0F0;">
+            ${tagHtml}
+            <div class="${textClass}" style="font-size: 16px;">${post.content}</div>
+            ${imageHtml}
+            <div style="font-size: 13px; color: #888; margin-top: 15px;">${timeStr}</div>
+            <div class="ins-forum-post-actions" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #F9F9F9; justify-content: space-between;">
+                <div style="display: flex; gap: 30px;">
+                    <div class="ins-forum-action-btn">
+                        <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                        <span>${post.comments ? post.comments.length : 0}</span>
+                    </div>
+                    <div class="ins-forum-action-btn" onclick="forumToggleLike(${post.id})">
+                        <svg viewBox="0 0 24 24" style="fill: ${likeIconFill}; stroke: ${likeIconStroke};"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                        <span style="color: ${isLiked ? '#FF3B30' : '#888'}">${Array.isArray(post.likes) ? post.likes.length : (post.likes || 0)}</span>
+                    </div>
+                    <div class="ins-forum-action-btn" onclick="forumOpenShareModal(${post.id})">
+                        <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+                    </div>
+                </div>
+                <div class="ins-forum-action-btn" onclick="forumToggleSave(${post.id})">
+                    <svg viewBox="0 0 24 24" style="fill: ${saveIconFill}; stroke: ${saveIconStroke};"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                </div>
+            </div>
+        </div>
+        <div class="ins-forum-comments-section">
+            ${commentsHtml}
+            ${aiActionHtml}
+        </div>
+    `;
+}
+
+function forumSubmitComment() {
+    const input = document.getElementById('forum-comment-input');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    const post = forumState.posts.find(p => p.id === forumState.currentDetailPostId);
+    if (!post) return;
+    
+    // 👇 新增：处理回复逻辑 👇
+    let finalContent = text;
+    if (forumState.replyingToComment) {
+        finalContent = `回复 @${forumState.replyingToComment}: ${text}`;
+    }
+    
+    if (!post.comments) post.comments = [];
+    post.comments.push({
+        name: forumState.profile.name,
+        handle: forumState.profile.handle,
+        avatar: forumState.profile.avatar,
+        content: finalContent,
+        time: Date.now()
+    });
+    
+    forumSaveData();
+    input.value = '';
+    input.placeholder = "发布评论...";
+    forumState.replyingToComment = null; // 清空回复状态
+    forumRenderPostDetailContent();
+}
+// ==========================================
+// 👇 新增：AI 注入互动与加载更多评论逻辑 👇
+// ==========================================
+
+window.forumPrepareReplyComment = function(name) {
+    forumState.replyingToComment = name;
+    const input = document.getElementById('forum-comment-input');
+    if (input) {
+        input.placeholder = `回复 @${name}...`;
+        input.focus();
+    }
+};
+
+window.forumGenerateInteractions = async function(postId) {
+    const post = forumState.posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("正在召唤网友...");
+
+    try {
+        let contextInfo = "";
+        if (forumState.config.worldbookIds.length > 0) {
+            const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
+            if (wbs.length > 0) contextInfo += "【世界观背景】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+        }
+        if (forumState.config.charIds.length > 0) {
+            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+            if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
+        }
+
+        let prompt = `你现在是一个社交论坛的后台引擎。用户刚刚发布了一条帖子，请为这条帖子生成 8 到 15 条极具“活人感”的评论。\n`;
+        prompt += `【帖子内容】：\n${post.content}\n\n`;
+        prompt += `${contextInfo}`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 评论人可以是【你认识的熟人(NPC)】，也可以是虚构的网友。\n`;
+        prompt += `2. 语气要极度口语化、有网感。评论区要有互动感（网友互相回复、吐槽等）。\n`;
+        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `4. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `[
+  {"name": "评论人名字", "handle": "@ID", "content": "评论内容"}
+]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const generatedComments = JSON.parse(content);
+
+        // 增加点赞
+        const newLikes = forumGenerateFakeLikes();
+        if (!Array.isArray(post.likes)) post.likes = [];
+        post.likes.push(...newLikes);
+
+        // 增加评论
+        if (!post.comments) post.comments = [];
+        const processedComments = generatedComments.map(c => {
+            const cNpc = wcState.characters.find(char => char.name === c.name);
+            return {
+                name: c.name,
+                handle: c.handle || '@' + c.name,
+                avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
+                content: c.content,
+                time: Date.now()
+            };
+        });
+        post.comments.push(...processedComments);
+
+        forumSaveData();
+        forumRenderPostDetailContent();
+        if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+        if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+        if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+        
+        wcShowSuccess("互动注入成功！");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("生成失败");
+    }
+};
+
+window.forumGenerateMoreComments = async function(postId) {
+    const post = forumState.posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("正在加载更多评论...");
+
+    try {
+        let contextInfo = "";
+        if (forumState.config.worldbookIds.length > 0) {
+            const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
+            if (wbs.length > 0) contextInfo += "【世界观背景】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+        }
+        if (forumState.config.charIds.length > 0) {
+            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+            if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
+        }
+
+        const existingComments = (post.comments || []).slice(-10).map(c => `${c.name}: ${c.content}`).join('\n');
+
+        let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子继续生成 5 到 10 条后续评论。\n`;
+        prompt += `【帖子内容】：\n${post.content}\n\n`;
+        if (existingComments) {
+            prompt += `【已有评论上下文】：\n${existingComments}\n\n`;
+        }
+        prompt += `${contextInfo}`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 评论人可以是【你认识的熟人(NPC)】，也可以是虚构的网友。\n`;
+        prompt += `2. 语气要极度口语化、有网感。可以针对【已有评论上下文】进行回复（如：回复 @某某）。\n`;
+        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `4. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `[
+  {"name": "评论人名字", "handle": "@ID", "content": "评论内容"}
+]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const generatedComments = JSON.parse(content);
+
+        if (!post.comments) post.comments = [];
+        const processedComments = generatedComments.map(c => {
+            const cNpc = wcState.characters.find(char => char.name === c.name);
+            return {
+                name: c.name,
+                handle: c.handle || '@' + c.name,
+                avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
+                content: c.content,
+                time: Date.now()
+            };
+        });
+        post.comments.push(...processedComments);
+
+        forumSaveData();
+        forumRenderPostDetailContent();
+        if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+        if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+        if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+        
+        wcShowSuccess("评论加载成功！");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("生成失败");
+    }
+};
+
+// --- 分享帖子给 Char ---
+function forumOpenShareModal(postId) {
+    forumState.pendingSharePostId = postId;
+    const list = document.getElementById('forum-share-char-list');
+    list.innerHTML = '';
+    
+    const chars = wcState.characters.filter(c => !c.isGroup);
+    if (chars.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">暂无联系人</div>';
+    } else {
+        chars.forEach(char => {
+            const div = document.createElement('div');
+            div.className = 'wc-list-item';
+            div.style.background = 'white';
+            div.style.borderBottom = '1px solid #F0F0F0';
+            div.innerHTML = `
+                <img src="${char.avatar}" class="wc-avatar" style="width:36px;height:36px;">
+                <div class="wc-item-content"><div class="wc-item-title">${char.name}</div></div>
+                <button class="wc-btn-mini" style="background:#111; color:white; border:none; padding:6px 16px; border-radius:16px; font-weight:bold;" onclick="forumConfirmShare(${char.id})">发送</button>
+            `;
+            list.appendChild(div);
+        });
+    }
+    wcOpenModal('forum-modal-share');
+}
+
+function forumConfirmShare(charId) {
+    const post = forumState.posts.find(p => p.id === forumState.pendingSharePostId);
+    if (!post) return;
+
+    // 构造高级感分享卡片
+    const cardHtml = `
+        <div class="chat-shared-card">
+            <div class="shared-card-tag">FORUM POST</div>
+            <div class="shared-card-title">${post.author.name} 的帖子</div>
+            <div class="shared-card-content">${post.content}</div>
+        </div>
+    `;
+
+    // 发送卡片到聊天
+    wcAddMessage(charId, 'me', 'receipt', cardHtml);
+
+    // 给 AI 发送隐藏的系统提示
+    const aiPrompt = `[系统内部信息(仅AI可见): 用户在论坛看到了一篇帖子并分享给了你。发帖人：${post.author.name}。内容：“${post.content}”。请在回复中针对这篇帖子发表你的看法或吐槽。]`;
+    wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
+
+    wcCloseModal('forum-modal-share');
+    alert("已成功分享给 Ta！快去微信看看 Ta 的反应吧~");
+}
+
+// --- 个人信息与设置 ---
+function forumRenderProfile() {
+    document.getElementById('forum-profile-avatar').src = forumState.profile.avatar;
+    document.getElementById('forum-profile-name').innerText = forumState.profile.name;
+    document.getElementById('forum-profile-handle').innerText = forumState.profile.handle;
+    document.getElementById('forum-profile-bio').innerText = forumState.profile.bio;
+    
+    forumSwitchProfileTab(forumState.profileTab);
+}
+
+function forumSwitchProfileTab(tab) {
+    forumState.profileTab = tab;
+    document.querySelectorAll('.ins-forum-profile-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(`forum-profile-tab-${tab}`).classList.add('active');
+    forumRenderProfileList();
+}
+
+function forumRenderProfileList() {
+    const container = document.getElementById('forum-my-post-list');
+    container.innerHTML = '';
+    
+    let list = [];
+    if (forumState.profileTab === 'posts') {
+        list = forumState.posts.filter(p => p.author.name === forumState.profile.name);
+    } else if (forumState.profileTab === 'likes') {
+        list = forumState.posts.filter(p => Array.isArray(p.likes) && p.likes.includes(forumState.profile.name));
+    } else if (forumState.profileTab === 'saves') {
+        list = forumState.posts.filter(p => Array.isArray(p.saves) && p.saves.includes(forumState.profile.name));
+    }
+
+    list.sort((a, b) => b.time - a.time);
+    
+    if (list.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #888; padding: 60px 20px; font-size: 14px; font-style: italic;">空空如也</div>';
+        return;
+    }
+    
+    list.forEach(post => {
+        container.appendChild(forumCreatePostElement(post));
+    });
+}
+
+function forumOpenEditProfile() {
+    document.getElementById('forum-edit-avatar-preview').src = forumState.profile.avatar;
+    document.getElementById('forum-edit-name').value = forumState.profile.name;
+    document.getElementById('forum-edit-handle').value = forumState.profile.handle;
+    document.getElementById('forum-edit-bio').value = forumState.profile.bio;
+    forumState.tempAvatar = null;
+    wcOpenModal('forum-modal-edit-profile');
+}
+
+function forumHandleAvatarUpload(input) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            forumState.tempAvatar = e.target.result;
+            document.getElementById('forum-edit-avatar-preview').src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function forumSaveProfile() {
+    const name = document.getElementById('forum-edit-name').value.trim();
+    const handle = document.getElementById('forum-edit-handle').value.trim();
+    const bio = document.getElementById('forum-edit-bio').value.trim();
+    
+    if (name) forumState.profile.name = name;
+    if (handle) forumState.profile.handle = handle.startsWith('@') ? handle : '@' + handle;
+    if (bio) forumState.profile.bio = bio;
+    if (forumState.tempAvatar) forumState.profile.avatar = forumState.tempAvatar;
+    
+    forumSaveData();
+    forumRenderProfile();
+    wcCloseModal('forum-modal-edit-profile');
+}
+
+function forumOpenSettings() {
+    // 渲染世界书列表
+    const wbList = document.getElementById('forum-setting-wb-list');
+    wbList.innerHTML = '';
+    worldbookEntries.forEach(entry => {
+        const isChecked = forumState.config.worldbookIds.includes(entry.id.toString());
+        wbList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" value="${entry.id}" class="forum-wb-cb" ${isChecked ? 'checked' : ''}><span>${entry.title}</span></div>`;
+    });
+
+    // 渲染角色列表
+    const charList = document.getElementById('forum-setting-char-list');
+    charList.innerHTML = '';
+    wcState.characters.filter(c => !c.isGroup).forEach(char => {
+        const isChecked = forumState.config.charIds.includes(char.id.toString());
+        charList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" value="${char.id}" class="forum-char-cb" ${isChecked ? 'checked' : ''}><span>${char.name}</span></div>`;
+    });
+
+    // 渲染面具列表
+    const maskList = document.getElementById('forum-setting-mask-list');
+    maskList.innerHTML = '';
+    wcState.masks.forEach(mask => {
+        const isChecked = forumState.config.maskIds.includes(mask.id.toString());
+        maskList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" value="${mask.id}" class="forum-mask-cb" ${isChecked ? 'checked' : ''}><span>${mask.name}</span></div>`;
+    });
+
+    wcOpenModal('forum-modal-settings');
+}
+
+function forumSaveSettings() {
+    const wbCbs = document.querySelectorAll('.forum-wb-cb:checked');
+    forumState.config.worldbookIds = Array.from(wbCbs).map(cb => cb.value);
+
+    const charCbs = document.querySelectorAll('.forum-char-cb:checked');
+    forumState.config.charIds = Array.from(charCbs).map(cb => cb.value);
+
+    const maskCbs = document.querySelectorAll('.forum-mask-cb:checked');
+    forumState.config.maskIds = Array.from(maskCbs).map(cb => cb.value);
+
+    forumSaveData();
+    wcCloseModal('forum-modal-settings');
+    alert("设定已保存！AI 生成帖子时将参考这些背景。");
+}
+
+// --- 核心：高强度活人感 AI 生成 (8帖 + 6评 + 绝对禁止生成User) ---
+// --- 核心：高强度活人感 AI 生成 (8帖 + 6评 + 绝对禁止生成User + 覆盖未收藏的旧帖) ---
+async function forumGenerateAIPosts(type) {
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const limit = apiConfig.limit || 50;
+    if (limit > 0 && sessionApiCallCount >= limit) {
+        wcShowError("已达到API调用上限");
+        return;
+    }
+    sessionApiCallCount++;
+
+    wcShowLoading("正在刷新高浓度活人动态...");
+
+    try {
+        // 👇 新增：在生成新帖子前，清理掉同类型下【没有被点赞】且【没有被收藏】的旧帖子 👇
+        forumState.posts = forumState.posts.filter(p => {
+            // 1. 如果不是当前正在刷新的板块，保留
+            if (p.type !== type) return true;
+            // 2. 如果是用户自己发的帖子，保留
+            if (p.author.name === forumState.profile.name) return true;
+            // 3. 如果用户点赞了，保留
+            if (Array.isArray(p.likes) && p.likes.includes(forumState.profile.name)) return true;
+            // 4. 如果用户收藏了，保留
+            if (Array.isArray(p.saves) && p.saves.includes(forumState.profile.name)) return true;
+            // 否则，淘汰（被新帖子覆盖）
+            return false;
+        });
+        // 👆 清理逻辑结束 👆
+
+        // 收集上下文
+        let contextInfo = "";
+        
+        if (forumState.config.worldbookIds.length > 0) {
+            const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
+            if (wbs.length > 0) {
+                contextInfo += "【世界观背景】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+            }
+        }
+        
+        let npcNames = [];
+        if (forumState.config.charIds.length > 0) {
+            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+            if (chars.length > 0) {
+                contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => {
+                    npcNames.push(c.name);
+                    return `${c.name}: ${c.prompt}`;
+                }).join('\n') + "\n\n";
+            }
+        }
+
+        let userNames = [forumState.profile.name, wcState.user.name];
+        if (forumState.config.maskIds.length > 0) {
+            const masks = wcState.masks.filter(m => forumState.config.maskIds.includes(m.id.toString()));
+            if (masks.length > 0) {
+                contextInfo += "【关于我(User)的设定/马甲】:\n" + masks.map(m => {
+                    userNames.push(m.name);
+                    return `${m.name}: ${m.prompt}`;
+                }).join('\n') + "\n\n";
+            }
+        }
+
+        let prompt = `你现在是一个社交论坛的后台引擎。请生成一批极具“活人感”的论坛帖子和评论。\n`;
+        if (type === 'home') {
+            prompt += `论坛类型：日常主页。内容是生活吐槽、情感分享、日常记录、发疯文学等。\n`;
+        } else {
+            prompt += `论坛类型：同人论坛。内容是关于某些角色（可以是设定的NPC或虚构人物）的同人段子、脑洞、CP向发言、泥塑等。\n`;
+        }
+        
+        prompt += `\n${contextInfo}`;
+        
+        prompt += `【核心强制要求（最高优先级）】：\n`;
+        prompt += `1. 数量要求：必须一次性生成整整 8 条帖子！每条帖子必须包含至少 10 条评论！\n`;
+        prompt += `2. 角色穿插：发帖人和评论人中，必须穿插出现【你认识的熟人(NPC)】（如果有的话：${npcNames.join(', ')}），以及大量虚构的网友。\n`;
+        prompt += `3. 活人感：语气要极度口语化、有网感（如：笑死、救命、谁懂啊、破防了）。评论区要有互动感（网友互相回复、楼主回复网友）。\n`;
+        prompt += `4. 【绝对禁止扮演用户】：上面提供的【关于我(User)的设定/马甲】仅供你作为背景参考（NPC可以发关于User的帖子或吐槽User）。但是，你绝对不能以 User（${userNames.join('、')}）的身份发帖或评论！User 会自己操作，不需要你代劳！所有发帖人和评论人只能是 NPC 或 虚构网友！\n`;
+        prompt += `5. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `6. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `[
+  {
+    "authorName": "发帖人名字(NPC或网友)",
+    "handle": "@英文ID",
+    "content": "帖子的正文内容...",
+    "comments": [
+      {"name": "评论人名字", "handle": "@ID", "content": "评论内容"}
+    ]
+  }
+]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.9 
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const generatedPosts = JSON.parse(content);
+
+        generatedPosts.forEach(p => {
+            let finalAuthorName = p.authorName;
+            if (userNames.includes(finalAuthorName)) {
+                finalAuthorName = "匿名网友" + Math.floor(Math.random() * 10000);
+            }
+
+            const npc = wcState.characters.find(c => c.name === finalAuthorName);
+            const avatar = npc ? npc.avatar : getRandomNpcAvatar();
+            
+            const processedComments = (p.comments || []).map(c => {
+                let finalCommentName = c.name;
+                if (userNames.includes(finalCommentName)) {
+                    finalCommentName = "热心网友" + Math.floor(Math.random() * 10000);
+                }
+                const cNpc = wcState.characters.find(char => char.name === finalCommentName);
+                return {
+                    name: finalCommentName,
+                    handle: c.handle || '@' + finalCommentName,
+                    avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
+                    content: c.content,
+                    time: Date.now() - Math.floor(Math.random() * 3600000)
+                };
+            });
+
+            forumState.posts.unshift({
+                id: Date.now() + Math.random(),
+                type: type,
+                author: {
+                    name: finalAuthorName,
+                    handle: p.handle || '@' + finalAuthorName,
+                    avatar: avatar
+                },
+                content: p.content,
+                image: null,
+                time: Date.now() - Math.floor(Math.random() * 3600000),
+                likes: forumGenerateFakeLikes(), 
+                saves: [],
+                comments: processedComments
+            });
+        });
+
+        forumSaveData();
+        forumRenderPosts(type);
+        wcShowSuccess("刷新成功");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("刷新失败，可能生成内容过长");
+    }
+}
+
+// ==========================================
+// 同人文书城生成逻辑 (Fanfic Generator)
+// ==========================================
+
+// --- 打开同人文设定弹窗 ---
+async function forumOpenGenFanficModal() {
+    // 👇 新增：强制加载梦境数据，确保能读到你在聊天更多面板(梦境)里保存的预设
+    if (typeof dreamLoadData === 'function') {
+        await dreamLoadData();
+    }
+
+    // 1. 填充文风预设 (读取梦境预设)
+    const styleSelect = document.getElementById('fanfic-style-select');
+    styleSelect.innerHTML = '<option value="">默认文风 (细腻/意识流)</option>';
+    if (typeof dreamState !== 'undefined' && dreamState.presets) {
+        dreamState.presets.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.content; // 直接把内容作为 value
+            opt.innerText = p.name;
+            styleSelect.appendChild(opt);
+        });
+    }
+
+    // 2. 填充角色 A 和 B
+    const charASelect = document.getElementById('fanfic-char-a');
+    const charBSelect = document.getElementById('fanfic-char-b');
+    
+    let charOptionsHtml = '<option value="">随机/不指定</option>';
+    charOptionsHtml += `<option value="${wcState.user.name} (User)">${wcState.user.name} (我)</option>`;
+    
+    wcState.characters.filter(c => !c.isGroup).forEach(c => {
+        charOptionsHtml += `<option value="${c.name}">${c.name}</option>`;
+    });
+    
+    wcState.masks.forEach(m => {
+        charOptionsHtml += `<option value="${m.name} (我的马甲)">${m.name} (面具)</option>`;
+    });
+
+    charASelect.innerHTML = charOptionsHtml;
+    charBSelect.innerHTML = charOptionsHtml;
+
+    // 3. 恢复已保存的设定
+    styleSelect.value = forumState.config.fanficStyle || '';
+    charASelect.value = forumState.config.fanficCharA || '';
+    charBSelect.value = forumState.config.fanficCharB || '';
+    document.getElementById('fanfic-trope-input').value = forumState.config.fanficTrope || '';
+
+    wcOpenModal('forum-modal-gen-fanfic');
+}
+
+// --- 保存同人文设定 ---
+function forumSaveFanficSettings() {
+    forumState.config.fanficStyle = document.getElementById('fanfic-style-select').value;
+    forumState.config.fanficCharA = document.getElementById('fanfic-char-a').value;
+    forumState.config.fanficCharB = document.getElementById('fanfic-char-b').value;
+    forumState.config.fanficTrope = document.getElementById('fanfic-trope-input').value.trim();
+
+    forumSaveData();
+    wcCloseModal('forum-modal-gen-fanfic');
+    alert("同人文设定已保存！点击右上角闪电图标即可一键生成。");
+}
+
+// --- 一键生成同人文 ---
+function forumDirectGenFanfic() {
+    const charA = forumState.config.fanficCharA || '随机角色A';
+    const charB = forumState.config.fanficCharB || '随机角色B';
+    const trope = forumState.config.fanficTrope || '随机日常/发疯脑洞';
+    const style = forumState.config.fanficStyle || '极具高级感、日系/韩系文艺风、意识流、细腻且克制。';
+
+    let basePrompt = `你现在是一个同人论坛的驻站神仙太太（同人文作者）。\n`;
+    basePrompt += `请根据以下设定，创作同人文：\n`;
+    basePrompt += `【主角 A】：${charA}\n`;
+    basePrompt += `【主角 B】：${charB}\n`;
+    basePrompt += `【小说类型/梗】：${trope}\n`;
+    basePrompt += `【文风要求】：${style}\n`;
+
+    // 附加世界书和角色设定作为背景参考
+    let contextInfo = "";
+    if (forumState.config.worldbookIds.length > 0) {
+        const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
+        if (wbs.length > 0) {
+            contextInfo += "【世界观背景参考】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+        }
+    }
+    if (forumState.config.charIds.length > 0) {
+        const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+        if (chars.length > 0) {
+            contextInfo += "【角色性格参考】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
+        }
+    }
+    if (contextInfo) {
+        basePrompt += `\n${contextInfo}`;
+    }
+
+    _executeGenFanfic(basePrompt);
+}
+
+// 内部核心：执行同人文 API 请求 (覆盖未收藏的旧文)
+async function _executeGenFanfic(basePrompt) {
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const limit = apiConfig.limit || 50;
+    if (limit > 0 && sessionApiCallCount >= limit) {
+        wcShowError("已达到API调用上限");
+        return;
+    }
+    sessionApiCallCount++;
+
+    wcShowLoading("正在生成同人文，请耐心等待...");
+
+    try {
+        // 👇 新增：在生成新同人文前，清理掉【没有被点赞】且【没有被收藏】的旧同人文 👇
+        forumState.posts = forumState.posts.filter(p => {
+            // 1. 如果不是同人文板块，保留
+            if (p.type !== 'fanfic') return true;
+            // 2. 如果是用户自己发的，保留
+            if (p.author.name === forumState.profile.name) return true;
+            // 3. 如果用户点赞了，保留
+            if (Array.isArray(p.likes) && p.likes.includes(forumState.profile.name)) return true;
+            // 4. 如果用户收藏了，保留
+            if (Array.isArray(p.saves) && p.saves.includes(forumState.profile.name)) return true;
+            // 否则，淘汰（被新文覆盖）
+            return false;
+        });
+        // 👆 清理逻辑结束 👆
+
+        let prompt = basePrompt;
+        prompt += `\n【核心强制要求（最高优先级）】：\n`;
+        prompt += `1. 数量与长度：必须一次性生成 3 篇不同视角的同人文！为了防止输出截断，每篇字数控制在 600-1500 字左右，但必须保证故事结构完整！\n`;
+        prompt += `2. 评论互动：每篇小说必须附带 5 条读者评论（虚构的网友名字），评论要像真实的追更读者（如：太太饿饿饭饭、神仙绝美爱情、刀死我了等）。\n`;
+        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `4. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `[
+  {
+    "authorName": "虚构的作者笔名",
+    "handle": "@作者ID",
+    "content": "小说的正文内容（支持使用 \\n 换行排版）...",
+    "comments": [
+      {"name": "读者A", "handle": "@ID", "content": "评论内容"}
+    ]
+  }
+]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000 
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        if (!content.endsWith(']')) {
+            const lastBrace = content.lastIndexOf('}');
+            if (lastBrace !== -1) {
+                content = content.substring(0, lastBrace + 1) + ']';
+            }
+        }
+
+        const generatedPosts = JSON.parse(content);
+
+        generatedPosts.forEach(p => {
+            const processedComments = (p.comments || []).map(c => ({
+                name: c.name,
+                handle: c.handle || '@' + c.name,
+                avatar: getRandomNpcAvatar(),
+                content: c.content,
+                time: Date.now() - Math.floor(Math.random() * 3600000)
+            }));
+
+            forumState.posts.unshift({
+                id: Date.now() + Math.random(),
+                type: 'fanfic',
+                isStory: true, 
+                author: {
+                    name: p.authorName,
+                    handle: p.handle || '@' + p.authorName,
+                    avatar: getRandomNpcAvatar()
+                },
+                content: p.content,
+                image: null,
+                time: Date.now(),
+                likes: forumGenerateFakeLikes(), 
+                saves: [],
+                comments: processedComments
+            });
+        });
+
+        forumSaveData();
+        forumRenderPosts('fanfic');
+        wcShowSuccess("神仙太太更新啦！");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("生成失败，可能是字数太多导致截断");
     }
 }
