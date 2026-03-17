@@ -676,6 +676,12 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-bubble.them { background: #F2F2F7; color: #000; border: none; }
 .wc-bubble.me { background: #FFFFFF; color: #000; border: 0.5px solid rgba(0,0,0,0.05); align-items: flex-end; }
 .wc-bubble.me:has(.wc-quote-block) { align-items: flex-start; }
+
+/* 隐藏特殊气泡（表情包、图片、邀请卡片等）的小圆点，保持干净 */
+.wc-bubble-sticker::after, .wc-bubble-img::after, .wc-bubble.invite::after, .wc-bubble.transfer::after {
+    display: none !important;
+}
+
 .wc-bubble-sticker { background: transparent !important; border: none !important; padding: 0; }
 .wc-sticker-img { max-width: 120px; max-height: 120px; border-radius: 4px; }
 /* --- 修改：限制真实图片的最大尺寸 --- */
@@ -868,19 +874,21 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-ctx-item:last-child { border-bottom: none; }
 .wc-ctx-item:active { background: #F2F2F7; }
 
+/* --- 修改：底部输入栏 (干净留白) --- */
 .wc-chat-footer {
-    position: relative; bottom: auto; left: 0; width: 100%; background: #F7F7F7;
-    border-top: 0.5px solid #C6C6C8; 
-    /* 核心适配：使用 max() 保证底部安全距离 */
-    padding: 8px 12px max(10px, env(safe-area-inset-bottom)) 12px;
-    display: flex; align-items: flex-end; gap: 10px; z-index: 1200; flex-shrink: 0;
+    position: relative; bottom: auto; left: 0; width: 100%; 
+    background: #FFFFFF; /* 改为纯白背景 */
+    border-top: 1px solid #F0F0F0; 
+    padding: 10px 16px max(12px, env(safe-area-inset-bottom)) 16px;
+    display: flex; align-items: center; /* 居中对齐 */
+    gap: 12px; z-index: 1200; flex-shrink: 0;
     transition: margin-bottom 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-.wc-chat-footer.panel-active { margin-bottom: var(--wc-panel-height); border-bottom: 1px solid #C6C6C8; padding-bottom: 8px; }
+.wc-chat-footer.panel-active { margin-bottom: var(--wc-panel-height); border-bottom: 1px solid #F0F0F0; padding-bottom: 10px; }
 
 /* 修复：引用预览区域过长导致关闭按钮被挤出屏幕 */
-#wc-quote-preview-area { position: absolute; top: -40px; left: 0; width: 100%; height: 40px; background: rgba(247, 247, 247, 0.95); border-top: 0.5px solid #C6C6C8; display: none; align-items: center; padding: 0 12px; font-size: 13px; color: #666; justify-content: space-between; overflow: hidden; }
+#wc-quote-preview-area { position: absolute; top: -40px; left: 0; width: 100%; height: 40px; background: rgba(255, 255, 255, 0.95); border-top: 1px solid #F0F0F0; display: none; align-items: center; padding: 0 16px; font-size: 12px; color: #999; justify-content: space-between; overflow: hidden; }
 #wc-quote-text-content { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; margin-right: 10px; display: flex; align-items: center; }
 
 /* 限制底部输入框上方预览区域的图片大小 */
@@ -893,10 +901,40 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     object-fit: contain;
 }
 
-.wc-chat-input { flex: 1; background: #FFFFFF; border: none; border-radius: 4px; padding: 10px; font-size: 16px; max-height: 100px; min-height: 40px; resize: none; }
-.wc-footer-icon { width: 28px; height: 28px; color: #1C1C1E; cursor: pointer; flex-shrink: 0; margin-bottom: 6px; }
-.wc-btn-ai-reply { background: none; border: none; padding: 0; cursor: pointer; color: var(--wc-accent-blue); margin-bottom: 6px; }
-.wc-btn-ai-reply svg { width: 28px; height: 28px; fill: currentColor; }
+/* --- 修改：输入框 (椭圆形、浅灰) --- */
+.wc-chat-input { 
+    flex: 1; 
+    background: #F5F5F5; /* 浅灰背景 */
+    border: 1px solid #EEEEEE; 
+    border-radius: 20px; /* 椭圆形 */
+    padding: 8px 16px; 
+    font-size: 14px; 
+    max-height: 100px; min-height: 36px; 
+    resize: none; 
+    color: #333333;
+    outline: none;
+}
+
+/* --- 修改：底部按键 (更小、更细、更浅) --- */
+.wc-footer-icon { 
+    width: 22px; height: 22px; /* 改小 */
+    color: #999999; /* 颜色变浅 */
+    cursor: pointer; flex-shrink: 0; 
+    margin-bottom: 0; /* 移除底部边距使其居中 */
+    stroke-width: 1.5; /* 让线条变细 */
+}
+.wc-btn-ai-reply { 
+    background: none; border: none; padding: 0; cursor: pointer; 
+    color: #999999; /* 颜色变浅 */
+    margin-bottom: 0; 
+    display: flex; align-items: center;
+}
+.wc-btn-ai-reply svg { 
+    width: 22px; height: 22px; /* 改小 */
+    fill: none; /* 移除实心填充 */
+    stroke: currentColor; /* 使用描边 */
+    stroke-width: 1.5; /* 让线条变细 */
+}
 
 #wc-multi-select-footer { position: absolute; bottom: 0; left: 0; width: 100%; height: calc(60px + var(--wc-safe-area-bottom)); background: #F7F7F7; border-top: 0.5px solid #C6C6C8; display: none; align-items: center; justify-content: center; gap: 16px; z-index: 1250; padding-bottom: var(--wc-safe-area-bottom); }
 
@@ -5728,3 +5766,4 @@ body,
 .ins-paper-action-btn.reply {
     background: #111; color: #FFF; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 }
+
