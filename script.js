@@ -2887,24 +2887,35 @@ function wcRenderMessages(charId) {
                     </div>`;
             }
         } else if (msg.type === 'transfer') {
-            const statusClass = (msg.status === 'received' || msg.status === 'rejected') ? 'received' : '';
-            const statusText = msg.status === 'received' ? '已收款' : (msg.status === 'rejected' ? '已退还' : '转账');
-            const icon = msg.status === 'received' ? '<polyline points="20 6 9 17 4 12"></polyline>' : '<rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2"></circle><path d="M6 12h.01M18 12h.01"></path>';
+            const isReceived = msg.status === 'received';
+            const isRejected = msg.status === 'rejected';
+            const statusClass = isReceived ? 'received' : (isRejected ? 'rejected' : 'pending');
             
+            let statusText = '转账给您';
+            if (msg.sender === 'me') statusText = '转账给对方';
+            if (isReceived) statusText = '已收款';
+            if (isRejected) statusText = '已退还';
+
+            const tagText = isReceived ? 'RECEIVED' : (isRejected ? 'REJECTED' : 'TRANSFER');
+
             contentHtml = `
-                <div class="wc-bubble transfer ${statusClass}" onclick="wcHandleTransferClick(${msg.id})">
+                <div class="wc-bubble transfer ins-transfer-card ${statusClass}" onclick="wcHandleTransferClick(${msg.id})">
                     ${quoteHtml}
-                    <div class="wc-transfer-content">
-                        <div class="wc-transfer-icon-circle">
-                            <svg class="wc-icon" viewBox="0 0 24 24">${icon}</svg>
-                        </div>
-                        <div class="wc-transfer-info">
-                            <span class="wc-transfer-amount">¥${msg.amount}</span>
-                            <span class="wc-transfer-desc">${statusText}</span>
-                        </div>
+                    <div class="ins-transfer-header">
+                        <div class="ins-transfer-tag">${tagText}</div>
+                    </div>
+                    <div class="ins-transfer-body">
+                        <div class="ins-transfer-amount">¥${parseFloat(msg.amount).toFixed(2)}</div>
+                        <div class="ins-transfer-note">${msg.note || '转账'}</div>
+                    </div>
+                    <div class="ins-transfer-footer">
+                        <span class="ins-transfer-brand">WeChat Pay</span>
+                        <span class="ins-transfer-status">${statusText}</span>
                     </div>
                 </div>`;
-        } else if (msg.type === 'invite') {
+        }
+
+ else if (msg.type === 'invite') {
             const statusText = msg.status === 'accepted' ? '已同意' : (msg.status === 'rejected' ? '已拒绝' : '等待回应');
             contentHtml = `
                 <div class="wc-bubble invite ins-invite-card" onclick="wcHandleInviteClick(${msg.id})">

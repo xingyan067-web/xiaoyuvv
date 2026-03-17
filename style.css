@@ -767,13 +767,136 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-voice-bar:nth-child(3) { height: 10px; animation-delay: 0.4s; }
 @keyframes wcVoiceWave { 0%, 100% { height: 6px; } 50% { height: 16px; } }
 
-.wc-bubble.transfer { padding: 0; background: var(--wc-transfer-orange); border: none; width: 200px; max-width: 100%; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
-.wc-bubble.transfer.received { background: #F7D6A8; }
-.wc-transfer-content { padding: 16px; display: flex; align-items: center; gap: 12px; }
-.wc-transfer-icon-circle { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; color: #fff; }
-.wc-transfer-info { display: flex; flex-direction: column; color: #fff; }
-.wc-transfer-amount { font-size: 16px; font-weight: 500; }
-.wc-transfer-desc { font-size: 13px; opacity: 0.9; }
+/* /* ========================================== */
+/* 高级感 INS 韩系风转账卡片 (220x150px) */
+/* ========================================== */
+.wc-bubble.transfer {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    width: 220px; /* 强制宽度 */
+    height: 150px; /* 强制高度 */
+    max-width: 100%;
+}
+
+.ins-transfer-card {
+    width: 100%;
+    height: 100%;
+    background: #FFFFFF;
+    border-radius: 18px; /* 稍微小一点的圆角显得更精致 */
+    border: 1px solid #F0F0F0;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.03); /* 极其柔和的阴影 */
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1), box-shadow 0.3s ease;
+    cursor: pointer;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.ins-transfer-card:active {
+    transform: scale(0.97);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+}
+
+/* 顶部标签 */
+.ins-transfer-header {
+    padding: 16px 16px 0 16px;
+    display: flex;
+    justify-content: flex-start;
+}
+
+.ins-transfer-tag {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: #999;
+    text-transform: uppercase;
+}
+
+/* 中间金额与备注 */
+.ins-transfer-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 16px;
+}
+
+.ins-transfer-amount {
+    font-family: 'Georgia', serif;
+    font-size: 28px;
+    font-weight: 400; /* 细体更显高级 */
+    color: #111;
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+    line-height: 1;
+}
+
+.ins-transfer-note {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    font-size: 12px;
+    color: #A0A0A0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 300;
+}
+
+/* 底部状态栏 */
+.ins-transfer-footer {
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid rgba(0,0,0,0.03);
+    background: rgba(250, 250, 250, 0.5);
+}
+
+.ins-transfer-brand {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    font-size: 10px;
+    color: #CCC;
+    letter-spacing: 0.5px;
+}
+
+.ins-transfer-status {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* 状态颜色变体 (韩系低饱和) */
+/* 1. 待收款 (Pending) - 柔和的奶茶色/香槟色 */
+.ins-transfer-card.pending {
+    background: linear-gradient(135deg, #FCFBF9 0%, #F7F4F0 100%);
+    border-color: #EFEBE6;
+}
+.ins-transfer-card.pending .ins-transfer-tag { color: #D4C4B7; }
+.ins-transfer-card.pending .ins-transfer-amount { color: #4A413E; }
+.ins-transfer-card.pending .ins-transfer-status { color: #C28E7E; }
+
+/* 2. 已收款 (Received) - 极简白+低饱和灰绿 */
+.ins-transfer-card.received {
+    background: #FFFFFF;
+    border-color: #F0F5F1;
+}
+.ins-transfer-card.received .ins-transfer-tag { color: #A3B8A8; }
+.ins-transfer-card.received .ins-transfer-amount { color: #555; opacity: 0.8; }
+.ins-transfer-card.received .ins-transfer-status { color: #8F9E8B; }
+
+/* 3. 已退还 (Rejected) - 极简白+低饱和灰粉 */
+.ins-transfer-card.rejected {
+    background: #FFFFFF;
+    border-color: #F9F0F0;
+}
+.ins-transfer-card.rejected .ins-transfer-tag { color: #D1B3B5; }
+.ins-transfer-card.rejected .ins-transfer-amount { color: #999; text-decoration: line-through; opacity: 0.6; }
+.ins-transfer-card.rejected .ins-transfer-status { color: #C28E7E; opacity: 0.8; }
+
 /* ========================================== */
 /* 高级感 INS 风情侣空间邀请卡片 (180x100 迷你版) */
 /* ========================================== */
@@ -5768,11 +5891,11 @@ body,
 }
 
 /* ========================================== */
-/* App 4: INS Forum (论坛) 样式 (韩系/日系 INS 极简高级风) */
+/* App 4: INS Forum (论坛) 样式 (Twitter/INS 极简高级风) */
 /* ========================================== */
 .ins-forum-root {
     width: 100%; height: 100%; position: relative; overflow: hidden;
-    background-color: #FFFFFF; color: #111; font-family: inherit;
+    background-color: #FFFFFF; color: #111; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
 }
 .ins-forum-view {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -5783,15 +5906,15 @@ body,
 .ins-forum-view.active { display: flex; animation: wcFadeIn 0.3s ease; }
 
 .ins-forum-header {
-    padding: calc(env(safe-area-inset-top, 20px) + 10px) 20px 10px 20px;
-    background: rgba(255, 255, 255, 0.9);
+    padding: calc(env(safe-area-inset-top, 20px) + 15px) 20px 15px 20px;
+    background: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
     position: sticky; top: 0; z-index: 10;
     display: flex; justify-content: space-between; align-items: center;
-    border-bottom: 0.5px solid #EAEAEA;
+    border-bottom: 1px solid #F0F0F0;
 }
 .ins-forum-title {
-    font-size: 18px; font-weight: 700; color: #111; letter-spacing: -0.5px;
+    font-size: 20px; font-weight: 800; color: #111; letter-spacing: -0.5px;
 }
 .ins-forum-header-right {
     width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
@@ -5803,59 +5926,58 @@ body,
 
 /* 帖子卡片 (推特风排版) */
 .ins-forum-post-card {
-    padding: 20px 16px; border-bottom: 0.5px solid #EAEAEA; cursor: pointer; transition: background 0.2s; background: #FFF;
+    padding: 16px 20px; border-bottom: 1px solid #F0F0F0; cursor: pointer; transition: background 0.2s;
 }
 .ins-forum-post-card:active { background: #FAFAFA; }
 
 .ins-forum-post-header {
-    display: flex; align-items: center; margin-bottom: 10px;
+    display: flex; align-items: flex-start; margin-bottom: 4px;
 }
 .ins-forum-avatar-small {
-    width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #F0F0F0; margin-right: 12px; flex-shrink: 0; border: 1px solid #F5F5F5;
+    width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #F0F0F0; margin-right: 12px; flex-shrink: 0;
 }
 .ins-forum-post-info { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-.ins-forum-post-name { font-size: 15px; font-weight: 700; color: #111; letter-spacing: -0.3px; }
-.ins-forum-post-handle { font-size: 13px; color: #999; margin-top: 2px; }
-.ins-forum-post-time { font-size: 12px; color: #999; margin-left: 6px; }
+.ins-forum-post-name { font-size: 15px; font-weight: 700; color: #111; }
+.ins-forum-post-handle { font-size: 14px; color: #888; }
+.ins-forum-post-time { font-size: 14px; color: #888; }
 
-.ins-forum-post-body { margin-left: 52px; /* 头像40 + 间距12 */ }
+.ins-forum-post-body { margin-left: 56px; /* 头像宽度44 + 间距12 */ }
 .ins-forum-post-text {
-    font-size: 15px; color: #222; line-height: 1.6; text-align: left;
-    word-break: break-word; white-space: pre-wrap; letter-spacing: 0.2px;
+    font-size: 15px; color: #111; line-height: 1.5; text-align: left;
+    word-break: break-word; white-space: pre-wrap;
 }
 .ins-forum-post-image {
-    width: 100%; max-height: 350px; object-fit: cover; border-radius: 16px; margin-top: 12px;
-    border: 1px solid #F0F0F0; box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+    width: 100%; max-height: 300px; object-fit: cover; border-radius: 16px; margin-top: 12px;
+    border: 1px solid #F0F0F0;
 }
 
 .ins-forum-post-actions {
-    display: flex; align-items: center; justify-content: space-between; margin-top: 16px; margin-left: 52px; max-width: 280px;
+    display: flex; align-items: center; justify-content: space-between; margin-top: 12px; margin-left: 56px; max-width: 250px;
 }
 .ins-forum-action-btn {
-    display: flex; align-items: center; gap: 6px; color: #999; font-size: 13px; cursor: pointer; transition: color 0.2s;
+    display: flex; align-items: center; gap: 6px; color: #888; font-size: 13px; cursor: pointer; transition: color 0.2s;
 }
 .ins-forum-action-btn:active { color: #111; }
 .ins-forum-action-btn svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.5; fill: none; transition: transform 0.2s; }
-.ins-forum-action-btn:active svg { transform: scale(0.85); }
+.ins-forum-action-btn:active svg { transform: scale(0.9); }
 
 /* 发布页 */
 .ins-forum-btn-publish {
-    background: #111; color: #FFF; border: none; padding: 6px 16px; border-radius: 16px;
-    font-size: 13px; font-weight: 700; cursor: pointer; transition: transform 0.2s;
+    background: #111; color: #FFF; border: none; padding: 8px 20px; border-radius: 20px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
 }
-.ins-forum-btn-publish:active { transform: scale(0.95); }
 .ins-forum-post-user-info {
     display: flex; align-items: center; margin-bottom: 15px;
 }
 .ins-forum-post-user-info span { font-size: 16px; font-weight: 700; }
 .ins-forum-textarea {
-    width: 100%; height: 180px; border: none; font-size: 16px; resize: none; outline: none;
-    color: #111; line-height: 1.6; padding: 10px 0; background: transparent;
+    width: 100%; height: 150px; border: none; font-size: 18px; resize: none; outline: none;
+    color: #111; line-height: 1.5;
 }
 .ins-forum-textarea::placeholder { color: #CCC; }
 .ins-forum-image-upload {
-    display: inline-flex; align-items: center; padding: 8px 14px; background: #F9F9F9;
-    border-radius: 16px; cursor: pointer; border: 1px solid #F0F0F0; color: #555; font-weight: 600; font-size: 13px;
+    display: inline-flex; align-items: center; padding: 10px 16px; background: #FFF;
+    border-radius: 20px; cursor: pointer; border: 1px solid #E5E5EA; color: #111; font-weight: 600;
 }
 .ins-forum-post-options {
     margin-top: 20px; padding-top: 20px; border-top: 1px solid #F0F0F0;
@@ -5863,28 +5985,28 @@ body,
 
 /* 个人信息页 */
 .ins-forum-profile-header {
-    display: flex; flex-direction: column; padding: 30px 20px 20px 20px; border-bottom: 1px solid #F0F0F0; background: #FFF;
+    display: flex; flex-direction: column; padding: 20px; border-bottom: 1px solid #F0F0F0;
 }
 .ins-forum-profile-avatar {
-    width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 16px;
-    border: 1px solid #EAEAEA; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;
+    border: 2px solid #FFF; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 .ins-forum-profile-info { display: flex; flex-direction: column; }
-.ins-forum-profile-name { font-size: 22px; font-weight: 800; color: #111; margin-bottom: 4px; letter-spacing: -0.5px; }
-.ins-forum-profile-handle { font-size: 14px; color: #888; margin-bottom: 16px; }
-.ins-forum-profile-bio { font-size: 14px; color: #333; line-height: 1.5; cursor: pointer; }
+.ins-forum-profile-name { font-size: 22px; font-weight: 800; color: #111; margin-bottom: 2px; }
+.ins-forum-profile-handle { font-size: 15px; color: #888; margin-bottom: 12px; }
+.ins-forum-profile-bio { font-size: 15px; color: #111; line-height: 1.4; cursor: pointer; }
 
 .ins-forum-profile-tabs {
-    display: flex; border-bottom: 0.5px solid #EAEAEA; background: #FFF;
+    display: flex; border-bottom: 1px solid #F0F0F0;
 }
 .ins-forum-profile-tab {
-    flex: 1; text-align: center; padding: 16px 0; font-size: 14px; font-weight: 600; color: #888;
+    flex: 1; text-align: center; padding: 15px 0; font-size: 15px; font-weight: 700; color: #888;
     cursor: pointer; position: relative; transition: color 0.2s;
 }
 .ins-forum-profile-tab.active { color: #111; }
 .ins-forum-profile-tab.active::after {
     content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
-    width: 40px; height: 3px; background: #111; border-radius: 3px 3px 0 0;
+    width: 50px; height: 4px; background: #111; border-radius: 2px;
 }
 
 /* 详情页评论区 */
@@ -5892,11 +6014,11 @@ body,
     padding: 0; border-top: 1px solid #F0F0F0;
 }
 .ins-forum-comment-item {
-    display: flex; padding: 16px 20px; border-bottom: 0.5px solid #F5F5F5; background: #FFF;
+    display: flex; padding: 16px 20px; border-bottom: 1px solid #F9F9F9;
 }
 .ins-forum-comment-info { flex: 1; }
-.ins-forum-comment-name { font-size: 14px; font-weight: 700; color: #111; }
-.ins-forum-comment-text { font-size: 14px; color: #333; line-height: 1.5; margin-top: 4px; }
+.ins-forum-comment-name { font-size: 15px; font-weight: 700; color: #111; }
+.ins-forum-comment-text { font-size: 15px; color: #111; line-height: 1.5; margin-top: 4px; }
 
 .ins-forum-comment-bar {
     position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(255,255,255,0.95);
@@ -5914,19 +6036,18 @@ body,
 
 /* 底部 Tabbar */
 .ins-forum-tabbar {
-    position: absolute; bottom: 0; left: 0; width: 100%; height: calc(54px + env(safe-area-inset-bottom, 20px));
+    position: absolute; bottom: 0; left: 0; width: 100%; height: calc(60px + env(safe-area-inset-bottom, 20px));
     background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border-top: 0.5px solid #EAEAEA; display: flex; justify-content: space-around; align-items: center;
+    border-top: 1px solid #F0F0F0; display: flex; justify-content: space-around; align-items: center;
     padding-bottom: env(safe-area-inset-bottom, 20px); z-index: 10;
 }
 .ins-forum-tab {
     width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;
     color: #B2B2B2; cursor: pointer; transition: all 0.2s;
 }
-.ins-forum-tab svg { width: 24px; height: 24px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
+.ins-forum-tab svg { width: 26px; height: 26px; fill: currentColor; stroke: currentColor; stroke-width: 0; }
 .ins-forum-tab#forum-tab-post svg { fill: none; stroke-width: 2; }
 .ins-forum-tab.active { color: #111; transform: translateY(-2px); }
-
 /* ========================================== */
 /* 论坛同人小说专属排版 (长文截断与阅读模式) */
 /* ========================================== */
@@ -5943,43 +6064,27 @@ body,
 /* 小说正文排版 (增加行距，首行缩进，字体优化) */
 .ins-forum-story-text {
     font-family: 'Kaiti', 'STKaiti', '楷体', 'Georgia', serif;
-    font-size: 15px !important;
+    font-size: 16px !important;
     line-height: 1.8 !important;
     color: #333 !important;
     text-align: justify;
     white-space: pre-wrap;
     letter-spacing: 0.5px;
-    background: #FAFAFA;
-    padding: 12px;
-    border-radius: 12px;
-    border: 1px solid #F5F5F5;
 }
 
 /* 详情页中的小说排版进一步放大 */
 #forum-post-detail-content .ins-forum-story-text {
-    font-size: 16px !important;
+    font-size: 17px !important;
     line-height: 2 !important;
     color: #111 !important;
-    background: transparent;
-    padding: 0;
-    border: none;
 }
 
-/* 详情页排版覆盖 */
-#forum-post-detail-content .ins-forum-post-header {
-    padding: 20px 20px 10px 20px;
-}
-#forum-post-detail-content .ins-forum-post-body {
-    padding: 0 20px 20px 20px; border-bottom: 0.5px solid #EAEAEA; margin-left: 0;
-}
-#forum-post-detail-content .ins-forum-post-text {
-    font-size: 16px; line-height: 1.7; color: #111;
-}
+/* 修复详情页底部操作栏的布局，让书签按钮靠右 */
 #forum-post-detail-content .ins-forum-post-actions {
-    margin-left: 0; max-width: 100%; margin-top: 20px; padding-top: 16px; border-top: 0.5px solid #F5F5F5;
-    display: flex; justify-content: space-between !important; align-items: center;
+    display: flex;
+    justify-content: space-between !important;
+    align-items: center;
 }
-
 /* ========================================== */
 /* 论坛帖子删除按钮样式 */
 /* ========================================== */
