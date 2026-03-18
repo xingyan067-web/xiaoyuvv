@@ -1,4 +1,3 @@
-
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
 /**
@@ -16228,26 +16227,27 @@ const forumState = {
         name: 'User',
         handle: '@user_id',
         avatar: '',
-        bio: '记录生活的美好'
+        bio: '记录生活的美好',
+        boundMaskId: null
     },
     config: {
         worldbookIds: [],
         charIds: [],
         maskIds: [],
-        // 👇 新增：同人文预设字段 👇
         fanficStyle: '',
         fanficCharA: '',
         fanficCharB: '',
         fanficTrope: ''
     },
     posts: [], 
+    privateChats: [], // 👈 修改这里：改为 privateChats，存储会话列表
     tempImage: null,
     tempAvatar: null,
     currentDetailPostId: null,
     pendingSharePostId: null,
-    profileTab: 'posts'
+    profileTab: 'posts',
+    activePMChatId: null // 👈 新增：记录当前正在聊天的私信ID
 };
-
 
 async function forumLoadData() {
     const data = await idb.get('ins_forum_data');
@@ -16255,8 +16255,8 @@ async function forumLoadData() {
         if (data.profile) forumState.profile = { ...forumState.profile, ...data.profile };
         if (data.config) forumState.config = { ...forumState.config, ...data.config };
         if (data.posts) forumState.posts = data.posts;
+        if (data.privateChats) forumState.privateChats = data.privateChats; // 👈 修改这里
     }
-    // 如果没有头像，默认使用微信头像
     if (!forumState.profile.avatar) {
         forumState.profile.avatar = wcState.user.avatar;
         forumState.profile.name = wcState.user.name;
@@ -16267,9 +16267,11 @@ async function forumSaveData() {
     await idb.set('ins_forum_data', {
         profile: forumState.profile,
         config: forumState.config,
-        posts: forumState.posts
+        posts: forumState.posts,
+        privateChats: forumState.privateChats // 👈 修改这里
     });
 }
+
 // 生成虚拟的初始点赞数据，让帖子看起来有活人感
 function forumGenerateFakeLikes() {
     const count = Math.floor(Math.random() * 80) + 15; // 随机 15 到 95 个赞
@@ -16421,7 +16423,7 @@ function forumHandleImageUpload(input) {
 
 function forumSubmitPost() {
     const content = document.getElementById('forum-post-input').value.trim();
-    const postType = document.getElementById('forum-post-type-select').value; // 获取选择的板块
+    const postType = document.getElementById('forum-post-type-select').value; 
     
     if (!content && !forumState.tempImage) {
         return alert("请输入内容或上传图片");
@@ -16429,8 +16431,8 @@ function forumSubmitPost() {
     
     const newPost = {
         id: Date.now(),
-        type: postType, // 根据用户的选择发布到 home 或 fanfic
-        isStory: postType === 'fanfic', // 如果发到同人区，自动打上小说排版标签
+        type: postType, 
+        isStory: postType === 'fanfic', 
         author: {
             name: forumState.profile.name,
             handle: forumState.profile.handle,
@@ -16439,7 +16441,7 @@ function forumSubmitPost() {
         content: content,
         image: forumState.tempImage,
         time: Date.now(),
-        likes: [], // 自己发的帖子初始 0 赞
+        likes: [], 
         saves: [],
         comments: []
     };
@@ -16451,9 +16453,9 @@ function forumSubmitPost() {
     document.getElementById('forum-post-image-preview').style.display = 'none';
     forumState.tempImage = null;
     
-    forumSwitchTab(postType); // 跳转到对应的板块
+    forumSwitchTab(postType); 
+       
 }
-
 
 // --- 互动：点赞、评论、分享 ---
 function forumToggleLike(postId) {
@@ -16651,7 +16653,6 @@ function forumSubmitComment() {
     const post = forumState.posts.find(p => p.id === forumState.currentDetailPostId);
     if (!post) return;
     
-    // 👇 新增：处理回复逻辑 👇
     let finalContent = text;
     if (forumState.replyingToComment) {
         finalContent = `回复 @${forumState.replyingToComment}: ${text}`;
@@ -16669,9 +16670,117 @@ function forumSubmitComment() {
     forumSaveData();
     input.value = '';
     input.placeholder = "发布评论...";
-    forumState.replyingToComment = null; // 清空回复状态
+    forumState.replyingToComment = null; 
     forumRenderPostDetailContent();
+
 }
+
+// --- 新增：用户评论后，AI 自动回复并概率掉落私信 ---
+window.forumTriggerReactionToUser = async function(postId, userCommentText) {
+    const post = forumState.posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return;
+
+    // 静默加载，不打断用户浏览
+    const loadingToast = document.createElement('div');
+    loadingToast.style.cssText = 'position:fixed; top:60px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); color:#fff; padding:8px 16px; border-radius:20px; font-size:12px; z-index:9999;';
+    loadingToast.innerText = '网友正在回复你...';
+    document.body.appendChild(loadingToast);
+
+    try {
+        let contextInfo = "";
+        if (forumState.config.charIds.length > 0) {
+            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+            if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
+        }
+
+        let prompt = `你现在是一个社交论坛的后台引擎。用户（${forumState.profile.name}）刚刚在帖子里发表了一条评论。\n`;
+        prompt += `【原帖内容】：\n${post.content}\n\n`;
+        prompt += `【用户的评论】：\n${userCommentText}\n\n`;
+        prompt += `${contextInfo}`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 请生成 2 到 4 条其他网友或 NPC 针对用户这条评论的【回复】。\n`;
+        prompt += `2. 语气要极度口语化、有网感（如：确实、笑死、抱抱楼主等）。\n`;
+        prompt += `3. 【私信掉落机制】：你有 35% 的概率生成一条发给用户的【私信】（比如有人想私下认识用户、或者 NPC 私下吐槽）。如果不生成私信，请将 privateMessage 设为 null。\n`;
+        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `5. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）发表评论！所有评论人和私信发送人只能是 NPC 或 虚构网友！\n`;
+        prompt += `6. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "comments": [
+    {"name": "网友名字", "handle": "@ID", "content": "回复 @${forumState.profile.name}: 评论内容"}
+  ],
+  "privateMessage": {
+    "senderName": "发件人名字",
+    "content": "私信内容"
+  }
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        // 1. 处理追加的评论
+        if (result.comments && result.comments.length > 0) {
+            const processedComments = result.comments.map(c => {
+                const cNpc = wcState.characters.find(char => char.name === c.name);
+                return {
+                    name: c.name,
+                    handle: c.handle || '@' + c.name,
+                    avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
+                    content: c.content,
+                    time: Date.now()
+                };
+            });
+            post.comments.push(...processedComments);
+        }
+
+        // 2. 处理掉落的私信
+        if (result.privateMessage && result.privateMessage.senderName && result.privateMessage.content) {
+            const pm = result.privateMessage;
+            const npc = wcState.characters.find(c => c.name === pm.senderName);
+            const avatar = npc ? npc.avatar : getRandomNpcAvatar();
+
+            if (!forumState.privateMessages) forumState.privateMessages = [];
+            forumState.privateMessages.unshift({
+                id: Date.now(),
+                senderName: pm.senderName,
+                avatar: avatar,
+                content: pm.content,
+                contextPreview: userCommentText.substring(0, 15) + '...',
+                time: Date.now()
+            });
+            
+            if (typeof showMainSystemNotification === 'function') {
+                showMainSystemNotification("论坛私信", `收到来自 ${pm.senderName} 的新私信`, avatar);
+            }
+        }
+
+        forumSaveData();
+        if (forumState.currentDetailPostId === postId) {
+            forumRenderPostDetailContent();
+        }
+
+    } catch (e) {
+        console.error("AI 回复用户评论失败", e);
+    } finally {
+        loadingToast.remove();
+    }
+};
+
 // ==========================================
 // 👇 新增：AI 注入互动与加载更多评论逻辑 👇
 // ==========================================
@@ -16705,17 +16814,25 @@ window.forumGenerateInteractions = async function(postId) {
             if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
         }
 
-        let prompt = `你现在是一个社交论坛的后台引擎。用户刚刚发布了一条帖子，请为这条帖子生成 8 到 15 条极具“活人感”的评论。\n`;
+        let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子生成 8 到 15 条极具“活人感”的评论。\n`;
         prompt += `【帖子内容】：\n${post.content}\n\n`;
         prompt += `${contextInfo}`;
         prompt += `【要求】：\n`;
         prompt += `1. 评论人可以是【你认识的熟人(NPC)】，也可以是虚构的网友。\n`;
         prompt += `2. 语气要极度口语化、有网感。评论区要有互动感（网友互相回复、吐槽等）。\n`;
-        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
-        prompt += `4. 返回纯 JSON 数组，格式如下：\n`;
-        prompt += `[
-  {"name": "评论人名字", "handle": "@ID", "content": "评论内容"}
-]\n`;
+        prompt += `3. 【私信掉落机制】：你有 35% 的概率生成一条发给用户的【私信】。如果不生成私信，请将 privateMessage 设为 null。\n`;
+        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `5. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）发表评论！所有评论人和私信发送人只能是 NPC 或 虚构网友！\n`;
+        prompt += `6. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "comments": [
+    {"name": "评论人名字", "handle": "@ID", "content": "评论内容"}
+  ],
+  "privateMessage": {
+    "senderName": "发件人名字",
+    "content": "私信内容"
+  }
+}\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -16731,26 +16848,59 @@ window.forumGenerateInteractions = async function(postId) {
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const generatedComments = JSON.parse(content);
+        const result = JSON.parse(content);
 
-        // 增加点赞
+        // 1. 增加点赞和评论
         const newLikes = forumGenerateFakeLikes();
         if (!Array.isArray(post.likes)) post.likes = [];
         post.likes.push(...newLikes);
 
-        // 增加评论
-        if (!post.comments) post.comments = [];
-        const processedComments = generatedComments.map(c => {
-            const cNpc = wcState.characters.find(char => char.name === c.name);
-            return {
-                name: c.name,
-                handle: c.handle || '@' + c.name,
-                avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
-                content: c.content,
+        if (result.comments && result.comments.length > 0) {
+            if (!post.comments) post.comments = [];
+            const processedComments = result.comments.map(c => {
+                const cNpc = wcState.characters.find(char => char.name === c.name);
+                return {
+                    name: c.name,
+                    handle: c.handle || '@' + c.name,
+                    avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
+                    content: c.content,
+                    time: Date.now()
+                };
+            });
+            post.comments.push(...processedComments);
+        }
+
+        // 2. 处理掉落的私信 (升级为会话模式)
+        if (result.privateMessage && result.privateMessage.senderName && result.privateMessage.content) {
+            const pm = result.privateMessage;
+            
+            // 查找是否已有该人的会话
+            let chat = forumState.privateChats.find(c => c.targetName === pm.senderName);
+            if (!chat) {
+                const npc = wcState.characters.find(c => c.name === pm.senderName);
+                chat = {
+                    id: Date.now().toString(),
+                    targetName: pm.senderName,
+                    targetAvatar: npc ? npc.avatar : getRandomNpcAvatar(),
+                    messages: [],
+                    lastUpdateTime: Date.now()
+                };
+                forumState.privateChats.push(chat);
+            }
+            
+            // 将新消息推入会话
+            chat.messages.push({
+                id: Date.now(),
+                sender: 'them',
+                content: pm.content,
                 time: Date.now()
-            };
-        });
-        post.comments.push(...processedComments);
+            });
+            chat.lastUpdateTime = Date.now();
+            
+            if (typeof showMainSystemNotification === 'function') {
+                showMainSystemNotification("论坛私信", `收到来自 ${pm.senderName} 的新私信`, chat.targetAvatar);
+            }
+        }
 
         forumSaveData();
         forumRenderPostDetailContent();
@@ -16797,11 +16947,19 @@ window.forumGenerateMoreComments = async function(postId) {
         prompt += `【要求】：\n`;
         prompt += `1. 评论人可以是【你认识的熟人(NPC)】，也可以是虚构的网友。\n`;
         prompt += `2. 语气要极度口语化、有网感。可以针对【已有评论上下文】进行回复（如：回复 @某某）。\n`;
-        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
-        prompt += `4. 返回纯 JSON 数组，格式如下：\n`;
-        prompt += `[
-  {"name": "评论人名字", "handle": "@ID", "content": "评论内容"}
-]\n`;
+        prompt += `3. 【私信掉落机制】：你有 35% 的概率生成一条发给用户的【私信】。如果不生成私信，请将 privateMessage 设为 null。\n`;
+        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `5. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）发表评论！所有评论人和私信发送人只能是 NPC 或 虚构网友！\n`;
+        prompt += `6. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "comments": [
+    {"name": "评论人名字", "handle": "@ID", "content": "评论内容"}
+  ],
+  "privateMessage": {
+    "senderName": "发件人名字",
+    "content": "私信内容"
+  }
+}\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -16817,20 +16975,55 @@ window.forumGenerateMoreComments = async function(postId) {
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const generatedComments = JSON.parse(content);
+        const result = JSON.parse(content);
 
-        if (!post.comments) post.comments = [];
-        const processedComments = generatedComments.map(c => {
-            const cNpc = wcState.characters.find(char => char.name === c.name);
-            return {
-                name: c.name,
-                handle: c.handle || '@' + c.name,
-                avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
-                content: c.content,
+        // 1. 处理追加的评论
+        if (result.comments && result.comments.length > 0) {
+            if (!post.comments) post.comments = [];
+            const processedComments = result.comments.map(c => {
+                const cNpc = wcState.characters.find(char => char.name === c.name);
+                return {
+                    name: c.name,
+                    handle: c.handle || '@' + c.name,
+                    avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
+                    content: c.content,
+                    time: Date.now()
+                };
+            });
+            post.comments.push(...processedComments);
+        }
+
+        // 2. 处理掉落的私信 (升级为会话模式)
+        if (result.privateMessage && result.privateMessage.senderName && result.privateMessage.content) {
+            const pm = result.privateMessage;
+            
+            // 查找是否已有该人的会话
+            let chat = forumState.privateChats.find(c => c.targetName === pm.senderName);
+            if (!chat) {
+                const npc = wcState.characters.find(c => c.name === pm.senderName);
+                chat = {
+                    id: Date.now().toString(),
+                    targetName: pm.senderName,
+                    targetAvatar: npc ? npc.avatar : getRandomNpcAvatar(),
+                    messages: [],
+                    lastUpdateTime: Date.now()
+                };
+                forumState.privateChats.push(chat);
+            }
+            
+            // 将新消息推入会话
+            chat.messages.push({
+                id: Date.now(),
+                sender: 'them',
+                content: pm.content,
                 time: Date.now()
-            };
-        });
-        post.comments.push(...processedComments);
+            });
+            chat.lastUpdateTime = Date.now();
+            
+            if (typeof showMainSystemNotification === 'function') {
+                showMainSystemNotification("论坛私信", `收到来自 ${pm.senderName} 的新私信`, chat.targetAvatar);
+            }
+        }
 
         forumSaveData();
         forumRenderPostDetailContent();
@@ -16845,7 +17038,6 @@ window.forumGenerateMoreComments = async function(postId) {
         wcShowError("生成失败");
     }
 };
-
 // --- 分享帖子给 Char ---
 function forumOpenShareModal(postId) {
     forumState.pendingSharePostId = postId;
@@ -16903,7 +17095,59 @@ function forumRenderProfile() {
     document.getElementById('forum-profile-handle').innerText = forumState.profile.handle;
     document.getElementById('forum-profile-bio').innerText = forumState.profile.bio;
     
+    // 动态注入私信按钮和面具绑定下拉框
+    const headerInfo = document.querySelector('.ins-forum-profile-info');
+    if (headerInfo && !document.getElementById('forum-profile-extra-actions')) {
+        const extraDiv = document.createElement('div');
+        extraDiv.id = 'forum-profile-extra-actions';
+        extraDiv.style.cssText = 'display: flex; align-items: center; gap: 15px; margin-top: 12px;';
+        
+        // 私信 SVG 按钮
+        const pmBtn = document.createElement('div');
+        pmBtn.innerHTML = `<svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: none; stroke: #111; stroke-width: 1.5; cursor: pointer;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>`;
+        pmBtn.onclick = forumOpenPrivateMessages;
+        
+        // 面具绑定下拉框
+        const maskSelect = document.createElement('select');
+        maskSelect.id = 'forum-mask-bind-select';
+        maskSelect.style.cssText = 'padding: 6px 12px; border-radius: 16px; border: 1px solid #E5E5EA; background: #F9F9F9; font-size: 12px; outline: none; color: #333;';
+        maskSelect.onchange = (e) => forumBindMask(e.target.value);
+        
+        extraDiv.appendChild(pmBtn);
+        extraDiv.appendChild(maskSelect);
+        headerInfo.appendChild(extraDiv);
+    }
+
+    // 更新面具下拉框选项
+    const maskSelect = document.getElementById('forum-mask-bind-select');
+    if (maskSelect) {
+        maskSelect.innerHTML = '<option value="">默认身份 (User)</option>';
+        wcState.masks.forEach(m => {
+            const isSelected = forumState.profile.boundMaskId == m.id ? 'selected' : '';
+            maskSelect.innerHTML += `<option value="${m.id}" ${isSelected}>扮演: ${m.name}</option>`;
+        });
+    }
+    
     forumSwitchProfileTab(forumState.profileTab);
+}
+
+// 新增：绑定面具逻辑
+function forumBindMask(maskId) {
+    if (!maskId) {
+        forumState.profile.boundMaskId = null;
+        forumState.profile.name = wcState.user.name;
+        forumState.profile.avatar = wcState.user.avatar;
+    } else {
+        const mask = wcState.masks.find(m => m.id == maskId);
+        if (mask) {
+            forumState.profile.boundMaskId = mask.id;
+            forumState.profile.name = mask.name;
+            forumState.profile.avatar = mask.avatar;
+        }
+    }
+    forumSaveData();
+    forumRenderProfile();
+    alert("身份已切换，发帖和评论将使用新身份。");
 }
 
 function forumSwitchProfileTab(tab) {
@@ -17093,7 +17337,7 @@ async function forumGenerateAIPosts(type) {
         prompt += `1. 数量要求：必须一次性生成整整 8 条帖子！每条帖子必须包含至少 10 条评论！\n`;
         prompt += `2. 角色穿插：发帖人和评论人中，必须穿插出现【你认识的熟人(NPC)】（如果有的话：${npcNames.join(', ')}），以及大量虚构的网友。\n`;
         prompt += `3. 活人感：语气要极度口语化、有网感（如：笑死、救命、谁懂啊、破防了）。评论区要有互动感（网友互相回复、楼主回复网友）。\n`;
-        prompt += `4. 【绝对禁止扮演用户】：上面提供的【关于我(User)的设定/马甲】仅供你作为背景参考（NPC可以发关于User的帖子或吐槽User）。但是，你绝对不能以 User（${userNames.join('、')}）的身份发帖或评论！User 会自己操作，不需要你代劳！所有发帖人和评论人只能是 NPC 或 虚构网友！\n`;
+        prompt += `4. 【绝对禁止扮演用户】：上面提供的【关于我(User)的设定/马甲】仅供你作为背景参考（NPC可以发关于User的帖子或吐槽User）。但是，你绝对不能以 User（${userNames.join('、')}）的身份发帖或评论！User 会自己操作，不需要你代劳！所有发帖人和评论人只能是 NPC 或 虚构网友！\n`;                
         prompt += `5. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
         prompt += `6. 返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
@@ -17377,5 +17621,343 @@ async function _executeGenFanfic(basePrompt) {
     } catch (e) {
         console.error(e);
         wcShowError("生成失败，可能是字数太多导致截断");
+    }
+}
+// ==========================================
+// 论坛私信系统 (会话列表 + 聊天界面)
+// ==========================================
+
+// 1. 打开私信会话列表
+function forumOpenPrivateMessages() {
+    let view = document.getElementById('forum-pm-list-view');
+    if (!view) {
+        view = document.createElement('div');
+        view.id = 'forum-pm-list-view';
+        view.className = 'ins-forum-view';
+        view.style.zIndex = '3000';
+        view.innerHTML = `
+            <div class="ins-forum-header">
+                <div class="ins-forum-header-right" onclick="forumClosePrivateMessages()">
+                    <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: none; stroke: #111; stroke-width: 2;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </div>
+                <div class="ins-forum-title">私信箱</div>
+                <div style="width: 36px;"></div>
+            </div>
+            <div class="ins-forum-content" id="forum-pm-list-container" style="padding: 0; background: #FFF;"></div>
+        `;
+        document.getElementById('forumModal').appendChild(view);
+    }
+    forumRenderPMList();
+    view.style.display = 'flex';
+    setTimeout(() => view.classList.add('active'), 10);
+}
+
+function forumClosePrivateMessages() {
+    const view = document.getElementById('forum-pm-list-view');
+    if (view) {
+        view.classList.remove('active');
+        setTimeout(() => view.style.display = 'none', 300);
+    }
+}
+
+// 2. 渲染会话列表 (支持左滑删除)
+function forumRenderPMList() {
+    const container = document.getElementById('forum-pm-list-container');
+    container.innerHTML = '';
+    
+    if (!forumState.privateChats || forumState.privateChats.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #888; padding: 50px 20px; font-size: 13px;">暂无私信</div>';
+        return;
+    }
+
+    // 按最后更新时间排序
+    const sortedChats = [...forumState.privateChats].sort((a, b) => b.lastUpdateTime - a.lastUpdateTime);
+    
+    sortedChats.forEach(chat => {
+        const lastMsg = chat.messages.length > 0 ? chat.messages[chat.messages.length - 1] : null;
+        const lastMsgText = lastMsg ? lastMsg.content : '...';
+        const timeStr = lastMsg ? new Date(lastMsg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+
+        const div = document.createElement('div');
+        div.className = 'forum-pm-swipe-wrapper';
+        
+        // 👇 核心修改：加入底层删除按钮和顶层滑动内容 👇
+        div.innerHTML = `
+            <div class="forum-pm-swipe-action" onclick="forumDeletePMChat('${chat.id}')">删除</div>
+            <div class="forum-pm-swipe-content" onclick="forumOpenPMChat('${chat.id}')" ontouchstart="forumPMTouchStart(event)" ontouchmove="forumPMTouchMove(event)" ontouchend="forumPMTouchEnd(event)">
+                <img src="${chat.targetAvatar}" class="forum-pm-avatar">
+                <div class="forum-pm-info">
+                    <div class="forum-pm-name-row">
+                        <span class="forum-pm-name">${chat.targetName}</span>
+                        <span class="forum-pm-time">${timeStr}</span>
+                    </div>
+                    <div class="forum-pm-preview">${lastMsgText}</div>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// 👇👇👇 在 forumRenderPMList 函数下方，紧接着粘贴这段滑动与删除逻辑 👇👇👇
+
+let forumPMSwipeXDown = null;
+let forumPMSwipeYDown = null;
+let forumPMCurrentSwipeElement = null;
+
+window.forumPMTouchStart = function(evt) {
+    forumPMSwipeXDown = evt.touches[0].clientX;
+    forumPMSwipeYDown = evt.touches[0].clientY;
+    forumPMCurrentSwipeElement = evt.currentTarget;
+};
+
+window.forumPMTouchMove = function(evt) {
+    if (!forumPMSwipeXDown || !forumPMSwipeYDown || !forumPMCurrentSwipeElement) return;
+    let xUp = evt.touches[0].clientX;
+    let yUp = evt.touches[0].clientY;
+    let xDiff = forumPMSwipeXDown - xUp;
+    let yDiff = forumPMSwipeYDown - yUp;
+    
+    // 确保是水平滑动
+    if (Math.abs(xDiff) > Math.abs(yDiff)) { 
+        if (xDiff > 0) {
+            // 向左滑，露出删除按钮 (宽度70px)
+            forumPMCurrentSwipeElement.style.transform = `translateX(-70px)`; 
+        } else {
+            // 向右滑，恢复原位
+            forumPMCurrentSwipeElement.style.transform = 'translateX(0px)'; 
+        }
+    }
+};
+
+window.forumPMTouchEnd = function(evt) {
+    forumPMSwipeXDown = null;
+    forumPMSwipeYDown = null;
+};
+
+window.forumDeletePMChat = function(chatId) {
+    if (confirm("确定要删除这个私信会话吗？")) {
+        forumState.privateChats = forumState.privateChats.filter(c => c.id !== chatId);
+        forumSaveData();
+        forumRenderPMList();
+    }
+};
+// 👆👆👆 粘贴结束 👆👆👆
+
+
+// 3. 打开具体的私信聊天页面
+function forumOpenPMChat(chatId) {
+    forumState.activePMChatId = chatId;
+    const chat = forumState.privateChats.find(c => c.id === chatId);
+    if (!chat) return;
+
+// 找到这段代码（大约在 17680 行左右）：
+    let view = document.getElementById('forum-pm-chat-view');
+    if (!view) {
+        view = document.createElement('div');
+        view.id = 'forum-pm-chat-view';
+        view.className = 'ins-forum-view';
+        view.style.zIndex = '3100'; // 层级高于列表页
+        
+        // 👇👇👇 在这里加上这一行，消除底部 80px 的留白 👇👇👇
+        view.style.paddingBottom = '0'; 
+        
+        view.innerHTML = `
+            <div class="ins-forum-header" style="background: #F9F9F9;">
+                <div class="ins-forum-header-right" onclick="forumClosePMChat()">
+                    <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: none; stroke: #111; stroke-width: 2;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </div>
+                <div class="ins-forum-title" id="forum-pm-chat-title">名字</div>
+                <div style="width: 36px;"></div>
+            </div>
+            <div class="forum-pm-chat-history" id="forum-pm-chat-history"></div>
+            <!-- 👇 修改：重新排版底部输入框，增加左侧的 AI 回复按钮 👇 -->
+            <div class="forum-pm-chat-footer" style="display: flex; align-items: center; gap: 8px; padding: 10px; border-top: 1px solid #E5E5EA; background: #FFF;">
+                <div class="ins-forum-action-btn" onclick="forumTriggerPMAI(forumState.activePMChatId)" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #F5F5F5; border-radius: 50%; cursor: pointer; flex-shrink: 0;" title="让AI回复">
+                    <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: #AF52DE; stroke-width: 2;"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+                </div>
+                <input type="text" id="forum-pm-chat-input" placeholder="发私信..." style="flex: 1; border: 1px solid #E5E5EA; border-radius: 16px; padding: 0 12px; height: 32px; outline: none; font-size: 14px; background: transparent;">
+                <button onclick="forumSendPM()" style="background: #111; color: #FFF; border: none; border-radius: 16px; padding: 0 16px; height: 32px; font-weight: bold; cursor: pointer; flex-shrink: 0;">发送</button>
+            </div>
+        `;
+        document.getElementById('forumModal').appendChild(view);
+        // 绑定回车发送
+        document.getElementById('forum-pm-chat-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') forumSendPM();
+        });
+    }
+
+    document.getElementById('forum-pm-chat-title').innerText = chat.targetName;
+    forumRenderPMChatHistory();
+    
+    view.style.display = 'flex';
+    setTimeout(() => view.classList.add('active'), 10);
+}
+
+function forumClosePMChat() {
+    const view = document.getElementById('forum-pm-chat-view');
+    if (view) {
+        view.classList.remove('active');
+        setTimeout(() => view.style.display = 'none', 300);
+    }
+    forumState.activePMChatId = null;
+    forumRenderPMList(); // 退回列表时刷新一下最后一条消息
+}
+
+// 4. 渲染聊天记录
+function forumRenderPMChatHistory() {
+    const container = document.getElementById('forum-pm-chat-history');
+    container.innerHTML = '';
+    
+    const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
+    if (!chat) return;
+
+    chat.messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = `forum-pm-bubble-row ${msg.sender === 'me' ? 'me' : 'them'}`;
+        
+// 找到这段代码（大约在 17730 行左右）：
+        let avatarHtml = '';
+        if (msg.sender === 'them') {
+            avatarHtml = `<img src="${chat.targetAvatar}" class="forum-pm-bubble-avatar">`;
+        } else {
+            avatarHtml = `<img src="${forumState.profile.avatar}" class="forum-pm-bubble-avatar">`;
+        }
+
+        // 👇👇👇 将下面的 div.innerHTML 替换掉 👇👇👇
+        div.innerHTML = `
+            ${avatarHtml}
+            <div class="forum-pm-bubble">${msg.content}</div>
+        `;
+        // 👆👆👆 替换结束 👆👆👆
+        
+        container.appendChild(div);
+    });
+
+    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+}
+
+// 5. 用户发送私信
+function forumSendPM() {
+    const input = document.getElementById('forum-pm-chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
+    if (!chat) return;
+
+    // 存入用户消息
+    chat.messages.push({
+        id: Date.now(),
+        sender: 'me',
+        content: text,
+        time: Date.now()
+    });
+    chat.lastUpdateTime = Date.now();
+    forumSaveData();
+    
+    input.value = '';
+    forumRenderPMChatHistory();
+
+}
+
+// 6. 专属的私信 AI 回复逻辑
+async function forumTriggerPMAI(chatId) {
+    const chat = forumState.privateChats.find(c => c.id === chatId);
+    if (!chat) return;
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return;
+
+    // 插入一个临时的“正在输入”气泡
+    const container = document.getElementById('forum-pm-chat-history');
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'forum-pm-bubble-row them';
+    loadingDiv.id = 'forum-pm-loading';
+    loadingDiv.innerHTML = `<img src="${chat.targetAvatar}" class="forum-pm-bubble-avatar"><div class="forum-pm-bubble" style="color:#888;">正在输入...</div>`;
+    container.appendChild(loadingDiv);
+    container.scrollTop = container.scrollHeight;
+
+    try {
+        // 提取最近的聊天记录
+        const recentMsgs = chat.messages.slice(-15).map(m => {
+            const speaker = m.sender === 'me' ? forumState.profile.name : chat.targetName;
+            return `${speaker}: ${m.content}`;
+        }).join('\n');
+
+        // 👇 修改：查找对方是否是已知的 NPC，如果不是，赋予路人设定
+        const npc = wcState.characters.find(c => c.name === chat.targetName);
+        let npcPersona = npc ? npc.prompt : "一个在论坛上关注你的热心网友/路人。请根据你们的聊天记录推断你的性格，语气要像真实的活人网友。";
+
+        let prompt = `你现在正在一个社交论坛的私信界面里，和用户（${forumState.profile.name}）进行一对一私聊。\n`;
+        prompt += `【你的身份】：${chat.targetName}\n`;
+        prompt += `【你的人设】：${npcPersona}\n\n`;
+        prompt += `【最近的私信聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 请根据你的人设和聊天记录，回复用户的最后一条消息。\n`;
+        prompt += `2. 语气要符合论坛私聊的氛围（可以是网感、暧昧、吐槽等，取决于你的人设）。\n`;
+        // 👇 修改：强制要求碎片化输出
+        prompt += `3. 【碎片化口语化强制指令】：必须像真人聊天一样，将长回复拆分成 2-4 条短消息！严禁把所有话挤在一个气泡里！\n`;
+        prompt += `4. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）说话！你只能扮演 ${chat.targetName}！\n`;
+        prompt += `5. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `[
+  {"content": "第一句短消息"},
+  {"content": "第二句短消息"}
+]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        // 👇 修改：解析数组，并遍历推入聊天记录
+        let replies = [];
+        try {
+            replies = JSON.parse(content);
+            if (!Array.isArray(replies)) {
+                replies = [replies]; // 兜底：如果AI还是返回了对象，转成数组
+            }
+        } catch (e) {
+            replies = [{"content": content}]; // 兜底：解析失败直接作为纯文本
+        }
+
+        // 移除 loading
+        const loadingEl = document.getElementById('forum-pm-loading');
+        if (loadingEl) loadingEl.remove();
+
+        // 存入 AI 回复 (遍历数组)
+        for (const reply of replies) {
+            if (reply.content) {
+                chat.messages.push({
+                    id: Date.now() + Math.random(),
+                    sender: 'them',
+                    content: reply.content,
+                    time: Date.now()
+                });
+            }
+        }
+        
+        chat.lastUpdateTime = Date.now();
+        forumSaveData();
+
+        // 如果当前还在这个聊天页面，刷新界面
+        if (forumState.activePMChatId === chatId) {
+            forumRenderPMChatHistory();
+        }
+
+    } catch (e) {
+        console.error("私信回复失败", e);
+        const loadingEl = document.getElementById('forum-pm-loading');
+        if (loadingEl) loadingEl.remove();
     }
 }
