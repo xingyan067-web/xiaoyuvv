@@ -1189,20 +1189,27 @@
             </div>
         </div>
 
-        <!-- 世界书分组详情弹窗 -->
-        <div class="settings-modal sub-page" id="worldbookGroupDetailModal">
-            <div class="settings-header">
-                <div class="header-left">
-                    <button class="nav-btn" onclick="closeGroupDetailModal()">
-                        <svg class="back-svg" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-                        <span>返回</span>
-                    </button>
+        <!-- 世界书分组详情弹窗 (日记本目录版) -->
+        <div class="notebook-modal-overlay" id="worldbookGroupDetailModal">
+            <div class="notebook-modal">
+                <div class="notebook-binding"></div>
+                
+                <div class="notebook-page">
+                    <div class="close-bookmark" onclick="closeGroupDetailModal()">×</div>
+                    
+                    <div class="page-title" id="wbGroupDetailTitle">分组名称</div>
+                    <div class="page-subtitle">Table of Contents</div>
+                    
+                    <div class="toc-list" id="wbGroupDetailList">
+                        <!-- JS 动态注入条目 -->
+                    </div>
+
+                    <div class="pagination">
+                        <button class="page-btn" id="notebook-prev-btn" onclick="changeNotebookPage(-1)">← Prev</button>
+                        <span class="page-info" id="notebook-page-info">Page 1 / 1</span>
+                        <button class="page-btn" id="notebook-next-btn" onclick="changeNotebookPage(1)">Next →</button>
+                    </div>
                 </div>
-                <div class="header-title" id="wbGroupDetailTitle">分组名称</div>
-                <div class="header-right"></div>
-            </div>
-            <div class="settings-content ios-settings-content">
-                <div class="wb-list-container" id="wbGroupDetailList"></div>
             </div>
         </div>
 

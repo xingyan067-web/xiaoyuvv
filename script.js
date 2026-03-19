@@ -1615,54 +1615,132 @@ function renderGroupView() {
     const wrapper = document.createElement('div');
     wrapper.className = 'ins-group-container';
 
-    // 胶带颜色库
-    const tapeColors = ['rgba(255,200,200,0.6)', 'rgba(200,255,200,0.6)', 'rgba(200,200,255,0.6)', 'rgba(240,240,200,0.7)'];
+    // 韩系/日系低饱和度日记本颜色库
+    const notebookColors = [
+        { bg: '#FDFBF7', text: '#4A413E', border: '#EAEAEA' }, // 奶白
+        { bg: '#F4E8E8', text: '#5D4A45', border: '#EADCDC' }, // 灰粉
+        { bg: '#E8EEF2', text: '#4A5568', border: '#DCE4EA' }, // 雾霾蓝
+        { bg: '#E6EBE0', text: '#4A554A', border: '#DCE0D6' }, // 鼠尾草绿
+        { bg: '#F0EBE1', text: '#5D534A', border: '#E6DFD3' }, // 奶茶
+        { bg: '#EBE6F0', text: '#4A415D', border: '#DFD8E6' }  // 浅紫
+    ];
 
-    worldbookGroups.forEach(group => {
+    worldbookGroups.forEach((group, index) => {
         const groupEntries = worldbookEntries.filter(e => e.type === group);
         
-        // 随机旋转角度，制造错落感
-        const rot = (Math.random() * 6 - 3).toFixed(1); 
-        const tapeColor = tapeColors[Math.floor(Math.random() * tapeColors.length)];
-        const tapeRot = (Math.random() * 10 - 5).toFixed(1);
+        // 顺序循环获取颜色
+        const colorTheme = notebookColors[index % notebookColors.length];
 
         const card = document.createElement('div');
         card.className = 'ins-group-card';
-        card.style.transform = `rotate(${rot}deg)`;
+        card.style.backgroundColor = colorTheme.bg;
+        card.style.borderColor = colorTheme.border;
         card.onclick = () => openGroupDetailModal(group);
 
         card.innerHTML = `
-            <div class="ins-tape" style="background: ${tapeColor}; transform: translateX(-50%) rotate(${tapeRot}deg);"></div>
-            <div class="ins-group-title">${group}</div>
-            <div class="ins-group-count">${groupEntries.length} 个条目</div>
-            <div class="ins-group-delete" onclick="event.stopPropagation(); deleteGroup('${group}')">×</div>
+            <div class="ins-notebook-binding"></div>
+            <div class="ins-notebook-label" style="background: ${colorTheme.text};"></div>
+            <div class="ins-group-title" style="color: ${colorTheme.text}">${group}</div>
+            <div class="ins-group-count" style="color: ${colorTheme.text}; opacity: 0.6;">${groupEntries.length} entries</div>
+            <div class="ins-group-delete" onclick="event.stopPropagation(); deleteGroup('${group}')">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </div>
         `;
         
         wrapper.appendChild(card);
     });
 
     container.appendChild(wrapper);
-}
+} // 👈 宝宝，就是少了这个大括号导致报错！
+    // --- 补回丢失的分组详情弹窗逻辑 ---
+// --- 日记本目录分页全局变量 ---
+let currentNotebookEntries = [];
+let currentNotebookPage = 1;
+const NOTEBOOK_ITEMS_PER_PAGE = 9; // 每页显示9条，刚好贴合横线
+
 function openGroupDetailModal(groupName) {
     document.getElementById('wbGroupDetailTitle').innerText = groupName;
-    const container = document.getElementById('wbGroupDetailList');
-    container.innerHTML = '';
     
-    const groupEntries = worldbookEntries.filter(e => e.type === groupName);
-    if (groupEntries.length === 0) {
-        container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">该分组下暂无条目</div>';
-    } else {
-        groupEntries.forEach(entry => {
-            container.appendChild(createEntryElement(entry));
-        });
-    }
+    // 获取该分组下的所有条目
+    currentNotebookEntries = worldbookEntries.filter(e => e.type === groupName);
+    currentNotebookPage = 1; // 重置为第一页
     
-    document.getElementById('worldbookGroupDetailModal').classList.add('open');
+    renderNotebookPage(currentNotebookPage);
+    
+    // 显示弹窗
+    const modal = document.getElementById('worldbookGroupDetailModal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
 }
 
 function closeGroupDetailModal() {
-    document.getElementById('worldbookGroupDetailModal').classList.remove('open');
+    const modal = document.getElementById('worldbookGroupDetailModal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
     renderGroupView(); // 关闭时刷新一下背后的贴纸视图
+}
+
+function renderNotebookPage(page) {
+    const list = document.getElementById('wbGroupDetailList');
+    list.innerHTML = ''; 
+    
+    // 强制重绘以触发 CSS 动画
+    void list.offsetWidth;
+
+    if (currentNotebookEntries.length === 0) {
+        list.innerHTML = '<div style="text-align: center; color: #999; padding-top: 50px; font-style: italic;">该分组下暂无条目</div>';
+        document.getElementById('notebook-page-info').innerText = `Page 1 / 1`;
+        document.getElementById('notebook-prev-btn').disabled = true;
+        document.getElementById('notebook-next-btn').disabled = true;
+        return;
+    }
+
+    const totalPages = Math.ceil(currentNotebookEntries.length / NOTEBOOK_ITEMS_PER_PAGE);
+    const start = (page - 1) * NOTEBOOK_ITEMS_PER_PAGE;
+    const end = start + NOTEBOOK_ITEMS_PER_PAGE;
+    const pageItems = currentNotebookEntries.slice(start, end);
+
+    pageItems.forEach(entry => {
+        const div = document.createElement('div');
+        div.className = 'toc-item';
+        div.onclick = () => {
+            closeGroupDetailModal(); // 点击后先关闭目录
+            setTimeout(() => openWorldbookEditor(entry.id), 300); // 等待动画结束后打开编辑器
+        };
+        div.innerHTML = `
+            <div class="toc-title">${entry.title}</div>
+            <div class="toc-dots"></div>
+            <div class="toc-action">Edit</div>
+        `;
+        list.appendChild(div);
+    });
+
+    // 更新翻页器状态
+    document.getElementById('notebook-page-info').innerText = `Page ${page} / ${totalPages}`;
+    document.getElementById('notebook-prev-btn').disabled = page === 1;
+    document.getElementById('notebook-next-btn').disabled = page === totalPages;
+}
+
+function changeNotebookPage(dir) {
+    const totalPages = Math.ceil(currentNotebookEntries.length / NOTEBOOK_ITEMS_PER_PAGE);
+    currentNotebookPage += dir;
+    if (currentNotebookPage < 1) currentNotebookPage = 1;
+    if (currentNotebookPage > totalPages) currentNotebookPage = totalPages;
+    renderNotebookPage(currentNotebookPage);
+}
+
+
+// (保险起见，如果你连删除分组的函数也误删了，把下面这个也带上)
+function deleteGroup(groupName) {
+    if (confirm(`确定要删除分组 "${groupName}" 吗？\n该分组下的所有条目也将被删除！`)) {
+        worldbookGroups = worldbookGroups.filter(g => g !== groupName);
+        worldbookEntries = worldbookEntries.filter(e => e.type !== groupName);
+        saveWorldbookData();
+        renderGroupView();
+    } else {
+        const items = document.querySelectorAll('.wb-swipe-box');
+        items.forEach(el => el.style.transform = 'translateX(0)');
+    }
 }
 
 function editWorldbookGroup(oldName) {
@@ -1838,7 +1916,7 @@ function saveWorldbookEntry() {
         
         // 如果分组详情弹窗开着，同步刷新它
         const detailModal = document.getElementById('worldbookGroupDetailModal');
-        if (detailModal && detailModal.classList.contains('open')) {
+        if (detailModal && detailModal.classList.contains('active')) {
             const currentGroup = document.getElementById('wbGroupDetailTitle').innerText;
             openGroupDetailModal(currentGroup);
         }
@@ -1857,7 +1935,7 @@ function deleteWorldbookEntry(id) {
         
         // 如果分组详情弹窗开着，同步刷新它
         const detailModal = document.getElementById('worldbookGroupDetailModal');
-        if (detailModal && detailModal.classList.contains('open')) {
+        if (detailModal && detailModal.classList.contains('active')) {
             const currentGroup = document.getElementById('wbGroupDetailTitle').innerText;
             openGroupDetailModal(currentGroup);
         }
@@ -6966,32 +7044,36 @@ function renderSettingsUI(data) {
         </div>
     `;
 
-    let playlistHtml = `<div id="wc-settings-tab-playlist" style="display: none; padding: 0 16px 16px 16px;">`;
+    // 全新的歌单 UI 逻辑 (去除了默认图片和Emoji星光)
+    let playlistHtml = `<div id="wc-settings-tab-playlist" style="display: none; position: relative; height: calc(100vh - 220px); overflow: hidden; background: #F9F9F9; margin: -16px; border-radius: 16px;">`;
+    
     if (data.playlist && data.playlist.length > 0) {
+        playlistHtml += `<div class="char-playlist-list" id="char-playlist-list">`;
         data.playlist.forEach((song, idx) => {
             playlistHtml += `
-                <div style="background: #fff; border-radius: 12px; padding: 12px 16px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: transform 0.1s;" onclick="wcPlayCharPlaylistSong(${idx})" onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.98)'" ontouchend="this.style.transform='scale(1)'">
-                    <div style="display: flex; align-items: center; gap: 12px; overflow: hidden;">
-                        <div style="width: 40px; height: 40px; border-radius: 8px; background: #F5F5F5; display: flex; align-items: center; justify-content: center; color: #888; flex-shrink: 0;">
-                            <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: currentColor;"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
-                        </div>
-                        <div style="overflow: hidden;">
-                            <div style="font-size: 15px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${song.title}</div>
-                            <div style="font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${song.artist}</div>
-                        </div>
-                    </div>
-                    <div style="color: #007AFF; flex-shrink: 0;">
-                        <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: currentColor;"><path d="M8 5v14l11-7z"/></svg>
-                    </div>
+                <div class="char-playlist-item" id="char-playlist-item-${idx}" onclick="wcSelectAndPlayCharSong(${idx})">
+                    <div class="char-playlist-item-title">${song.title}</div>
+                    <div class="char-playlist-item-artist">${song.artist}</div>
                 </div>
             `;
         });
+        playlistHtml += `</div>`;
+        
+        // 右侧唱片区域 (干净无星光，默认无图片)
+        playlistHtml += `
+            <div class="char-playlist-record-area" id="char-playlist-record-area" ontouchstart="wcRecordTouchStart(event)" ontouchend="wcRecordTouchEnd(event)">
+                <div class="char-playlist-record" id="char-playlist-record">
+                    <img src="" class="char-playlist-record-cover" id="char-playlist-record-cover">
+                    <div class="char-playlist-record-hole"></div>
+                </div>
+            </div>
+            <div style="position: absolute; bottom: 20px; right: 150px; font-size: 10px; color: #999; pointer-events: none; animation: pulse 2s infinite;">↕ 滑动切歌</div>
+        `;
     } else {
-        playlistHtml += `<div style="text-align: center; color: #888; padding: 20px;">暂无歌单数据，请点击右上角刷新生成</div>`;
+        playlistHtml += `<div style="text-align: center; color: #888; padding: 20px; width: 100%;">暂无歌单数据，请点击右上角刷新生成</div>`;
     }
     playlistHtml += `</div>`;
 
-    // 注意：这里去掉了外层的 padding: 20px，改为在内部控制，防止 Tab 栏被挤压
     content.style.padding = '0';
     content.innerHTML = `
         <div style="padding: 16px;">
@@ -7004,16 +7086,71 @@ function renderSettingsUI(data) {
         ${playlistHtml}
     `;
 }
-
 window.wcToggleSettingsTab = function(tab) {
-    document.getElementById('wc-seg-settings-status').classList.toggle('active', tab === 'status');
-    document.getElementById('wc-seg-settings-playlist').classList.toggle('active', tab === 'playlist');
-    document.getElementById('wc-settings-tab-status').style.display = tab === 'status' ? 'block' : 'none';
-    document.getElementById('wc-settings-tab-playlist').style.display = tab === 'playlist' ? 'block' : 'none';
-}
+    const statusBtn = document.getElementById('wc-seg-settings-status');
+    const playlistBtn = document.getElementById('wc-seg-settings-playlist');
+    const statusTab = document.getElementById('wc-settings-tab-status');
+    const playlistTab = document.getElementById('wc-settings-tab-playlist');
+    
+    if (statusBtn) statusBtn.classList.toggle('active', tab === 'status');
+    if (playlistBtn) playlistBtn.classList.toggle('active', tab === 'playlist');
+    if (statusTab) statusTab.style.display = tab === 'status' ? 'block' : 'none';
+    if (playlistTab) playlistTab.style.display = tab === 'playlist' ? 'block' : 'none';
+};
 
-// --- 新增：点击歌单直接播放并开启一起听歌 ---
-// --- 新增：点击歌单直接播放 ---
+// 完整的播放函数
+// ==========================================
+// Char 歌单滑动与点击逻辑
+// ==========================================
+let wcRecordStartY = 0;
+let wcCurrentPlaylistIdx = -1;
+
+window.wcSelectAndPlayCharSong = function(idx) {
+    wcCurrentPlaylistIdx = idx;
+    
+    // 更新列表高亮状态
+    document.querySelectorAll('.char-playlist-item').forEach(el => el.classList.remove('active'));
+    const activeItem = document.getElementById(`char-playlist-item-${idx}`);
+    if (activeItem) {
+        activeItem.classList.add('active');
+        activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    
+    // 唱片动画复位并转动
+    const record = document.getElementById('char-playlist-record');
+    if (record) {
+        record.classList.remove('playing');
+        setTimeout(() => record.classList.add('playing'), 50);
+    }
+    
+    // 调用播放逻辑
+    wcPlayCharPlaylistSong(idx);
+};
+
+window.wcRecordTouchStart = function(e) {
+    wcRecordStartY = e.touches[0].clientY;
+};
+
+window.wcRecordTouchEnd = function(e) {
+    const endY = e.changedTouches[0].clientY;
+    const diff = endY - wcRecordStartY;
+    
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.settings || !char.phoneData.settings.playlist) return;
+    const playlist = char.phoneData.settings.playlist;
+    
+    if (diff > 30) {
+        // 向下滑动，上一首
+        let nextIdx = (wcCurrentPlaylistIdx - 1 + playlist.length) % playlist.length;
+        wcSelectAndPlayCharSong(nextIdx);
+    } else if (diff < -30) {
+        // 向上滑动，下一首
+        let nextIdx = (wcCurrentPlaylistIdx + 1) % playlist.length;
+        wcSelectAndPlayCharSong(nextIdx);
+    }
+};
+
+// 完整的播放函数 (去除了跳转，实现沉浸式播放)
 async function wcPlayCharPlaylistSong(idx) {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char || !char.phoneData || !char.phoneData.settings || !char.phoneData.settings.playlist) return;
@@ -7037,28 +7174,25 @@ async function wcPlayCharPlaylistSong(idx) {
 
             wcShowSuccess("即将播放");
             
+            // 更新唱片封面
+            const coverEl = document.getElementById('char-playlist-record-cover');
+            if (coverEl) {
+                coverEl.src = cover;
+                coverEl.style.opacity = '1'; // 确保有图片时显示
+            }
+            
             // 延迟一下等待提示消失
             setTimeout(() => {
-                // 1. 关闭手机模拟器
-                wcClosePhoneSim();
-                
-                // 2. 打开音乐APP
-                openMusicApp();
-                
-                // 3. 将这首歌加入当前播放列表并播放
+                // 【核心修改】：去除了关闭手机模拟器和打开全屏播放器的代码
+                // 直接在后台更新播放列表并播放，保持在当前页面
                 musicState.currentPlaylist = [{ id, title, artist, cover }];
                 musicState.currentIndex = 0;
                 musicPlaySong(id, title, artist, cover);
                 
-                // 4. 打开全屏播放器
-                musicOpenFullPlayer();
-
-                // 5. 【修改逻辑】：判断当前是否正在和该角色一起听歌
+                // 判断当前是否正在和该角色一起听歌
                 if (musicState.listenTogether.active && musicState.listenTogether.charId === char.id) {
-                    // 如果正在一起听歌，告诉 AI 你点播了 Ta 的歌
                     wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机歌单，并点播了你最近常听的《${title}》，现在你们正在一起听这首歌。]`, { hidden: true });
                 }
-                // 如果没有一起听歌，就什么都不做，单纯自己听
                 
             }, 1000);
 
@@ -7070,14 +7204,6 @@ async function wcPlayCharPlaylistSong(idx) {
         wcShowError("搜索失败，网络异常");
     }
 }
-
-window.wcToggleSettingsTab = function(tab) {
-    document.getElementById('wc-seg-settings-status').classList.toggle('active', tab === 'status');
-    document.getElementById('wc-seg-settings-playlist').classList.toggle('active', tab === 'playlist');
-    document.getElementById('wc-settings-tab-status').style.display = tab === 'status' ? 'block' : 'none';
-    document.getElementById('wc-settings-tab-playlist').style.display = tab === 'playlist' ? 'block' : 'none';
-}
-
 
 // --- Phone Message Logic ---
 
