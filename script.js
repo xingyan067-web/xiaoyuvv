@@ -1347,11 +1347,16 @@ function initGrid() {
         cell.dataset.index = i;
         grid.appendChild(cell);
     }
+    // 👇 核心修改：注入顶级质感【负空间实心】SVG 图标
     const appsData = [
-        { id: 'app-0', iconId: 'icon-0', nameId: 'name-0', name: 'App 1' },
-        { id: 'app-1', iconId: 'icon-1', nameId: 'name-1', name: 'App 2' },
-        { id: 'app-2', iconId: 'icon-2', nameId: 'name-2', name: 'App 3' },
-        { id: 'app-3', iconId: 'icon-3', nameId: 'name-3', name: 'App 4' }
+        // Chat: 实心气泡 + 内部镂空省略号
+        { id: 'app-0', iconId: 'icon-0', nameId: 'name-0', name: 'Chat', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 5.92 2 10.75c0 2.7 1.56 5.08 3.96 6.54L4.5 22l4.66-2.33A11.1 11.1 0 0 0 12 19.5c5.52 0 10-3.92 10-8.75S17.52 2 12 2zm-3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>' },
+        // Space: 实心爱心 + 内部镂空闪耀星光
+        { id: 'app-1', iconId: 'icon-1', nameId: 'name-1', name: 'Space', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/><path fill="#FFF" d="M16 5l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/></svg>' },
+        // Music: 实心黑胶唱片 + 内部精细镂空
+        { id: 'app-2', iconId: 'icon-2', nameId: 'name-2', name: 'Music', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5z"/><circle cx="12" cy="12" r="1.5" fill="#FFF"/></svg>' },
+        // Forum: 实心星球/社区 + 内部镂空纹理
+        { id: 'app-3', iconId: 'icon-3', nameId: 'name-3', name: 'Forum', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>' }
     ];
     const cells = Array.from(grid.children).slice(1); 
     appsData.forEach((data, index) => {
@@ -1359,7 +1364,8 @@ function initGrid() {
             const appDiv = document.createElement('div');
             appDiv.className = 'app-item';
             appDiv.id = data.id;
-            appDiv.innerHTML = `<div class="app-icon" id="${data.iconId}"></div><div class="app-name" id="${data.nameId}">${data.name}</div>`;
+            // 👇 核心修改：把 data.svg 塞进 app-icon 里面
+            appDiv.innerHTML = `<div class="app-icon" id="${data.iconId}">${data.svg}</div><div class="app-name" id="${data.nameId}">${data.name}</div>`;
             addDragListeners(appDiv);
             
             // App 点击事件 (受编辑模式控制)
@@ -6443,7 +6449,7 @@ function wcRenderPhoneMe() {
                 <svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
             </div>
             <div class="wc-list-item" style="background: #fff;">
-                <svg class="wc-icon" style="margin-right: 10px; color: #8E8E93;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2 2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <svg class="wc-icon" style="margin-right: 10px; color: #8E8E93;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                 <div class="wc-item-content">
                     <div class="wc-item-title">设置</div>
                 </div>

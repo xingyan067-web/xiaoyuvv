@@ -311,6 +311,12 @@ body, input, textarea, select, button {
     margin-bottom: 5px; transition: transform 0.1s; position: relative;
     display: flex; align-items: center; justify-content: center;
 }
+/* 👇 核心修改：当检测到上传了图片(有url)时，彻底去除底色、边框和阴影 */
+.app-icon[style*="url"] {
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+}
 .app-icon:active { filter: brightness(0.8); transform: scale(0.95); }
 .app-name {
     color: white; font-size: var(--app-font-size);
@@ -318,7 +324,13 @@ body, input, textarea, select, button {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;
     transition: font-size 0.1s; pointer-events: none;
 }
-.default-icon-svg { width: 32px; height: 32px; fill: #8e8e93; }
+/* 👇 核心修改：高级负空间实心风 (INS/iOS 顶级质感) */
+.default-icon-svg { 
+    width: 32px; height: 32px; 
+    fill: #2C2C2E; /* iOS 经典深灰黑，比纯黑更柔和高级 */
+    stroke: none; 
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.05)); /* 增加极微弱的阴影，提升立体感 */
+}
 .app-icon[style*="url"] .default-icon-svg { display: none; }
 
 /* --- Dock 栏 --- */
