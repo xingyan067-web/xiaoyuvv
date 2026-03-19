@@ -440,15 +440,25 @@ function initNewPhoneFeatures() {
 // --- 数据加载逻辑 (异步) ---
 async function loadAllData() {
     try {
-        // 1. 加载小组件数据
+        // 1. 加载新版小组件数据
         const widgetData = await idb.get('ios_theme_widget') || {};
-        if (widgetData.bg) document.getElementById('mainWidget').style.backgroundImage = widgetData.bg;
-        if (widgetData.avatar) {
-            const av = document.getElementById('widgetAvatar');
-            av.style.backgroundImage = widgetData.avatar;
-            av.style.backgroundSize = 'cover';
-        }
-        if (widgetData.text) document.getElementById('widgetText').innerText = widgetData.text;
+        const elements = ['label1', 'label2', 'centerText', 'bubble1', 'bubble2', 'bubble3'];
+        elements.forEach(id => {
+            if (widgetData[id]) {
+                const el = document.getElementById(id);
+                if (el) el.innerText = widgetData[id];
+            }
+        });
+        const images = ['avatar1', 'avatar2', 'picture1'];
+        images.forEach(id => {
+            if (widgetData[id]) {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.style.backgroundImage = `url('${widgetData[id]}')`;
+                    el.innerHTML = ''; // 清除占位文字
+                }
+            }
+        });
 
         // 2. 加载 Apple ID 数据
         const appleData = await idb.get('ios_theme_apple') || {};
@@ -571,13 +581,49 @@ async function saveGridLayout() {
 }
 
 // --- 数据保存逻辑 ---
-async function saveWidgetData() {
+// --- 新版小组件保存逻辑 ---
+async function saveNewWidgetData() {
     const data = {
-        bg: document.getElementById('mainWidget').style.backgroundImage,
-        avatar: document.getElementById('widgetAvatar').style.backgroundImage,
-        text: document.getElementById('widgetText').innerText
+        label1: document.getElementById('label1').innerText,
+        label2: document.getElementById('label2').innerText,
+        centerText: document.getElementById('centerText') ? document.getElementById('centerText').innerText : '',
+        bubble1: document.getElementById('bubble1').innerText,
+        bubble2: document.getElementById('bubble2').innerText,
+        bubble3: document.getElementById('bubble3').innerText,
+        
+        avatar1: document.getElementById('avatar1').style.backgroundImage.slice(5, -2).replace(/"/g, ""),
+        avatar2: document.getElementById('avatar2').style.backgroundImage.slice(5, -2).replace(/"/g, ""),
+        picture1: document.getElementById('picture1').style.backgroundImage.slice(5, -2).replace(/"/g, "")
     };
     await idb.set('ios_theme_widget', data);
+}
+
+// --- 新版小组件文字编辑逻辑 (弹窗输入，绝对有效) ---
+function editNewWidgetText(elementId, title) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    openTextEditModal(title, "请输入新的文字内容", el.innerText, (val) => {
+        if (val !== null && val.trim() !== "") {
+            el.innerText = val;
+            saveNewWidgetData();
+        }
+    });
+}
+
+// --- 新版小组件图片上传逻辑 ---
+function handleNewWidgetUpload(input, targetId) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const target = document.getElementById(targetId);
+            target.style.backgroundImage = `url('${e.target.result}')`;
+            target.innerHTML = ''; // 清除占位文字
+            saveNewWidgetData(); // 上传完自动保存
+        };
+        reader.readAsDataURL(file);
+    }
+    input.value = ''; // 清空 input
 }
 
 async function saveAppleData() {
@@ -1139,8 +1185,10 @@ function startClock() {
         const month = now.getMonth() + 1;
         const day = now.getDate();
                 
-        document.getElementById('widgetTime').innerText = `${hours}:${minutes}`;
-        document.getElementById('widgetDate').innerText = `${month}月${day}日`;
+        const timeEl = document.getElementById('widgetTime');
+        const dateEl = document.getElementById('widgetDate');
+        if (timeEl) timeEl.innerText = `${hours}:${minutes}`;
+        if (dateEl) dateEl.innerText = `${month}月${day}日`;
     }
     update();
     setInterval(update, 1000);
@@ -1162,16 +1210,16 @@ function initBattery() {
 
 function updateBatteryUI(battery) {
     const level = Math.round(battery.level * 100);
-    document.getElementById('batteryLevel').innerText = `${level}%`;
+    const batteryEl = document.getElementById('batteryLevel');
+    if (batteryEl) batteryEl.innerText = `${level}%`;
 }
 
 // 初始化天气 (使用 Open-Meteo 免费 API)
 function initWeather() {
     // 默认值
     const updateWeatherUI = (temp, code) => {
-        document.getElementById('weatherTemp').innerText = `${Math.round(temp)}°C`;
-        // SVG 图标逻辑在 HTML 中已静态定义，这里只更新温度
-        // 如果需要动态切换 SVG，可以在这里操作 DOM，目前保持默认太阳图标
+        const weatherEl = document.getElementById('weatherTemp');
+        if (weatherEl) weatherEl.innerText = `${Math.round(temp)}°C`;
     };
 
     // 尝试获取位置
@@ -1293,7 +1341,7 @@ function initGrid() {
     const grid = document.getElementById('homeGrid');
     if (!grid) return; 
 
-    for (let i = 8; i < 28; i++) {
+    for (let i = 12; i < 28; i++) {
         const cell = document.createElement('div');
         cell.className = 'grid-cell';
         cell.dataset.index = i;
@@ -11646,7 +11694,10 @@ audioPlayer.addEventListener('timeupdate', () => {
     if (capTimeCurrentEl) capTimeCurrentEl.innerText = musicFormatTime(current);
     if (capTimeTotalEl) capTimeTotalEl.innerText = musicFormatTime(total);
     // 👆新增结束
-    
+    // 同步更新桌面小组件进度条
+    const widgetProgressFill = document.getElementById('widget-progress-fill');
+    if (widgetProgressFill) widgetProgressFill.style.width = `${percent}%`;
+
     // 2. 同步歌词
     if (musicState.lyrics.length > 0 && lyricsContainer) {
         let activeIndex = -1;
@@ -11679,6 +11730,28 @@ audioPlayer.addEventListener('timeupdate', () => {
                 if (capsuleLyricEl && musicState.lyrics[activeIndex]) {
                     capsuleLyricEl.innerText = musicState.lyrics[activeIndex].text || '...';
                 }               
+                // 同步歌词到桌面小组件 (带智能滚动判断)
+                const widgetLyricEl = document.getElementById('widget-song-lyric');
+                if (widgetLyricEl && musicState.lyrics[activeIndex]) {
+                    widgetLyricEl.innerText = musicState.lyrics[activeIndex].text || '...';
+                    
+                    // 动态判断是否需要滚动
+                    const wrapper = widgetLyricEl.parentElement;
+                    // 强制浏览器重绘以获取真实宽度
+                    void widgetLyricEl.offsetWidth; 
+                    
+                    if (widgetLyricEl.scrollWidth > wrapper.clientWidth) {
+                        // 如果歌词宽度大于容器宽度，计算需要滚动的距离 (负值)
+                        const dist = wrapper.clientWidth - widgetLyricEl.scrollWidth;
+                        widgetLyricEl.style.setProperty('--scroll-dist', `${dist}px`);
+                        widgetLyricEl.classList.add('scrolling');
+                    } else {
+                        // 如果不够长，移除滚动类，恢复居中静止状态
+                        widgetLyricEl.classList.remove('scrolling');
+                        widgetLyricEl.style.transform = 'translateX(0)';
+                    }
+                }
+
             }
         }
     }
@@ -12185,6 +12258,9 @@ if (miniTitle) miniTitle.innerText = musicState.currentSong.title;
 if (miniArtist) miniArtist.innerText = musicState.currentSong.artist;
 if (fpTitle) fpTitle.innerText = musicState.currentSong.title;
 if (fpArtist) fpArtist.innerText = musicState.currentSong.artist; 
+const widgetTitle = document.getElementById('widget-song-name');
+if (widgetTitle) widgetTitle.innerText = musicState.currentSong.title;
+
     const coverEl = document.getElementById('music-player-cover');
     const fpRecordEl = document.getElementById('music-fp-record');
     const playBtn = document.getElementById('music-btn-play');
@@ -12204,7 +12280,11 @@ if (fpArtist) fpArtist.innerText = musicState.currentSong.artist;
         playBtn.innerHTML = playIcon;
         fpPlayBtn.innerHTML = playIcon;
     }
-    
+    const widgetPlayBtn = document.getElementById('widget-btn-play');
+    if (widgetPlayBtn) {
+        widgetPlayBtn.innerHTML = musicState.isPlaying ? pauseIcon : playIcon;
+    }
+
     // 【追加这一行】：同步更新音乐胶囊的 UI
     if (typeof musicUpdateCapsuleUI === 'function') musicUpdateCapsuleUI();
 }

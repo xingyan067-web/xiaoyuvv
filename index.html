@@ -66,8 +66,11 @@
         
         <!-- 隐藏的文件输入框 -->
         <input type="file" id="widgetBgInput" class="hidden-file-input" accept="image/*" onchange="handleWidgetBgUpload(this)">
-        <input type="file" id="widgetAvatarInput" class="hidden-file-input" accept="image/*" onchange="handleWidgetAvatarUpload(this)">
         <input type="file" id="appleAvatarInput" class="hidden-file-input" accept="image/*" onchange="handleAppleAvatarUpload(this)">
+        <!-- 新增：日系小组件的上传框 -->
+        <input type="file" id="input-avatar1" class="hidden-file-input" accept="image/*" onchange="handleNewWidgetUpload(this, 'avatar1')">
+        <input type="file" id="input-avatar2" class="hidden-file-input" accept="image/*" onchange="handleNewWidgetUpload(this, 'avatar2')">
+        <input type="file" id="input-picture1" class="hidden-file-input" accept="image/*" onchange="handleNewWidgetUpload(this, 'picture1')">
         
         <!-- 备份导入输入框 -->
         <input type="file" id="backupImportInput" class="hidden-file-input" accept=".json" onchange="importAllData(this)">
@@ -87,21 +90,47 @@
 
             <!-- 桌面区域 -->
             <div class="home-grid" id="homeGrid">
-                <!-- 小组件 -->
-                <div class="widget-item" id="mainWidget" onclick="triggerWidgetBgUpload()">
-                    <div class="widget-corner widget-top-left" id="widgetTime">12:00</div>
-                    <div class="widget-corner widget-top-right" id="widgetDate">10月24日</div>
-                    <div class="widget-center">
-                        <div class="widget-avatar" id="widgetAvatar" onclick="event.stopPropagation(); triggerAvatarUpload()"></div>
-                        <div class="widget-text" id="widgetText" onclick="event.stopPropagation(); editWidgetText()">User ID</div>
+                <!-- 新版日系 INS 风小组件 (4x3) -->
+                <div class="ins-widget-container" id="mainWidget">
+                    <!-- 上半部分 -->
+                    <div class="ins-widget-top">
+                        <div class="ins-avatar-group">
+                            <div class="ins-avatar" id="avatar1" onclick="document.getElementById('input-avatar1').click()">Me</div>
+                            <div class="ins-label" id="label1" onclick="event.stopPropagation(); editNewWidgetText('label1', '编辑标签')">User</div>
+                        </div>
+                        
+                        <div class="ins-center-group" onclick="event.stopPropagation(); openMusicApp()">
+                            <div class="ins-widget-song" id="widget-song-name">Time machine</div>
+                            <!-- 增加了一个 wrapper 容器来实现高级滚动效果 -->
+                            <div class="ins-widget-lyric-wrapper">
+                                <div class="ins-widget-lyric" id="widget-song-lyric">I wish I could go back in time</div>
+                            </div>
+                            <div class="ins-widget-progress">
+                                <div class="ins-widget-progress-fill" id="widget-progress-fill"></div>
+                            </div>
+                            <div class="ins-widget-controls">
+                                <svg onclick="event.stopPropagation(); musicPlayPrev()" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                                <svg onclick="event.stopPropagation(); musicTogglePlay()" id="widget-btn-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                <svg onclick="event.stopPropagation(); musicPlayNext()" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                            </div>
+                        </div>
+
+                        <div class="ins-avatar-group">
+                            <div class="ins-avatar" id="avatar2" onclick="document.getElementById('input-avatar2').click()">Ta</div>
+                            <div class="ins-label" id="label2" onclick="event.stopPropagation(); editNewWidgetText('label2', '编辑标签')">Lover</div>
+                        </div>
                     </div>
-                    <div class="widget-corner widget-bottom-left" id="widgetBattery">
-                        <svg class="widget-icon-svg" viewBox="0 0 24 24"><path d="M16 20H8V6H16M16.67 4H15V2H9V4H7.33C6.6 4 6 4.6 6 5.33V20.67C6 21.4 6.6 22 7.33 22H16.67C17.4 22 18 21.4 18 20.67V5.33C18 4.6 17.4 4 16.67 4Z" fill="currentColor"/></svg>
-                        <span id="batteryLevel">--%</span>
-                    </div>
-                    <div class="widget-corner widget-bottom-right" id="widgetWeather">
-                        <span id="weatherTemp">--°C</span>
-                        <svg class="widget-icon-svg" id="weatherIconSvg" viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5 0 .65.13 1.26.36 1.83C5.93 14.34 5 15.58 5 17c0 2.21 1.79 4 4 4h9c2.21 0 4-1.79 4-4 0-1.88-1.28-3.46-3.03-3.88.21-.67.32-1.39.32-2.12 0-3.87-3.13-7-7-7z" fill="currentColor"/></svg>
+
+                    <!-- 下半部分 -->
+                    <div class="ins-widget-bottom">
+                        <div class="ins-bubbles">
+                            <div class="ins-bubble" id="bubble1" onclick="event.stopPropagation(); editNewWidgetText('bubble1', '编辑气泡')">听你听过的歌</div>
+                            <div class="ins-bubble" id="bubble2" onclick="event.stopPropagation(); editNewWidgetText('bubble2', '编辑气泡')">心跳会同频吗</div>
+                            <div class="ins-bubble" id="bubble3" onclick="event.stopPropagation(); editNewWidgetText('bubble3', '编辑气泡')">I love you</div>
+                        </div>
+                        <div class="ins-picture" id="picture1" onclick="document.getElementById('input-picture1').click()">
+                            <span class="placeholder" id="pic-placeholder">220 x 150</span>
+                        </div>
                     </div>
                 </div>
                 <!-- JS 生成剩余格子 -->

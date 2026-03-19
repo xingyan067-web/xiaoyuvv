@@ -99,68 +99,171 @@ body, input, textarea, select, button {
     position: relative; 
 }
 
-/* --- 小组件样式 --- */
-.widget-item {
-    grid-column: 1 / span 4; grid-row: 1 / span 2;
-    width: 100%; height: 100%;
-    background: rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-    border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    position: relative;
-    color: white;
-    background-size: cover; background-position: center; cursor: pointer; overflow: hidden;
-}
-
-.widget-corner {
-    position: absolute;
-    z-index: 2;
-    font-size: 14px;
-    font-weight: 500;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-    padding: 15px;
-}
-
-.widget-top-left { top: 0; left: 0; font-size: 24px; font-weight: 300; }
-.widget-top-right { top: 0; right: 0; opacity: 0.9; }
-.widget-bottom-left { bottom: 0; left: 0; display: flex; align-items: center; gap: 4px; }
-.widget-bottom-right { bottom: 0; right: 0; display: flex; align-items: center; gap: 4px; }
-
-.widget-icon-svg {
-    width: 20px;
-    height: 20px;
-    fill: white;
-    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5));
-}
-
-.widget-center {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
+/* --- 新版日系 INS 风小组件样式 (4x3) --- */
+.ins-widget-container {
+    grid-column: 1 / span 4; 
+    grid-row: 1 / span 3; /* 关键：占3行，变成 4x3 大小 */
+    width: 100%; 
+    height: 100%;
+    background: transparent; /* 无背景 */
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    gap: 15px;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 1;
+}
+
+/* 上半部分 */
+.ins-widget-top {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    width: 100%; height: 120px;
+    /* 👇 修改这里：增加顶部 padding 让内容下移，增加左右 padding 让头像拉近 */
+    padding: 15px 30px 0 30px; 
+    box-sizing: border-box;
+}
+.ins-avatar-group {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.ins-avatar {
+    width: 65px; height: 65px; background-color: #f5f5f5;
+    background-size: cover; background-position: center;
+    border-radius: 48% 52% 45% 55% / 50% 45% 55% 50%; /* 手绘感边框 */
+    border: 1px solid #dcdcdc;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.06), inset 0 0 4px rgba(255, 255, 255, 0.8);
+    cursor: pointer; transition: transform 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    color: #ccc; font-size: 10px;
+}
+.ins-avatar:active { transform: scale(0.95); }
+.ins-label {
+    background-color: #f0f0f0; color: #666; font-size: 11px;
+    padding: 4px 10px; border-radius: 0; border: 1px solid #e8e8e8;
+    outline: none; min-width: 50px; text-align: center; letter-spacing: 1px;
+}
+.ins-center-group {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    flex: 1; padding: 0 10px; 
+    margin-top: 18px; /* 整体大幅度下移 */
+    cursor: pointer;
+}
+.ins-widget-song {
+    font-size: 14px; font-weight: 600; color: #333; /* 歌名放大 */
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
+    margin-bottom: 6px; font-family: 'Georgia', serif;
+}
+
+/* 歌词滚动外层容器 (带边缘渐变消失效果) */
+.ins-widget-lyric-wrapper {
+    width: 130px; 
+    overflow: hidden;
+    margin-bottom: 12px; 
+    white-space: nowrap;
+    text-align: center; /* 默认居中对齐 */
+    /* 两侧渐变透明遮罩，高级感拉满 */
+    -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+    mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+}
+.ins-widget-lyric {
+    display: inline-block;
+    font-size: 11px; color: #888; font-style: italic; 
+    transition: transform 0.3s ease;
+}
+/* 只有当 JS 判断超长并加上 scrolling 类时，才执行来回滚动动画 */
+.ins-widget-lyric.scrolling {
+    text-align: left; /* 滚动时靠左对齐 */
+    /* alternate 表示来回滚动(乒乓效果)，阅读体验更好 */
+    animation: widgetScrollText 5s linear infinite alternate; 
+}
+@keyframes widgetScrollText {
+    0%, 15% { transform: translateX(0); } /* 停顿一下再滚 */
+    85%, 100% { transform: translateX(var(--scroll-dist, -20px)); } /* 滚到末尾停顿一下 */
+}
+
+.ins-widget-progress {
+    width: 120px; height: 2px; background: #e5e5ea; border-radius: 1px; 
+    margin-bottom: 12px; position: relative; /* 进度条变宽，间距拉大 */
+}
+.ins-widget-progress-fill {
+    width: 0%; height: 100%; background: #333; border-radius: 1px; position: absolute; top: 0; left: 0; transition: width 0.1s linear;
+}
+.ins-widget-controls {
+    display: flex; align-items: center; 
+    gap: 18px; /* 按钮间距拉大 */
+    color: #333;
+}
+.ins-widget-controls svg {
+    width: 18px; height: 18px; fill: currentColor; cursor: pointer; transition: transform 0.1s; /* 左右切歌键放大 */
+}
+.ins-widget-controls svg:active { transform: scale(0.8); }
+.ins-widget-controls svg:nth-child(2) {
+    width: 24px; height: 24px; /* 播放暂停键放大 */
+}
+
+/* 下半部分 */
+.ins-widget-bottom {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    width: 100%; height: 150px;
+}
+.ins-bubbles {
+    display: flex; flex-direction: column; gap: 6px; flex: 1;
+    padding-right: 15px; justify-content: flex-end;
+}
+.ins-bubble {
+    background-color: #fdfdfd; border: 1px solid #eaeaea; color: #555;
+    font-size: 12px; padding: 8px 12px; outline: none; width: fit-content;
+    max-width: 100%; word-break: break-all; box-shadow: 1px 2px 5px rgba(0,0,0,0.02);
+}
+.ins-bubble:nth-child(1) { border-radius: 12px 12px 12px 2px; }
+.ins-bubble:nth-child(2) { border-radius: 2px 12px 12px 2px; }
+.ins-bubble:nth-child(3) { border-radius: 2px 12px 12px 12px; }
+
+.ins-picture {
+    width: 220px; height: 150px; 
+    background-color: #f5f5f5;
+    background-size: cover; background-position: center;
+    border-radius: 0; 
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; 
+    position: relative;
+    transition: filter 0.2s;
+    overflow: visible; /* 允许外部边框显示 */
+}
+.ins-picture:active { filter: brightness(0.9); }
+.ins-picture .placeholder { color: #aaa; font-size: 12px; letter-spacing: 2px; font-family: monospace; z-index: 10; }
+
+/* 蕾丝虚线边框 (距离图片 5px，且不完整) */
+.ins-picture::before {
+    content: '';
+    position: absolute;
+    top: -5px; left: -5px; right: -5px; bottom: -5px;
+    border: 1px dashed #c6c6c8; /* 灰白色蕾丝感 */
+    pointer-events: none;
     z-index: 2;
-    width:100%;
+    /* 制造不完整的边框效果：中间断开 */
+    -webkit-mask-image: 
+        linear-gradient(to right, black 15%, transparent 15%, transparent 25%, black 25%, black 75%, transparent 75%, transparent 85%, black 85%),
+        linear-gradient(to bottom, black 15%, transparent 15%, transparent 25%, black 25%, black 75%, transparent 75%, transparent 85%, black 85%);
+    -webkit-mask-composite: source-in;
+    mask-image: 
+        linear-gradient(to right, black 15%, transparent 15%, transparent 25%, black 25%, black 75%, transparent 75%, transparent 85%, black 85%),
+        linear-gradient(to bottom, black 15%, transparent 15%, transparent 25%, black 25%, black 75%, transparent 75%, transparent 85%, black 85%);
+    mask-composite: intersect;
 }
 
-.widget-avatar {
-    width: 90px; height: 90px;
-    border-radius: 50%;
-    background-color: rgba(255,255,255,0.3);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E");
-    background-size: 60%; background-repeat: no-repeat; background-position: center;
-    border: 2px solid rgba(255,255,255,0.6); cursor: pointer;
-    margin-bottom: 8px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-}
-
-.widget-text {
-    font-size: 16px; font-weight: 600; text-align: center;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-    background: transparent; 
-    padding: 4px 12px; border-radius: 12px;
-    cursor: pointer; max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+/* 几何实线边框 (距离图片 8px，错位感，且不完整) */
+.ins-picture::after {
+    content: '';
+    position: absolute;
+    top: -8px; left: -8px; right: -8px; bottom: -8px;
+    border: 1px solid #e5e5ea; /* 灰白色几何感 */
+    pointer-events: none;
+    z-index: 2;
+    /* 制造不完整的边框效果：对角线断开 */
+    -webkit-mask-image: linear-gradient(45deg, black 30%, transparent 30%, transparent 70%, black 70%);
+    mask-image: linear-gradient(45deg, black 30%, transparent 30%, transparent 70%, black 70%);
 }
 
 /* --- APP 样式 --- */
