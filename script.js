@@ -970,7 +970,6 @@ async function exportAllData() {
 
         // 2. 导出 WeChat 数据
         const wechatData = {};
-        await wcDb.init(); // 👈 修改3：加上这一行！确保备份时数据库被强制唤醒
         if (wcDb.instance) {
             wechatData.user = await wcDb.get('kv_store', 'user');
             wechatData.wallet = await wcDb.get('kv_store', 'wallet');
@@ -2411,41 +2410,55 @@ function handleWallpaperUpload(input) {
 
 // --- WeChat DB ---
 const WC_DB_NAME = 'WeChatSimDB';
-const WC_DB_VERSION = 2; // 👈 修改1：版本号改为2，强制修复数据库表缺失
+const WC_DB_VERSION = 3;
 
 const wcDb = {
     instance: null,
-    open: function() { // 👈 新增：每次操作前确保数据库连接是打开的，防止休眠
+    open: function() {
         return new Promise((resolve, reject) => {
             if (this.instance) return resolve(this.instance);
             const request = indexedDB.open(WC_DB_NAME, WC_DB_VERSION);
+            
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                if (!db.objectStoreNames.contains('kv_store')) db.createObjectStore('kv_store');
-                if (!db.objectStoreNames.contains('characters')) db.createObjectStore('characters', { keyPath: 'id' });
-                if (!db.objectStoreNames.contains('chats')) db.createObjectStore('chats', { keyPath: 'charId' });
-                if (!db.objectStoreNames.contains('moments')) db.createObjectStore('moments', { keyPath: 'id' });
-                if (!db.objectStoreNames.contains('masks')) db.createObjectStore('masks', { keyPath: 'id' });
+                const stores = ['kv_store', 'characters', 'chats', 'moments', 'masks'];
+                stores.forEach(store => {
+                    if (!db.objectStoreNames.contains(store)) {
+                        db.createObjectStore(store, store === 'kv_store' ? undefined : { keyPath: store === 'chats' ? 'charId' : 'id' });
+                    }
+                });
             };
             request.onsuccess = (event) => {
                 this.instance = event.target.result;
                 resolve(this.instance);
             };
-            request.onerror = (event) => reject(event.target.error);
+            request.onerror = (event) => {
+                console.error("DB Open Error:", event.target.error);
+                reject(event.target.error);
+            };
         });
     },
     init: async function() {
-        await this.open();
+        try {
+            await this.open();
+        } catch (e) {
+            console.warn("尝试降级打开数据库...");
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(WC_DB_NAME);
+                req.onsuccess = (e) => { this.instance = e.target.result; resolve(); };
+                req.onerror = (e) => reject(e.target.error);
+            });
+        }
     },
     get: async function(storeName, key) {
         await this.open();
         return new Promise((resolve, reject) => {
             try {
                 if (!this.instance.objectStoreNames.contains(storeName)) return resolve(null);
-                const transaction = this.instance.transaction([storeName], 'readonly');
-                const request = transaction.objectStore(storeName).get(key);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
+                const tx = this.instance.transaction([storeName], 'readonly');
+                const req = tx.objectStore(storeName).get(key);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
             } catch (e) { resolve(null); }
         });
     },
@@ -2454,10 +2467,10 @@ const wcDb = {
         return new Promise((resolve, reject) => {
             try {
                 if (!this.instance.objectStoreNames.contains(storeName)) return resolve([]);
-                const transaction = this.instance.transaction([storeName], 'readonly');
-                const request = transaction.objectStore(storeName).getAll();
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
+                const tx = this.instance.transaction([storeName], 'readonly');
+                const req = tx.objectStore(storeName).getAll();
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
             } catch (e) { resolve([]); }
         });
     },
@@ -2466,10 +2479,10 @@ const wcDb = {
         return new Promise((resolve, reject) => {
             try {
                 if (!this.instance.objectStoreNames.contains(storeName)) return resolve();
-                const transaction = this.instance.transaction([storeName], 'readwrite');
-                const request = key ? transaction.objectStore(storeName).put(value, key) : transaction.objectStore(storeName).put(value);
-                transaction.oncomplete = () => resolve();
-                transaction.onerror = () => reject(transaction.error);
+                const tx = this.instance.transaction([storeName], 'readwrite');
+                const req = key ? tx.objectStore(storeName).put(value, key) : tx.objectStore(storeName).put(value);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
             } catch (e) { resolve(); }
         });
     },
@@ -2478,10 +2491,10 @@ const wcDb = {
         return new Promise((resolve, reject) => {
             try {
                 if (!this.instance.objectStoreNames.contains(storeName)) return resolve();
-                const transaction = this.instance.transaction([storeName], 'readwrite');
-                const request = transaction.objectStore(storeName).delete(key);
-                transaction.oncomplete = () => resolve();
-                transaction.onerror = () => reject(transaction.error);
+                const tx = this.instance.transaction([storeName], 'readwrite');
+                const req = tx.objectStore(storeName).delete(key);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
             } catch (e) { resolve(); }
         });
     }
@@ -2602,40 +2615,68 @@ async function wcLoadData() {
 
 async function wcSaveData() {
     try {
-        // 👈 修改2：使用 Promise.all 并发保存。
-        // 原本的 await 是一行一行执行的，iOS 杀后台太快，导致排在后面的 characters 根本来不及保存！
-        const promises = [];
+        await wcDb.open();
+        if (!wcDb.instance) return;
 
-        promises.push(wcDb.put('kv_store', wcState.myFavorites || [], 'my_favorites'));
-        promises.push(wcDb.put('kv_store', wcState.calendarEvents || [], 'calendar_events'));
-        promises.push(wcDb.put('kv_store', wcState.user || { name: 'User', avatar: '' }, 'user'));
-        promises.push(wcDb.put('kv_store', wcState.wallet || { balance: 0, transactions: [] }, 'wallet'));
-        promises.push(wcDb.put('kv_store', wcState.stickerCategories || [], 'sticker_categories'));
-        promises.push(wcDb.put('kv_store', wcState.cssPresets || [], 'css_presets'));
-        promises.push(wcDb.put('kv_store', wcState.unreadCounts || {}, 'unread_counts'));
-        promises.push(wcDb.put('kv_store', wcState.chatBgPresets || [], 'chat_bg_presets'));
-        promises.push(wcDb.put('kv_store', wcState.phonePresets || [], 'phone_presets'));
-        promises.push(wcDb.put('kv_store', wcState.shopData || {}, 'shop_data'));
+        return new Promise((resolve, reject) => {
+            try {
+                const stores = ['kv_store', 'characters', 'masks', 'moments', 'chats'];
+                const validStores = stores.filter(s => wcDb.instance.objectStoreNames.contains(s));
+                if (validStores.length === 0) return resolve();
 
-        for (const char of wcState.characters) {
-            if (char && char.id) promises.push(wcDb.put('characters', char));
-        }
-        for (const mask of wcState.masks) {
-            if (mask && mask.id) promises.push(wcDb.put('masks', mask));
-        }
-        for (const moment of wcState.moments) {
-            if (moment && moment.id) promises.push(wcDb.put('moments', moment));
-        }
-        for (const charId in wcState.chats) {
-            const parsedId = parseInt(charId);
-            if (!isNaN(parsedId)) {
-                promises.push(wcDb.put('chats', { charId: parsedId, messages: wcState.chats[charId] }));
+                const tx = wcDb.instance.transaction(validStores, 'readwrite');
+                
+                tx.oncomplete = () => resolve();
+                tx.onerror = (e) => reject(tx.error);
+
+                if (validStores.includes('kv_store')) {
+                    const kv = tx.objectStore('kv_store');
+                    kv.put(wcState.myFavorites || [], 'my_favorites');
+                    kv.put(wcState.calendarEvents || [], 'calendar_events');
+                    kv.put(wcState.user || { name: 'User', avatar: '' }, 'user');
+                    kv.put(wcState.wallet || { balance: 0, transactions: [] }, 'wallet');
+                    kv.put(wcState.stickerCategories || [], 'sticker_categories');
+                    kv.put(wcState.cssPresets || [], 'css_presets');
+                    kv.put(wcState.unreadCounts || {}, 'unread_counts');
+                    kv.put(wcState.chatBgPresets || [], 'chat_bg_presets');
+                    kv.put(wcState.phonePresets || [], 'phone_presets');
+                    kv.put(wcState.shopData || {}, 'shop_data');
+                }
+
+                if (validStores.includes('characters')) {
+                    const charStore = tx.objectStore('characters');
+                    for (const char of wcState.characters) {
+                        if (char && char.id) charStore.put(char);
+                    }
+                }
+
+                if (validStores.includes('masks')) {
+                    const maskStore = tx.objectStore('masks');
+                    for (const mask of wcState.masks) {
+                        if (mask && mask.id) maskStore.put(mask);
+                    }
+                }
+
+                if (validStores.includes('moments')) {
+                    const momentStore = tx.objectStore('moments');
+                    for (const moment of wcState.moments) {
+                        if (moment && moment.id) momentStore.put(moment);
+                    }
+                }
+
+                if (validStores.includes('chats')) {
+                    const chatStore = tx.objectStore('chats');
+                    for (const charId in wcState.chats) {
+                        const parsedId = parseInt(charId);
+                        if (!isNaN(parsedId)) {
+                            chatStore.put({ charId: parsedId, messages: wcState.chats[charId] });
+                        }
+                    }
+                }
+            } catch (err) {
+                reject(err);
             }
-        }
-
-        // 一次性将所有保存任务推入队列，瞬间完成，防止被 iOS 杀后台打断
-        await Promise.all(promises.map(p => p.catch(e => console.warn("Save item failed:", e))));
-
+        });
     } catch (e) {
         console.error("WeChat Save failed", e);
     }
