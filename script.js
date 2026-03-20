@@ -2457,9 +2457,19 @@ const wcState = {
     tempBgCleared: false,
     replyingToComment: null,
     unreadCounts: {}, // { charId: count }
-    proactiveInterval: null, // 主动消息定时器
-    tempShopTransaction: null // 临时存储购物交易信息
+    // ... 现有代码 ...
+    proactiveInterval: null,
+    tempShopTransaction: null,
+    // 👇 新增：语音通话状态
+    callState: {
+        isActive: false,
+        charId: null,
+        startTime: 0,
+        timerInterval: null,
+        isSpeaking: false
+    }
 };
+
 
 // --- WeChat Core Functions ---
 function openWechat() {
@@ -3087,6 +3097,25 @@ function wcRenderMessages(charId) {
         } else if (msg.type === 'receipt') {
             // 新增：渲染购物小票
             contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" style="background: transparent; padding: 0; border: none;">${msg.content}</div>`;
+            
+        // 👇 新增的代码从这里开始 👇
+        } else if (msg.type === 'call_record') {
+            const isRejected = msg.status === 'rejected';
+            const iconColor = isRejected ? '#FF3B30' : '#111';
+            const iconSvg = isRejected 
+                ? `<svg viewBox="0 0 24 24" style="fill:${iconColor};"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" transform="rotate(135 12 12)"/></svg>`
+                : `<svg viewBox="0 0 24 24" style="fill:none; stroke:${iconColor}; stroke-width:2;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>`;
+            
+            contentHtml = `
+                <div class="wc-bubble call-record ${msg.sender === 'me' ? 'me' : 'them'}">
+                    <div class="ins-call-record-card">
+                        ${iconSvg}
+                        <span class="ins-call-record-text">${msg.content}</span>
+                        ${msg.duration ? `<span class="ins-call-record-time">${msg.duration}</span>` : ''}
+                    </div>
+                </div>`;
+        // 👆 新增的代码到这里结束 👆
+        
         } else {
             contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}${msg.content}</div>`;
         }
@@ -3127,6 +3156,7 @@ function wcRenderMessages(charId) {
         container.insertBefore(row, anchor);
     });
 }
+
 // ==========================================
 // 新增：群聊长按头像 @ 成员逻辑 (带防抖修复)
 // ==========================================
@@ -3563,7 +3593,14 @@ async function wcTriggerAI(charIdOverride = null) {
                 playlistInfo = `\n【当前播放列表】:\n${listStr}`;
             }
             
-            musicContextPrompt = `\n【当前特殊状态：一起听歌中】\n你和User正在“一起听歌”频道。你们已经一起听了 ${listenMinutes} 分钟。当前${playStatus}的歌曲是：${songInfo}。${playlistInfo}
+            // 👇 新增：提取当前歌曲的歌词给 AI 感知 (限制行数防止 Token 爆炸)
+            let lyricsInfo = "";
+            if (musicState.lyrics && musicState.lyrics.length > 0) {
+                const lyricLines = musicState.lyrics.slice(0, 30).map(l => l.text).filter(t => t.trim() !== '').join(' / ');
+                lyricsInfo = `\n【当前歌曲歌词片段】:\n${lyricLines}`;
+            }
+            
+            musicContextPrompt = `\n【当前特殊状态：一起听歌中】\n你和User正在“一起听歌”频道。你们已经一起听了 ${listenMinutes} 分钟。当前${playStatus}的歌曲是：${songInfo}。${playlistInfo}${lyricsInfo}
             
 【你的音乐控制特权】(你可以自主控制播放器，请在JSON数组中加入以下指令)：
 - 暂停/继续音乐: {"type":"music_control", "action":"pause"} 或 {"type":"music_control", "action":"play"}
@@ -3696,8 +3733,10 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
    如果用户向你发送了 [邀请听歌] 的卡片，你必须根据当前人设和心情决定是否同意。
    - 如果同意，请回复：{"type":"music_accept", "content":"好呀，一起听~"}
    - 如果拒绝，请回复：{"type":"music_reject", "content":"我现在有点忙，晚点吧。"}
+7. **主动语音通话** (按需使用)
+   如果你想念User 或者你觉得当前氛围极佳，又或者有非常重要/暧昧的话想对 User 说，你可以主动向 User 发起语音通话！
+   {"type":"call_invite", "content":"(你的内心OS：我想听听你的声音了)"}
 `;
-
         if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
             systemPrompt += `\n【桌面小组件互动】\n你和用户绑定了恋人空间，并且用户在手机桌面上放置了你的专属小组件。你有 ${lsState.widgetUpdateFreq}% 的概率在回复时顺便更新这个小组件。\n如果决定更新，请在JSON数组中加入一条指令：\n- 发送便利贴：{"type":"widget_note", "content":"留言内容"}\n- 发送拍立得照片：{"type":"widget_photo", "content":"照片画面描述"}\n注意：每次最多只发一个组件更新指令。\n`;
         }
@@ -4216,9 +4255,16 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             wcAddMessage(charId, 'them', 'text', action.content || "我先不听啦~", extra);
             musicForceStopListenTogether(charId);
             
-        } else if (action.type === 'music_invite_user') {
+                } else if (action.type === 'music_invite_user') {
             wcAddMessage(charId, 'them', 'text', action.content || "我们一起听歌吧？", extra);
             musicShowCharInviteModal(charId, action.songName);      
+            
+        // 👇 新增：解析 AI 主动打来的电话 👇
+        } else if (action.type === 'call_invite') {
+            wcShowIncomingCall(charId);
+            wcAddMessage(charId, 'system', 'system', `[系统内部信息: 你主动向 User 发起了语音通话请求，等待对方接听...]`, { hidden: true });
+        // 👆 新增结束 👆
+
         } else if (action.type === 'invite') {
              // 处理恋人空间邀请回应
              // 逻辑待定，目前暂不处理复杂逻辑
@@ -7059,12 +7105,22 @@ function renderSettingsUI(data) {
         });
         playlistHtml += `</div>`;
         
-        // 右侧唱片区域 (干净无星光，默认无图片)
+        // 右侧星空星球区域 (纯CSS光影，绝对无Emoji)
         playlistHtml += `
             <div class="char-playlist-record-area" id="char-playlist-record-area" ontouchstart="wcRecordTouchStart(event)" ontouchend="wcRecordTouchEnd(event)">
+                <!-- 宇宙星云背景光晕 -->
+                <div class="space-glow"></div>
+                
+                <!-- 环绕的星轨与纯CSS发光星点 -->
+                <div class="planet-orbit orbit-1"></div>
+                <div class="planet-orbit orbit-2"></div>
+                <div class="planet-orbit orbit-3"></div>
+                
+                <!-- 星球本体 (替代黑胶) -->
                 <div class="char-playlist-record" id="char-playlist-record">
                     <img src="" class="char-playlist-record-cover" id="char-playlist-record-cover">
-                    <div class="char-playlist-record-hole"></div>
+                    <!-- 星球大气层反光遮罩 -->
+                    <div class="planet-surface-gloss"></div>
                 </div>
             </div>
             <div style="position: absolute; bottom: 20px; right: 150px; font-size: 10px; color: #999; pointer-events: none; animation: pulse 2s infinite;">↕ 滑动切歌</div>
@@ -7185,13 +7241,24 @@ async function wcPlayCharPlaylistSong(idx) {
             setTimeout(() => {
                 // 【核心修改】：去除了关闭手机模拟器和打开全屏播放器的代码
                 // 直接在后台更新播放列表并播放，保持在当前页面
-                musicState.currentPlaylist = [{ id, title, artist, cover }];
-                musicState.currentIndex = 0;
+                
+                // 👇 修改：将歌曲追加到当前播放列表，而不是覆盖
+                if (!musicState.currentPlaylist) musicState.currentPlaylist = [];
+                
+                // 检查列表中是否已经有这首歌，避免重复添加
+                let existingIdx = musicState.currentPlaylist.findIndex(s => s.id === id);
+                if (existingIdx !== -1) {
+                    musicState.currentIndex = existingIdx;
+                } else {
+                    musicState.currentPlaylist.push({ id, title, artist, cover });
+                    musicState.currentIndex = musicState.currentPlaylist.length - 1;
+                }
+                
                 musicPlaySong(id, title, artist, cover);
                 
                 // 判断当前是否正在和该角色一起听歌
                 if (musicState.listenTogether.active && musicState.listenTogether.charId === char.id) {
-                    wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机歌单，并点播了你最近常听的《${title}》，现在你们正在一起听这首歌。]`, { hidden: true });
+                    wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机歌单，并点播了你最近常听的《${title}》，这首歌已加入你们的播放列表，现在你们正在一起听这首歌。]`, { hidden: true });
                 }
                 
             }, 1000);
@@ -14220,9 +14287,25 @@ function injectDreamToChar(cardId) {
 
 // --- 系统更新日志数据 ---
 const systemUpdateLogs = [
+   {
+        version: "小元机 03.20",
+        date: "2026.03.20",
+        title: "欢迎来到小元机^这里是小元。",
+        content: [
+            "1.APP4论坛功能更新，还在完善，感觉差不多了",
+            "2.爆改了桌面和几个页面的UI嗯嗯对",            
+            "3.增加了语音通话",
+            "不想写更新日志，具体可以看我小红书@小元元元，可以去我评论区许愿，然后：我鸟都不鸟你"
+        ],
+        notes: [
+            "更新后若遇到界面显示异常，请尝试清除浏览器缓存。",
+            "请妥善保管您的数据，建议定期在设置中进行备份。",
+            "一机一码，禁止二传二贩"
+        ]
+    },
     {
         version: "小元机 03.16",
-        date: "2026.03.13",
+        date: "2026.03.16",
         title: "欢迎来到小元机^这里是小元。",
         content: [
             "1.音乐无法搜索已修复orz",
@@ -18172,4 +18255,358 @@ async function forumTriggerPMAI(chatId) {
         const loadingEl = document.getElementById('forum-pm-loading');
         if (loadingEl) loadingEl.remove();
     }
+}
+/* ==========================================================================
+   语音通话系统 (Voice Call Logic - 沉浸互通版)
+   ========================================================================== */
+
+// 1. 我呼叫 Ta
+async function wcActionVoiceCall() {
+    wcCloseAllPanels();
+    const charId = wcState.activeChatId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    if (char.isGroup) {
+        alert("群聊暂不支持语音通话哦~");
+        return;
+    }
+
+    // 初始化 UI (居中状态)
+    const callView = document.getElementById('wc-view-call-screen');
+    callView.classList.remove('active-call'); 
+    
+    document.getElementById('ins-call-bg').style.backgroundImage = `url('${char.avatar}')`;
+    document.getElementById('ins-call-avatar').src = char.avatar;
+    document.getElementById('ins-call-name').innerText = char.name;
+    document.getElementById('ins-call-status').innerText = "正在呼叫...";
+    document.getElementById('ins-call-voice-wave').classList.add('hidden'); // 隐藏音波
+    
+    document.getElementById('ins-call-actions-ringing').style.display = 'flex';
+    document.getElementById('ins-call-actions-incoming').style.display = 'none';
+    document.getElementById('ins-call-actions-active').style.display = 'none';
+    document.getElementById('ins-call-chat-area').style.display = 'none';
+    document.getElementById('ins-call-messages').innerHTML = '';
+    
+    callView.classList.remove('hidden');
+
+    wcState.callState.charId = charId;
+    wcState.callState.isActive = false;
+
+    // 触发 AI 决定是否接听
+    await wcProcessCallDecision(char);
+}
+
+// 2. AI 决定是否接听 (读取世界书、面具、记忆，严禁emoji)
+async function wcProcessCallDecision(char) {
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) {
+        setTimeout(() => wcHangUpCall('rejected', "未配置API，无法接通"), 2000);
+        return;
+    }
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-15).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
+        
+        // 读取世界书
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 读取记忆
+        let memoryText = "暂无特殊记忆。";
+        if (char.memories && char.memories.length > 0) {
+            const readCount = chatConfig.aiMemoryCount || 5;
+            memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content}`).join('\n');
+        }
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定/面具】：${userPersona}\n`;
+        prompt += `【你们的共同记忆】：\n${memoryText}\n\n`;
+        prompt += `【当前情境】：User 突然给你打来了一个语音电话。\n`;
+        prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `请根据你的人设、记忆、世界观以及最近的聊天氛围，决定是否接听这个电话。\n`;
+        prompt += `【核心表现要求】：\n`;
+        prompt += `1. 如果接听，请给出接通后的第一句话。你可以使用括号 () 来描述你接电话时的语气、呼吸声或环境音，例如：(刚睡醒，声音沙哑) 或 (轻笑一声)。\n`;
+        prompt += `2. 语气必须像真人一样自然、口语化，不要太死板！\n`;
+        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `如果拒接，请给出拒接的理由（内心OS）。\n`;
+        prompt += `返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{"accept": true, "firstSentence": "(接起电话，伴随着走路的喘息声) 喂？怎么突然打电话来了？"}\n`;
+        prompt += `或 {"accept": false, "reason": "现在在开会，不方便接。"}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.7
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const decision = JSON.parse(content);
+
+        if (!document.getElementById('wc-view-call-screen') || document.getElementById('wc-view-call-screen').classList.contains('hidden')) return;
+
+        if (decision.accept) {
+            wcStartActiveCall(decision.firstSentence);
+        } else {
+            wcHangUpCall('rejected', decision.reason);
+        }
+
+    } catch (e) {
+        console.error("AI 决策失败", e);
+        wcStartActiveCall("(接通电话) 喂？");
+    }
+}
+
+// 3. Ta 呼叫我 (AI 主动来电)
+window.wcShowIncomingCall = function(charId) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    wcState.callState.charId = charId;
+    wcState.callState.isActive = false;
+
+    const callView = document.getElementById('wc-view-call-screen');
+    callView.classList.remove('active-call'); 
+    
+    document.getElementById('ins-call-bg').style.backgroundImage = `url('${char.avatar}')`;
+    document.getElementById('ins-call-avatar').src = char.avatar;
+    document.getElementById('ins-call-name').innerText = char.name;
+    document.getElementById('ins-call-status').innerText = "邀请你进行语音通话...";
+    document.getElementById('ins-call-voice-wave').classList.add('hidden');
+    
+    document.getElementById('ins-call-actions-ringing').style.display = 'none';
+    document.getElementById('ins-call-actions-incoming').style.display = 'flex'; 
+    document.getElementById('ins-call-actions-active').style.display = 'none';
+    document.getElementById('ins-call-chat-area').style.display = 'none';
+    document.getElementById('ins-call-messages').innerHTML = '';
+    
+    callView.classList.remove('hidden');
+    
+    if (typeof showMainSystemNotification === 'function') {
+        showMainSystemNotification("语音通话", `${char.name} 邀请你进行语音通话`, char.avatar);
+    }
+    if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+};
+
+// 4. 我接听 Ta 的来电
+window.wcAcceptIncomingCall = function() {
+    const charId = wcState.callState.charId;
+    if (!charId) return;
+
+    document.getElementById('ins-call-actions-incoming').style.display = 'none';
+    
+    wcAddMessage(charId, 'system', 'system', `[系统内部信息: User 接听了你的语音通话！请立刻说第一句话。]`, { hidden: true });
+    
+    wcStartActiveCall(); 
+    wcTriggerCallAI();
+};
+
+// 5. 我拒绝 Ta 的来电
+window.wcRejectIncomingCall = function() {
+    const charId = wcState.callState.charId;
+    if (!charId) return;
+
+    document.getElementById('wc-view-call-screen').classList.add('hidden');
+    wcAddMessage(charId, 'me', 'call_record', '已拒绝', { status: 'rejected' });
+    wcAddMessage(charId, 'system', 'system', `[系统内部信息: User 挂断/拒绝了你的语音通话。]`, { hidden: true });
+    
+    wcState.callState.isActive = false;
+    wcState.callState.charId = null;
+};
+
+// 6. 正式接通电话 (UI 变化)
+function wcStartActiveCall(firstSentence = null) {
+    wcState.callState.isActive = true;
+    wcState.callState.startTime = Date.now();
+
+    const callView = document.getElementById('wc-view-call-screen');
+    callView.classList.add('active-call'); 
+
+    document.getElementById('ins-call-actions-ringing').style.display = 'none';
+    document.getElementById('ins-call-actions-incoming').style.display = 'none';
+    document.getElementById('ins-call-actions-active').style.display = 'flex';
+    document.getElementById('ins-call-chat-area').style.display = 'flex';
+
+    wcState.callState.timerInterval = setInterval(() => {
+        const diff = Math.floor((Date.now() - wcState.callState.startTime) / 1000);
+        const m = Math.floor(diff / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        // 只有在没说话的时候才显示时间
+        if (!wcState.callState.isSpeaking) {
+            document.getElementById('ins-call-status').innerText = `${m}:${s}`;
+        }
+    }, 1000);
+
+    if (firstSentence) {
+        wcAddCallMessage('them', firstSentence);
+        wcAddMessage(wcState.callState.charId, 'system', 'system', `[语音通话已接通] ${wcState.characters.find(c=>c.id===wcState.callState.charId).name} 说: "${firstSentence}"`, { hidden: true });
+    }
+}
+
+// 7. 挂断电话 (注入强力记忆)
+window.wcHangUpCall = function(reason, aiReason = "") {
+    const charId = wcState.callState.charId;
+    if (!charId) return;
+
+    clearInterval(wcState.callState.timerInterval);
+    document.getElementById('wc-view-call-screen').classList.add('hidden');
+    document.getElementById('ins-call-voice-wave').classList.add('hidden');
+
+    if (reason === 'cancel') {
+        wcAddMessage(charId, 'me', 'call_record', '已取消', { status: 'canceled' });
+    } else if (reason === 'rejected') {
+        wcAddMessage(charId, 'them', 'call_record', '已拒绝接听', { status: 'rejected' });
+        if (aiReason) {
+            wcAddMessage(charId, 'system', 'system', `[系统内部信息: 对方拒接了电话，Ta的内心OS是: "${aiReason}"]`, { hidden: true });
+        }
+    } else if (reason === 'end') {
+        const diff = Math.floor((Date.now() - wcState.callState.startTime) / 1000);
+        const m = Math.floor(diff / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        const durationStr = `${m}:${s}`;
+        
+        wcAddMessage(charId, 'me', 'call_record', '通话时长', { duration: durationStr, status: 'ended' });
+        
+        // 👇 核心修改：挂断时注入强力记忆，确保文字聊天能接上话题 👇
+        const memoryPrompt = `[系统强制提示：你们刚刚结束了一通长达 ${durationStr} 的语音通话。在接下来的文字聊天中，请你自然地顺延刚刚电话里聊过的话题或情绪，不要表现得像刚认识一样！]`;
+        wcAddMessage(charId, 'system', 'system', memoryPrompt, { hidden: true });
+    }
+
+    wcState.callState.isActive = false;
+    wcState.callState.charId = null;
+    wcState.callState.isSpeaking = false;
+    document.getElementById('ins-call-avatar-wrapper').classList.remove('speaking');
+};
+
+// 8. 通话中发送消息 (User)
+window.wcSendCallMessage = function() {
+    const input = document.getElementById('ins-call-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    wcAddCallMessage('me', text);
+    wcAddMessage(wcState.callState.charId, 'system', 'system', `[语音通话中] User 说: "${text}"`, { hidden: true });
+
+    input.value = '';
+    setTimeout(wcTriggerCallAI, 500);
+};
+
+// 9. 通话中 AI 回复 (深度记忆互通、活人感、严禁emoji)
+window.wcTriggerCallAI = async function() {
+    const charId = wcState.callState.charId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char || !wcState.callState.isActive) return;
+
+    const apiConfig = await idb.get('ios_theme_api_config');
+    if (!apiConfig || !apiConfig.key) return;
+
+    // 开启说话动画和 SVG 音波
+    wcState.callState.isSpeaking = true;
+    document.getElementById('ins-call-avatar-wrapper').classList.add('speaking');
+    document.getElementById('ins-call-status').innerText = "对方正在说话...";
+    document.getElementById('ins-call-voice-wave').classList.remove('hidden');
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        // 读取世界书
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 读取记忆
+        let memoryText = "暂无特殊记忆。";
+        if (char.memories && char.memories.length > 0) {
+            const readCount = chatConfig.aiMemoryCount || 5;
+            memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content}`).join('\n');
+        }
+
+        // 提取最近的聊天记录（包含文字聊天和语音通话记录，实现无缝互通）
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-20).map(m => {
+            if (m.type === 'system' && m.content.includes('[语音通话中]')) return m.content;
+            if (m.type === 'system' && m.content.includes('[语音通话已接通]')) return m.content;
+            if (m.type === 'text') return `${m.sender==='me'?'User':char.name}: ${m.content}`;
+            return null;
+        }).filter(Boolean).join('\n');
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定/面具】：${userPersona}\n`;
+        prompt += `【你们的共同记忆】：\n${memoryText}\n\n`;
+        prompt += `【当前情境】：你正在和 User 打语音电话。\n`;
+        prompt += `【最近的文字与语音聊天记录】：\n${recentMsgs}\n\n`;
+        
+        prompt += `请根据你的人设、记忆、世界观以及上下文，回复 User 的话。\n`;
+        prompt += `【核心表现要求】：\n`;
+        prompt += `1. 语气要像真实的语音通话一样自然、口语化，可以带点语气词（嗯、啊、哦），绝对不要像机器或客服！不要太死板！\n`;
+        prompt += `2. 你可以使用括号 () 来描述你说话时的语气、呼吸声、微动作或环境音，例如：(轻笑)、(深吸一口气)、(翻身摩擦被子的声音)、(声音有些沙哑)。\n`;
+        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `返回纯 JSON 对象：{"content": "你说的话"}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const reply = JSON.parse(content);
+
+        if (wcState.callState.isActive) {
+            wcAddCallMessage('them', reply.content);
+            wcAddMessage(charId, 'system', 'system', `[语音通话中] ${char.name} 说: "${reply.content}"`, { hidden: true });
+        }
+
+    } catch (e) {
+        console.error("通话回复失败", e);
+    } finally {
+        // 关闭说话动画和 SVG 音波
+        wcState.callState.isSpeaking = false;
+        document.getElementById('ins-call-avatar-wrapper').classList.remove('speaking');
+        document.getElementById('ins-call-voice-wave').classList.add('hidden');
+        
+        // 恢复显示时间
+        const diff = Math.floor((Date.now() - wcState.callState.startTime) / 1000);
+        const m = Math.floor(diff / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        document.getElementById('ins-call-status').innerText = `${m}:${s}`;
+    }
+};
+
+// 10. 渲染单条通话消息到屏幕
+function wcAddCallMessage(sender, text) {
+    const container = document.getElementById('ins-call-messages');
+    const div = document.createElement('div');
+    div.className = `ins-call-msg ${sender}`;
+    
+    // 简单处理一下括号，让括号里的动作文字变成灰色斜体，更有高级感
+    let formattedText = text.replace(/\((.*?)\)/g, '<span style="color: rgba(255,255,255,0.5); font-style: italic;">($1)</span>');
+    formattedText = formattedText.replace(/（(.*?)）/g, '<span style="color: rgba(255,255,255,0.5); font-style: italic;">（$1）</span>');
+    
+    div.innerHTML = formattedText;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
 }

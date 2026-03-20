@@ -6642,3 +6642,315 @@ body,
 }
 
 @keyframes spinRecord { 100% { transform: rotate(360deg); } }
+/* ========================================== */
+/* Char 手机设置 - 星际星球播放器 (纯CSS/无Emoji) */
+/* ========================================== */
+
+/* 整体星空区域容器 */
+.char-playlist-record-area {
+    position: absolute;
+    right: -100px; /* 稍微往左移一点，露出星环 */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 280px;
+    height: 280px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 宇宙星云背景光晕 (深蓝/紫渐变) */
+.space-glow {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(29, 78, 216, 0.15) 0%, rgba(88, 28, 135, 0.05) 50%, transparent 70%);
+    pointer-events: none;
+}
+
+/* 星球本体 (替代原本的黑胶) */
+.char-playlist-record {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    background: #0f172a; /* 深邃宇宙底色 */
+    /* 模拟星球的立体光影：外发光 + 背光面暗角 + 受光面亮角 */
+    box-shadow: 
+        0 0 30px rgba(56, 189, 248, 0.3), 
+        inset -15px -15px 25px rgba(0,0,0,0.9), 
+        inset 10px 10px 20px rgba(255,255,255,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    z-index: 10;
+}
+
+/* 播放时星球缓慢自转 */
+.char-playlist-record.playing {
+    animation: spinPlanet 25s linear infinite; 
+}
+
+/* 专辑封面作为星球地表纹理 */
+.char-playlist-record-cover {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    /* 让图片颜色稍微融入星球的暗色调中 */
+    mix-blend-mode: luminosity; 
+}
+
+/* 星球大气层反光遮罩 (替代黑胶中间的洞) */
+.planet-surface-gloss {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15) 0%, transparent 60%);
+    pointer-events: none;
+}
+
+/* ================= 星环与纯CSS星光 ================= */
+.planet-orbit {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+/* 利用伪元素绘制轨道上的发光星点 (绝对没有Emoji) */
+.planet-orbit::before, .planet-orbit::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    background: #fff;
+}
+
+/* 内圈轨道：虚线 + 纯白星光 */
+.orbit-1 {
+    width: 170px; height: 170px;
+    border: 1px dashed rgba(255, 255, 255, 0.2);
+    animation: spinOrbit 15s linear infinite;
+}
+.orbit-1::before { 
+    width: 4px; height: 4px; top: 15px; left: 30px; 
+    box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.8); 
+}
+.orbit-1::after { 
+    width: 2px; height: 2px; bottom: 20px; right: 40px; 
+    background: #93c5fd; box-shadow: 0 0 6px 1px #93c5fd; 
+}
+
+/* 中圈轨道：点线 + 逆向旋转 + 浅蓝/淡黄星光 */
+.orbit-2 {
+    width: 210px; height: 210px;
+    border: 1px dotted rgba(147, 197, 253, 0.3);
+    animation: spinOrbit 25s linear infinite reverse;
+}
+.orbit-2::before { 
+    width: 3px; height: 3px; top: 50%; left: -1.5px; 
+    background: #bae6fd; box-shadow: 0 0 8px 2px #bae6fd;
+}
+.orbit-2::after { 
+    width: 5px; height: 5px; top: 25px; right: 25px; 
+    background: #fef08a; box-shadow: 0 0 10px 2px #fef08a; 
+}
+
+/* 外圈轨道：极细实线 + 远处的微弱星光 */
+.orbit-3 {
+    width: 250px; height: 250px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    animation: spinOrbit 40s linear infinite;
+}
+.orbit-3::before { 
+    width: 2px; height: 2px; bottom: 15%; left: 10%; 
+    box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* 动画定义 */
+@keyframes spinPlanet { 100% { transform: rotate(360deg); } }
+@keyframes spinOrbit { 100% { transform: rotate(360deg); } }
+/* ========================================== */
+/* 语音通话系统 (高级暗黑神秘风) */
+/* ========================================== */
+.ins-call-view {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: #0B0C10; z-index: 3000; display: flex; flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    opacity: 1; transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.ins-call-view.hidden {
+    opacity: 0; pointer-events: none; transform: translateY(20px);
+}
+
+.ins-call-bg {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background-size: cover; background-position: center;
+    filter: blur(40px) brightness(0.3); transform: scale(1.2); z-index: 0;
+}
+
+/* 顶部头像与状态 (未接通时绝对居中，接通后平滑上移) */
+.ins-call-header {
+    position: relative; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    flex: 1; /* 占据剩余空间，实现完美居中 */
+    transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+/* 接通后，取消居中，靠上显示 */
+.ins-call-view.active-call .ins-call-header {
+    flex: none;
+    padding-top: calc(env(safe-area-inset-top, 20px) + 60px);
+}
+
+.ins-call-avatar-wrapper {
+    position: relative; width: 120px; height: 120px; margin-bottom: 24px;
+}
+.ins-call-avatar {
+    width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.1); box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    position: relative; z-index: 2; transition: transform 0.3s ease;
+}
+
+/* 说话时的声波动画 */
+.ins-call-ripple {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    border-radius: 50%; border: 1px solid rgba(255,255,255,0.4);
+    opacity: 0; z-index: 1; pointer-events: none;
+}
+.ins-call-avatar-wrapper.speaking .ins-call-ripple.ring1 {
+    animation: callRipple 1.5s infinite ease-out;
+}
+.ins-call-avatar-wrapper.speaking .ins-call-ripple.ring2 {
+    animation: callRipple 1.5s infinite ease-out 0.75s;
+}
+@keyframes callRipple {
+    0% { width: 120px; height: 120px; opacity: 0.8; border-width: 2px; }
+    100% { width: 240px; height: 240px; opacity: 0; border-width: 0px; }
+}
+.ins-call-avatar-wrapper.speaking .ins-call-avatar {
+    transform: scale(1.05); box-shadow: 0 0 30px rgba(255,255,255,0.2);
+}
+
+.ins-call-name { font-size: 28px; font-weight: 300; color: #FFF; letter-spacing: 2px; margin-bottom: 8px; }
+.ins-call-status { font-size: 14px; color: rgba(255,255,255,0.5); font-family: monospace; letter-spacing: 1px; }
+
+/* 通话中的文字流 (完美内部滑动，不顶按键) */
+.ins-call-chat-area {
+    flex: 1; /* 占据中间所有剩余空间 */
+    position: relative; 
+    z-index: 10; 
+    padding: 0 20px;
+    display: flex; 
+    flex-direction: column; 
+    overflow: hidden; /* 关键：限制外层高度，防止撑开屏幕 */
+    mask-image: linear-gradient(to bottom, transparent, black 10%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%);
+}
+.ins-call-messages {
+    flex: 1; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 12px; 
+    overflow-y: auto; /* 关键：内容过长时在内部滚动 */
+    padding-top: 20px;
+    padding-bottom: 20px;
+    -webkit-overflow-scrolling: touch; /* 苹果丝滑滚动 */
+}
+.ins-call-messages::-webkit-scrollbar { display: none; }
+
+.ins-call-msg {
+    max-width: 85%; padding: 12px 16px; border-radius: 16px; font-size: 15px; line-height: 1.5;
+    color: #FFF; animation: wcFadeIn 0.3s ease; word-break: break-word; flex-shrink: 0;
+}
+.ins-call-msg.me { align-self: flex-end; background: rgba(255,255,255,0.15); border-bottom-right-radius: 4px; }
+.ins-call-msg.them { align-self: flex-start; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-bottom-left-radius: 4px; }
+
+/* 底部操作区 (死死钉在底部) */
+.ins-call-footer {
+    position: relative; 
+    z-index: 10; 
+    flex-shrink: 0; /* 关键：绝对不允许被上面的文字挤压变形或顶下去 */
+    padding: 10px 30px calc(env(safe-area-inset-bottom, 20px) + 20px) 30px; 
+}
+
+.ins-call-actions-row { display: flex; justify-content: center; gap: 40px; }
+.ins-call-btn {
+    width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: transform 0.2s; box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+}
+.ins-call-btn:active { transform: scale(0.9); }
+.ins-call-btn svg { width: 32px; height: 32px; fill: #FFF; }
+.ins-call-btn.reject { background: #FF3B30; }
+.ins-call-btn.accept { background: #34C759; }
+.ins-call-btn.reject.small { width: 56px; height: 56px; margin: 20px auto 0 auto; }
+.ins-call-btn.reject.small svg { width: 24px; height: 24px; }
+
+.ins-call-actions-active { display: flex; flex-direction: column; width: 100%; }
+.ins-call-input-row {
+    display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.1);
+    padding: 8px 12px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.15);
+    backdrop-filter: blur(10px);
+}
+.ins-call-input-row input {
+    flex: 1; background: transparent; border: none; color: #FFF; font-size: 15px; outline: none;
+}
+.ins-call-input-row input::placeholder { color: rgba(255,255,255,0.4); }
+.ins-call-send-btn, .ins-call-ai-btn {
+    background: transparent; border: none; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.ins-call-send-btn svg { width: 20px; height: 20px; stroke: #FFF; fill: none; stroke-width: 2; }
+.ins-call-ai-btn svg { width: 22px; height: 22px; fill: #AF52DE; }
+
+/* 聊天界面的通话记录气泡 */
+.wc-bubble.call-record {
+    background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important;
+}
+.ins-call-record-card {
+    display: flex; align-items: center; gap: 10px; background: #FFF; border: 1px solid #E5E5EA;
+    padding: 10px 16px; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+}
+.ins-call-record-card svg { width: 20px; height: 20px; }
+.ins-call-record-text { font-size: 14px; color: #111; font-weight: 500; }
+.ins-call-record-time { font-size: 12px; color: #888; font-family: monospace; margin-left: 8px; }
+/* ========================================== */
+/* 语音通话 - 动态呼吸音波样式 */
+/* ========================================== */
+.ins-call-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.ins-call-voice-wave {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 16px;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+.ins-call-voice-wave.hidden {
+    opacity: 0;
+}
+
+.ins-call-voice-wave .wave-bar {
+    width: 3px;
+    background-color: #AF52DE; /* 神秘的紫色音波 */
+    border-radius: 2px;
+    animation: callVoiceWave 1s infinite ease-in-out;
+}
+
+.ins-call-voice-wave .wave-bar:nth-child(1) { height: 8px; animation-delay: 0s; }
+.ins-call-voice-wave .wave-bar:nth-child(2) { height: 16px; animation-delay: 0.2s; }
+.ins-call-voice-wave .wave-bar:nth-child(3) { height: 10px; animation-delay: 0.4s; }
+.ins-call-voice-wave .wave-bar:nth-child(4) { height: 14px; animation-delay: 0.1s; }
+
+@keyframes callVoiceWave {
+    0%, 100% { height: 6px; }
+    50% { height: 16px; }
+}
