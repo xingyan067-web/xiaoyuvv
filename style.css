@@ -1383,13 +1383,232 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-amount-in { color: var(--wc-accent-green); }
 .wc-amount-out { color: #000; }
 
-#wc-view-memory { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #F2F2F7; z-index: 1400; display: none; flex-direction: column; }
-#wc-view-memory.active { display: flex; animation: wcSlideInRight 0.3s ease; }
-@keyframes wcSlideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-.wc-memory-card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.03); position: relative; }
-.wc-memory-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: #8E8E93; padding-right: 20px; }
-.wc-memory-content { font-size: 15px; line-height: 1.5; color: #333; }
-.wc-memory-delete-btn { position: absolute; top: 12px; right: 12px; color: #FF3B30; cursor: pointer; font-size: 12px; font-weight: 600; }
+/* ========================================== */
+/* 回忆日记 (Memory) - iOS 黑白灰星空宇宙风 */
+/* ========================================== */
+#wc-view-memory { 
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+    background: #050505; /* 极深邃的纯黑底色 */
+    z-index: 1400; display: none; flex-direction: column; 
+    font-family: 'Georgia', 'Times New Roman', 'Kaiti', 'STKaiti', serif;
+    color: #FFFFFF;
+    overflow: hidden;
+}
+#wc-view-memory.active { display: flex; animation: wcSlideInRight 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+
+/* --- 宇宙星光与流苏背景动画 --- */
+.ins-mem-universe-bg {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: hidden;
+}
+/* 动态星光 */
+.ins-mem-star {
+    position: absolute; background: #FFF; border-radius: 50%;
+    box-shadow: 0 0 10px 2px rgba(255,255,255,0.8);
+    animation: twinkle var(--duration) infinite ease-in-out alternate;
+}
+@keyframes twinkle { 0% { opacity: 0.2; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1.2); } }
+/* 光影流苏 (从顶部垂下的细线) */
+.ins-mem-tassel {
+    position: absolute; top: -50px; width: 1px; height: 150px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.5), rgba(255,255,255,0));
+    animation: fall var(--duration) infinite linear;
+}
+@keyframes fall { 0% { transform: translateY(-100px); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(100vh); opacity: 0; } }
+
+/* 顶部不对称标题与延伸线 */
+.ins-mem-header {
+    position: relative; z-index: 10; display: flex; align-items: center; 
+    padding: calc(env(safe-area-inset-top, 20px) + 20px) 20px 20px 20px; flex-shrink: 0;
+}
+.ins-mem-title-box {
+    display: flex; flex-direction: column; font-size: 26px; font-weight: bold; letter-spacing: 4px; cursor: pointer; line-height: 1.1; transition: opacity 0.2s; color: #FFF; text-shadow: 0 0 15px rgba(255,255,255,0.3);
+}
+.ins-mem-title-box:active { opacity: 0.5; }
+.ins-mem-title-1 { align-self: flex-start; }
+.ins-mem-title-2 { align-self: flex-start; margin-left: 28px; }
+.ins-mem-line { flex: 1; height: 1px; background-color: rgba(255,255,255,0.3); margin: 15px 15px 0 15px; }
+.ins-mem-icons { display: flex; gap: 15px; margin-top: 15px; }
+.ins-mem-icon-btn { width: 24px; height: 24px; cursor: pointer; color: #FFF; transition: transform 0.2s; opacity: 0.8; }
+.ins-mem-icon-btn:active { transform: scale(0.8); opacity: 1; }
+.ins-mem-icon-btn svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; filter: drop-shadow(0 0 5px rgba(255,255,255,0.5)); }
+
+/* 主体时间轴与卡片流 */
+.ins-mem-main { position: relative; z-index: 10; flex: 1; overflow-y: auto; padding-left: 20px; padding-bottom: 50px; scrollbar-width: none; }
+.ins-mem-main::-webkit-scrollbar { display: none; }
+.ins-mem-row { display: flex; align-items: flex-start; margin-bottom: 30px; position: relative; }
+
+/* 左侧时间节点 */
+.ins-mem-time-node {
+    width: 50px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; position: relative; z-index: 2; padding-top: 15px; cursor: pointer; transition: transform 0.2s;
+}
+.ins-mem-time-node:active { transform: scale(0.9); }
+.ins-mem-time-node::before {
+    content: ''; position: absolute; top: 0; bottom: -50px; left: 50%; transform: translateX(-50%); width: 1px; background-color: rgba(255,255,255,0.15); z-index: -1;
+}
+.ins-mem-node-icon {
+    width: 16px; height: 16px; background: #050505; color: #FFF; margin-bottom: 8px; animation: insMemPulse 2.5s infinite ease-in-out;
+}
+.ins-mem-node-icon svg { width: 100%; height: 100%; fill: currentColor; stroke: none; filter: drop-shadow(0 0 8px rgba(255,255,255,0.8)); }
+@keyframes insMemPulse { 0%, 100% { transform: scale(0.8); opacity: 0.6; } 50% { transform: scale(1.2); opacity: 1; } }
+.ins-mem-date-text { font-family: 'Courier New', Courier, monospace; font-size: 11px; font-weight: bold; color: #8E8E93; text-align: center; }
+.ins-mem-date-hint { font-size: 8px; color: #555; margin-top: 4px; transform: scale(0.8); font-family: sans-serif; }
+
+/* 右侧横向滑动区 */
+.ins-mem-cards-scroll {
+    flex: 1; display: flex; gap: 12px; overflow-x: auto; padding: 10px 20px 10px 10px; scroll-behavior: smooth; scrollbar-width: none;
+}
+.ins-mem-cards-scroll::-webkit-scrollbar { display: none; }
+
+/* 50x180px 竖向卡片 (黑白灰毛玻璃) */
+.ins-mem-card {
+    width: 50px; height: 180px; border-radius: 0; flex-shrink: 0; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px 0 15px 0; cursor: pointer; 
+    background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #FFF;
+    transition: transform 0.2s, background 0.2s;
+}
+.ins-mem-card:active { transform: scale(0.96); background: rgba(255, 255, 255, 0.1); }
+.ins-mem-delete-btn {
+    position: absolute; top: 4px; left: 4px; font-family: -apple-system, sans-serif; font-size: 14px; color: rgba(255,255,255,0.3); cursor: pointer; line-height: 1; transition: color 0.2s; z-index: 10;
+}
+.ins-mem-delete-btn:active { color: #FF3B30; }
+.ins-mem-card-title {
+    writing-mode: vertical-rl; font-size: 13px; font-weight: bold; letter-spacing: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 100px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+.ins-mem-card-time { font-family: 'Courier New', Courier, monospace; font-size: 10px; font-weight: bold; opacity: 0.5; }
+
+/* 动态分配的黑白灰透明度类 */
+.ins-bg-white { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.3); }
+.ins-bg-gray  { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); }
+.ins-bg-pink  { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.1); }
+.ins-bg-blue  { background: rgba(200, 200, 200, 0.05); border-color: rgba(200, 200, 200, 0.1); }
+.ins-bg-green { background: rgba(150, 150, 150, 0.05); border-color: rgba(150, 150, 150, 0.1); }
+
+/* 塔罗牌堆叠视图 (深色星空版) */
+.ins-tarot-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 5, 5, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); display: none; align-items: center; justify-content: center; z-index: 2000; opacity: 0; transition: opacity 0.3s ease;
+}
+.ins-tarot-overlay.active { display: flex; opacity: 1; }
+.ins-tarot-close { position: absolute; top: calc(env(safe-area-inset-top, 20px) + 20px); right: 30px; font-size: 24px; color: #FFF; cursor: pointer; z-index: 2010; font-family: sans-serif; opacity: 0.6; }
+.ins-tarot-date-title { position: absolute; top: calc(env(safe-area-inset-top, 20px) + 30px); left: 30px; font-family: 'Georgia', serif; font-size: 24px; font-weight: bold; color: #FFF; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
+.ins-tarot-container { position: relative; width: 100%; height: 350px; display: flex; align-items: center; justify-content: center; perspective: 1000px; }
+.ins-tarot-card {
+    position: absolute; width: 160px; height: 280px; border-radius: 0; 
+    background: rgba(20, 20, 20, 0.8); border: 1px solid rgba(255,255,255,0.2); 
+    box-shadow: 0 15px 35px rgba(0,0,0,0.5), inset 0 0 20px rgba(255,255,255,0.05); 
+    display: flex; flex-direction: column; padding: 20px; color: #FFF;
+    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease; cursor: pointer;
+}
+.ins-tarot-card-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+.ins-tarot-card-desc { font-size: 13px; line-height: 1.6; flex: 1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; text-align: justify; font-family: -apple-system, sans-serif; color: #CCC; }
+.ins-tarot-card-time { font-family: 'Courier New', monospace; font-size: 11px; text-align: right; margin-top: 10px; opacity: 0.4; }
+
+/* ========================================== */
+/* 300x500px 详情编辑弹窗 (动态几何蕾丝边框版) */
+/* ========================================== */
+.ins-mem-detail-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+    background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    display: none; align-items: center; justify-content: center; z-index: 3000; 
+    opacity: 0; transition: opacity 0.3s ease;
+}
+.ins-mem-detail-overlay.active { display: flex; opacity: 1; }
+
+/* 卡片主体：深色毛玻璃底 */
+.ins-mem-detail-card {
+    width: 300px; height: 500px; 
+    background: rgba(15, 15, 15, 0.85); /* 半透明深黑底色 */
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-radius: 0; /* 绝对无圆角 */
+    display: flex; flex-direction: column; padding: 24px; 
+    transform: translateY(20px); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1); 
+    color: #FFFFFF;
+    position: relative;
+    /* 移除原本的实线边框和阴影，交给伪元素处理 */
+    border: none; 
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+.ins-mem-detail-overlay.active .ins-mem-detail-card { transform: translateY(0); }
+
+/* 🌟 动态几何蕾丝边框 - 外层流动斜纹光影 🌟 */
+.ins-mem-detail-card::before {
+    content: '';
+    position: absolute;
+    top: -2px; left: -2px; right: -2px; bottom: -2px;
+    z-index: -1;
+    background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 4px,
+        rgba(255, 255, 255, 0.4) 4px,
+        rgba(255, 255, 255, 0.4) 5px
+    );
+    /* 利用 mask 裁剪出边框形状 */
+    -webkit-mask: 
+        linear-gradient(#fff 0 0) content-box, 
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    padding: 2px; /* 边框厚度 */
+    animation: laceFlow 15s linear infinite;
+}
+
+/* 🌟 动态几何蕾丝边框 - 内层呼吸虚线框 🌟 */
+.ins-mem-detail-card::after {
+    content: '';
+    position: absolute;
+    top: 6px; left: 6px; right: 6px; bottom: 6px;
+    border: 1px dashed rgba(255, 255, 255, 0.3);
+    pointer-events: none;
+    animation: lacePulse 2.5s infinite alternate ease-in-out;
+}
+
+/* 边框动画定义 */
+@keyframes laceFlow {
+    0% { background-position: 0 0; }
+    100% { background-position: 100px 100px; }
+}
+@keyframes lacePulse {
+    0% { opacity: 0.3; border-color: rgba(255, 255, 255, 0.1); }
+    100% { opacity: 1; border-color: rgba(255, 255, 255, 0.6); }
+}
+
+/* 内部元素排版 */
+.ins-mem-detail-header { 
+    display: flex; justify-content: space-between; align-items: center; 
+    margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 10px; 
+    position: relative; z-index: 10;
+}
+.ins-mem-detail-date { font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #A0A0A0; letter-spacing: 1px; }
+.ins-mem-detail-close { font-size: 22px; cursor: pointer; color: #FFFFFF; line-height: 1; font-family: sans-serif; opacity: 0.6; transition: opacity 0.2s; }
+.ins-mem-detail-close:active { opacity: 1; }
+
+/* 修复：强制输入框文字为白色，防止被全局污染 */
+.ins-mem-detail-title { 
+    width: 100%; border: none; font-family: inherit; font-size: 18px; font-weight: bold; 
+    color: #FFFFFF !important; /* 强制白字 */
+    margin-bottom: 15px; outline: none; background: transparent !important; 
+    position: relative; z-index: 10;
+}
+.ins-mem-detail-title::placeholder { color: rgba(255,255,255,0.3); font-weight: normal; }
+
+.ins-mem-detail-textarea { 
+    flex: 1; width: 100%; border: none; resize: none; outline: none; 
+    font-family: 'Kaiti', 'STKaiti', '楷体', serif; /* 衬线体增加日记感 */
+    font-size: 15px; line-height: 1.8; 
+    color: #E0E0E0 !important; /* 强制浅灰白字 */
+    background: transparent !important; text-align: justify; 
+    position: relative; z-index: 10;
+}
+.ins-mem-detail-textarea::placeholder { color: rgba(255,255,255,0.2); font-family: sans-serif; }
+
+.ins-mem-detail-footer { margin-top: 15px; display: flex; justify-content: flex-end; position: relative; z-index: 10; }
+.ins-mem-detail-save { 
+    background: #FFFFFF; color: #111111; border: none; padding: 8px 24px; 
+    font-family: inherit; font-size: 13px; font-weight: bold; letter-spacing: 1px;
+    cursor: pointer; border-radius: 0; transition: transform 0.2s, background 0.2s; 
+}
+.ins-mem-detail-save:active { background: #CCCCCC; transform: scale(0.95); }
 
 #wc-modal-char-detail .wc-modal-content { width: 320px; height: 450px; border-radius: 20px; position: relative; bottom: auto; margin: auto; display: flex; flex-direction: column; align-items: center; padding: 0; background: #fff; }
 .wc-contact-card-header { width: 100%; height: 240px; position: relative; }

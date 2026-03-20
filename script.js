@@ -970,7 +970,6 @@ async function exportAllData() {
 
         // 2. 导出 WeChat 数据
         const wechatData = {};
-        await wcDb.init(); // 👈 修改3：加上这一行！确保备份时数据库被强制唤醒
         if (wcDb.instance) {
             wechatData.user = await wcDb.get('kv_store', 'user');
             wechatData.wallet = await wcDb.get('kv_store', 'wallet');
@@ -2411,41 +2410,55 @@ function handleWallpaperUpload(input) {
 
 // --- WeChat DB ---
 const WC_DB_NAME = 'WeChatSimDB';
-const WC_DB_VERSION = 2; // 👈 修改1：版本号改为2，强制修复数据库表缺失
+const WC_DB_VERSION = 3;
 
 const wcDb = {
     instance: null,
-    open: function() { // 👈 新增：每次操作前确保数据库连接是打开的，防止休眠
+    open: function() {
         return new Promise((resolve, reject) => {
             if (this.instance) return resolve(this.instance);
             const request = indexedDB.open(WC_DB_NAME, WC_DB_VERSION);
+            
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                if (!db.objectStoreNames.contains('kv_store')) db.createObjectStore('kv_store');
-                if (!db.objectStoreNames.contains('characters')) db.createObjectStore('characters', { keyPath: 'id' });
-                if (!db.objectStoreNames.contains('chats')) db.createObjectStore('chats', { keyPath: 'charId' });
-                if (!db.objectStoreNames.contains('moments')) db.createObjectStore('moments', { keyPath: 'id' });
-                if (!db.objectStoreNames.contains('masks')) db.createObjectStore('masks', { keyPath: 'id' });
+                const stores = ['kv_store', 'characters', 'chats', 'moments', 'masks'];
+                stores.forEach(store => {
+                    if (!db.objectStoreNames.contains(store)) {
+                        db.createObjectStore(store, store === 'kv_store' ? undefined : { keyPath: store === 'chats' ? 'charId' : 'id' });
+                    }
+                });
             };
             request.onsuccess = (event) => {
                 this.instance = event.target.result;
                 resolve(this.instance);
             };
-            request.onerror = (event) => reject(event.target.error);
+            request.onerror = (event) => {
+                console.error("DB Open Error:", event.target.error);
+                reject(event.target.error);
+            };
         });
     },
     init: async function() {
-        await this.open();
+        try {
+            await this.open();
+        } catch (e) {
+            console.warn("尝试降级打开数据库...");
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(WC_DB_NAME);
+                req.onsuccess = (e) => { this.instance = e.target.result; resolve(); };
+                req.onerror = (e) => reject(e.target.error);
+            });
+        }
     },
     get: async function(storeName, key) {
         await this.open();
         return new Promise((resolve, reject) => {
             try {
                 if (!this.instance.objectStoreNames.contains(storeName)) return resolve(null);
-                const transaction = this.instance.transaction([storeName], 'readonly');
-                const request = transaction.objectStore(storeName).get(key);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
+                const tx = this.instance.transaction([storeName], 'readonly');
+                const req = tx.objectStore(storeName).get(key);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
             } catch (e) { resolve(null); }
         });
     },
@@ -2454,10 +2467,10 @@ const wcDb = {
         return new Promise((resolve, reject) => {
             try {
                 if (!this.instance.objectStoreNames.contains(storeName)) return resolve([]);
-                const transaction = this.instance.transaction([storeName], 'readonly');
-                const request = transaction.objectStore(storeName).getAll();
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
+                const tx = this.instance.transaction([storeName], 'readonly');
+                const req = tx.objectStore(storeName).getAll();
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
             } catch (e) { resolve([]); }
         });
     },
@@ -2466,10 +2479,10 @@ const wcDb = {
         return new Promise((resolve, reject) => {
             try {
                 if (!this.instance.objectStoreNames.contains(storeName)) return resolve();
-                const transaction = this.instance.transaction([storeName], 'readwrite');
-                const request = key ? transaction.objectStore(storeName).put(value, key) : transaction.objectStore(storeName).put(value);
-                transaction.oncomplete = () => resolve();
-                transaction.onerror = () => reject(transaction.error);
+                const tx = this.instance.transaction([storeName], 'readwrite');
+                const req = key ? tx.objectStore(storeName).put(value, key) : tx.objectStore(storeName).put(value);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
             } catch (e) { resolve(); }
         });
     },
@@ -2478,10 +2491,10 @@ const wcDb = {
         return new Promise((resolve, reject) => {
             try {
                 if (!this.instance.objectStoreNames.contains(storeName)) return resolve();
-                const transaction = this.instance.transaction([storeName], 'readwrite');
-                const request = transaction.objectStore(storeName).delete(key);
-                transaction.oncomplete = () => resolve();
-                transaction.onerror = () => reject(transaction.error);
+                const tx = this.instance.transaction([storeName], 'readwrite');
+                const req = tx.objectStore(storeName).delete(key);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
             } catch (e) { resolve(); }
         });
     }
@@ -2602,40 +2615,68 @@ async function wcLoadData() {
 
 async function wcSaveData() {
     try {
-        // 👈 修改2：使用 Promise.all 并发保存。
-        // 原本的 await 是一行一行执行的，iOS 杀后台太快，导致排在后面的 characters 根本来不及保存！
-        const promises = [];
+        await wcDb.open();
+        if (!wcDb.instance) return;
 
-        promises.push(wcDb.put('kv_store', wcState.myFavorites || [], 'my_favorites'));
-        promises.push(wcDb.put('kv_store', wcState.calendarEvents || [], 'calendar_events'));
-        promises.push(wcDb.put('kv_store', wcState.user || { name: 'User', avatar: '' }, 'user'));
-        promises.push(wcDb.put('kv_store', wcState.wallet || { balance: 0, transactions: [] }, 'wallet'));
-        promises.push(wcDb.put('kv_store', wcState.stickerCategories || [], 'sticker_categories'));
-        promises.push(wcDb.put('kv_store', wcState.cssPresets || [], 'css_presets'));
-        promises.push(wcDb.put('kv_store', wcState.unreadCounts || {}, 'unread_counts'));
-        promises.push(wcDb.put('kv_store', wcState.chatBgPresets || [], 'chat_bg_presets'));
-        promises.push(wcDb.put('kv_store', wcState.phonePresets || [], 'phone_presets'));
-        promises.push(wcDb.put('kv_store', wcState.shopData || {}, 'shop_data'));
+        return new Promise((resolve, reject) => {
+            try {
+                const stores = ['kv_store', 'characters', 'masks', 'moments', 'chats'];
+                const validStores = stores.filter(s => wcDb.instance.objectStoreNames.contains(s));
+                if (validStores.length === 0) return resolve();
 
-        for (const char of wcState.characters) {
-            if (char && char.id) promises.push(wcDb.put('characters', char));
-        }
-        for (const mask of wcState.masks) {
-            if (mask && mask.id) promises.push(wcDb.put('masks', mask));
-        }
-        for (const moment of wcState.moments) {
-            if (moment && moment.id) promises.push(wcDb.put('moments', moment));
-        }
-        for (const charId in wcState.chats) {
-            const parsedId = parseInt(charId);
-            if (!isNaN(parsedId)) {
-                promises.push(wcDb.put('chats', { charId: parsedId, messages: wcState.chats[charId] }));
+                const tx = wcDb.instance.transaction(validStores, 'readwrite');
+                
+                tx.oncomplete = () => resolve();
+                tx.onerror = (e) => reject(tx.error);
+
+                if (validStores.includes('kv_store')) {
+                    const kv = tx.objectStore('kv_store');
+                    kv.put(wcState.myFavorites || [], 'my_favorites');
+                    kv.put(wcState.calendarEvents || [], 'calendar_events');
+                    kv.put(wcState.user || { name: 'User', avatar: '' }, 'user');
+                    kv.put(wcState.wallet || { balance: 0, transactions: [] }, 'wallet');
+                    kv.put(wcState.stickerCategories || [], 'sticker_categories');
+                    kv.put(wcState.cssPresets || [], 'css_presets');
+                    kv.put(wcState.unreadCounts || {}, 'unread_counts');
+                    kv.put(wcState.chatBgPresets || [], 'chat_bg_presets');
+                    kv.put(wcState.phonePresets || [], 'phone_presets');
+                    kv.put(wcState.shopData || {}, 'shop_data');
+                }
+
+                if (validStores.includes('characters')) {
+                    const charStore = tx.objectStore('characters');
+                    for (const char of wcState.characters) {
+                        if (char && char.id) charStore.put(char);
+                    }
+                }
+
+                if (validStores.includes('masks')) {
+                    const maskStore = tx.objectStore('masks');
+                    for (const mask of wcState.masks) {
+                        if (mask && mask.id) maskStore.put(mask);
+                    }
+                }
+
+                if (validStores.includes('moments')) {
+                    const momentStore = tx.objectStore('moments');
+                    for (const moment of wcState.moments) {
+                        if (moment && moment.id) momentStore.put(moment);
+                    }
+                }
+
+                if (validStores.includes('chats')) {
+                    const chatStore = tx.objectStore('chats');
+                    for (const charId in wcState.chats) {
+                        const parsedId = parseInt(charId);
+                        if (!isNaN(parsedId)) {
+                            chatStore.put({ charId: parsedId, messages: wcState.chats[charId] });
+                        }
+                    }
+                }
+            } catch (err) {
+                reject(err);
             }
-        }
-
-        // 一次性将所有保存任务推入队列，瞬间完成，防止被 iOS 杀后台打断
-        await Promise.all(promises.map(p => p.catch(e => console.warn("Save item failed:", e))));
-
+        });
     } catch (e) {
         console.error("WeChat Save failed", e);
     }
@@ -3850,12 +3891,27 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         systemPrompt += `【你的唯一身份与设定】\n你是：${char.name}\n人设：${char.prompt || '无'}\n(警告：你只能扮演 ${char.name}，绝不能扮演其他人！)\n\n`;
         systemPrompt += `【对方(User)的设定】\n对方是：${config.userName || wcState.user.name}\n人设：${config.userPersona || '无'}\n\n`;
 
+        // 史诗级强化：强制 AI 读取并应用记忆
         if (char.memories && char.memories.length > 0) {
-            const readCount = config.aiMemoryCount || 5;
-            const recentMemories = char.memories.slice(0, readCount);
-            systemPrompt += `【关于聊天的记忆/总结】\n`;
-            recentMemories.forEach(m => { systemPrompt += `- ${m.content}\n`; });
-            systemPrompt += `\n`;
+            // 确保读取的是用户设置的最新条数
+            const readCount = config.aiMemoryCount !== undefined ? config.aiMemoryCount : 5;
+            
+            if (readCount > 0) {
+                // 因为新记忆是 unshift 插入到数组头部的，所以 slice(0, readCount) 取出的就是最新的 N 条
+                const recentMemories = char.memories.slice(0, readCount);
+                
+                systemPrompt += `\n====================================\n`;
+                systemPrompt += `【⚠️ 核心潜意识与绝对记忆 (最高优先级) ⚠️】\n`;
+                systemPrompt += `以下是你脑海中最深刻的记忆（共 ${recentMemories.length} 条），你绝对不能忘记！在接下来的对话中，你必须时刻牢记这些设定和发生过的事，并让它们自然地影响你的情绪和决定：\n`;
+                
+                recentMemories.forEach(m => { 
+                    // 去除总结前缀，让 AI 读起来更自然
+                    let cleanMem = m.content.replace(/^\[.*?\]\s*/, '');
+                    systemPrompt += `👉 ${cleanMem}\n`; 
+                });
+                
+                systemPrompt += `====================================\n\n`;
+            }
         }
 
         let availableStickers = [];
@@ -5201,29 +5257,111 @@ function wcActionMemory() {
     wcOpenMemoryPage();
 }
 
+// ==========================================
+// 极简韩系 INS 风回忆日记逻辑 (黑白星空塔罗牌版)
+// ==========================================
+
+// 全局变量用于塔罗牌状态
+let insTarotCurrentIndex = 0;
+let insTarotCardsData = [];
+let insCurrentEditingMemId = null;
+
+// 动态生成星空背景的函数
+function generateUniverseBg() {
+    let html = '<div class="ins-mem-universe-bg">';
+    // 生成 30 个随机星光
+    for(let i=0; i<30; i++) {
+        const size = Math.random() * 3 + 1;
+        const left = Math.random() * 100;
+        const top = Math.random() * 100;
+        const duration = Math.random() * 3 + 2;
+        html += `<div class="ins-mem-star" style="width:${size}px; height:${size}px; left:${left}%; top:${top}%; --duration:${duration}s;"></div>`;
+    }
+    // 生成 5 条流苏/流星
+    for(let i=0; i<5; i++) {
+        const left = Math.random() * 100;
+        const duration = Math.random() * 5 + 5;
+        const delay = Math.random() * 5;
+        html += `<div class="ins-mem-tassel" style="left:${left}%; --duration:${duration}s; animation-delay:${delay}s;"></div>`;
+    }
+    html += '</div>';
+    return html;
+}
+
 function wcOpenMemoryPage() {
     document.getElementById('wc-view-chat-detail').classList.remove('active');
-    document.getElementById('wc-view-memory').classList.add('active');
+    const memView = document.getElementById('wc-view-memory');
+    memView.classList.add('active');
     
-    const titleEl = document.getElementById('wc-nav-title');
-    titleEl.innerText = '回忆总结';
-    titleEl.onclick = null;
-    titleEl.style.cursor = 'default';
-    
-    const rightContainer = document.getElementById('wc-nav-right-container');
-    rightContainer.innerHTML = '';
-    
-    const btnSettings = document.createElement('button');
-    btnSettings.className = 'wc-nav-btn';
-    btnSettings.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2 2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
-    btnSettings.onclick = () => wcOpenMemorySettingsModal();
-    rightContainer.appendChild(btnSettings);
+    // 隐藏全局的微信 Navbar
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'none';
 
-    const btn = document.createElement('button');
-    btn.className = 'wc-nav-btn';
-    btn.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>';
-    btn.onclick = () => wcOpenModal('wc-modal-memory-actions');
-    rightContainer.appendChild(btn);
+    // 注入全新的 HTML 结构 (修复羽毛笔点击，增加字数统计)
+    memView.innerHTML = `
+        ${generateUniverseBg()}
+        <header class="ins-mem-header">
+            <div class="ins-mem-title-box" onclick="wcCloseMemoryPage()">
+                <span class="ins-mem-title-1">回忆</span>
+                <span class="ins-mem-title-2">日记</span>
+            </div>
+            <div class="ins-mem-line"></div>
+            <div class="ins-mem-icons">
+                <!-- 1. 羽毛笔 (调用高级弹窗手动添加记忆) -->
+                <div class="ins-mem-icon-btn" onclick="insOpenManualAddModal()" title="手动添加记忆">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                </div>
+                <!-- 2. 魔法星轨 (打开更多操作：手动总结 / AI读取条数) -->
+                <div class="ins-mem-icon-btn" onclick="wcOpenModal('wc-modal-memory-actions')" title="更多操作">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 3L13.5 9.5L20 11L13.5 12.5L12 19L10.5 12.5L4 11L10.5 9.5L12 3Z" fill="currentColor" stroke="none"/>
+                        <circle cx="19" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+                        <circle cx="5" cy="18" r="1" fill="currentColor" stroke="none"/>
+                    </svg>
+                </div>
+                <!-- 3. 调音滑块 (回忆设置：触发条数/世界书) -->
+                <div class="ins-mem-icon-btn" onclick="wcOpenMemorySettingsModal()" title="回忆设置">
+                    <svg viewBox="0 0 24 24">
+                        <line x1="4" y1="8" x2="20" y2="8" />
+                        <line x1="4" y1="16" x2="20" y2="16" />
+                        <circle cx="9" cy="8" r="2" fill="currentColor" />
+                        <circle cx="16" cy="16" r="2" fill="currentColor" />
+                    </svg>
+                </div>
+            </div>
+        </header>
+        <main class="ins-mem-main" id="wc-memory-list-container"></main>
+
+        <!-- 塔罗牌堆叠视图 -->
+        <div class="ins-tarot-overlay" id="insTarotModal">
+            <div class="ins-tarot-close" onclick="insCloseTarot()">×</div>
+            <div class="ins-tarot-date-title" id="insTarotDateTitle">DATE</div>
+            <div class="ins-tarot-container" id="insTarotContainer" 
+                 ontouchstart="insTarotTouchStart(event)" 
+                 ontouchmove="insTarotTouchMove(event)" 
+                 ontouchend="insTarotTouchEnd(event)">
+            </div>
+        </div>
+
+        <!-- 300x500 详情编辑弹窗 (带字数统计) -->
+        <div class="ins-mem-detail-overlay" id="insMemDetailModal">
+            <div class="ins-mem-detail-card">
+                <div class="ins-mem-detail-header">
+                    <span class="ins-mem-detail-date" id="insMemDetailDate">TIME</span>
+                    <span class="ins-mem-detail-close" onclick="insCloseMemDetail()">×</span>
+                </div>
+                <input type="text" class="ins-mem-detail-title" id="insMemDetailTitle" placeholder="标题">
+                <!-- 绑定 oninput 实时更新字数 -->
+                <textarea class="ins-mem-detail-textarea" id="insMemDetailContent" placeholder="记录下这一刻..." oninput="document.getElementById('insMemWordCount').innerText = this.value.length + ' 字'"></textarea>
+                <div class="ins-mem-detail-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span id="insMemWordCount" style="color: rgba(255,255,255,0.5); font-size: 12px; font-family: monospace;">0 字</span>
+                    <button class="ins-mem-detail-save" onclick="insSaveMemDetail()">SAVE</button>
+                </div>
+            </div>
+        </div>
+    `;
 
     wcRenderMemories();
 }
@@ -5231,95 +5369,291 @@ function wcOpenMemoryPage() {
 function wcCloseMemoryPage() {
     document.getElementById('wc-view-memory').classList.remove('active');
     document.getElementById('wc-view-chat-detail').classList.add('active');
-    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'flex';
+    
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     const titleEl = document.getElementById('wc-nav-title');
     let displayName = char.note || char.name;
-    // 【新增】：如果是群聊，在名字后面加上人数
-    if (char.isGroup && char.members) {
-        displayName += ` (${char.members.length})`;
-    }
+    if (char.isGroup && char.members) displayName += ` (${char.members.length})`;
     titleEl.innerText = displayName;
-    titleEl.onclick = null;
-    titleEl.style.cursor = 'default';    
-    const rightContainer = document.getElementById('wc-nav-right-container');
-    rightContainer.innerHTML = '';
-    const btn = document.createElement('button');
-    btn.className = 'wc-nav-btn';
-    btn.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>';
-    btn.onclick = () => wcOpenChatSettings();
-    rightContainer.appendChild(btn);
 }
 
 function wcRenderMemories() {
     const container = document.getElementById('wc-memory-list-container');
+    if (!container) return;
     container.innerHTML = '';
+    
     const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     if (!char.memories) char.memories = [];
 
     if (char.memories.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #8E8E93; padding-top: 50px;">暂无回忆</div>';
+        container.innerHTML = '<div style="text-align: center; color: #555; padding-top: 50px; font-family: Georgia, serif; font-style: italic;">星空寂寥，暂无回忆...</div>';
         return;
     }
 
-    char.memories.forEach((mem, index) => {
-        const div = document.createElement('div');
-        div.className = 'wc-memory-card';
-        
-        // 精准判断记忆类型
-        let displayType = '手动添加';
-        if (mem.type === 'summary') {
-            if (mem.content.includes('[自动总结')) {
-                displayType = '自动总结';
-            } else if (mem.content.includes('[手动总结')) {
-                displayType = '手动总结';
-            } else {
-                displayType = '总结';
-            }
-        } else if (mem.type === 'manual') {
-            displayType = '手动添加';
-        }
+    const groups = {};
+    char.memories.forEach(mem => {
+        const d = new Date(mem.time);
+        const dateKey = `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+        if (!groups[dateKey]) groups[dateKey] = [];
+        groups[dateKey].push(mem);
+    });
 
-        // 重新排版：左侧时间+类型标签，右侧修改+删除按钮，彻底解决重叠
-        div.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #F0F0F0; padding-bottom: 8px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px; color: #8E8E93;">${new Date(mem.time).toLocaleString()}</span>
-                    <span style="font-size: 10px; background: #F2F2F7; color: #555; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${displayType}</span>
+    const colorClasses = ['ins-bg-white', 'ins-bg-gray', 'ins-bg-pink', 'ins-bg-blue', 'ins-bg-green'];
+
+    Object.keys(groups).sort((a, b) => b.localeCompare(a)).forEach(dateKey => {
+        const row = document.createElement('div');
+        row.className = 'ins-mem-row';
+        
+        let rowHtml = `
+            <div class="ins-mem-time-node" onclick="insOpenTarot('${dateKey}')">
+                <div class="ins-mem-node-icon">
+                    <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" transform="rotate(45 12 12)"/></svg>
                 </div>
-                <div style="display: flex; gap: 15px;">
-                    <div style="color: #007AFF; cursor: pointer; font-size: 13px; font-weight: bold;" onclick="wcEditMemory(${index})">修改</div>
-                    <div style="color: #FF3B30; cursor: pointer; font-size: 13px; font-weight: bold;" onclick="wcDeleteMemory(${index})">删除</div>
-                </div>
+                <div class="ins-mem-date-text">${dateKey}</div>
+                <div class="ins-mem-date-hint">点击展开</div>
             </div>
-            <div class="wc-memory-content" style="font-size: 14px; color: #333; line-height: 1.6;">${mem.content}</div>
+            <div class="ins-mem-cards-scroll">
         `;
-        container.appendChild(div);
+
+        groups[dateKey].forEach((mem, idx) => {
+            const d = new Date(mem.time);
+            const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            const colorClass = colorClasses[idx % colorClasses.length];
+            
+            let title = '记忆碎片';
+            let content = mem.content;
+            if (mem.type === 'summary') {
+                if (mem.content.includes('[自动总结')) title = '自动总结';
+                else if (mem.content.includes('[手动总结')) title = '手动总结';
+                else title = '总结';
+                content = mem.content.replace(/\[.*?\]\s*/, ''); 
+            } else if (mem.type === 'manual') {
+                title = '手动添加'; 
+            }
+
+            const safeContent = content.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+            rowHtml += `
+                <div class="ins-mem-card ${colorClass}" onclick="insOpenMemDetail(${mem.id}, '${title}', '${safeContent}', '${dateKey} ${timeStr}')">
+                    <div class="ins-mem-delete-btn" onclick="wcDeleteMemory(event, ${mem.id})">×</div>
+                    <div class="ins-mem-card-title">${title}</div>
+                    <div class="ins-mem-card-time">${timeStr}</div>
+                </div>
+            `;
+        });
+
+        rowHtml += `</div>`;
+        row.innerHTML = rowHtml;
+        container.appendChild(row);
     });
 }
 
-window.wcEditMemory = function(index) {
+function insOpenTarot(dateKey) {
     const char = wcState.characters.find(c => c.id === wcState.activeChatId);
-    if (!char || !char.memories || !char.memories[index]) return;
+    if (!char || !char.memories) return;
+
+    insTarotCardsData = char.memories.filter(mem => {
+        const d = new Date(mem.time);
+        return `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}` === dateKey;
+    });
+
+    if (insTarotCardsData.length === 0) return;
+
+    document.getElementById('insTarotDateTitle').innerText = dateKey;
+    insTarotCurrentIndex = 0;
+    insRenderTarotCards();
     
-    const mem = char.memories[index];
-    window.openIosTextEditModal("修改记忆", mem.content, (newText) => {
-        if (newText) {
-            mem.content = newText;
-            wcSaveData();
-            wcRenderMemories();
+    document.getElementById('insTarotModal').classList.add('active');
+}
+
+function insCloseTarot() {
+    document.getElementById('insTarotModal').classList.remove('active');
+}
+
+function insRenderTarotCards() {
+    const container = document.getElementById('insTarotContainer');
+    container.innerHTML = '';
+
+    insTarotCardsData.forEach((mem, index) => {
+        const d = new Date(mem.time);
+        const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        
+        let title = '记忆碎片';
+        let content = mem.content;
+        if (mem.type === 'summary') {
+            if (mem.content.includes('[自动总结')) title = '自动总结';
+            else if (mem.content.includes('[手动总结')) title = '手动总结';
+            else title = '总结';
+            content = mem.content.replace(/\[.*?\]\s*/, '');
+        } else if (mem.type === 'manual') {
+            title = '手动添加';
+        }
+
+        const card = document.createElement('div');
+        card.className = `ins-tarot-card`;
+        
+        card.innerHTML = `
+            <div class="ins-tarot-card-title">${title}</div>
+            <div class="ins-tarot-card-desc">${content}</div>
+            <div class="ins-tarot-card-time">${timeStr}</div>
+        `;
+
+        card.onclick = () => {
+            if (index === insTarotCurrentIndex) {
+                const dateKey = document.getElementById('insTarotDateTitle').innerText;
+                const safeContent = content.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                insOpenMemDetail(mem.id, title, safeContent, `${dateKey} ${timeStr}`);
+            } else {
+                insTarotCurrentIndex = index;
+                insUpdateTarotTransforms();
+            }
+        };
+
+        container.appendChild(card);
+    });
+
+    insUpdateTarotTransforms();
+}
+
+function insUpdateTarotTransforms() {
+    const cards = document.querySelectorAll('.ins-tarot-card');
+    cards.forEach((card, index) => {
+        const offset = index - insTarotCurrentIndex;
+        
+        if (offset === 0) {
+            card.style.transform = `translateX(0) scale(1) translateZ(0)`;
+            card.style.zIndex = 10;
+            card.style.opacity = 1;
+            card.style.filter = 'none';
+        } else if (offset < 0) {
+            card.style.transform = `translateX(${offset * 60}px) scale(0.85) rotateY(15deg) translateZ(-100px)`;
+            card.style.zIndex = 5 + offset;
+            card.style.opacity = 1 - Math.abs(offset) * 0.3;
+            card.style.filter = 'brightness(0.5)';
+        } else {
+            card.style.transform = `translateX(${offset * 60}px) scale(0.85) rotateY(-15deg) translateZ(-100px)`;
+            card.style.zIndex = 5 - offset;
+            card.style.opacity = 1 - Math.abs(offset) * 0.3;
+            card.style.filter = 'brightness(0.5)';
         }
     });
-};
+}
 
-function wcDeleteMemory(index) {
-    if (confirm("确定删除这条记忆吗？")) {
-        const char = wcState.characters.find(c => c.id === wcState.activeChatId);
-        char.memories.splice(index, 1);
-        wcSaveData();
-        wcRenderMemories();
+let insTarotStartX = 0;
+function insTarotTouchStart(e) { insTarotStartX = e.touches[0].clientX; }
+function insTarotTouchMove(e) { e.preventDefault(); }
+function insTarotTouchEnd(e) {
+    const endX = e.changedTouches[0].clientX;
+    const diff = endX - insTarotStartX;
+    if (diff > 50 && insTarotCurrentIndex > 0) {
+        insTarotCurrentIndex--;
+        insUpdateTarotTransforms();
+    } else if (diff < -50 && insTarotCurrentIndex < insTarotCardsData.length - 1) {
+        insTarotCurrentIndex++;
+        insUpdateTarotTransforms();
     }
 }
+
+// ==========================================
+// 详情编辑与【新增】手动添加弹窗逻辑
+// ==========================================
+
+// 点击羽毛笔触发：复用高级弹窗进行新建
+function insOpenManualAddModal() {
+    insCurrentEditingMemId = null; // null 代表新建
+    document.getElementById('insMemDetailTitle').value = '手动添加';
+    document.getElementById('insMemDetailContent').value = '';
+    document.getElementById('insMemWordCount').innerText = '0 字';
+    
+    const now = new Date();
+    const dateStr = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    document.getElementById('insMemDetailDate').innerText = dateStr;
+    
+    document.getElementById('insMemDetailModal').classList.add('active');
+}
+
+function insOpenMemDetail(id, title, content, dateStr) {
+    insCurrentEditingMemId = id;
+    document.getElementById('insMemDetailTitle').value = title;
+    document.getElementById('insMemDetailContent').value = content;
+    document.getElementById('insMemWordCount').innerText = content.length + ' 字'; // 初始化字数
+    document.getElementById('insMemDetailDate').innerText = dateStr;
+    document.getElementById('insMemDetailModal').classList.add('active');
+}
+
+function insCloseMemDetail() {
+    document.getElementById('insMemDetailModal').classList.remove('active');
+    insCurrentEditingMemId = null;
+}
+
+function insSaveMemDetail() {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    if (!char.memories) char.memories = [];
+
+    const newTitle = document.getElementById('insMemDetailTitle').value.trim();
+    const newContent = document.getElementById('insMemDetailContent').value.trim();
+    
+    if (!newContent) {
+        alert("记忆内容不能为空哦~");
+        return;
+    }
+
+    if (insCurrentEditingMemId) {
+        // 修改已有记忆
+        const mem = char.memories.find(m => m.id === insCurrentEditingMemId);
+        if (mem) {
+            if (mem.type === 'summary') {
+                const prefixMatch = mem.content.match(/^\[.*?\]\s*/);
+                const prefix = prefixMatch ? prefixMatch[0] : '[手动总结] ';
+                mem.content = prefix + newContent;
+            } else {
+                mem.content = newContent;
+            }
+        }
+    } else {
+        // 新建手动记忆 (羽毛笔触发)
+        char.memories.unshift({
+            id: Date.now(),
+            type: 'manual',
+            content: newContent,
+            time: Date.now()
+        });
+    }
+    
+    wcSaveData();
+    wcRenderMemories();
+    
+    // 如果塔罗牌开着，同步刷新塔罗牌
+    if (document.getElementById('insTarotModal').classList.contains('active')) {
+        const dateKey = document.getElementById('insTarotDateTitle').innerText;
+        insOpenTarot(dateKey);
+    }
+    
+    insCloseMemDetail();
+}
+
+// 覆盖原有的删除逻辑
+window.wcDeleteMemory = function(event, id) {
+    event.stopPropagation(); // 阻止触发打开详情
+    if (confirm("确定要将这段记忆化作尘埃吗？")) {
+        const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+        if (char && char.memories) {
+            char.memories = char.memories.filter(m => m.id !== id);
+            wcSaveData();
+            wcRenderMemories();
+            
+            // 如果塔罗牌开着，同步刷新塔罗牌
+            if (document.getElementById('insTarotModal').classList.contains('active')) {
+                const dateKey = document.getElementById('insTarotDateTitle').innerText;
+                insOpenTarot(dateKey);
+            }
+        }
+    }
+};
 
 function wcOpenMemorySummaryModal() {
     const msgs = wcState.chats[wcState.activeChatId] || [];
