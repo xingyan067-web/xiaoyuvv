@@ -928,57 +928,73 @@ function importThemeOnly(input) {
 
 // --- 全局备份 (包含 WeChat) ---
 async function exportAllData() {
-    const data = {};
-    
-    // 1. 导出 Theme Studio 数据
-    const keys = await idb.getAllKeys();
-    for (let key of keys) {
-        if (key.startsWith('ios_theme_')) {
-            data[key] = await idb.get(key);
+    try {
+        const data = {};
+        
+        // 1. 导出 Theme Studio 数据
+        const keys = await idb.getAllKeys();
+        for (let key of keys) {
+            if (key.startsWith('ios_theme_')) {
+                data[key] = await idb.get(key);
+            }
         }
+
+        // 2. 导出 WeChat 数据
+        const wechatData = {};
+        if (wcDb.instance) {
+            wechatData.user = await wcDb.get('kv_store', 'user');
+            wechatData.wallet = await wcDb.get('kv_store', 'wallet');
+            wechatData.stickerCategories = await wcDb.get('kv_store', 'sticker_categories');
+            wechatData.cssPresets = await wcDb.get('kv_store', 'css_presets');
+            wechatData.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets');
+            wechatData.phonePresets = await wcDb.get('kv_store', 'phone_presets');
+            wechatData.shopData = await wcDb.get('kv_store', 'shop_data');
+            wechatData.characters = await wcDb.getAll('characters');
+            wechatData.masks = await wcDb.getAll('masks');
+            wechatData.moments = await wcDb.getAll('moments');
+            
+            const allChats = await wcDb.getAll('chats');
+            const chatsObj = {};
+            if (allChats) {
+                allChats.forEach(item => {
+                    chatsObj[item.charId] = item.messages;
+                });
+            }
+            wechatData.chats = chatsObj;
+        }
+        
+        data['wechat_backup'] = wechatData;
+
+        // 3. 导出恋人空间数据
+        data['ls_data'] = await idb.get('ls_data');
+
+        // 4. 导出音乐数据 (APP3)
+        data['ins_music_data'] = await idb.get('ins_music_data');
+
+        // 5. 导出梦境数据
+        data['dream_space_data'] = await idb.get('dream_space_data');
+        // 6. 导出论坛数据
+        data['ins_forum_data'] = await idb.get('ins_forum_data');
+
+        const exportObj = { signature: 'ios_theme_studio_full_backup', timestamp: Date.now(), data: data };
+        
+        let jsonString;
+        try {
+            jsonString = JSON.stringify(exportObj);
+        } catch (err) {
+            throw new Error("数据量过大，请尝试清理部分聊天记录或图片后再备份。");
+        }
+
+        const blob = new Blob([jsonString], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `full_backup_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        
+    } catch (error) {
+        console.error("全局备份失败:", error);
+        alert("全局备份失败: " + error.message);
     }
-
-    // 2. 导出 WeChat 数据
-    const wechatData = {};
-    wechatData.user = await wcDb.get('kv_store', 'user');
-    wechatData.wallet = await wcDb.get('kv_store', 'wallet');
-    wechatData.stickerCategories = await wcDb.get('kv_store', 'sticker_categories');
-    wechatData.cssPresets = await wcDb.get('kv_store', 'css_presets');
-    wechatData.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets'); // 新增
-    wechatData.phonePresets = await wcDb.get('kv_store', 'phone_presets'); // 新增
-    wechatData.shopData = await wcDb.get('kv_store', 'shop_data'); // 新增购物数据
-    wechatData.characters = await wcDb.getAll('characters');
-    wechatData.masks = await wcDb.getAll('masks');
-    wechatData.moments = await wcDb.getAll('moments');
-    
-    const allChats = await wcDb.getAll('chats');
-    const chatsObj = {};
-    if (allChats) {
-        allChats.forEach(item => {
-            chatsObj[item.charId] = item.messages;
-        });
-    }
-    wechatData.chats = chatsObj;
-    
-    data['wechat_backup'] = wechatData;
-
-    // 3. 导出恋人空间数据
-    data['ls_data'] = await idb.get('ls_data');
-
-    // 4. 导出音乐数据 (APP3)
-    data['ins_music_data'] = await idb.get('ins_music_data');
-
-    // 5. 导出梦境数据
-    data['dream_space_data'] = await idb.get('dream_space_data');
-    // 6. 导出论坛数据
-    data['ins_forum_data'] = await idb.get('ins_forum_data');
-
-    const exportObj = { signature: 'ios_theme_studio_full_backup', timestamp: Date.now(), data: data };
-    const blob = new Blob([JSON.stringify(exportObj)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `full_backup_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 function importAllData(input) {
@@ -2386,34 +2402,66 @@ const wcDb = {
     },
     get: function(storeName, key) {
         return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction([storeName], 'readonly');
-            const request = transaction.objectStore(storeName).get(key);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+            try {
+                if (!this.instance || !this.instance.objectStoreNames.contains(storeName)) {
+                    return resolve(null);
+                }
+                const transaction = this.instance.transaction([storeName], 'readonly');
+                const request = transaction.objectStore(storeName).get(key);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            } catch (e) {
+                console.warn(`wcDb.get error for store ${storeName}:`, e);
+                resolve(null);
+            }
         });
     },
     getAll: function(storeName) {
         return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction([storeName], 'readonly');
-            const request = transaction.objectStore(storeName).getAll();
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+            try {
+                if (!this.instance || !this.instance.objectStoreNames.contains(storeName)) {
+                    return resolve([]);
+                }
+                const transaction = this.instance.transaction([storeName], 'readonly');
+                const request = transaction.objectStore(storeName).getAll();
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            } catch (e) {
+                console.warn(`wcDb.getAll error for store ${storeName}:`, e);
+                resolve([]);
+            }
         });
     },
     put: function(storeName, value, key) {
         return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction([storeName], 'readwrite');
-            const request = key ? transaction.objectStore(storeName).put(value, key) : transaction.objectStore(storeName).put(value);
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
+            try {
+                if (!this.instance || !this.instance.objectStoreNames.contains(storeName)) {
+                    return resolve();
+                }
+                const transaction = this.instance.transaction([storeName], 'readwrite');
+                const request = key ? transaction.objectStore(storeName).put(value, key) : transaction.objectStore(storeName).put(value);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            } catch (e) {
+                console.warn(`wcDb.put error for store ${storeName}:`, e);
+                resolve();
+            }
         });
     },
     delete: function(storeName, key) {
         return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction([storeName], 'readwrite');
-            const request = transaction.objectStore(storeName).delete(key);
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
+            try {
+                if (!this.instance || !this.instance.objectStoreNames.contains(storeName)) {
+                    return resolve();
+                }
+                const transaction = this.instance.transaction([storeName], 'readwrite');
+                const request = transaction.objectStore(storeName).delete(key);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            } catch (e) {
+                console.warn(`wcDb.delete error for store ${storeName}:`, e);
+                resolve();
+            }
         });
     }
 };
@@ -5509,33 +5557,52 @@ function wcOpenWechatSettings() {
 }
 
 async function wcExportData() {
-    const data = {};
-    data.user = await wcDb.get('kv_store', 'user');
-    data.wallet = await wcDb.get('kv_store', 'wallet');
-    data.stickerCategories = await wcDb.get('kv_store', 'sticker_categories');
-    data.cssPresets = await wcDb.get('kv_store', 'css_presets');
-    data.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets'); // 新增
-    data.phonePresets = await wcDb.get('kv_store', 'phone_presets'); // 新增
-    data.shopData = await wcDb.get('kv_store', 'shop_data'); // 新增
-    data.characters = await wcDb.getAll('characters');
-    data.masks = await wcDb.getAll('masks');
-    data.moments = await wcDb.getAll('moments');
-    
-    const allChats = await wcDb.getAll('chats');
-    const chatsObj = {};
-    if (allChats) {
-        allChats.forEach(item => {
-            chatsObj[item.charId] = item.messages;
-        });
-    }
-    data.chats = chatsObj;
+    try {
+        if (!wcDb.instance) {
+            alert("WeChat 数据库未初始化，无法备份。");
+            return;
+        }
 
-    const exportObj = { signature: 'wechat_sim_backup', timestamp: Date.now(), data: data };
-    const blob = new Blob([JSON.stringify(exportObj)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `wechat_backup_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        const data = {};
+        data.user = await wcDb.get('kv_store', 'user');
+        data.wallet = await wcDb.get('kv_store', 'wallet');
+        data.stickerCategories = await wcDb.get('kv_store', 'sticker_categories');
+        data.cssPresets = await wcDb.get('kv_store', 'css_presets');
+        data.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets');
+        data.phonePresets = await wcDb.get('kv_store', 'phone_presets');
+        data.shopData = await wcDb.get('kv_store', 'shop_data');
+        data.characters = await wcDb.getAll('characters');
+        data.masks = await wcDb.getAll('masks');
+        data.moments = await wcDb.getAll('moments');
+        
+        const allChats = await wcDb.getAll('chats');
+        const chatsObj = {};
+        if (allChats) {
+            allChats.forEach(item => {
+                chatsObj[item.charId] = item.messages;
+            });
+        }
+        data.chats = chatsObj;
+
+        const exportObj = { signature: 'wechat_sim_backup', timestamp: Date.now(), data: data };
+        
+        let jsonString;
+        try {
+            jsonString = JSON.stringify(exportObj);
+        } catch (err) {
+            throw new Error("数据量过大，请尝试清理部分聊天记录或图片后再备份。");
+        }
+
+        const blob = new Blob([jsonString], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `wechat_backup_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        
+    } catch (error) {
+        console.error("WeChat 备份失败:", error);
+        alert("WeChat 备份失败: " + error.message);
+    }
 }
 
 function wcImportData(input) {
