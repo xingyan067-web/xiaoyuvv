@@ -3589,11 +3589,12 @@ async function wcTriggerAI(charIdOverride = null) {
             
             let playlistInfo = "当前播放列表为空";
             if (musicState.currentPlaylist && musicState.currentPlaylist.length > 0) {
-                const listStr = musicState.currentPlaylist.map((s, i) => `${i === musicState.currentIndex ? '👉(正在播放)' : '  '} ${i+1}. 《${s.title}》- ${s.artist}`).join('\n');
-                playlistInfo = `\n【当前播放列表】:\n${listStr}`;
+                // 👇 修改：加上索引，限制最多传前20首，防止token爆炸
+                const listStr = musicState.currentPlaylist.slice(0, 20).map((s, i) => `${i === musicState.currentIndex ? '👉(正在播放)' : '  '} [索引:${i}] 《${s.title}》- ${s.artist}`).join('\n');
+                playlistInfo = `\n【当前播放列表 (你可以随时切到列表里的歌)】:\n${listStr}${musicState.currentPlaylist.length > 20 ? '\n...(后面还有更多)' : ''}`;
             }
             
-            // 👇 新增：提取当前歌曲的歌词给 AI 感知 (限制行数防止 Token 爆炸)
+            // 提取当前歌曲的歌词给 AI 感知 (限制行数防止 Token 爆炸)
             let lyricsInfo = "";
             if (musicState.lyrics && musicState.lyrics.length > 0) {
                 const lyricLines = musicState.lyrics.slice(0, 30).map(l => l.text).filter(t => t.trim() !== '').join(' / ');
@@ -3606,6 +3607,7 @@ async function wcTriggerAI(charIdOverride = null) {
 - 暂停/继续音乐: {"type":"music_control", "action":"pause"} 或 {"type":"music_control", "action":"play"}
 - 切换上一首/下一首: {"type":"music_control", "action":"prev"} 或 {"type":"music_control", "action":"next"}
 - 随机播放一首: {"type":"music_control", "action":"random"}
+- 播放列表中的指定歌曲: {"type":"music_play_list_index", "index": 索引数字, "content":"切到这首"}
 - 搜索歌曲/歌手: {"type":"music_search", "keyword":"歌曲名 或 歌手名"} (系统会返回搜索结果列表给你，你需要从中筛选出正确的版本)
 - 播放选定的歌曲: {"type":"music_play_selected", "songId": 12345, "songName": "歌名"} (必须在收到搜索结果后，根据ID使用此指令播放)
 - 删除当前歌曲: {"type":"music_delete_song", "content":"太难听了，删掉"}
@@ -4230,6 +4232,19 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             musicUpdatePlayerUI();
             // 明确显示系统提示
             wcAddMessage(charId, 'system', 'system', `[系统提示: ${char.name} ${actionText}]`, { style: 'transparent' });
+            
+        // 👇 新增：处理 AI 直接点播列表里的歌曲 👇
+        } else if (action.type === 'music_play_list_index') {
+            const targetIdx = parseInt(action.index);
+            if (!isNaN(targetIdx) && targetIdx >= 0 && targetIdx < musicState.currentPlaylist.length) {
+                const targetSong = musicState.currentPlaylist[targetIdx];
+                wcAddMessage(charId, 'them', 'text', action.content || `*(切到了列表里的: ${targetSong.title})*`, extra);
+                musicState.currentIndex = targetIdx;
+                musicPlaySong(targetSong.id, targetSong.title, targetSong.artist, targetSong.cover);
+                wcAddMessage(charId, 'system', 'system', `[系统提示: ${char.name} 将歌曲切换到了列表中的《${targetSong.title}》]`, { style: 'transparent' });
+            } else {
+                wcAddMessage(charId, 'them', 'text', action.content || "*(想切歌但没找到这首)*", extra);
+            }
             
         } else if (action.type === 'music_search' || action.type === 'music_play_specific') {
             // 兼容旧指令，统一走搜索逻辑
