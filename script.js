@@ -16984,11 +16984,26 @@ function forumSubmitComment() {
         finalContent = `回复 @${forumState.replyingToComment}: ${text}`;
     }
     
+    // 👇 新增：判断是否勾选了匿名评论 👇
+    const isAnonymous = document.getElementById('forum-comment-anonymous') && document.getElementById('forum-comment-anonymous').checked;
+    let commenterName = forumState.profile.name;
+    let commenterHandle = forumState.profile.handle;
+    let commenterAvatar = forumState.profile.avatar;
+
+    if (isAnonymous) {
+        commenterName = "匿名网友";
+        commenterHandle = "@anonymous";
+        // 生成一个带“匿”字的默认灰色头像
+        const defaultAvatarSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#E5E5EA"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#888" font-size="30" font-weight="bold">匿</text></svg>`;
+        commenterAvatar = 'data:image/svg+xml;base64,' + window.btoa(unescape(encodeURIComponent(defaultAvatarSvg)));
+    }
+    // 👆 新增结束 👆
+
     if (!post.comments) post.comments = [];
     post.comments.push({
-        name: forumState.profile.name,
-        handle: forumState.profile.handle,
-        avatar: forumState.profile.avatar,
+        name: commenterName,       // 👈 使用处理后的名字
+        handle: commenterHandle,   // 👈 使用处理后的ID
+        avatar: commenterAvatar,   // 👈 使用处理后的头像
         content: finalContent,
         time: Date.now()
     });
@@ -16997,8 +17012,13 @@ function forumSubmitComment() {
     input.value = '';
     input.placeholder = "发布评论...";
     forumState.replyingToComment = null; 
+    
+    // 评论完后自动取消勾选匿名，防止下次忘记关掉
+    if (document.getElementById('forum-comment-anonymous')) {
+        document.getElementById('forum-comment-anonymous').checked = false;
+    }
+    
     forumRenderPostDetailContent();
-
 }
 
 // --- 新增：用户评论后，AI 自动回复并概率掉落私信 ---
