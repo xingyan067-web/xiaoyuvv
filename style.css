@@ -1,24 +1,51 @@
-/* --- 基础样式 --- */
-:root { --app-font-size: 11px; --bg-color: #f2f2f7; --separator-color: #c6c6c8; --blue: #007aff; --red: #ff3b30; --green: #34c759; --orange: #ff9500; --purple: #af52de; --teal: #5ac8fa; }
-* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; user-select: none; font-family: inherit; }
-/* --- 从这里开始替换 --- */
-html, body {
-    width: 100vw;
-    height: 100vh;
-    height: 100dvh; /* 核心：强制使用动态视口，完美贴合物理屏幕底部 */
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    position: fixed;
-    inset: 0; /* 等同于 top:0; bottom:0; left:0; right:0; */
-    background-color: transparent; /* 保持透明，让壁纸透出来 */
-    overscroll-behavior: none;
-    -webkit-overflow-scrolling: touch;
+/* --- 基础样式与变量 --- */
+:root { 
+    --app-font-size: 11px; 
+    --bg-color: #f2f2f7; 
+    --separator-color: #c6c6c8; 
+    --blue: #007aff; 
+    --red: #ff3b30; 
+    --green: #34c759; 
+    --orange: #ff9500; 
+    --purple: #af52de; 
+    --teal: #5ac8fa; 
 }
+
+* { 
+    margin: 0; 
+    padding: 0; 
+    box-sizing: border-box; 
+    -webkit-tap-highlight-color: transparent; 
+    outline: none; 
+}
+
 /* 强制全局字体继承 */
 body, input, textarea, select, button {
     font-family: inherit !important;
 }
+
+/* --- 核心全屏重置 (完美兼容 PWA Standalone) --- */
+html, body {
+    width: 100vw;
+    height: 100vh; 
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    position: fixed;
+    inset: 0; 
+    background-color: #FFFFFF; 
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: manipulation; 
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+input, textarea, select {
+    -webkit-user-select: auto !important;
+    user-select: auto !important;
+}
+
 #app-root {
     position: absolute; 
     inset: 0;
@@ -29,10 +56,7 @@ body, input, textarea, select, button {
     z-index: 1;
 }
 
-/* --- SVG 图标通用类 --- */
-.svg-icon { width: 24px; height: 24px; fill: currentColor; }
-
-/* --- 屏幕容器 --- */
+/* --- 主屏幕容器 --- */
 .screen {
     position: absolute; 
     inset: 0;
@@ -49,7 +73,9 @@ body, input, textarea, select, button {
     padding-bottom: env(safe-area-inset-bottom);
     z-index: 1; 
 }
-/* --- 到这里结束替换 --- */
+
+/* --- SVG 图标通用类 --- */
+.svg-icon { width: 24px; height: 24px; fill: currentColor; }
 
 /* --- 桌面编辑栏 --- */
 .desktop-edit-bar {
@@ -94,9 +120,11 @@ body, input, textarea, select, button {
 .home-grid {
     flex: 1; display: grid;
     grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(7, 1fr);
-    gap: 15px 10px; padding: 20px 20px 0 20px;
+    gap: clamp(15px, 3vh, 30px) clamp(10px, 3vw, 20px); 
+    padding: 20px 20px 0 20px;
     justify-items: center; align-items: start;
     position: relative; 
+    margin-bottom: 100px; 
 }
 
 /* --- 新版日系 INS 风小组件样式 (4x3) --- */
@@ -336,17 +364,16 @@ body, input, textarea, select, button {
 /* --- Dock 栏 --- */
 .dock-container { 
     position: absolute;
-    bottom: 20px;
+    bottom: 0;
     left: 0;
     width: 100%; 
     display: flex; 
     justify-content: center; 
-    padding: 0 15px;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding: 0 15px calc(env(safe-area-inset-bottom) + 15px) 15px;
     z-index: 10;
 }
 .dock {
-    width: 100%; height: 90px;
+    width: 100%; height: 85px;
     background: rgba(255, 255, 255, 0.25); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
     border-radius: 35px; display: flex; justify-content: space-around; align-items: center; padding: 0 15px;
 }
@@ -3707,155 +3734,6 @@ input::-webkit-inner-spin-button {
 .update-log-list { list-style: none; padding: 0; margin: 0; }
 .update-log-list li { font-size: 13px; color: #333; line-height: 1.6; margin-bottom: 6px; position: relative; padding-left: 12px; text-align: justify; }
 .update-log-list li::before { content: '-'; position: absolute; left: 0; color: #888; }
-/* ========================================== */
-/* 🍎 苹果全系列机型 PWA 桌面级自适应终极版 🍎 */
-/* 涵盖 iPhone SE 到 iPhone 16 Pro Max */
-/* ========================================== */
-
-:root {
-    /* 默认流式计算 (兜底方案，适用于安卓或未匹配的机型) */
-    --icon-size: clamp(50px, 15.5vw, 68px);
-    --icon-radius: clamp(12px, 3.5vw, 18px);
-    --grid-gap-x: clamp(10px, 4vw, 25px);
-    --grid-gap-y: clamp(15px, 3vh, 35px);
-    --grid-padding-x: clamp(15px, 5vw, 25px);
-    --dock-height: clamp(80px, 10vh, 95px);
-    --dock-bottom: env(safe-area-inset-bottom, 15px);
-    --safe-top: env(safe-area-inset-top, 20px);
-}
-
-/* 🌟 PWA 独立模式专属优化 (添加到桌面后生效) 🌟 */
-@media (display-mode: standalone) {
-    body, html {
-        /* 彻底阻止 PWA 模式下的下拉刷新和橡皮筋回弹露底色 */
-        overscroll-behavior: none !important;
-        -webkit-overflow-scrolling: auto !important;
-    }
-    .screen {
-        /* PWA 模式下状态栏是透明穿透的，必须强制留出刘海/灵动岛的高度 */
-        padding-top: max(var(--safe-top), 47px) !important;
-    }
-}
-
-/* ------------------------------------------ */
-/* 🍏 官方 iPhone 逻辑分辨率精准适配 🍏 */
-/* ------------------------------------------ */
-
-/* 1. 矮屏/带Home键机型 (iPhone SE 1/2/3, 8, 7) - 逻辑宽度 320~375px，高度 < 700px */
-@media screen and (max-width: 375px) and (max-height: 667px) {
-    :root {
-        --icon-size: 56px;
-        --grid-gap-x: 16px;
-        --grid-gap-y: 18px;
-        --dock-height: 82px;
-    }
-    /* 矮屏只能放 6 行 APP，防止挤压 */
-    .home-grid { grid-template-rows: repeat(6, 1fr) !important; } 
-}
-
-/* 2. 经典刘海屏 (iPhone X, XS, 11 Pro, 12 mini, 13 mini) - 逻辑宽度 375px, 高度 812px */
-@media screen and (width: 375px) and (min-height: 812px) {
-    :root {
-        --icon-size: 60px;
-        --grid-gap-x: 18px;
-        --grid-gap-y: 26px;
-    }
-    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
-}
-
-/* 3. 主流标准屏 (iPhone 12, 13, 14) - 逻辑宽度 390px, 高度 844px */
-@media screen and (width: 390px) {
-    :root {
-        --icon-size: 60px;
-        --grid-gap-x: 22px;
-        --grid-gap-y: 28px;
-    }
-    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
-}
-
-/* 4. 灵动岛标准屏 (iPhone 14 Pro, 15, 15 Pro, 16) - 逻辑宽度 393px, 高度 852px */
-@media screen and (width: 393px) {
-    :root {
-        --icon-size: 60px;
-        --grid-gap-x: 23px;
-        --grid-gap-y: 30px;
-    }
-    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
-}
-
-/* 5. 新款大屏 (iPhone 16 Pro) - 逻辑宽度 402px, 高度 874px */
-@media screen and (width: 402px) {
-    :root {
-        --icon-size: 62px;
-        --grid-gap-x: 24px;
-        --grid-gap-y: 32px;
-    }
-    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
-}
-
-/* 6. 经典大屏 (iPhone 11 Pro Max, XS Max, 11, XR) - 逻辑宽度 414px, 高度 896px */
-@media screen and (width: 414px) {
-    :root {
-        --icon-size: 64px;
-        --grid-gap-x: 25px;
-        --grid-gap-y: 32px;
-    }
-    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
-}
-
-/* 7. 灵动岛大屏 (iPhone 14 Plus, 14 Pro Max, 15 Plus, 15 Pro Max, 16 Plus) - 逻辑宽度 428px / 430px */
-@media screen and (min-width: 428px) and (max-width: 430px) {
-    :root {
-        --icon-size: 66px;
-        --grid-gap-x: 26px;
-        --grid-gap-y: 35px;
-    }
-    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
-}
-
-/* 8. 最新超大屏 (iPhone 16 Pro Max) - 逻辑宽度 440px, 高度 956px */
-@media screen and (width: 440px) {
-    :root {
-        --icon-size: 68px;
-        --grid-gap-x: 28px;
-        --grid-gap-y: 38px;
-    }
-    .home-grid { grid-template-rows: repeat(7, 1fr) !important; }
-}
-
-/* ------------------------------------------ */
-/* 将变量应用到桌面元素 (覆盖旧样式) */
-/* ------------------------------------------ */
-
-.home-grid {
-    /* 顶部留出安全区，左右使用计算好的边距 */
-    padding: 10px var(--grid-padding-x) 0 var(--grid-padding-x) !important;
-    gap: var(--grid-gap-y) var(--grid-gap-x) !important;
-    /* 核心：确保网格底部绝对不会被 Dock 栏遮挡 */
-    margin-bottom: calc(var(--dock-height) + var(--dock-bottom) + 20px) !important;
-}
-
-.app-icon {
-    width: var(--icon-size) !important;
-    height: var(--icon-size) !important;
-    border-radius: var(--icon-radius) !important;
-}
-
-.dock-container {
-    bottom: 0 !important;
-    /* Dock栏底部顶着安全区，并加上微调间距 */
-    padding: 0 var(--grid-padding-x) calc(var(--dock-bottom) + 12px) var(--grid-padding-x) !important;
-}
-
-.dock {
-    height: var(--dock-height) !important;
-    padding: 0 clamp(15px, 4vw, 25px) !important;
-}
-
-.widget-item {
-    /* 小组件圆角比图标稍微大一点点，符合 iOS 视觉规范 */
-    border-radius: calc(var(--icon-radius) + 6px) !important;
-}
 
 /* ========================================== */
 /* 新增：Chat 页面定制化 UI (高级黑白灰卡片) */
@@ -4849,218 +4727,6 @@ input::-webkit-inner-spin-button {
 .fav-delete-btn {
     margin-top: 12px; text-align: right; font-size: 13px; color: #FF3B30; font-weight: 600; cursor: pointer;
 }
-/* ========================================== */
-/* 🍎 iOS 全屏终极修复 (从 :root 到具体容器) 🍎 */
-/* ========================================== */
-
-/* 1. 基础变量：使用 100% 替代 dvh，防止键盘弹出时容器缩小漏出底色 */
-:root {
-  --app-height: 100%;
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --keyboard-offset: 0px;
-}
-
-/* 2. 根节点强制全屏 (关键修复点) */
-html {
-  height: 100dvh; /* 必须是 100dvh，消除底部白边 */
-  background: transparent; 
-}
-
-body {
-  width: 100vw;
-  height: 100dvh; /* 必须是 100dvh，消除底部白边 */
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  position: fixed; 
-  inset: 0; 
-  background: transparent; 
-  overscroll-behavior: none; 
-  -webkit-overflow-scrolling: touch;
-}
-
-/* 3. 主应用容器强制铺满 */
-#app-root {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: transparent; 
-  z-index: 1;
-}
-
-/* 4. 主屏幕容器 */
-.screen {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding-top: var(--safe-top);
-  padding-bottom: var(--safe-bottom);
-  background-size: cover !important;
-  background-position: center center !important;
-  background-repeat: no-repeat !important;
-  background-color: transparent; 
-}
-
-/* 5. Dock 栏贴底 (不留白边) */
-.dock-container {
-  position: absolute;
-  bottom: 0 !important; 
-  left: 0;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  padding: 0 15px calc(var(--safe-bottom) + 8px) 15px !important;
-  z-index: 10;
-}
-
-.dock {
-  width: 100%;
-  height: clamp(80px, 11vh, 105px);
-  background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(25px);
-  -webkit-backdrop-filter: blur(25px);
-  border-radius: 35px;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  padding: 0 15px;
-}
-
-/* 6. 所有全屏模态框统一高度 */
-.settings-modal,
-.dream-fullscreen-view,
-#wc-view-phone-sim,
-#activation-overlay,
-#wechatModal,
-#musicModal,
-#loversSpaceModal,
-#music-full-player,
-#wc-view-shopping {
-  position: absolute !important; 
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  min-height: 100% !important;
-  max-height: none !important;
-  overflow: hidden !important;
-  /* 【关键修复】：删除了这里的 padding-top 和 padding-bottom */
-  /* 这样就不会和音乐播放器内部的安全区产生“双重挤压”，底部按钮就能正常显示了 */
-}
-
-/* 7. 微信/聊天页面特殊处理 (防止键盘顶起露白) */
-#wechat-root {
-  width: 100%;
-  height: 100%;
-  background: #fff;
-  overflow: hidden;
-}
-
-/* 微信聊天详情页强制全屏 */
-#wc-view-chat-detail {
-  height: 100% !important;
-  min-height: 100% !important;
-  overflow: hidden !important;
-  background: #F2F2F7;
-}
-
-/* 微信消息区域：给底部输入栏和键盘留空间 */
-.wc-chat-scroll-area {
-  flex: 1;
-  overflow-y: auto;
-  padding-bottom: 20px !important; /* 修复1：移除写死的80px，恢复正常内边距 */
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-}
-
-/* 微信输入栏固定在底部 */
-.wc-chat-footer {
-  position: relative !important; /* 修复2：改为 relative，让它在布局中自然推挤消息区域，不再悬浮遮挡 */
-  width: 100%;
-  background: #F7F7F7;
-  border-top: 0.5px solid #C6C6C8;
-  /* 关键：使用 max() 确保在 iOS 安全区正确 */
-  padding: 8px 12px max(10px, env(safe-area-inset-bottom)) 12px !important;
-  z-index: 1200;
-  flex-shrink: 0 !important; /* 修复3：确保输入框自身不会被挤压变形 */
-}
-
-/* 8. 底部 Tabbar 统一处理 */
-.wc-tabbar-container,
-.ins-music-tabbar,
-.ls-tabbar,
-.settings-tab-bar {
-  padding-bottom: var(--safe-bottom) !important;
-}
-
-/* 9. 防止 iOS 橡皮筋滚动露底 */
-body,
-#app-root,
-.screen,
-.settings-modal,
-.dream-fullscreen-view,
-#wc-view-phone-sim,
-#wc-view-shopping,
-#music-full-player,
-#wechat-root,
-#dream-chat-page,
-#dream-main-page {
-  overscroll-behavior: none !important;
-}
-
-/* 10. 针对 iPhone 不同机型的微调 (基于苹果官方逻辑宽度) */
-@media screen and (width: 375px) { /* iPhone SE/8/13 mini */
-  :root { --icon-size: 58px; }
-  .home-grid { grid-template-rows: repeat(6, 1fr); }
-}
-
-@media screen and (width: 390px) { /* iPhone 14/15 */
-  :root { --icon-size: 60px; }
-}
-
-@media screen and (width: 393px) { /* iPhone 14 Pro/15 Pro */
-  :root { --icon-size: 60px; }
-}
-
-@media screen and (width: 414px) { /* iPhone Plus/Max 系列 */
-  :root { --icon-size: 62px; }
-  .home-grid { grid-template-rows: repeat(7, 1fr); }
-}
-
-@media screen and (width: 428px) { /* iPhone 14 Pro Max */
-  :root { --icon-size: 64px; }
-}
-
-@media screen and (width: 430px) { /* iPhone 15 Pro Max */
-  :root { --icon-size: 64px; }
-}
-
-/* 11. 矮屏机型特殊适配 (iPhone SE 等带 Home 键机型) */
-@media screen and (max-height: 700px) {
-  :root {
-    --grid-gap-y: clamp(8px, 2vh, 15px);
-    --dock-height: 85px;
-  }
-  .home-grid {
-    grid-template-rows: repeat(6, 1fr) !important;
-  }
-}
-
-/* 12. 超长屏机型 (Pro Max 系列) */
-@media screen and (min-height: 890px) {
-  :root {
-    --grid-gap-y: clamp(20px, 3.5vh, 35px);
-  }
-}
-
 /* ========================================== */
 /* 🌟 朋友圈 (Moments) 韩系 INS 极简杂志风 🌟 */
 /* ========================================== */
@@ -6953,4 +6619,29 @@ body,
 @keyframes callVoiceWave {
     0%, 100% { height: 6px; }
     50% { height: 16px; }
+}
+/* ========================================== */
+/* 📱 iOS Standalone 全屏模式专属安全区适配 */
+/* ========================================== */
+
+.ios-standalone .screen {
+    padding-top: max(env(safe-area-inset-top), 47px) !important;
+}
+
+.ios-standalone .wc-chat-footer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+}
+
+.ios-standalone .ins-music-tabbar,
+.ios-standalone .ls-tabbar,
+.ios-standalone .ins-forum-tabbar {
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    height: calc(60px + env(safe-area-inset-bottom)) !important;
+}
+
+.ios-standalone .settings-modal,
+.ios-standalone .dream-fullscreen-view,
+.ios-standalone #wc-view-phone-sim,
+.ios-standalone #wc-view-shopping {
+    padding-top: env(safe-area-inset-top) !important;
 }

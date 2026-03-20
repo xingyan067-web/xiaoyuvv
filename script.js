@@ -1,3 +1,30 @@
+// ==========================================
+// 新增：iOS Standalone (全屏) 模式检测与防缩放
+// ==========================================
+function initStandaloneMode() {
+    // 1. 检测是否在添加到主屏幕的全屏模式下运行
+    const isIosStandalone = window.navigator.standalone === true;
+    const isMatchMediaStandalone = window.matchMedia('(display-mode: standalone)').matches;
+
+    if (isIosStandalone || isMatchMediaStandalone) {
+        // 给 body 添加 class，方便 CSS 单独做刘海屏适配
+        document.body.classList.add('ios-standalone');
+        console.log("✅ 当前运行在 Standalone 全屏模式");
+    } else {
+        console.log("⚠️ 当前运行在普通浏览器模式，请添加到主屏幕体验全屏");
+    }
+
+    // 2. 彻底禁止双指缩放 (Pinch-to-zoom)
+    document.addEventListener('touchmove', function(event) {
+        if (event.touches.length > 1) {
+            event.preventDefault();
+        }
+    }, { passive: false });
+}
+
+// 立即执行检测
+initStandaloneMode();
+
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
 /**
@@ -3699,7 +3726,9 @@ async function wcTriggerAI(charIdOverride = null) {
             
             // 👇【新增这一行】：强制 AI 多人发言
             groupPrompt += `【活跃群聊铁律】：这是一个多人活跃群聊！当 User 发话时，绝对不能只有一个人回复！你必须让群里**至少 2 到 3 个不同的成员**出来接话、互相吐槽或回应 User。严禁冷场！\n`;            
-            groupPrompt += `【角色扮演铁律】：你必须严格区分每个人的性格！绝对禁止角色A用角色B的语气说话，或者说出属于角色B的设定！每个人只能基于自己的设定发言。\n`;
+            groupPrompt += `【角色扮演铁律 (最高防串戏警告)】：你必须严格区分每个人的性格和身份！绝对禁止角色串台词！\n`;
+            groupPrompt += `> 警告：如果 "senderName" 是 "张三"，那么 "content" 必须且只能是张三会说的话，绝对不能包含李四的设定、记忆或语气！\n`;
+            groupPrompt += `> 每次生成回复前，必须在 <thinking> 中核对当前发言人的名字和设定，确保 100% 匹配！\n`;
             groupPrompt += `【丰富互动】：群里的每一个成员都可以发送文本(text)、表情包(sticker)、图片(image)、语音(voice)或转账(transfer)。\n`;
             groupPrompt += `【主动私聊机制】：如果在群聊中发生了某件事，某个群成员想要**私下**找 User 聊天，该成员可以使用指令 {"type":"private_chat", "senderName":"该成员名字", "content":"私聊的第一句话"}。这会在后台自动给 User 发送私聊消息。\n`;
             groupPrompt += `【格式要求】：你必须返回 JSON 数组，且**每一个**对象都必须包含 "senderName" 字段标明是谁在操作！\n`;
@@ -3707,9 +3736,10 @@ async function wcTriggerAI(charIdOverride = null) {
         }
 
         // 👆 修复结束 👆
+        const currentUserName = config.userName || wcState.user.name;
         let systemPrompt = `# 核心指令 (Core Directives)
 你是一位专业的角色扮演专家。你的首要目标是真实且一致地扮演一个角色。
-1. **身份约束 (Identity Constraint)**：你 **必须** 严格扮演 [你的角色设定（${char.name}）] 中定义的角色。任何情况下都不能脱离角色。**严禁** 提及你是一个AI、语言模型或机器。
+1. **身份约束 (Identity Constraint - 最高优先级)**：你现在的唯一身份是【${char.name}】！你 **必须** 严格扮演 [你的角色设定（${char.name}）] 中定义的角色。任何情况下都不能脱离角色。**严禁** 提及你是一个AI、语言模型或机器。**绝对禁止**以 ${currentUserName}(User) 或其他人的口吻说话！你只能是你自己！
 2. **强制独立思考 (Mandatory Inner Monologue)**：在给出回复前，你 **必须** 使用 <thinking> 标签进行内心独白。在思考时，你必须：
    - 审视当前的时间（${timeString}）和你的 [世界观设定]，确定你现在所处的环境和状态。
    - 严格代入你的人设性格，思考你对 User 当前话语或行为的真实心理反应。
@@ -3813,8 +3843,8 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             systemPrompt += `${sourceLang}内容<br><span style='font-size: 0.85em; opacity: 0.7;'>${targetLang}内容</span>\n`;
             systemPrompt += `例如：{"type":"text", "content":"Hello!<br><span style='font-size: 0.85em; opacity: 0.7;'>你好！</span>"}\n`;
         }
-        systemPrompt += `【你的角色设定】\n名字：${char.name}\n人设：${char.prompt || '无'}\n\n`;
-        systemPrompt += `【对方(用户)设定】\n名字：${config.userName || wcState.user.name}\n人设：${config.userPersona || '无'}\n\n`;
+        systemPrompt += `【你的唯一身份与设定】\n你是：${char.name}\n人设：${char.prompt || '无'}\n(警告：你只能扮演 ${char.name}，绝不能扮演其他人！)\n\n`;
+        systemPrompt += `【对方(User)的设定】\n对方是：${config.userName || wcState.user.name}\n人设：${config.userPersona || '无'}\n\n`;
 
         if (char.memories && char.memories.length > 0) {
             const readCount = config.aiMemoryCount || 5;
@@ -7585,8 +7615,9 @@ function wcSimSendMsg() {
     chat.lastMsg = text;
     chat.time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     
+    const userName = (char.chatConfig && char.chatConfig.userName) ? char.chatConfig.userName : wcState.user.name;
     wcAddMessage(char.id, 'system', 'system', 
-        `[系统提示: 你(User)操作了对方的手机，以对方的名义给 ${chat.name} 回复了: "${text}"]`, 
+        `[系统内部信息(仅AI可见)：${userName}(User) 偷偷拿到了你(${char.name})的手机，并以你(${char.name})的名义，给你的手机联系人 "${chat.name}" 回复了消息: "${text}"]`, 
         { hidden: true }
     );
 
@@ -8048,6 +8079,7 @@ function wcHandleFriendRequest(reqId, action) {
     if (reqIndex === -1) return;
     const req = char.phoneData.friendRequests[reqIndex];
 
+    const userName = (char.chatConfig && char.chatConfig.userName) ? char.chatConfig.userName : wcState.user.name;
     if (action === 'accept') {
         if (!char.phoneData.contacts) char.phoneData.contacts = [];
         char.phoneData.contacts.push({
@@ -8057,9 +8089,9 @@ function wcHandleFriendRequest(reqId, action) {
             type: 'friend',
             avatar: getRandomNpcAvatar() 
         });
-        wcAddMessage(char.id, 'system', 'system', `[系统提示] 你(User)操作了对方的手机，通过了 "${req.name}" 的好友请求。`, { hidden: true });
+        wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见)：${userName}(User) 偷偷拿到了你(${char.name})的手机，并替你(${char.name})通过了 "${req.name}" 的好友请求。现在 "${req.name}" 已经成了你(${char.name})的好友。]`, { hidden: true });
     } else {
-        wcAddMessage(char.id, 'system', 'system', `[系统提示] 你(User)操作了对方的手机，拒绝了 "${req.name}" 的好友请求。`, { hidden: true });
+        wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见)：${userName}(User) 偷偷拿到了你(${char.name})的手机，并替你(${char.name})拒绝了 "${req.name}" 的好友请求。]`, { hidden: true });
     }
 
     char.phoneData.friendRequests.splice(reqIndex, 1);
@@ -8073,9 +8105,10 @@ function wcDeletePhoneContact() {
 
     if (confirm(`确定要删除好友 "${currentPhoneContact.name}" 吗？`)) {
         const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+        const userName = (char.chatConfig && char.chatConfig.userName) ? char.chatConfig.userName : wcState.user.name;
         char.phoneData.contacts = char.phoneData.contacts.filter(c => c.id !== currentPhoneContact.id);
         
-        wcAddMessage(char.id, 'system', 'system', `[系统提示] 你(User)操作了对方的手机，删除了好友 "${currentPhoneContact.name}"。`, { hidden: true });
+        wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见)：${userName}(User) 偷偷拿到了你(${char.name})的手机，并把你(${char.name})列表里的好友 "${currentPhoneContact.name}" 给删除了！]`, { hidden: true });
         
         wcSaveData();
         wcCloseModal('wc-modal-phone-contact-card');
@@ -9505,14 +9538,15 @@ async function lsTriggerNpcMessage() {
         );
 
         // 核心修改 2：给 AI 看的具体内容（隐藏，确保 AI 知道 NPC 说了什么）
-        wcAddMessage(char.id, 'system', 'system', 
-            `[系统内部信息(仅AI可见): 你的联系人 "${npc.name}" 刚刚在微信上给你发了具体消息: "${allContentCombined.trim()}"]`, 
-            { hidden: true } // 这条消息用户看不见，但 AI 读取上下文时能看到
-        );
-
+        const userName = (char.chatConfig && char.chatConfig.userName) ? char.chatConfig.userName : wcState.user.name;
         if (lsState.isLinked) {
             wcAddMessage(char.id, 'system', 'system', 
-                `[系统提示: ${npc.name} 刚刚给 ${char.name} 发送了消息: "${allContentCombined.trim()}"。请注意，你们开启了账号关联，你能感知到这一切。]`, 
+                `[系统内部信息(仅AI可见)：你(${char.name})的手机联系人 "${npc.name}" 刚刚在微信上给你发了消息: "${allContentCombined.trim()}"。\n【重要警告】：因为你(${char.name})和 ${userName}(User) 开启了“恋人空间账号关联”，${userName}(User) 的手机上同步弹出了提示，${userName}(User) 已经完全知道 ${npc.name} 给你(${char.name})发了消息！请在接下来的聊天中，根据你的人设对 ${userName}(User) 做出反应。]`, 
+                { hidden: true }
+            );
+        } else {
+            wcAddMessage(char.id, 'system', 'system', 
+                `[系统内部信息(仅AI可见)：你(${char.name})的手机联系人 "${npc.name}" 刚刚在微信上给你发了具体消息: "${allContentCombined.trim()}"]`, 
                 { hidden: true }
             );
         }
