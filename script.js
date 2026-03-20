@@ -471,7 +471,7 @@ async function loadAllData() {
     try {
         // 1. 加载新版小组件数据
         const widgetData = await idb.get('ios_theme_widget') || {};
-        const elements = ['label1', 'label2', 'centerText', 'bubble1', 'bubble2', 'bubble3'];
+        const elements = ['label1', 'label2', 'widgetSong', 'widgetLyric', 'bubble1', 'bubble2', 'bubble3'];
         elements.forEach(id => {
             if (widgetData[id]) {
                 const el = document.getElementById(id);
@@ -612,19 +612,35 @@ async function saveGridLayout() {
 // --- 数据保存逻辑 ---
 // --- 新版小组件保存逻辑 ---
 async function saveNewWidgetData() {
-    const data = {
-        label1: document.getElementById('label1').innerText,
-        label2: document.getElementById('label2').innerText,
-        centerText: document.getElementById('centerText') ? document.getElementById('centerText').innerText : '',
-        bubble1: document.getElementById('bubble1').innerText,
-        bubble2: document.getElementById('bubble2').innerText,
-        bubble3: document.getElementById('bubble3').innerText,
+    try {
+        const safeGetText = (id) => {
+            const el = document.getElementById(id);
+            return el ? el.innerText : '';
+        };
         
-        avatar1: document.getElementById('avatar1').style.backgroundImage.slice(5, -2).replace(/"/g, ""),
-        avatar2: document.getElementById('avatar2').style.backgroundImage.slice(5, -2).replace(/"/g, ""),
-        picture1: document.getElementById('picture1').style.backgroundImage.slice(5, -2).replace(/"/g, "")
-    };
-    await idb.set('ios_theme_widget', data);
+        const safeGetBg = (id) => {
+            const el = document.getElementById(id);
+            if (!el || !el.style.backgroundImage || el.style.backgroundImage === 'none') return '';
+            return el.style.backgroundImage.slice(5, -2).replace(/"/g, "");
+        };
+
+        const data = {
+            label1: safeGetText('label1'),
+            label2: safeGetText('label2'),
+            widgetSong: safeGetText('widgetSong'),
+            widgetLyric: safeGetText('widgetLyric'),
+            bubble1: safeGetText('bubble1'),
+            bubble2: safeGetText('bubble2'),
+            bubble3: safeGetText('bubble3'),
+            
+            avatar1: safeGetBg('avatar1'),
+            avatar2: safeGetBg('avatar2'),
+            picture1: safeGetBg('picture1')
+        };
+        await idb.set('ios_theme_widget', data);
+    } catch (e) {
+        console.error("小组件保存失败:", e);
+    }
 }
 
 // --- 新版小组件文字编辑逻辑 (弹窗输入，绝对有效) ---
@@ -2618,67 +2634,72 @@ async function wcSaveData() {
         await wcDb.open();
         if (!wcDb.instance) return;
 
-        return new Promise((resolve, reject) => {
-            try {
-                const stores = ['kv_store', 'characters', 'masks', 'moments', 'chats'];
-                const validStores = stores.filter(s => wcDb.instance.objectStoreNames.contains(s));
-                if (validStores.length === 0) return resolve();
-
-                const tx = wcDb.instance.transaction(validStores, 'readwrite');
-                
+        // 辅助函数：将单个 store 的操作封装为独立的 Promise 事务
+        const saveStore = (storeName, callback) => {
+            return new Promise((resolve, reject) => {
+                if (!wcDb.instance.objectStoreNames.contains(storeName)) {
+                    return resolve();
+                }
+                const tx = wcDb.instance.transaction([storeName], 'readwrite');
                 tx.oncomplete = () => resolve();
-                tx.onerror = (e) => reject(tx.error);
+                tx.onerror = (e) => {
+                    console.error(`保存 ${storeName} 失败:`, tx.error);
+                    reject(tx.error);
+                };
+                const store = tx.objectStore(storeName);
+                callback(store);
+            });
+        };
 
-                if (validStores.includes('kv_store')) {
-                    const kv = tx.objectStore('kv_store');
-                    kv.put(wcState.myFavorites || [], 'my_favorites');
-                    kv.put(wcState.calendarEvents || [], 'calendar_events');
-                    kv.put(wcState.user || { name: 'User', avatar: '' }, 'user');
-                    kv.put(wcState.wallet || { balance: 0, transactions: [] }, 'wallet');
-                    kv.put(wcState.stickerCategories || [], 'sticker_categories');
-                    kv.put(wcState.cssPresets || [], 'css_presets');
-                    kv.put(wcState.unreadCounts || {}, 'unread_counts');
-                    kv.put(wcState.chatBgPresets || [], 'chat_bg_presets');
-                    kv.put(wcState.phonePresets || [], 'phone_presets');
-                    kv.put(wcState.shopData || {}, 'shop_data');
-                }
+        // 1. 保存 kv_store
+        await saveStore('kv_store', (store) => {
+            store.put(wcState.myFavorites || [], 'my_favorites');
+            store.put(wcState.calendarEvents || [], 'calendar_events');
+            store.put(wcState.user || { name: 'User', avatar: '' }, 'user');
+            store.put(wcState.wallet || { balance: 0, transactions: [] }, 'wallet');
+            store.put(wcState.stickerCategories || [], 'sticker_categories');
+            store.put(wcState.cssPresets || [], 'css_presets');
+            store.put(wcState.unreadCounts || {}, 'unread_counts');
+            store.put(wcState.chatBgPresets || [], 'chat_bg_presets');
+            store.put(wcState.phonePresets || [], 'phone_presets');
+            store.put(wcState.shopData || {}, 'shop_data');
+        }).catch(e => console.warn("kv_store 保存异常", e));
 
-                if (validStores.includes('characters')) {
-                    const charStore = tx.objectStore('characters');
-                    for (const char of wcState.characters) {
-                        if (char && char.id) charStore.put(char);
-                    }
-                }
-
-                if (validStores.includes('masks')) {
-                    const maskStore = tx.objectStore('masks');
-                    for (const mask of wcState.masks) {
-                        if (mask && mask.id) maskStore.put(mask);
-                    }
-                }
-
-                if (validStores.includes('moments')) {
-                    const momentStore = tx.objectStore('moments');
-                    for (const moment of wcState.moments) {
-                        if (moment && moment.id) momentStore.put(moment);
-                    }
-                }
-
-                if (validStores.includes('chats')) {
-                    const chatStore = tx.objectStore('chats');
-                    for (const charId in wcState.chats) {
-                        const parsedId = parseInt(charId);
-                        if (!isNaN(parsedId)) {
-                            chatStore.put({ charId: parsedId, messages: wcState.chats[charId] });
-                        }
-                    }
-                }
-            } catch (err) {
-                reject(err);
+        // 2. 保存 characters (你的角色数据)
+        await saveStore('characters', (store) => {
+            for (const char of wcState.characters) {
+                if (char && char.id) store.put(char);
             }
+        }).catch(e => console.warn("characters 保存异常", e));
+
+        // 3. 保存 masks
+        await saveStore('masks', (store) => {
+            for (const mask of wcState.masks) {
+                if (mask && mask.id) store.put(mask);
+            }
+        }).catch(e => console.warn("masks 保存异常", e));
+
+        // 4. 保存 moments
+        await saveStore('moments', (store) => {
+            for (const moment of wcState.moments) {
+                if (moment && moment.id) store.put(moment);
+            }
+        }).catch(e => console.warn("moments 保存异常", e));
+
+        // 5. 保存 chats (最容易因为图片太多导致 iOS 崩溃的地方，单独隔离)
+        await saveStore('chats', (store) => {
+            for (const charId in wcState.chats) {
+                const parsedId = parseInt(charId);
+                if (!isNaN(parsedId)) {
+                    store.put({ charId: parsedId, messages: wcState.chats[charId] });
+                }
+            }
+        }).catch(e => {
+            console.error("聊天记录保存失败，可能是图片数据过大导致 iOS 限制！", e);
         });
+
     } catch (e) {
-        console.error("WeChat Save failed", e);
+        console.error("WeChat Save 整体流程失败", e);
     }
 }
 
