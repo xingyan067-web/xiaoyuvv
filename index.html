@@ -3250,13 +3250,19 @@
                         <input type="file" id="forum-image-input" style="display: none;" accept="image/*" onchange="forumHandleImageUpload(this)">
                         
                         <div class="ins-forum-post-options">
-                            <div class="wc-form-group" style="margin-bottom: 0;">
+                            <div class="wc-form-group" style="margin-bottom: 15px;">
                                 <label class="wc-form-label" style="font-weight: bold; color: #111;">发布到</label>
                                 <select id="forum-post-type-select" class="ios-select" style="background: #F9F9F9; border: 1px solid #F0F0F0;">
                                     <option value="home">主页论坛 (日常吐槽/分享)</option>
                                     <option value="fanfic">同人论坛 (小说/脑洞/CP)</option>
                                 </select>
-                            </div>                       
+                            </div>
+                            <!-- 👇 新增：匿名发布开关 👇 -->
+                            <div class="wc-form-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; padding: 12px; background: #F9F9F9; border-radius: 10px; border: 1px solid #F0F0F0;">
+                                <label class="wc-form-label" style="font-weight: bold; color: #111; margin: 0;">匿名发布</label>
+                                <input type="checkbox" id="forum-post-anonymous" class="ls-toggle" style="width: 40px; height: 24px; margin: 0;">
+                            </div>
+                            <!-- 👆 新增结束 👆 -->
                         </div>
                     </div>
                 </div>

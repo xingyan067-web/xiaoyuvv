@@ -16734,19 +16734,34 @@ function forumHandleImageUpload(input) {
 function forumSubmitPost() {
     const content = document.getElementById('forum-post-input').value.trim();
     const postType = document.getElementById('forum-post-type-select').value; 
+    const isAnonymous = document.getElementById('forum-post-anonymous').checked; // 👈 新增：读取匿名状态
     
     if (!content && !forumState.tempImage) {
         return alert("请输入内容或上传图片");
     }
     
+    // 👇 新增：判断是否匿名，替换作者信息 👇
+    let authorName = forumState.profile.name;
+    let authorHandle = forumState.profile.handle;
+    let authorAvatar = forumState.profile.avatar;
+
+    if (isAnonymous) {
+        authorName = "匿名用户";
+        authorHandle = "@anonymous";
+        // 生成一个带“匿”字的默认灰色头像
+        const defaultAvatarSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#E5E5EA"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#888" font-size="30" font-weight="bold">匿</text></svg>`;
+        authorAvatar = 'data:image/svg+xml;base64,' + window.btoa(unescape(encodeURIComponent(defaultAvatarSvg)));
+    }
+    // 👆 新增结束 👆
+
     const newPost = {
         id: Date.now(),
         type: postType, 
         isStory: postType === 'fanfic', 
         author: {
-            name: forumState.profile.name,
-            handle: forumState.profile.handle,
-            avatar: forumState.profile.avatar
+            name: authorName, // 👈 使用处理后的名字
+            handle: authorHandle, // 👈 使用处理后的ID
+            avatar: authorAvatar // 👈 使用处理后的头像
         },
         content: content,
         image: forumState.tempImage,
@@ -16761,11 +16776,12 @@ function forumSubmitPost() {
     
     document.getElementById('forum-post-input').value = '';
     document.getElementById('forum-post-image-preview').style.display = 'none';
+    document.getElementById('forum-post-anonymous').checked = false; // 👈 新增：发布后自动重置匿名开关
     forumState.tempImage = null;
     
     forumSwitchTab(postType); 
-       
 }
+
 
 // --- 互动：点赞、评论、分享 ---
 function forumToggleLike(postId) {
