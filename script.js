@@ -258,9 +258,10 @@ const idb = {
         return new Promise((resolve, reject) => {
             const tx = this.db.transaction(this.storeName, 'readwrite');
             const store = tx.objectStore(this.storeName);
-            const req = store.put(value, key);
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
+            store.put(value, key);
+            // 【iOS 核心修复】：必须监听 tx.oncomplete 确保数据物理写入磁盘
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
         });
     },
 
@@ -269,9 +270,10 @@ const idb = {
         return new Promise((resolve, reject) => {
             const tx = this.db.transaction(this.storeName, 'readwrite');
             const store = tx.objectStore(this.storeName);
-            const req = store.clear();
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
+            store.clear();
+            // 【iOS 核心修复】
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
         });
     },
     
@@ -968,6 +970,7 @@ async function exportAllData() {
 
         // 2. 导出 WeChat 数据
         const wechatData = {};
+        await wcDb.init(); // 👈 修改3：加上这一行！确保备份时数据库被强制唤醒
         if (wcDb.instance) {
             wechatData.user = await wcDb.get('kv_store', 'user');
             wechatData.wallet = await wcDb.get('kv_store', 'wallet');
@@ -2408,12 +2411,13 @@ function handleWallpaperUpload(input) {
 
 // --- WeChat DB ---
 const WC_DB_NAME = 'WeChatSimDB';
-const WC_DB_VERSION = 1;
+const WC_DB_VERSION = 2; // 👈 修改1：版本号改为2，强制修复数据库表缺失
 
 const wcDb = {
     instance: null,
-    init: function() {
+    open: function() { // 👈 新增：每次操作前确保数据库连接是打开的，防止休眠
         return new Promise((resolve, reject) => {
+            if (this.instance) return resolve(this.instance);
             const request = indexedDB.open(WC_DB_NAME, WC_DB_VERSION);
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
@@ -2425,73 +2429,60 @@ const wcDb = {
             };
             request.onsuccess = (event) => {
                 this.instance = event.target.result;
-                resolve();
+                resolve(this.instance);
             };
             request.onerror = (event) => reject(event.target.error);
         });
     },
-    get: function(storeName, key) {
+    init: async function() {
+        await this.open();
+    },
+    get: async function(storeName, key) {
+        await this.open();
         return new Promise((resolve, reject) => {
             try {
-                if (!this.instance || !this.instance.objectStoreNames.contains(storeName)) {
-                    return resolve(null);
-                }
+                if (!this.instance.objectStoreNames.contains(storeName)) return resolve(null);
                 const transaction = this.instance.transaction([storeName], 'readonly');
                 const request = transaction.objectStore(storeName).get(key);
                 request.onsuccess = () => resolve(request.result);
                 request.onerror = () => reject(request.error);
-            } catch (e) {
-                console.warn(`wcDb.get error for store ${storeName}:`, e);
-                resolve(null);
-            }
+            } catch (e) { resolve(null); }
         });
     },
-    getAll: function(storeName) {
+    getAll: async function(storeName) {
+        await this.open();
         return new Promise((resolve, reject) => {
             try {
-                if (!this.instance || !this.instance.objectStoreNames.contains(storeName)) {
-                    return resolve([]);
-                }
+                if (!this.instance.objectStoreNames.contains(storeName)) return resolve([]);
                 const transaction = this.instance.transaction([storeName], 'readonly');
                 const request = transaction.objectStore(storeName).getAll();
                 request.onsuccess = () => resolve(request.result);
                 request.onerror = () => reject(request.error);
-            } catch (e) {
-                console.warn(`wcDb.getAll error for store ${storeName}:`, e);
-                resolve([]);
-            }
+            } catch (e) { resolve([]); }
         });
     },
-    put: function(storeName, value, key) {
+    put: async function(storeName, value, key) {
+        await this.open();
         return new Promise((resolve, reject) => {
             try {
-                if (!this.instance || !this.instance.objectStoreNames.contains(storeName)) {
-                    return resolve();
-                }
+                if (!this.instance.objectStoreNames.contains(storeName)) return resolve();
                 const transaction = this.instance.transaction([storeName], 'readwrite');
                 const request = key ? transaction.objectStore(storeName).put(value, key) : transaction.objectStore(storeName).put(value);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            } catch (e) {
-                console.warn(`wcDb.put error for store ${storeName}:`, e);
-                resolve();
-            }
+                transaction.oncomplete = () => resolve();
+                transaction.onerror = () => reject(transaction.error);
+            } catch (e) { resolve(); }
         });
     },
-    delete: function(storeName, key) {
+    delete: async function(storeName, key) {
+        await this.open();
         return new Promise((resolve, reject) => {
             try {
-                if (!this.instance || !this.instance.objectStoreNames.contains(storeName)) {
-                    return resolve();
-                }
+                if (!this.instance.objectStoreNames.contains(storeName)) return resolve();
                 const transaction = this.instance.transaction([storeName], 'readwrite');
                 const request = transaction.objectStore(storeName).delete(key);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            } catch (e) {
-                console.warn(`wcDb.delete error for store ${storeName}:`, e);
-                resolve();
-            }
+                transaction.oncomplete = () => resolve();
+                transaction.onerror = () => reject(transaction.error);
+            } catch (e) { resolve(); }
         });
     }
 };
@@ -2611,40 +2602,40 @@ async function wcLoadData() {
 
 async function wcSaveData() {
     try {
-        await wcDb.put('kv_store', wcState.myFavorites || [], 'my_favorites').catch(e => console.warn(e));
-        await wcDb.put('kv_store', wcState.calendarEvents || [], 'calendar_events').catch(e => console.warn(e));
-        await wcDb.put('kv_store', wcState.user || { name: 'User', avatar: '' }, 'user').catch(e => console.warn(e));
-        await wcDb.put('kv_store', wcState.wallet || { balance: 0, transactions: [] }, 'wallet').catch(e => console.warn(e));
-        await wcDb.put('kv_store', wcState.stickerCategories || [], 'sticker_categories').catch(e => console.warn(e));
-        await wcDb.put('kv_store', wcState.cssPresets || [], 'css_presets').catch(e => console.warn(e));
-        await wcDb.put('kv_store', wcState.unreadCounts || {}, 'unread_counts').catch(e => console.warn(e));
-        
-        // 【新增】：保存图库和预设
-        await wcDb.put('kv_store', wcState.chatBgPresets || [], 'chat_bg_presets').catch(e => console.warn(e));
-        await wcDb.put('kv_store', wcState.phonePresets || [], 'phone_presets').catch(e => console.warn(e));
-        await wcDb.put('kv_store', wcState.shopData || {}, 'shop_data').catch(e => console.warn(e));
-        
+        // 👈 修改2：使用 Promise.all 并发保存。
+        // 原本的 await 是一行一行执行的，iOS 杀后台太快，导致排在后面的 characters 根本来不及保存！
+        const promises = [];
+
+        promises.push(wcDb.put('kv_store', wcState.myFavorites || [], 'my_favorites'));
+        promises.push(wcDb.put('kv_store', wcState.calendarEvents || [], 'calendar_events'));
+        promises.push(wcDb.put('kv_store', wcState.user || { name: 'User', avatar: '' }, 'user'));
+        promises.push(wcDb.put('kv_store', wcState.wallet || { balance: 0, transactions: [] }, 'wallet'));
+        promises.push(wcDb.put('kv_store', wcState.stickerCategories || [], 'sticker_categories'));
+        promises.push(wcDb.put('kv_store', wcState.cssPresets || [], 'css_presets'));
+        promises.push(wcDb.put('kv_store', wcState.unreadCounts || {}, 'unread_counts'));
+        promises.push(wcDb.put('kv_store', wcState.chatBgPresets || [], 'chat_bg_presets'));
+        promises.push(wcDb.put('kv_store', wcState.phonePresets || [], 'phone_presets'));
+        promises.push(wcDb.put('kv_store', wcState.shopData || {}, 'shop_data'));
+
         for (const char of wcState.characters) {
-            if (char && char.id) {
-                await wcDb.put('characters', char).catch(e => console.warn("Save char failed:", e));
-            }
+            if (char && char.id) promises.push(wcDb.put('characters', char));
         }
         for (const mask of wcState.masks) {
-            if (mask && mask.id) {
-                await wcDb.put('masks', mask).catch(e => console.warn("Save mask failed:", e));
-            }
+            if (mask && mask.id) promises.push(wcDb.put('masks', mask));
         }
         for (const moment of wcState.moments) {
-            if (moment && moment.id) {
-                await wcDb.put('moments', moment).catch(e => console.warn("Save moment failed:", e));
-            }
+            if (moment && moment.id) promises.push(wcDb.put('moments', moment));
         }
         for (const charId in wcState.chats) {
             const parsedId = parseInt(charId);
             if (!isNaN(parsedId)) {
-                await wcDb.put('chats', { charId: parsedId, messages: wcState.chats[charId] }).catch(e => console.warn("Save chat failed:", e));
+                promises.push(wcDb.put('chats', { charId: parsedId, messages: wcState.chats[charId] }));
             }
         }
+
+        // 一次性将所有保存任务推入队列，瞬间完成，防止被 iOS 杀后台打断
+        await Promise.all(promises.map(p => p.catch(e => console.warn("Save item failed:", e))));
+
     } catch (e) {
         console.error("WeChat Save failed", e);
     }
