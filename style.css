@@ -3144,13 +3144,24 @@ input::-webkit-inner-spin-button {
     font-size: 14px; font-weight: 700; color: #555; font-family: monospace; 
     letter-spacing: 2px; background: #F5F5F5; padding: 6px 16px; border-radius: 16px; 
 }
+/* 🌟 核心：中间点击区域包裹层 🌟 */
+.ins-music-fp-center-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
 /* 黑胶唱片设计 */
 .ins-music-fp-record-container {
     flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px;
-    margin-top: 2vh; margin-bottom: 2vh; min-height: 280px; /* 修复：增加上下弹性边距，使布局更均衡 */
+    margin-top: 2vh; margin-bottom: 2vh; min-height: 280px; 
+    transition: opacity 0.3s, transform 0.3s; /* 新增动画 */
 }
 .ins-music-fp-record {
-    width: 280px; height: 280px; border-radius: 50%; background: #111; /* 稍微放大唱片 */
+    width: 280px; height: 280px; border-radius: 50%; background: #111; 
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 20px 50px rgba(0,0,0,0.2), inset 0 0 0 8px #222, inset 0 0 0 16px #111, inset 0 0 0 17px #333;
     animation: spin 12s linear infinite; animation-play-state: paused;
@@ -3162,7 +3173,7 @@ input::-webkit-inner-spin-button {
 }
 
 /* 歌曲信息 */
-.ins-music-fp-info { padding: 0 30px 15px 30px; text-align: center; }
+.ins-music-fp-info { padding: 0 30px 15px 30px; text-align: center; transition: all 0.3s; }
 .ins-music-fp-song { font-size: 24px; font-weight: 800; color: #111; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.5px; }
 .ins-music-fp-artist { font-size: 15px; color: #888; font-weight: 500; }
 
@@ -3171,6 +3182,7 @@ input::-webkit-inner-spin-button {
     height: 60px; overflow: hidden; position: relative; margin: 0 30px 20px 30px;
     mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
     -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+    transition: all 0.3s ease; /* 新增动画 */
 }
 .ins-music-fp-lyrics {
     display: flex; flex-direction: column; align-items: center; transition: transform 0.3s ease-out;
@@ -3180,6 +3192,50 @@ input::-webkit-inner-spin-button {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; transition: color 0.3s, font-size 0.3s;
 }
 .ins-music-lyric-line.active { color: #111; font-weight: 700; font-size: 16px; }
+
+/* ========================================== */
+/* 🌟 歌词模式 (Lyric Mode) 样式覆盖 🌟 */
+/* ========================================== */
+
+/* 1. 隐藏唱片 */
+.ins-music-full-player.lyric-mode .ins-music-fp-record-container {
+    display: none; 
+}
+
+/* 2. 调整歌曲信息位置 */
+.ins-music-full-player.lyric-mode .ins-music-fp-info {
+    margin-top: 10px;
+    padding-bottom: 10px;
+}
+
+/* 3. 放大歌词容器，占据剩余空间 */
+.ins-music-full-player.lyric-mode .ins-music-fp-lyrics-container {
+    flex: 1; 
+    height: auto;
+    margin: 0 20px 10px 20px;
+    mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+}
+
+/* 4. 歌词排版调整 (允许换行，字号变大) */
+.ins-music-full-player.lyric-mode .ins-music-lyric-line {
+    height: auto;
+    min-height: 40px;
+    line-height: 1.6;
+    padding: 12px 20px;
+    white-space: normal; 
+    font-size: 15px;
+    color: rgba(0,0,0,0.3);
+    transition: all 0.3s ease;
+}
+
+/* 5. 当前高亮歌词样式 */
+.ins-music-full-player.lyric-mode .ins-music-lyric-line.active {
+    font-size: 18px;
+    color: #111;
+    font-weight: 800;
+    transform: scale(1.05);
+}
 
 /* 进度条 UI */
 .ins-music-fp-progress { padding: 0 30px 20px 30px; }

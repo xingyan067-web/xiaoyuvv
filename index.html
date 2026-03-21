@@ -1440,23 +1440,26 @@
  <div class="ins-music-fp-timer" id="music-fp-timer" onclick="musicStopListenTogether()" title="点击结束一起听歌">00:00</div>
                     </div>
                     
-                    <!-- 中间：黑胶唱片 -->
-                    <div class="ins-music-fp-record-container">
-                        <div class="ins-music-fp-record" id="music-fp-record">
-                            <img src="" id="music-fp-cover" class="ins-music-fp-cover">
+                    <!-- 🌟 中间区域：点击任意位置切换模式 🌟 -->
+                    <div class="ins-music-fp-center-area" onclick="toggleLyricMode()">
+                        <!-- 中间：黑胶唱片 -->
+                        <div class="ins-music-fp-record-container">
+                            <div class="ins-music-fp-record" id="music-fp-record">
+                                <img src="" id="music-fp-cover" class="ins-music-fp-cover">
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- 歌曲信息 -->
-                    <div class="ins-music-fp-info">
-                        <div class="ins-music-fp-song" id="music-fp-title">Song Title</div>
-                        <div class="ins-music-fp-artist" id="music-fp-artist">Artist</div>
-                    </div>
+                        
+                        <!-- 歌曲信息 -->
+                        <div class="ins-music-fp-info">
+                            <div class="ins-music-fp-song" id="music-fp-title">Song Title</div>
+                            <div class="ins-music-fp-artist" id="music-fp-artist">Artist</div>
+                        </div>
 
-                    <!-- 滚动歌词 -->
-                    <div class="ins-music-fp-lyrics-container" id="music-fp-lyrics-container">
-                        <div class="ins-music-fp-lyrics" id="music-fp-lyrics">
-                            <div class="ins-music-lyric-line">Pure Music...</div>
+                        <!-- 滚动歌词 -->
+                        <div class="ins-music-fp-lyrics-container" id="music-fp-lyrics-container">
+                            <div class="ins-music-fp-lyrics" id="music-fp-lyrics">
+                                <div class="ins-music-lyric-line">Pure Music...</div>
+                            </div>
                         </div>
                     </div>
                     

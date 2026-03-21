@@ -12622,9 +12622,24 @@ audioPlayer.addEventListener('timeupdate', () => {
                 
                 if (lines[activeIndex]) {
                     lines[activeIndex].classList.add('active');
-                    // 滚动歌词 (假设每行高度30px)
-                    const offset = activeIndex * 30;
-                    lyricsContainer.style.transform = `translateY(-${offset}px)`;
+                    
+                    const player = document.getElementById('music-full-player');
+                    const isLyricMode = player.classList.contains('lyric-mode');
+                    
+                    if (isLyricMode) {
+                        // 歌词模式下：动态计算高度并居中
+                        let offset = 0;
+                        for (let i = 0; i < activeIndex; i++) {
+                            offset += lines[i].offsetHeight;
+                        }
+                        const containerHeight = document.querySelector('.ins-music-fp-lyrics-container').offsetHeight;
+                        offset = offset - containerHeight / 2 + lines[activeIndex].offsetHeight / 2;
+                        lyricsContainer.style.transform = `translateY(-${Math.max(0, offset)}px)`;
+                    } else {
+                        // 唱片模式下：固定行高 30px
+                        const offset = activeIndex * 30;
+                        lyricsContainer.style.transform = `translateY(-${offset}px)`;
+                    }
                 }
                 // 记录当前高亮的歌词索引
                 lyricsContainer.setAttribute('data-active-index', activeIndex);
@@ -13144,6 +13159,22 @@ function musicCloseFullPlayer() {
     if (fullPlayer) {
         fullPlayer.classList.remove('active');
     }
+}
+// 🌟 新增：切换歌词模式
+function toggleLyricMode() {
+    const player = document.getElementById('music-full-player');
+    if (!player) return;
+    
+    player.classList.toggle('lyric-mode');
+    
+    // 延迟重新计算滚动位置，等待 CSS 动画展开
+    setTimeout(() => {
+        // 强制触发一次 timeupdate 来重新计算歌词位置
+        if (audioPlayer && !audioPlayer.paused) {
+            const event = new Event('timeupdate');
+            audioPlayer.dispatchEvent(event);
+        }
+    }, 50);
 }
 
 function musicUpdatePlayerUI() {
