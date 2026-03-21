@@ -3717,5 +3717,23 @@
         </div>
     </div>
 </div>
+<!-- ========================================== -->
+<!-- 新增：高级文字图片描述卡片弹窗 (极简版) -->
+<!-- ========================================== -->
+<div class="desc-card-overlay" id="wc-image-desc-overlay" onclick="wcCloseImageDescCard()">
+    <div class="desc-card-wrapper" onclick="event.stopPropagation()">
+        <!-- 卡片主体 -->
+        <div class="desc-card-content">
+            <div class="desc-card-header">
+                <span class="desc-card-tag">IMAGE DESC</span>
+                <button class="desc-card-close" onclick="wcCloseImageDescCard()">×</button>
+            </div>
+            <div class="desc-card-body" id="wc-image-desc-body">
+                <!-- 描述内容将在这里显示 -->
+            </div>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>

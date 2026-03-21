@@ -6890,4 +6890,108 @@ input::-webkit-inner-spin-button {
 .ios-standalone #wc-view-shopping {
     padding-top: 0 !important;
 }
+/* ========================================== */
+/* 新增：高级文字图片描述卡片样式 (极简版) */
+/* ========================================== */
+.desc-card-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 30000; /* 确保层级极高，盖住所有界面 */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+}
+.desc-card-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.desc-card-wrapper {
+    position: relative;
+    width: 85%;
+    max-width: 320px;
+    border-radius: 0; /* 绝对直角 */
+    transform: scale(0.95) translateY(20px);
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.desc-card-overlay.active .desc-card-wrapper {
+    transform: scale(1) translateY(0);
+}
+
+.desc-card-content {
+    position: relative;
+    background: #111; /* 纯黑底色 */
+    color: #fff;
+    padding: 30px 24px;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 220px;
+    /* 增加一个极细的静态白边，替代流光，保持精致感 */
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5), inset 0 0 30px rgba(255,255,255,0.03);
+}
+
+/* 内部噪点/网格纹理，增加高级质感 */
+.desc-card-content::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.15) 1px, transparent 1px);
+    background-size: 4px 4px;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.desc-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    padding-bottom: 12px;
+}
+
+.desc-card-tag {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 3px;
+    color: #888;
+}
+
+.desc-card-close {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 24px;
+    cursor: pointer;
+    line-height: 1;
+    opacity: 0.5;
+    transition: opacity 0.2s, transform 0.2s;
+    padding: 0;
+}
+.desc-card-close:active {
+    opacity: 1;
+    transform: scale(0.9);
+}
+
+.desc-card-body {
+    font-family: 'Kaiti', 'STKaiti', 'Georgia', serif;
+    font-size: 15px;
+    line-height: 1.8;
+    color: #ddd;
+    text-align: justify;
+    flex: 1;
+    letter-spacing: 1px;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
 

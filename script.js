@@ -474,13 +474,16 @@ async function loadAllData() {
     try {
         // 1. 加载新版小组件数据
         const widgetData = await idb.get('ios_theme_widget') || {};
-        const elements = ['label1', 'label2', 'widgetSong', 'widgetLyric', 'bubble1', 'bubble2', 'bubble3'];
+        const elements = ['label1', 'label2', 'bubble1', 'bubble2', 'bubble3'];
         elements.forEach(id => {
             if (widgetData[id]) {
                 const el = document.getElementById(id);
                 if (el) el.innerText = widgetData[id];
             }
         });
+        
+        // 【已删除读取旧歌名和歌词的代码，强制使用 HTML 默认值】
+
         const images = ['avatar1', 'avatar2', 'picture1'];
         images.forEach(id => {
             if (widgetData[id]) {
@@ -614,7 +617,6 @@ async function saveGridLayout() {
 
 // --- 数据保存逻辑 ---
 // --- 新版小组件保存逻辑 ---
-// --- 新版小组件保存逻辑 ---
 async function saveNewWidgetData() {
     // 【修复】：增加安全检查，如果当前页面没有小组件元素，直接跳过保存，防止报错清空数据
     const label1El = document.getElementById('label1');
@@ -622,16 +624,15 @@ async function saveNewWidgetData() {
 
     const data = {
         label1: label1El.innerText,
-        label2: document.getElementById('label2').innerText,
-        widgetSong: document.getElementById('widgetSong').innerText,
-        widgetLyric: document.getElementById('widgetLyric').innerText,
-        bubble1: document.getElementById('bubble1').innerText,
-        bubble2: document.getElementById('bubble2').innerText,
-        bubble3: document.getElementById('bubble3').innerText,
+        label2: document.getElementById('label2') ? document.getElementById('label2').innerText : '',
+        // 【已删除 widgetSong 和 widgetLyric 的保存逻辑】
+        bubble1: document.getElementById('bubble1') ? document.getElementById('bubble1').innerText : '',
+        bubble2: document.getElementById('bubble2') ? document.getElementById('bubble2').innerText : '',
+        bubble3: document.getElementById('bubble3') ? document.getElementById('bubble3').innerText : '',
         
-        avatar1: document.getElementById('avatar1').style.backgroundImage.slice(5, -2).replace(/"/g, ""),
-        avatar2: document.getElementById('avatar2').style.backgroundImage.slice(5, -2).replace(/"/g, ""),
-        picture1: document.getElementById('picture1').style.backgroundImage.slice(5, -2).replace(/"/g, "")
+        avatar1: document.getElementById('avatar1') ? document.getElementById('avatar1').style.backgroundImage.slice(5, -2).replace(/"/g, "") : '',
+        avatar2: document.getElementById('avatar2') ? document.getElementById('avatar2').style.backgroundImage.slice(5, -2).replace(/"/g, "") : '',
+        picture1: document.getElementById('picture1') ? document.getElementById('picture1').style.backgroundImage.slice(5, -2).replace(/"/g, "") : ''
     };
     await idb.set('ios_theme_widget', data);
 }
@@ -3281,10 +3282,12 @@ function wcRenderMessages(charId) {
         if (msg.type === 'text' && msg.content.trim().startsWith('[图片描述]')) {
             // 提取描述文字，去掉前缀
             const descText = msg.content.replace('[图片描述]', '').trim();
+            // 转义单双引号，防止 onclick 报错
+            const safeDescText = descText.replace(/'/g, "\\'").replace(/"/g, "&quot;");
             contentHtml = `
                 <div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" style="background: transparent; padding: 0; border: none;">
                     ${quoteHtml}
-                    <div class="wc-text-img-placeholder" style="width: 100px; height: 100px; background-color: #E5E5EA; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8E8E93; font-size: 10px; border: 1px solid #D1D1D6; overflow: hidden; text-align: center; padding: 5px; box-sizing: border-box;">
+                    <div class="wc-text-img-placeholder" onclick="wcOpenImageDescCard('${safeDescText}')" style="width: 100px; height: 100px; background-color: #E5E5EA; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8E8E93; font-size: 10px; border: 1px solid #D1D1D6; overflow: hidden; text-align: center; padding: 5px; box-sizing: border-box; cursor: pointer;">
                         <svg viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px; margin-bottom: 4px; opacity: 0.5;"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
                         <div style="overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; width: 100%;">${descText || '图片'}</div>
                     </div>
@@ -3436,6 +3439,26 @@ function wcRenderMessages(charId) {
         container.insertBefore(row, anchor);
     });
 }
+// ==========================================
+// 新增：高级文字图片描述卡片逻辑
+// ==========================================
+window.wcOpenImageDescCard = function(text) {
+    const bodyEl = document.getElementById('wc-image-desc-body');
+    if (bodyEl) {
+        bodyEl.innerText = text;
+    }
+    const overlay = document.getElementById('wc-image-desc-overlay');
+    if (overlay) {
+        overlay.classList.add('active');
+    }
+};
+
+window.wcCloseImageDescCard = function() {
+    const overlay = document.getElementById('wc-image-desc-overlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
+};
 
 // ==========================================
 // 新增：群聊长按头像 @ 成员逻辑 (带防抖修复)
@@ -4514,9 +4537,13 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                     showMainSystemNotification("Music", `${char.name} 婉拒了听歌邀请。`, char.avatar);
                 }
             } else {
-                // 如果用户根本没发邀请，AI 却幻觉了，就只当做普通文本发出来，不触发听歌逻辑
-                console.warn("拦截到 AI 幻觉的听歌回应");
+                // 如果用户根本没发邀请卡片，AI 却回复了同意，说明用户是口头暗示。
+                // 顺水推舟，将这个“同意”转化为 AI 主动向用户发起的听歌邀请！
+                console.warn("拦截到 AI 幻觉的听歌回应，自动转换为 AI 主动邀请");
                 wcAddMessage(charId, 'them', 'text', action.content, extra);
+                if (action.type === 'music_accept') {
+                    musicShowCharInviteModal(charId, ""); // 弹出邀请卡片
+                }
             }
           // ================= 新增：AI 自主控制音乐逻辑 =================
         } else if (action.type === 'music_control') {
@@ -4669,8 +4696,12 @@ async function wcTriggerAIMoment(charId) {
         prompt += `【要求】：\n`;
         prompt += `1. 朋友圈的内容通常是对最近聊天中发生的事情的感慨、吐槽、分享，或者对User的暗示。\n`;
         prompt += `2. 文案要符合日常朋友圈风格，生活化，不要太长，拒绝AI味。\n`;
-        prompt += `3. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
-        prompt += `{"text": "朋友圈文案内容", "imageDesc": "配图的画面描述(如果没有配图请留空)"}\n`;
+        prompt += `3. 【活人感排版（核心）】：为了更像真人，你可以自由选择以下三种发布形式之一（随机决定）：\n`;
+        prompt += `   - 纯文本：只有 text，imageDesc 留空。\n`;
+        prompt += `   - 纯图片：只有 imageDesc，text 留空（无字朋友圈，只发图）。\n`;
+        prompt += `   - 图文并茂：text 和 imageDesc 都有。\n`;
+        prompt += `4. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
+        prompt += `{"text": "朋友圈文案内容(可留空)", "imageDesc": "配图的画面描述(可留空)"}\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -6381,8 +6412,14 @@ function wcRenderMoments() {
 
     filteredMoments.forEach(moment => {
         let mediaHtml = '';
-        if (moment.image) mediaHtml = `<img src="${moment.image}" class="wc-moment-image">`;
-        else if (moment.imageDesc) mediaHtml = `<div class="wc-moment-image-placeholder" style="width: 100px !important; height: 100px !important; max-width: none !important; padding: 5px !important; box-sizing: border-box;"><svg class="wc-icon" style="margin-bottom: 4px; width: 24px; height:24px;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${moment.imageDesc}</div></div>`;
+        if (moment.image) {
+            // 真实图片增加点击预览
+            mediaHtml = `<img src="${moment.image}" class="wc-moment-image" onclick="wcPreviewImage('${moment.image}')" style="cursor: pointer;">`;
+        } else if (moment.imageDesc) {
+            // AI 描述图片增加点击弹出高级卡片
+            const safeDesc = moment.imageDesc.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+            mediaHtml = `<div class="wc-moment-image-placeholder" onclick="wcOpenImageDescCard('${safeDesc}')" style="width: 100px !important; height: 100px !important; max-width: none !important; padding: 5px !important; box-sizing: border-box; cursor: pointer;"><svg class="wc-icon" style="margin-bottom: 4px; width: 24px; height:24px;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${moment.imageDesc}</div></div>`;
+        }
         
         let likesHtml = '';
         if (moment.likes && moment.likes.length > 0) likesHtml = `<div class="wc-moment-like-row"><svg class="wc-icon wc-icon-fill" style="width:14px; height:14px; margin-right:6px;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>${moment.likes.join(', ')}</div>`;
@@ -6396,6 +6433,12 @@ function wcRenderMoments() {
         
         const interactionArea = (likesHtml || commentsHtml) ? `<div class="wc-moment-likes-comments">${likesHtml}${commentsHtml}</div>` : '';
         
+        // 动态判断是否有文字，如果没有文字就不渲染 div，防止出现多余的空白间距
+        let textHtml = '';
+        if (moment.text && moment.text.trim() !== '') {
+            textHtml = `<div class="wc-moment-text">${moment.text}</div>`;
+        }
+        
         const div = document.createElement('div');
         div.className = 'wc-moment-card';
         div.innerHTML = `
@@ -6404,7 +6447,7 @@ function wcRenderMoments() {
                 <div class="wc-moment-name">${moment.name || wcState.user.name}</div>
             </div>
             <div class="wc-moment-content">
-                <div class="wc-moment-text">${moment.text}</div>
+                ${textHtml}
                 ${mediaHtml}
                 <div class="wc-moment-actions">
                     <div style="display: flex; align-items: center; gap: 12px;">
