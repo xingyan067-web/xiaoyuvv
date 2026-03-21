@@ -1,11 +1,14 @@
 {
   "name": "小元元元",
   "short_name": "小元元元",
+  "id": "./index.html",
   "description": "iOS Theme Studio Standalone App",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#000000",
+  "lang": "zh-CN",
   "orientation": "portrait",
   "icons": [
     {
