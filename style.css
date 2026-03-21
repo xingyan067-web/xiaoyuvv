@@ -2412,94 +2412,240 @@ input::-webkit-inner-spin-button {
     animation: wcSlideInRight 0.3s ease;
 }
 
-.shop-tab { 
-    font-size: 15px; 
-    color: #b0a8a6; 
-    letter-spacing: 1px; 
-    transition: color 0.3s; 
-}
-.shop-tab.active::after { 
-    content: ''; 
-    position: absolute; 
-    bottom: 0; 
-    left: 50%; 
-    transform: translateX(-50%); 
-    width: 15px; 
-    height: 2px; 
-    background: #d4c4b7; 
-    border-radius: 2px; 
-}
+    /* ========================================== */
+    /* 顶部导航栏 (无边框，线条延伸) */
+    /* ========================================== */
+    .ins-shop-header {
+        display: flex; align-items: center; 
+        padding: calc(env(safe-area-inset-top, 20px) + 20px) 20px 0 20px; 
+        background: transparent;
+        position: relative; z-index: 10;
+    }
+    .ins-shop-title { cursor: pointer; display: flex; flex-direction: column; line-height: 1; transition: opacity 0.2s; }
+    .ins-shop-title:active { opacity: 0.5; }
+    .ins-shop-title-en { font-size: 28px; font-weight: 900; color: #111; letter-spacing: 2px; font-family: -apple-system, sans-serif; }
+    .ins-shop-title-cn { font-size: 10px; color: #888; letter-spacing: 6px; margin-top: 6px; font-family: sans-serif; font-weight: bold; }
+    .ins-shop-line { flex: 1; height: 1px; background: linear-gradient(to right, #111, transparent); margin: 0 20px; opacity: 0.2; }
+    .ins-shop-actions { display: flex; gap: 15px; }
+    .ins-shop-btn { width: 24px; height: 24px; color: #111; cursor: pointer; transition: transform 0.2s; }
+    .ins-shop-btn:active { transform: scale(0.9); }
+    .ins-shop-btn svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; }
 
-.shop-item-card { 
-    background: #fff; 
-    border-radius: 20px; 
-    padding: 15px; 
-    margin-bottom: 15px; 
-    display: flex; 
-    align-items: center; 
-    gap: 15px; 
-    box-shadow: 0 8px 20px rgba(212, 196, 183, 0.15); 
-    border: none; 
-}
-.shop-item-img { 
-    width: 80px; 
-    height: 80px; 
-    border-radius: 16px; 
-    object-fit: cover; 
-    background: #f5f0eb; 
-    flex-shrink: 0; 
-}
-.shop-item-info { 
-    flex: 1; 
-    display: flex; 
-    flex-direction: column; 
-    justify-content: center; 
-    overflow: hidden; 
-}
-.shop-item-title { 
-    font-size: 15px; 
-    font-weight: 600; 
-    color: #4a413e; 
-    margin-bottom: 4px; 
-    white-space: nowrap; 
-    overflow: hidden; 
-    text-overflow: ellipsis; 
-}
-.shop-item-desc { 
-    font-size: 12px; 
-    color: #9e948f; 
-    margin-bottom: 8px; 
-    display: -webkit-box; 
-    -webkit-line-clamp: 2; 
-    -webkit-box-orient: vertical; 
-    overflow: hidden; 
-    line-height: 1.4; 
-}
-.shop-item-price { 
-    font-size: 16px; 
-    font-weight: bold; 
-    color: #c28e7e; 
-    font-family: 'Georgia', serif; 
-    font-style: italic; 
-}
-.shop-item-add { 
-    width: 32px; 
-    height: 32px; 
-    border-radius: 50%; 
-    background: #e8dfd8; 
-    color: #5d5350; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    cursor: pointer; 
-    flex-shrink: 0; 
-    font-size: 20px; 
-    box-shadow: none; 
-    transition: transform 0.1s; 
-}
-.shop-item-add:active { 
-    transform: scale(0.9); 
-}
+    /* ========================================== */
+    /* 横向滚动商品列表 (精准控制高度与点击层级) */
+    /* ========================================== */
+    .ins-shop-scroll-container {
+        flex: 1; display: flex; gap: 15px; 
+        padding: 20px; 
+        overflow-x: auto; 
+        align-items: center; /* 居中对齐 */
+        scrollbar-width: none;
+        margin-top: 0; 
+        margin-bottom: 250px; 
+        position: relative; 
+        z-index: 100; /* 👈 核心修复：大幅提高层级，确保在轨道上方，防止点击被拦截 */
+        pointer-events: auto;
+    }
+    .ins-shop-scroll-container::-webkit-scrollbar { display: none; }
+
+    /* 80x310px 竖向卡片 (严格锁定尺寸) */
+    .ins-shop-card {
+        width: 80px !important; 
+        height: 310px !important; 
+        flex-shrink: 0; position: relative;
+        background: linear-gradient(to bottom, rgba(17, 17, 17, 0.95) 0%, rgba(17, 17, 17, 0) 100%);
+        cursor: pointer; display: flex; flex-direction: column; align-items: center;
+        padding: 15px 5px; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        box-sizing: border-box;
+        z-index: 110; /* 确保卡片本身层级极高 */
+    }
+    .ins-shop-card:active { transform: translateY(-10px); }
+    
+    /* 顶部几何设计感边框 */
+    .ins-shop-card::before {
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 100px;
+        border: 1px solid rgba(255, 255, 255, 0.2); border-bottom: none; pointer-events: none;
+    }
+    .ins-shop-card::after {
+        content: ''; position: absolute; top: 5px; left: 5px; right: 5px; height: 40px;
+        border: 1px dashed rgba(255, 255, 255, 0.3); border-bottom: none; pointer-events: none;
+    }
+
+    .ins-shop-card-icon { font-size: 20px; margin-bottom: 20px; margin-top: 5px; filter: grayscale(100%) contrast(200%); }
+    .ins-shop-card-name {
+        writing-mode: vertical-rl; color: #FFF; font-size: 14px; letter-spacing: 4px;
+        font-family: 'Kaiti', 'STKaiti', serif; text-shadow: 0 2px 10px rgba(0,0,0,0.8); flex: 1;
+    }
+    .ins-shop-card-price {
+        color: rgba(255, 255, 255, 0.5); font-size: 10px; font-family: 'Courier New', monospace;
+        writing-mode: vertical-rl; margin-top: 10px; letter-spacing: 1px;
+    }
+
+    /* 添加商品专属卡片 (严格 80x310px，居中排版) */
+    .ins-shop-card.add-card {
+        background: rgba(0, 0, 0, 0.02); border: 1px dashed #CCC;
+        justify-content: center; padding: 0;
+    }
+    .ins-shop-card.add-card::before, .ins-shop-card.add-card::after { display: none; }
+    .ins-shop-card.add-card .ins-shop-card-icon { margin: 0 0 15px 0; font-size: 24px; opacity: 0.5; }
+    .ins-shop-card.add-card .ins-shop-card-name { flex: none; color: #888; text-shadow: none; font-size: 13px; letter-spacing: 6px; }
+
+    /* ========================================== */
+    /* 星际环绕半圆滑动键 (主页分类) */
+    /* ========================================== */
+    .orbit-category-container {
+        position: absolute; bottom: 90px; left: 0; width: 100%; height: 120px;
+        overflow: hidden; display: flex; justify-content: center; z-index: 50;
+        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    }
+    .orbit-wheel {
+        position: absolute; top: 40px; width: 600px; height: 600px;
+        border-radius: 50%; border: 1px dashed #E5E5EA;
+        transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .orbit-wheel::before {
+        content: ''; position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2px;
+        border-radius: 50%; border: 2px solid transparent;
+        background: linear-gradient(180deg, rgba(17,17,17,0.1) 0%, transparent 20%) border-box;
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none;
+    }
+    .orbit-node {
+        position: absolute; top: 50%; left: 50%; width: 60px; height: 60px;
+        margin: -30px 0 0 -30px; display: flex; align-items: center; justify-content: center;
+    }
+    .orbit-node-content {
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s;
+        opacity: 0.4; cursor: pointer;
+    }
+    .orbit-node.active .orbit-node-content { opacity: 1; transform: scale(1.1); }
+    .orbit-dot {
+        width: 8px; height: 8px; background: #FFF; border: 2px solid #111; border-radius: 50%;
+        box-shadow: 0 0 10px rgba(0,0,0,0.2); transition: all 0.3s;
+    }
+    .orbit-node.active .orbit-dot { background: #111; box-shadow: 0 0 15px rgba(17,17,17,0.4); }
+    .orbit-label {
+        font-size: 9px; font-family: -apple-system, sans-serif; font-weight: bold;
+        color: #111; letter-spacing: 0.5px; white-space: normal; text-align: center;
+        max-width: 70px; line-height: 1.2; margin-top: 4px;
+    }
+
+    /* ========================================== */
+    /* 塔罗牌详情弹窗 (200x450px) & 内部星际轨道 */
+    /* ========================================== */
+    .tarot-modal-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+        display: none; /* 👈 核心修复：默认彻底隐藏，防止隐形遮罩阻挡底层滑动 */
+        flex-direction: column; align-items: center; justify-content: center;
+        z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.4s ease;
+    }
+    .tarot-modal-overlay.active { opacity: 1; pointer-events: auto; }
+
+    .tarot-slider-container {
+        position: relative; width: 100%; height: 450px; margin-top: -50px;
+        display: flex; align-items: center; justify-content: center; perspective: 1000px;
+    }
+
+    .tarot-card {
+        position: absolute; width: 200px; height: 450px;
+        background: #0B0C10; color: #FFF; display: flex; flex-direction: column;
+        padding: 24px; box-shadow: 0 30px 60px rgba(0,0,0,0.4); box-sizing: border-box;
+        transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease;
+        opacity: 0; pointer-events: none;
+    }
+    
+    .tarot-card::before {
+        content: ''; position: absolute; top: 8px; left: 8px; right: 8px; bottom: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.2); pointer-events: none;
+    }
+    .tarot-card::after {
+        content: ''; position: absolute; top: 14px; left: 14px; right: 14px; bottom: 14px;
+        border: 1px dashed rgba(255, 255, 255, 0.1); pointer-events: none;
+    }
+
+    .tarot-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2; }
+    .tarot-tag { font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 3px; color: #888; }
+    .tarot-close { font-size: 24px; cursor: pointer; line-height: 1; color: #888; transition: color 0.2s; }
+    .tarot-close:active { color: #FFF; }
+    
+    /* 👇 新增：塔罗牌内部的高级感编辑/删除按钮 👇 */
+    .tarot-manage-actions {
+        display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; position: relative; z-index: 10;
+    }
+    .tarot-action-btn {
+        width: 32px; height: 32px; border-radius: 50%;
+        background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; transition: all 0.2s ease; backdrop-filter: blur(4px);
+    }
+    .tarot-action-btn svg {
+        width: 14px; height: 14px; fill: none; stroke: #CCC; stroke-width: 1.5; transition: stroke 0.2s;
+    }
+    .tarot-action-btn:active { transform: scale(0.9); background: rgba(255, 255, 255, 0.2); }
+    .tarot-action-btn.edit:active svg { stroke: #FFF; }
+    .tarot-action-btn.delete:active svg { stroke: #FF3B30; }
+    /* 👆 新增结束 👆 */
+
+    .tarot-icon { font-size: 45px; text-align: center; margin-bottom: 20px; filter: grayscale(100%) contrast(200%); }
+    .tarot-title { font-size: 22px; font-weight: bold; text-align: center; margin-bottom: 15px; letter-spacing: 4px; font-family: 'Kaiti', serif; }
+    .tarot-desc { font-size: 12px; color: #AAA; text-align: justify; line-height: 1.8; flex: 1; font-family: 'Kaiti', serif; letter-spacing: 1px; }
+    .tarot-price { font-family: 'Georgia', serif; font-size: 18px; text-align: center; margin-bottom: 24px; font-style: italic; color: #D4C4B7; }
+    .tarot-btn {
+        background: #FFF; color: #111; border: none; padding: 14px; font-size: 11px;
+        font-weight: 900; letter-spacing: 3px; cursor: pointer; position: relative; z-index: 2;
+        font-family: -apple-system, sans-serif; transition: transform 0.2s;
+    }
+    .tarot-btn:active { transform: scale(0.95); }
+
+    /* 塔罗牌底部的星际轨道 */
+    .tarot-orbit-container {
+        position: absolute; bottom: 40px; left: 0; width: 100%; height: 80px;
+        overflow: hidden; display: flex; justify-content: center; z-index: 50;
+    }
+    .tarot-orbit-wheel {
+        position: absolute; top: 20px; width: 400px; height: 400px;
+        border-radius: 50%; border: 1px solid rgba(17,17,17,0.1);
+        transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .tarot-orbit-node {
+        position: absolute; top: 50%; left: 50%; width: 40px; height: 40px;
+        margin: -20px 0 0 -20px; display: flex; align-items: center; justify-content: center;
+    }
+    .tarot-orbit-dot {
+        width: 6px; height: 6px; background: #CCC; border-radius: 50%;
+        transition: all 0.3s; cursor: pointer;
+    }
+    .tarot-orbit-node.active .tarot-orbit-dot {
+        width: 10px; height: 10px; background: #111; box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    }
+
+    /* ========================================== */
+    /* 添加商品弹窗 */
+    /* ========================================== */
+    .add-modal-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.5); backdrop-filter: blur(5px);
+        display: none; align-items: center; justify-content: center; z-index: 3000;
+    }
+    .add-modal-overlay.active { display: flex; }
+    .add-card {
+        background: #FFF; width: 280px; border-radius: 20px; padding: 24px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.2); font-family: -apple-system, sans-serif;
+    }
+    .add-card h3 { margin: 0 0 20px 0; font-size: 18px; text-align: center; color: #111; }
+    .add-input {
+        width: 100%; background: #F5F5F5; border: none; border-radius: 10px;
+        padding: 12px; margin-bottom: 12px; font-size: 14px; outline: none; box-sizing: border-box;
+    }
+    .add-btn {
+        width: 100%; background: #111; color: #FFF; border: none; border-radius: 10px;
+        padding: 14px; font-size: 15px; font-weight: bold; cursor: pointer; margin-top: 10px;
+    }
+    .add-btn.cancel { background: transparent; color: #888; margin-top: 5px; }
 
 /* 修改：将购物车按钮往上移 */
 .shop-cart-btn { 

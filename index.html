@@ -1925,33 +1925,74 @@
                         </div>
                     </div>
                     <!-- Shopping Full Page (New Full Screen) -->
-                    <div id="wc-view-shopping">
-                        <div class="wc-navbar" style="position: relative; background: #fdfbf7; border-bottom: none; box-shadow: 0 2px 10px rgba(212, 196, 183, 0.15);">
-                            <div class="wc-nav-left">
-                                <button class="wc-nav-btn" onclick="wcCloseShoppingPage()">
-                                    <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                                </button>
+                    <div id="wc-view-shopping" style="background: #FFFFFF;">
+                        <!-- 全新高级感顶栏 -->
+                        <div class="ins-shop-header">
+                            <div class="ins-shop-title" onclick="wcCloseShoppingPage()">
+                                <span class="ins-shop-title-en">STORE</span>
+                                <span class="ins-shop-title-cn">商城</span>
                             </div>
-                            <!-- 修改：移除顶部的 Tab，改为纯标题 -->
-                            <div class="wc-nav-title" style="font-weight: 600; color: #4a413e;">
-                                购物
-                            </div>
-                            <div class="wc-nav-right" style="gap: 10px;">
-                                <button class="wc-nav-btn" onclick="wcOpenShopSettingsModal()">
-                                    <svg class="wc-icon" viewBox="0 0 24 24"><path d="M4 21v-7"></path><path d="M4 10V3"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M20 21v-5"></path><path d="M20 12V3"></path><path d="M1 14h6"></path><path d="M9 8h6"></path><path d="M17 16h6"></path></svg>
-                                </button>
-                                <button class="wc-nav-btn" onclick="wcGenerateShopItems()">
-                                    <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                                </button>
+                            <div class="ins-shop-line"></div>
+                            <div class="ins-shop-actions">
+                                <div class="ins-shop-btn" onclick="wcOpenShopSettingsModal()" title="世界书设置">
+                                    <svg viewBox="0 0 24 24"><path d="M4 21v-7"></path><path d="M4 10V3"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M20 21v-5"></path><path d="M20 12V3"></path><path d="M1 14h6"></path><path d="M9 8h6"></path><path d="M17 16h6"></path></svg>
+                                </div>
+                                <div class="ins-shop-btn" onclick="wcGenerateShopItems()" title="刷新进货">
+                                    <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                                </div>
                             </div>
                         </div>
-                        <!-- 修改：增加 padding-bottom 防止列表被底部胶囊遮挡 -->
-                        <div class="wc-main-content" style="padding-top: 64px; padding-bottom: 100px; background: #fdfbf7; position: relative;">
-                            <div id="shop-list-mall" class="shop-list active" style="padding: 16px;">
-                                <div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成商品</div>
+
+                        <!-- 横向滚动商品列表 -->
+                        <div class="wc-main-content" style="padding: 0; background: transparent; position: relative; display: flex; flex-direction: column; z-index: 5;">
+                            <div id="shop-list-mall" class="shop-list ins-shop-scroll-container active">
+                                <div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">点击右上角生成商品</div>
                             </div>
-                            <div id="shop-list-takeout" class="shop-list" style="display: none; padding: 16px;">
-                                <div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成外卖</div>
+                            <div id="shop-list-takeout" class="shop-list ins-shop-scroll-container" style="display: none;">
+                                <div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">点击右上角生成外卖</div>
+                            </div>
+                        </div>
+
+                        <!-- 主页：星际环绕分类轨道 -->
+                        <div class="orbit-category-container" 
+                             ontouchstart="wcCatTouchStart(event)" 
+                             ontouchmove="wcCatTouchMove(event)" 
+                             ontouchend="wcCatTouchEnd(event)">
+                            <div class="orbit-wheel" id="wc-cat-orbit-wheel">
+                                <!-- 节点由 JS 生成 -->
+                            </div>
+                        </div>
+                        
+                        <!-- 塔罗牌详情弹窗 & 3D滑动容器 -->
+                        <div class="tarot-modal-overlay" id="wc-tarot-modal">
+                            <div class="tarot-slider-container" id="wc-tarot-slider" 
+                                 ontouchstart="wcTarotTouchStart(event)" 
+                                 ontouchmove="wcTarotTouchMove(event)" 
+                                 ontouchend="wcTarotTouchEnd(event)">
+                                <!-- 塔罗牌将在这里生成 -->
+                            </div>
+                            
+                            <!-- 塔罗牌底部的星际轨道 -->
+                            <div class="tarot-orbit-container"
+                                 ontouchstart="wcTarotTouchStart(event)" 
+                                 ontouchmove="wcTarotTouchMove(event)" 
+                                 ontouchend="wcTarotTouchEnd(event)">
+                                <div class="tarot-orbit-wheel" id="wc-tarot-orbit-wheel">
+                                    <!-- 节点由 JS 生成 -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 添加/编辑商品弹窗 -->
+                        <div class="add-modal-overlay" id="wc-add-product-modal">
+                            <div class="add-card">
+                                <h3 id="wc-add-modal-title">添加新商品</h3>
+                                <input type="hidden" id="wc-add-id"> <!-- 隐藏的ID字段 -->
+                                <input type="text" id="wc-add-name" class="add-input" placeholder="商品名称">
+                                <input type="text" id="wc-add-desc" class="add-input" placeholder="商品描述">
+                                <input type="number" id="wc-add-price" class="add-input" placeholder="价格 (如 99.00)">
+                                <button class="add-btn" onclick="wcSaveNewProduct()">保存</button>
+                                <button class="add-btn cancel" onclick="document.getElementById('wc-add-product-modal').classList.remove('active')">取消</button>
                             </div>
                         </div>
 

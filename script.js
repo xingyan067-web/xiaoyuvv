@@ -11561,6 +11561,18 @@ async function wcGenerateShopItems() {
     wcShowLoading("正在进货中...");
 
     try {
+        // 1. 获取当前角色和用户设定
+        const charId = wcState.activeChatId || wcState.editingCharId;
+        const char = wcState.characters.find(c => c.id === charId);
+        let charInfo = "";
+        let userInfo = "";
+        if (char) {
+            charInfo = `【角色设定 (${char.name})】：${char.prompt}\n`;
+            const chatConfig = char.chatConfig || {};
+            userInfo = `【用户设定】：${chatConfig.userPersona || wcState.user.persona || "无"}\n`;
+        }
+
+        // 2. 获取勾选的世界书
         let wbInfo = "";
         const selectedWbs = wcState.shopData.config.worldbookEntries || [];
         if (worldbookEntries.length > 0 && selectedWbs.length > 0) {
@@ -11570,11 +11582,24 @@ async function wcGenerateShopItems() {
             }
         }
 
-        let prompt = `请根据以下世界观设定，生成商城商品和外卖商品。\n${wbInfo}\n`;
+        // 3. 组装强大的 Prompt
+        let prompt = `你现在是一个商城和外卖平台的后台引擎。请根据以下设定，生成商城商品和外卖商品。\n`;
+        prompt += charInfo;
+        prompt += userInfo;
+        if (wbInfo) prompt += wbInfo + "\n";
+        
         prompt += `【要求】：\n`;
-        prompt += `1. 生成 10 个商城商品 (mall)，包含物品名称、符合世界观的简短描述、以及合理的价格(数字)。\n`;
-        prompt += `2. 生成 10 个外卖商品 (takeout)，包含食物名称、诱人的简短描述、以及合理的价格(数字)。\n`;
-        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `1. 总共生成 30 个商品：商城 (mall) 15 个，外卖 (takeout) 15 个。\n`;
+        prompt += `2. 商城商品 (mall) 包含两类：\n`;
+        prompt += `   - 前 8 个为【日常用品DAILY】：符合世界观和角色日常生活的普通物品。\n`;
+        prompt += `   - 后 7 个为【可能喜欢FAV】：根据角色和用户的设定，专门为他们推荐的特殊物品、礼物或情趣用品。\n`;
+        prompt += `   - 注意：日常用品和可能喜欢的商品必须完全不同，不互通！\n`;
+        prompt += `3. 外卖商品 (takeout) 包含两类：\n`;
+        prompt += `   - 前 8 个为【普通小吃/餐饮SNACK】：符合世界观的常见食物。\n`;
+        prompt += `   - 后 7 个为【可能喜欢的小吃FAV】：根据角色和用户的口味偏好，专门推荐的特色美食或饮品。\n`;
+        prompt += `   - 注意：普通小吃和可能喜欢的小吃必须完全不同，不互通！\n`;
+        prompt += `4. 每个商品包含物品名称 (name)、符合设定的简短描述 (desc)、以及合理的价格 (price，数字格式)。\n`;
+        prompt += `5. 返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
           "mall": [
             {"name": "商品名", "desc": "描述", "price": 99.00}
@@ -11604,8 +11629,7 @@ async function wcGenerateShopItems() {
         wcState.shopData.takeout = generatedData.takeout || [];
         wcSaveData();
 
-        wcRenderShopItems('mall');
-        wcRenderShopItems('takeout');
+        wcUpdateCatOrbit(); // 刷新当前视图
         wcShowSuccess("进货成功");
 
     } catch (e) {
@@ -11614,36 +11638,417 @@ async function wcGenerateShopItems() {
     }
 }
 
-function wcRenderShopItems(tab) {
-    const container = document.getElementById(`shop-list-${tab}`);
-    const items = wcState.shopData[tab] || [];
+// ==========================================
+// 商城全局状态与分类轨道逻辑 (支持商城与外卖双模式)
+// ==========================================
+let wcShopCurrentTab = 'mall'; // 记录当前是大 Tab 是商城还是外卖
+let wcShopCurrentItems = [];
+let wcCatCurrentIndex = 0;
+const wcCatRadius = 300; 
+const wcCatStepAngle = 30; 
+
+// 动态获取当前 Tab 的分类
+function getShopCategories() {
+    if (wcShopCurrentTab === 'mall') {
+        return [
+            { id: 'all', label: 'ALL' },
+            { id: 'daily', label: 'DAILY' },
+            { id: 'fav', label: 'FAV' },
+            { id: 'add', label: 'ADD' }
+        ];
+    } else {
+        return [
+            { id: 'all', label: 'ALL' },
+            { id: 'snack', label: 'SNACK' },
+            { id: 'fav', label: 'FAV' },
+            { id: 'add', label: 'ADD' }
+        ];
+    }
+}
+
+// 覆盖原有的 wcSwitchShopTab，让外卖也支持轨道
+function wcSwitchShopTab(tab) {
+    wcShopCurrentTab = tab; // 更新当前大 Tab 状态
     
-    if (items.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成商品</div>';
+    document.querySelectorAll('.shop-tab, .shop-cap-tab').forEach(el => el.classList.remove('active'));
+    const activeTab = document.getElementById(`shop-tab-${tab}`) || document.getElementById(`cap-tab-${tab}`);
+    if (activeTab) activeTab.classList.add('active');
+    
+    document.querySelectorAll('.shop-list').forEach(el => el.style.display = 'none');
+    const activeList = document.getElementById(`shop-list-${tab}`);
+    if (activeList) activeList.style.display = 'flex'; // 保持 flex 布局
+    
+    // 无论是商城还是外卖，都显示星际轨道
+    document.querySelector('.orbit-category-container').style.display = 'flex';
+    
+    // 切换大 Tab 时，重置轨道到 ALL 分类
+    wcCatCurrentIndex = 0;
+    wcRenderCatOrbit();
+}
+
+function wcRenderCatOrbit() {
+    const wheel = document.getElementById('wc-cat-orbit-wheel');
+    if (!wheel) return;
+    wheel.innerHTML = '';
+    
+    const categories = getShopCategories();
+    categories.forEach((cat, i) => {
+        const angleDeg = i * wcCatStepAngle;
+        const angleRad = (angleDeg - 90) * (Math.PI / 180);
+        const x = wcCatRadius * Math.cos(angleRad);
+        const y = wcCatRadius * Math.sin(angleRad);
+
+        const node = document.createElement('div');
+        node.className = `orbit-node ${i === wcCatCurrentIndex ? 'active' : ''}`;
+        node.style.transform = `translate(${x}px, ${y}px)`;
+        
+        node.innerHTML = `
+            <div class="orbit-node-content" id="wc-cat-content-${i}">
+                <div class="orbit-dot"></div>
+                <div class="orbit-label">${cat.label}</div>
+            </div>
+        `;
+        node.onclick = () => {
+            wcCatCurrentIndex = i;
+            wcUpdateCatOrbit();
+        };
+        wheel.appendChild(node);
+    });
+    wcUpdateCatOrbit();
+}
+
+function wcUpdateCatOrbit() {
+    const wheel = document.getElementById('wc-cat-orbit-wheel');
+    if (!wheel) return;
+    const rotation = -wcCatCurrentIndex * wcCatStepAngle;
+    wheel.style.transform = `rotate(${rotation}deg)`;
+
+    const categories = getShopCategories();
+    categories.forEach((_, i) => {
+        const content = document.getElementById(`wc-cat-content-${i}`);
+        if (content) {
+            content.style.transform = `rotate(${-rotation}deg) ${i === wcCatCurrentIndex ? 'scale(1.2)' : 'scale(1)'}`;
+        }
+        const node = wheel.children[i];
+        if (node) {
+            if (i === wcCatCurrentIndex) node.classList.add('active');
+            else node.classList.remove('active');
+        }
+    });
+
+    // 动态过滤数据 (严格隔离前8个和后7个)
+    const catId = categories[wcCatCurrentIndex].id;
+    const allItems = wcState.shopData[wcShopCurrentTab] || [];
+    
+    if (catId === 'add') {
+        // 仅显示手动添加的商品
+        wcShopCurrentItems = allItems.filter(item => item.isManual);
+    } else if (catId === 'all') {
+        // 显示所有商品
+        wcShopCurrentItems = [...allItems];
+    } else if (catId === 'daily' || catId === 'snack') {
+        // 显示前半部分 AI 生成的商品 (前8个)
+        const aiItems = allItems.filter(item => !item.isManual);
+        wcShopCurrentItems = aiItems.slice(0, 8);
+    } else if (catId === 'fav') {
+        // 显示后半部分 AI 生成的商品 (后7个)
+        const aiItems = allItems.filter(item => !item.isManual);
+        wcShopCurrentItems = aiItems.slice(8, 15);
+    }
+    
+    // 渲染当前 Tab 的商品列表
+    wcRenderShopItems(wcShopCurrentTab, catId === 'add');
+}
+
+// 分类轨道滑动事件
+let wcCatStartX = 0;
+let wcCatIsDragging = false;
+window.wcCatTouchStart = function(e) { wcCatStartX = e.touches[0].clientX; wcCatIsDragging = true; };
+window.wcCatTouchMove = function(e) { if (wcCatIsDragging && e.cancelable) e.preventDefault(); };
+window.wcCatTouchEnd = function(e) {
+    if (!wcCatIsDragging) return;
+    wcCatIsDragging = false;
+    const diff = e.changedTouches[0].clientX - wcCatStartX;
+    const categories = getShopCategories();
+    if (diff > 40 && wcCatCurrentIndex > 0) {
+        wcCatCurrentIndex--; wcUpdateCatOrbit();
+    } else if (diff < -40 && wcCatCurrentIndex < categories.length - 1) {
+        wcCatCurrentIndex++; wcUpdateCatOrbit();
+    }
+};
+
+// ==========================================
+// 商品列表渲染与添加/编辑/删除逻辑
+// ==========================================
+function wcRenderShopItems(tab, isAddMode = false) {
+    const container = document.getElementById(`shop-list-${tab}`);
+    if (!container) return;
+    container.innerHTML = '';
+    
+    const items = wcShopCurrentItems;
+
+    if (isAddMode) {
+        // 渲染手动添加的商品（去除了卡片表面的编辑删除按钮，保持极简）
+        items.forEach((item, idx) => {
+            const icon = tab === 'mall' ? '🔮' : '🍱';
+            const card = document.createElement('div');
+            card.className = 'ins-shop-card manual-card';
+            card.innerHTML = `
+                <div class="ins-shop-card-icon">${icon}</div>
+                <div class="ins-shop-card-name">${item.name}</div>
+                <div class="ins-shop-card-price">¥${parseFloat(item.price).toFixed(2)}</div>
+            `;
+            card.onclick = () => wcOpenTarotModal(tab, idx);
+            container.appendChild(card);
+        });
+
+        // 渲染添加按钮卡片 (换成了高级的 SVG 加号)
+        const addCard = document.createElement('div');
+        addCard.className = 'ins-shop-card add-card';
+        addCard.onclick = () => {
+            document.getElementById('wc-add-modal-title').innerText = `添加新${tab === 'mall' ? '商品' : '外卖'}`;
+            document.getElementById('wc-add-id').value = '';
+            document.getElementById('wc-add-name').value = '';
+            document.getElementById('wc-add-desc').value = '';
+            document.getElementById('wc-add-price').value = '';
+            document.getElementById('wc-add-product-modal').classList.add('active');
+        };
+        addCard.innerHTML = `
+            <div class="ins-shop-card-icon">
+                <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M12 5v14M5 12h14"/></svg>
+            </div>
+            <div class="ins-shop-card-name">添加新${tab === 'mall' ? '商品' : '外卖'}</div>
+        `;
+        container.appendChild(addCard);
         return;
     }
 
-    let html = '';
+    if (items.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">空空如也</div>';
+        return;
+    }
+
     items.forEach((item, idx) => {
-        // 随机生成一个占位图颜色
-        const hue = Math.floor(Math.random() * 360);
-        const imgBg = `hsl(${hue}, 30%, 90%)`;
-        const icon = tab === 'mall' ? '🛍️' : '🍱';
-        
-        html += `
-            <div class="shop-item-card">
-                <div class="shop-item-img" style="background: ${imgBg}; display:flex; align-items:center; justify-content:center; font-size:30px;">${icon}</div>
-                <div class="shop-item-info">
-                    <div class="shop-item-title">${item.name}</div>
-                    <div class="shop-item-desc">${item.desc}</div>
-                    <div class="shop-item-price">¥${parseFloat(item.price).toFixed(2)}</div>
-                </div>
-                <div class="shop-item-add" onclick="wcAddToCart('${tab}', ${idx})">+</div>
-            </div>
+        const icon = tab === 'mall' ? '🔮' : '🍱';
+        const card = document.createElement('div');
+        card.className = 'ins-shop-card';
+        card.onclick = () => wcOpenTarotModal(tab, idx);
+        card.innerHTML = `
+            <div class="ins-shop-card-icon">${icon}</div>
+            <div class="ins-shop-card-name">${item.name}</div>
+            <div class="ins-shop-card-price">¥${parseFloat(item.price).toFixed(2)}</div>
         `;
+        container.appendChild(card);
     });
-    container.innerHTML = html;
 }
+
+window.wcSaveNewProduct = function() {
+    const idField = document.getElementById('wc-add-id').value;
+    const name = document.getElementById('wc-add-name').value.trim();
+    const desc = document.getElementById('wc-add-desc').value.trim();
+    const price = document.getElementById('wc-add-price').value.trim();
+    
+    if (!name || !price) return alert("请填写名称和价格");
+
+    if (!wcState.shopData[wcShopCurrentTab]) wcState.shopData[wcShopCurrentTab] = [];
+    
+    if (idField) {
+        // 编辑模式
+        const item = wcState.shopData[wcShopCurrentTab].find(i => i.id === idField);
+        if (item) {
+            item.name = name;
+            item.desc = desc;
+            item.price = parseFloat(price).toFixed(2);
+        }
+    } else {
+        // 新增模式
+        wcState.shopData[wcShopCurrentTab].push({
+            id: 'manual_' + Date.now(),
+            isManual: true, // 标记为手动添加
+            name: name,
+            desc: desc || '神秘的未知物品',
+            price: parseFloat(price).toFixed(2)
+        });
+    }
+    
+    wcSaveData();
+    
+    document.getElementById('wc-add-product-modal').classList.remove('active');
+    wcUpdateCatOrbit(); // 刷新当前视图
+    alert(idField ? "修改成功！" : "添加成功！");
+};
+
+window.wcDeleteProduct = function(tab, id) {
+    if (confirm("确定要删除这个商品吗？")) {
+        wcState.shopData[tab] = wcState.shopData[tab].filter(i => i.id !== id);
+        wcSaveData();
+        wcUpdateCatOrbit(); // 刷新当前视图
+    }
+};
+
+window.wcEditProduct = function(tab, id) {
+    const item = wcState.shopData[tab].find(i => i.id === id);
+    if (!item) return;
+    document.getElementById('wc-add-modal-title').innerText = "编辑商品";
+    document.getElementById('wc-add-id').value = item.id;
+    document.getElementById('wc-add-name').value = item.name;
+    document.getElementById('wc-add-desc').value = item.desc;
+    document.getElementById('wc-add-price').value = item.price;
+    document.getElementById('wc-add-product-modal').classList.add('active');
+};
+
+
+// ==========================================
+// 塔罗牌弹窗与星际轨道逻辑
+// ==========================================
+let wcTarotCurrentTab = 'mall';
+let wcTarotCurrentIdx = 0;
+const wcTarotRadius = 200;
+const wcTarotStepAngle = 25;
+
+window.wcOpenTarotModal = function(tab, idx) {
+    wcTarotCurrentTab = tab;
+    wcTarotCurrentIdx = idx;
+    wcRenderTarotCards(tab);
+    wcRenderTarotOrbit(tab);
+    wcUpdateTarotTransforms();
+    const modal = document.getElementById('wc-tarot-modal');
+    modal.style.display = 'flex'; // 👈 核心修复：先显示容器，彻底解决阻挡点击的Bug
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.wcCloseTarotModal = function() {
+    const modal = document.getElementById('wc-tarot-modal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 400); // 👈 核心修复：动画结束后彻底隐藏容器
+};
+
+window.wcRenderTarotCards = function(tab) {
+    const slider = document.getElementById('wc-tarot-slider');
+    slider.innerHTML = '';
+    const items = tab === 'mall' ? wcShopCurrentItems : (wcState.shopData[tab] || []);
+    
+    items.forEach((item, index) => {
+        const icon = tab === 'mall' ? '🔮' : '🌙';
+        const card = document.createElement('div');
+        card.className = 'tarot-card';
+        card.id = `tarot-card-${index}`;
+        
+        const displayId = String(index + 1).padStart(2, '0');
+        
+        // 👇 判断是否为手动添加的商品，如果是，注入高级 SVG 编辑/删除按钮
+        let manageActionsHtml = '';
+        if (item.isManual) {
+            manageActionsHtml = `
+                <div class="tarot-manage-actions">
+                    <div class="tarot-action-btn edit" onclick="event.stopPropagation(); wcEditProduct('${tab}', '${item.id}'); wcCloseTarotModal();" title="编辑">
+                        <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </div>
+                    <div class="tarot-action-btn delete" onclick="event.stopPropagation(); wcDeleteProduct('${tab}', '${item.id}'); wcCloseTarotModal();" title="删除">
+                        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    </div>
+                </div>
+            `;
+        }
+        
+        card.innerHTML = `
+            <div class="tarot-header">
+                <span class="tarot-tag">NO.${displayId}</span>
+                <span class="tarot-close" onclick="wcCloseTarotModal()">×</span>
+            </div>
+            ${manageActionsHtml}
+            <div class="tarot-icon">${icon}</div>
+            <div class="tarot-title">${item.name}</div>
+            <div class="tarot-desc">${item.desc}</div>
+            <div class="tarot-price">¥${parseFloat(item.price).toFixed(2)}</div>
+            <button class="tarot-btn" onclick="wcAddToCartFromTarot('${tab}', ${index})">ADD TO CART</button>
+        `;
+        slider.appendChild(card);
+    });
+};
+
+window.wcRenderTarotOrbit = function(tab) {
+    const wheel = document.getElementById('wc-tarot-orbit-wheel');
+    if (!wheel) return;
+    wheel.innerHTML = '';
+    const items = tab === 'mall' ? wcShopCurrentItems : (wcState.shopData[tab] || []);
+    
+    items.forEach((_, i) => {
+        const angleDeg = i * wcTarotStepAngle;
+        const angleRad = (angleDeg - 90) * (Math.PI / 180);
+        const x = wcTarotRadius * Math.cos(angleRad);
+        const y = wcTarotRadius * Math.sin(angleRad);
+
+        const node = document.createElement('div');
+        node.className = `tarot-orbit-node ${i === wcTarotCurrentIdx ? 'active' : ''}`;
+        node.style.transform = `translate(${x}px, ${y}px)`;
+        node.innerHTML = `<div class="tarot-orbit-dot"></div>`;
+        node.onclick = () => {
+            wcTarotCurrentIdx = i;
+            wcUpdateTarotTransforms();
+        };
+        wheel.appendChild(node);
+    });
+};
+
+window.wcUpdateTarotTransforms = function() {
+    const cards = document.querySelectorAll('.tarot-card');
+    cards.forEach((card, index) => {
+        const offset = index - wcTarotCurrentIdx;
+        if (offset === 0) {
+            card.style.transform = `translateX(0) scale(1) translateZ(0)`;
+            card.style.zIndex = 10; card.style.opacity = 1; card.style.pointerEvents = 'auto';
+        } else if (offset < 0) {
+            card.style.transform = `translateX(${offset * 120}px) scale(0.85) rotateY(15deg) translateZ(-100px)`;
+            card.style.zIndex = 5 + offset; card.style.opacity = 1 - Math.abs(offset) * 0.4; card.style.pointerEvents = 'none';
+        } else {
+            card.style.transform = `translateX(${offset * 120}px) scale(0.85) rotateY(-15deg) translateZ(-100px)`;
+            card.style.zIndex = 5 - offset; card.style.opacity = 1 - Math.abs(offset) * 0.4; card.style.pointerEvents = 'none';
+        }
+    });
+
+    const wheel = document.getElementById('wc-tarot-orbit-wheel');
+    if (wheel) {
+        const rotation = -wcTarotCurrentIdx * wcTarotStepAngle;
+        wheel.style.transform = `rotate(${rotation}deg)`;
+        Array.from(wheel.children).forEach((node, i) => {
+            if (i === wcTarotCurrentIdx) node.classList.add('active');
+            else node.classList.remove('active');
+        });
+    }
+};
+
+let wcTarotStartX = 0;
+let wcTarotIsDragging = false;
+window.wcTarotTouchStart = function(e) { wcTarotStartX = e.touches[0].clientX; wcTarotIsDragging = true; };
+window.wcTarotTouchMove = function(e) { if (wcTarotIsDragging && e.cancelable) e.preventDefault(); };
+window.wcTarotTouchEnd = function(e) {
+    if (!wcTarotIsDragging) return;
+    wcTarotIsDragging = false;
+    const diff = e.changedTouches[0].clientX - wcTarotStartX;
+    const items = wcTarotCurrentTab === 'mall' ? wcShopCurrentItems : (wcState.shopData[wcTarotCurrentTab] || []);
+
+    if (diff > 40 && wcTarotCurrentIdx > 0) {
+        wcTarotCurrentIdx--; wcUpdateTarotTransforms();
+    } else if (diff < -40 && wcTarotCurrentIdx < items.length - 1) {
+        wcTarotCurrentIdx++; wcUpdateTarotTransforms();
+    }
+};
+
+window.wcAddToCartFromTarot = function(tab, idx) {
+    // 找到真实的商品数据
+    const items = tab === 'mall' ? wcShopCurrentItems : (wcState.shopData[tab] || []);
+    const item = items[idx];
+    if (!item) return;
+    
+    if (!wcState.shopData.cart) wcState.shopData.cart = [];
+    wcState.shopData.cart.push({ ...item, id: Date.now() + Math.random() });
+    wcSaveData();
+    wcUpdateCartBadge();
+    
+    wcCloseTarotModal();
+    alert("已化作星光落入购物车");
+};
 
 function wcAddToCart(tab, idx) {
     const item = wcState.shopData[tab][idx];
