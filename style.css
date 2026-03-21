@@ -1,5 +1,6 @@
 /* --- 基础样式与变量 --- */
-:root { 
+:root {
+    --app-height: 100vh;
     --app-font-size: 11px; 
     --bg-color: #f2f2f7; 
     --separator-color: #c6c6c8; 
@@ -26,19 +27,34 @@ body, input, textarea, select, button {
 
 /* --- 核心全屏重置 (完美兼容 PWA Standalone) --- */
 html, body {
-    width: 100vw;
-    height: 100vh; 
+    width: 100%;
+    height: var(--app-height, 100vh);
+    min-height: var(--app-height, 100vh);
     margin: 0;
     padding: 0;
     overflow: hidden;
-    position: fixed;
-    inset: 0; 
-    background-color: #FFFFFF; 
+    background-color: #FFFFFF;
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
-    touch-action: manipulation; 
+    touch-action: manipulation;
     -webkit-user-select: none;
     user-select: none;
+}
+
+body {
+    position: fixed;
+    inset: 0;
+}
+
+@supports (-webkit-touch-callout: none) {
+    html,
+    body,
+    #app-root,
+    #activation-overlay,
+    #wc-view-phone-sim {
+        height: -webkit-fill-available;
+        min-height: -webkit-fill-available;
+    }
 }
 
 input, textarea, select {
@@ -50,7 +66,8 @@ input, textarea, select {
     position: absolute; 
     inset: 0;
     width: 100%;
-    height: 100%;
+    height: var(--app-height, 100vh);
+    min-height: var(--app-height, 100vh);
     overflow: hidden;
     background-color: transparent;
     z-index: 1;
@@ -384,7 +401,7 @@ input, textarea, select {
 /* --- 模态框通用 --- */
 .settings-modal {
     position: absolute; 
-    top: 0; left: 0; width: 100%; height: 100%; height: 100dvh; /* 👈宝宝，加在这里！ */
+    top: 0; left: 0; width: 100%; height: var(--app-height, 100dvh); min-height: var(--app-height, 100dvh); height: 100dvh;
     background-color: var(--bg-color); z-index: 1000;
     display: none; 
     opacity: 0;
@@ -1619,7 +1636,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-contact-card-edit-btn { position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.3); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: white; cursor: pointer; backdrop-filter: blur(4px); }
 .wc-contact-card-close-btn { position: absolute; top: 16px; left: 16px; background: rgba(0,0,0,0.3); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: white; cursor: pointer; backdrop-filter: blur(4px); z-index: 10; }
 
-#wc-view-phone-sim { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; background-color: #000; z-index: 10000; display: none; justify-content: center; align-items: center; padding: 0; }
+#wc-view-phone-sim { position: fixed; top: 0; left: 0; width: 100%; height: var(--app-height, 100vh); min-height: var(--app-height, 100vh); height: 100dvh; background-color: #000; z-index: 10000; display: none; justify-content: center; align-items: center; padding: 0; }
 #wc-view-phone-sim.active { display: flex; animation: wcFadeIn 0.3s ease; }
 .wc-phone-bezel { width: 100%; max-width: 100%; height: 100%; max-height: 100%; background: #000; border-radius: 0; border: none; box-shadow: none; overflow: hidden; position: relative; display: flex; flex-direction: column; }
 .wc-phone-sticky-note { position: absolute; top: 20px; right: 20px; width: 100px; height: 100px; background: #fff; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); transform: rotate(5deg); z-index: 200; cursor: pointer; padding: 5px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; }
@@ -1642,7 +1659,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 
 .wc-phone-app-view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #F2F2F7; z-index: 20; display: flex; flex-direction: column; animation: wcPopIn 0.2s ease-out; }
 .wc-phone-app-content { flex: 1; overflow-y: auto; padding-top: 0; padding-bottom: 0; }
-.wc-phone-app-tabbar { height: 50px; background: #F7F7F7; border-top: 0.5px solid #C6C6C8; display: flex; justify-content: space-around; align-items: center; flex-shrink: 0; width: 100%; position: relative; z-index: 100; }
+.wc-phone-app-tabbar { height: calc(50px + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); background: #F7F7F7; border-top: 0.5px solid #C6C6C8; display: flex; justify-content: space-around; align-items: center; flex-shrink: 0; width: 100%; position: relative; z-index: 100; }
 .wc-phone-tab-item { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #8E8E93; cursor: pointer; }
 .wc-phone-tab-item.active { color: #007AFF; }
 
@@ -2202,7 +2219,8 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 }
 
 body, html {
-    height: 100%;
+    height: var(--app-height, 100vh);
+    min-height: var(--app-height, 100vh);
     overflow: hidden;
 }
 
@@ -3501,7 +3519,7 @@ input::-webkit-inner-spin-button {
 /* ========================================== */
 
 .dream-fullscreen-view {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%; height: 100dvh; /* 👈宝宝，加在这里！ */
+    position: fixed; top: 0; left: 0; width: 100%; height: var(--app-height, 100dvh); min-height: var(--app-height, 100dvh); height: 100dvh;
     background: #FAFAFA; z-index: 9000;
     display: none; flex-direction: column;
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -6858,9 +6876,18 @@ input::-webkit-inner-spin-button {
     height: calc(60px + env(safe-area-inset-bottom)) !important;
 }
 
-.ios-standalone .settings-modal,
+.ios-standalone .settings-modal {
+    padding-top: 0 !important;
+}
+
+.ios-standalone .settings-header {
+    height: calc(50px + env(safe-area-inset-top, 20px)) !important;
+    padding-top: env(safe-area-inset-top, 20px) !important;
+}
+
 .ios-standalone .dream-fullscreen-view,
 .ios-standalone #wc-view-phone-sim,
 .ios-standalone #wc-view-shopping {
-    padding-top: env(safe-area-inset-top) !important;
+    padding-top: 0 !important;
 }
+

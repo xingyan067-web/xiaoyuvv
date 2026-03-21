@@ -3460,17 +3460,21 @@
     </div> <!-- End of #app-root -->
 
     <style id="dynamic-font-style"></style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
     <script src="script.js"></script>
     <script>
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                    }, err => {
-                        console.log('ServiceWorker registration failed: ', err);
-                    });
+            window.addEventListener('load', async () => {
+                try {
+                    const swResponse = await fetch('sw.js', { method: 'HEAD', cache: 'no-store' });
+                    if (!swResponse.ok) return;
+
+                    const registration = await navigator.serviceWorker.register('sw.js');
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                } catch (err) {
+                    console.log('ServiceWorker registration skipped/failed: ', err);
+                }
             });
         }
     </script>
