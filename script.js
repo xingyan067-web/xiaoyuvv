@@ -20443,7 +20443,7 @@ async function refreshApiQuota() {
     }
 }
 // ==========================================
-// 新增：位置功能核心逻辑 (发送位置 & 角色城市 & 查看地图)
+// 新增：位置功能核心逻辑 (免翻墙高德地图版)
 // ==========================================
 
 let sendLocMapInstance = null;
@@ -20451,6 +20451,10 @@ let sendLocCurrentType = 'real';
 let sendLocRealAddress = "正在获取高精度定位...";
 let sendLocLat = 0;
 let sendLocLon = 0;
+
+// 高德地图免 Key 直连图层 (国内秒开)
+const AMAP_TILE_URL = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
+const AMAP_SUBDOMAINS = ['1', '2', '3', '4'];
 
 // 1. 打开发送位置弹窗 (User)
 function wcOpenSendLocationModal() {
@@ -20481,7 +20485,7 @@ function wcSwitchSendLocTab(tab) {
     }
 }
 
-// 获取真实定位并渲染地图
+// 获取真实定位并渲染地图 (免翻墙接口)
 function fetchSendLocation() {
     const titleEl = document.getElementById('send-loc-real-address');
     titleEl.innerText = "正在获取高精度定位...";
@@ -20491,28 +20495,23 @@ function fetchSendLocation() {
             sendLocLat = pos.coords.latitude;
             sendLocLon = pos.coords.longitude;
             try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${sendLocLat}&lon=${sendLocLon}&zoom=18&addressdetails=1`, {
-                    headers: { 'Accept-Language': 'zh-CN' }
-                });
+                // 使用国内可直连的 BigDataCloud 接口获取地名
+                const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${sendLocLat}&longitude=${sendLocLon}&localityLanguage=zh`);
                 const data = await res.json();
                 
-                let address = data.display_name;
-                if (data.address) {
-                    const a = data.address;
-                    address = `${a.city || a.town || a.province || ''} ${a.suburb || a.county || ''} ${a.road || ''}`.trim();
-                    if (!address) address = data.display_name;
-                }
+                let address = `${data.countryName || ''} ${data.principalSubdivision || ''} ${data.city || data.locality || ''}`.trim();
+                if (!address) address = `${sendLocLat.toFixed(4)}, ${sendLocLon.toFixed(4)}`;
                 
-                sendLocRealAddress = address || `${sendLocLat.toFixed(4)}, ${sendLocLon.toFixed(4)}`;
+                sendLocRealAddress = address;
                 titleEl.innerText = sendLocRealAddress;
 
-                // 渲染 Leaflet 地图
+                // 渲染高德地图
                 if (typeof L !== 'undefined') {
                     if (!sendLocMapInstance) {
                         sendLocMapInstance = L.map('send-real-map-container', {
                             zoomControl: false, attributionControl: false
                         }).setView([sendLocLat, sendLocLon], 16);
-                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(sendLocMapInstance);
+                        L.tileLayer(AMAP_TILE_URL, { subdomains: AMAP_SUBDOMAINS }).addTo(sendLocMapInstance);
                     } else {
                         sendLocMapInstance.setView([sendLocLat, sendLocLon], 16);
                     }
@@ -20558,7 +20557,6 @@ function wcSubmitSendLocation() {
     const mapClass = isVirtual ? "wc-bubble-location-map virtual" : "wc-bubble-location-map";
     const markerClass = isVirtual ? "ins-loc-marker virtual-marker" : "ins-loc-marker";
     
-    // 核心：给卡片绑定 onclick 事件，传入参数打开地图弹窗
     const cardHtml = `
         <div class="wc-bubble-location-card" onclick="window.wcOpenMapView(${isVirtual}, '${locTitle}', '${locDesc}', ${lat}, ${lon})">
             <div class="${mapClass}">
@@ -20603,7 +20601,6 @@ function wcOpenCharLocationModal() {
         document.getElementById('char-loc-real-province').value = config.locationProvince || '';
         document.getElementById('char-loc-real-city').value = config.locationCity || '';
         
-        // 如果之前存过经纬度，直接渲染地图
         if (config.locationLat && config.locationLon) {
             charLocLat = config.locationLat;
             charLocLon = config.locationLon;
@@ -20635,7 +20632,7 @@ function wcSwitchCharLocTab(tab) {
     }
 }
 
-// 搜索 Char 的真实地理位置
+// 搜索 Char 的真实地理位置 (免翻墙接口)
 async function searchCharLocation() {
     const country = document.getElementById('char-loc-real-country').value.trim();
     const province = document.getElementById('char-loc-real-province').value.trim();
@@ -20648,14 +20645,14 @@ async function searchCharLocation() {
     coordsDisplay.innerText = "正在搜索地图坐标...";
 
     try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`, {
-            headers: { 'Accept-Language': 'zh-CN' }
-        });
+        // 使用 Photon 开源接口，国内直连速度快
+        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=1`);
         const data = await res.json();
         
-        if (data && data.length > 0) {
-            charLocLat = parseFloat(data[0].lat);
-            charLocLon = parseFloat(data[0].lon);
+        if (data && data.features && data.features.length > 0) {
+            // Photon 返回的是 GeoJSON 格式，坐标是 [lon, lat]
+            charLocLon = parseFloat(data.features[0].geometry.coordinates[0]);
+            charLocLat = parseFloat(data.features[0].geometry.coordinates[1]);
             coordsDisplay.innerText = `经纬度: ${charLocLat.toFixed(4)}, ${charLocLon.toFixed(4)}`;
             renderCharLocMap(charLocLat, charLocLon);
         } else {
@@ -20672,7 +20669,8 @@ function renderCharLocMap(lat, lon) {
             charLocMapInstance = L.map('char-real-map-container', {
                 zoomControl: false, attributionControl: false
             }).setView([lat, lon], 12);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(charLocMapInstance);
+            // 使用高德地图图层
+            L.tileLayer(AMAP_TILE_URL, { subdomains: AMAP_SUBDOMAINS }).addTo(charLocMapInstance);
         } else {
             charLocMapInstance.setView([lat, lon], 12);
         }
@@ -20764,7 +20762,6 @@ window.wcOpenMapView = function(isVirtual, title, desc, lat, lon) {
     setTimeout(() => modal.classList.add('active'), 10);
 
     if (isVirtual) {
-        // 虚拟位置：显示紫色网格背景，隐藏真实地图
         virtualBg.style.display = 'flex';
         coordsEl.innerText = "经纬度: 异世界坐标无法解析";
         if (viewMapInstance) {
@@ -20772,7 +20769,6 @@ window.wcOpenMapView = function(isVirtual, title, desc, lat, lon) {
             viewMapInstance = null;
         }
     } else {
-        // 真实位置：隐藏虚拟背景，渲染 Leaflet 地图
         virtualBg.style.display = 'none';
         coordsEl.innerText = `经纬度: ${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`;
         
@@ -20782,9 +20778,9 @@ window.wcOpenMapView = function(isVirtual, title, desc, lat, lon) {
                     viewMapInstance = L.map('view-map-container', {
                         zoomControl: false, attributionControl: false
                     }).setView([lat, lon], 16);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(viewMapInstance);
+                    // 使用高德地图图层
+                    L.tileLayer(AMAP_TILE_URL, { subdomains: AMAP_SUBDOMAINS }).addTo(viewMapInstance);
                     
-                    // 添加一个红色的定位大头针
                     const customIcon = L.divIcon({
                         className: 'custom-pin',
                         html: `<svg viewBox="0 0 24 24" style="width:36px;height:36px;fill:#FF3B30;stroke:#FFF;stroke-width:2;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.3));"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3" fill="#FFF"></circle></svg>`,
@@ -20798,7 +20794,7 @@ window.wcOpenMapView = function(isVirtual, title, desc, lat, lon) {
                 }
                 viewMapInstance.invalidateSize();
             }
-        }, 300); // 等待弹窗动画结束再渲染地图，防止尺寸计算错误
+        }, 300); 
     }
 }
 
