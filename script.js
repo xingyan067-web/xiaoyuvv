@@ -2148,17 +2148,22 @@ async function refreshCurrentApiQuota() {
         if (!response.ok) throw new Error("接口不支持");
 
         const data = await response.json();
-        let balance = "未知";
+        let finalBalance = "未知";
+        
+        let rawValue = data.balance ?? data.remain_quota ?? data.total_available ?? data.quota;
+        if (data.data) {
+            rawValue = rawValue ?? data.data.balance ?? data.data.remain_quota ?? data.data.quota;
+        }
 
-        if (data.balance !== undefined) balance = parseFloat(data.balance);
-        else if (data.data && data.data.balance !== undefined) balance = parseFloat(data.data.balance);
-        else if (data.remain_quota !== undefined) balance = parseFloat(data.remain_quota);
-        else if (data.data && data.data.remain_quota !== undefined) balance = parseFloat(data.data.remain_quota);
-        else if (data.total_available !== undefined) balance = parseFloat(data.total_available);
-        else if (data.quota !== undefined) {
-            let q = parseFloat(data.quota);
-            if (q > 10000) q = q / 500000; 
-            balance = q;
+        if (rawValue !== undefined && rawValue !== null) {
+            let num = parseFloat(rawValue);
+            if (num > 10000) {
+                let calc50 = (num / 500000).toFixed(2);
+                let calc10 = (num / 100000).toFixed(2);
+                finalBalance = `${calc50} 或 ${calc10} (原数据:${num})`;
+            } else {
+                finalBalance = num.toFixed(2);
+            }
         } else if (data.hard_limit_usd !== undefined) {
             let total_usage = 0;
             if (data.total_usage !== undefined) {
@@ -2175,12 +2180,18 @@ async function refreshCurrentApiQuota() {
                     if (usageData.total_usage !== undefined) total_usage = usageData.total_usage / 100;
                 } catch(e) {}
             }
-            balance = data.hard_limit_usd - total_usage;
+            
+            // 🌟 核心修改：如果是无限额度令牌，直接显示已消耗的金额！
+            if (data.hard_limit_usd > 9000000) {
+                finalBalance = `已用: $${total_usage.toFixed(4)} (无限额度令牌)`;
+            } else {
+                finalBalance = (data.hard_limit_usd - total_usage).toFixed(2);
+            }
         }
 
-        if (balance !== "未知" && !isNaN(balance)) {
-            if (balance > 10000) quotaEl.innerText = `充足`;
-            else quotaEl.innerText = `$ ${balance.toFixed(2)}`;
+        if (finalBalance !== "未知") {
+            quotaEl.innerText = finalBalance;
+            quotaEl.style.fontSize = "12px"; 
         } else {
             quotaEl.innerText = "格式不支持";
         }
@@ -20631,17 +20642,14 @@ async function refreshApiQuota() {
     quotaEl.style.opacity = "0.5";
 
     try {
-        // 【核心修复】：使用新的双路 API 获取方法，读取当前聊天所用的 API 配置
         const apiConfig = await getActiveApiConfig('chat');
         if (!apiConfig || !apiConfig.key || !apiConfig.baseUrl) {
             throw new Error("未配置API");
         }
 
-        // 提取基础域名
         const baseUrlMatch = apiConfig.baseUrl.match(/^(https?:\/\/[^\/]+)/);
         const host = baseUrlMatch ? baseUrlMatch[1] : apiConfig.baseUrl;
 
-        // 1. 先请求 subscription 接口
         const response = await fetch(`${host}/v1/dashboard/billing/subscription`, {
             method: 'GET',
             headers: { 'Authorization': `Bearer ${apiConfig.key}` }
@@ -20650,30 +20658,27 @@ async function refreshApiQuota() {
         if (!response.ok) throw new Error("接口不支持");
 
         const data = await response.json();
-        let balance = "未知";
+        let finalBalance = "未知";
+        
+        let rawValue = data.balance ?? data.remain_quota ?? data.total_available ?? data.quota;
+        if (data.data) {
+            rawValue = rawValue ?? data.data.balance ?? data.data.remain_quota ?? data.data.quota;
+        }
 
-        // 2. 解析数据
-        if (data.balance !== undefined) {
-            balance = parseFloat(data.balance);
-        } else if (data.data && data.data.balance !== undefined) {
-            balance = parseFloat(data.data.balance);
-        } else if (data.remain_quota !== undefined) {
-            balance = parseFloat(data.remain_quota);
-        } else if (data.data && data.data.remain_quota !== undefined) {
-            balance = parseFloat(data.data.remain_quota);
-        } else if (data.total_available !== undefined) {
-            balance = parseFloat(data.total_available);
-        } else if (data.quota !== undefined) {
-            let q = parseFloat(data.quota);
-            if (q > 10000) q = q / 500000; 
-            balance = q;
+        if (rawValue !== undefined && rawValue !== null) {
+            let num = parseFloat(rawValue);
+            if (num > 10000) {
+                let calc50 = (num / 500000).toFixed(2);
+                let calc10 = (num / 100000).toFixed(2);
+                finalBalance = `${calc50} 或 ${calc10} (原数据:${num})`;
+            } else {
+                finalBalance = num.toFixed(2);
+            }
         } else if (data.hard_limit_usd !== undefined) {
-            // 针对你截图里的情况：有总额度，但没有已用额度
             let total_usage = 0;
             if (data.total_usage !== undefined) {
                 total_usage = data.total_usage / 100;
             } else {
-                // 尝试去另一个隐藏接口查已用额度
                 try {
                     const now = new Date();
                     const year = now.getFullYear();
@@ -20689,21 +20694,20 @@ async function refreshApiQuota() {
                     if (usageData.total_usage !== undefined) {
                         total_usage = usageData.total_usage / 100;
                     }
-                } catch(e) {
-                    console.warn("无法获取已用额度");
-                }
+                } catch(e) {}
             }
-            balance = data.hard_limit_usd - total_usage;
+            
+            // 🌟 核心修改：如果是无限额度令牌，直接显示已消耗的金额！
+            if (data.hard_limit_usd > 9000000) {
+                finalBalance = `已用: $${total_usage.toFixed(4)} (无限额度令牌)`;
+            } else {
+                finalBalance = (data.hard_limit_usd - total_usage).toFixed(2);
+            }
         }
 
-        // 3. 渲染到界面
-        if (balance !== "未知" && !isNaN(balance)) {
-            // 如果额度大于 10000（比如截图里的一亿），直接显示“充足”，保持排版优雅
-            if (balance > 10000) {
-                quotaEl.innerText = `充足`;
-            } else {
-                quotaEl.innerText = `$ ${balance.toFixed(2)}`;
-            }
+        if (finalBalance !== "未知") {
+            quotaEl.innerText = finalBalance;
+            quotaEl.style.fontSize = "12px"; 
         } else {
             quotaEl.innerText = "格式不支持";
         }
@@ -20715,6 +20719,7 @@ async function refreshApiQuota() {
         quotaEl.style.opacity = "1";
     }
 }
+
 // ==========================================
 // 新增：位置功能核心逻辑 (发送位置 & 角色城市 & 查看地图)
 // ==========================================
