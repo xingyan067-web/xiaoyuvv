@@ -1179,97 +1179,142 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .ins-transfer-card.rejected .ins-transfer-tag { color: #D1B3B5; }
 .ins-transfer-card.rejected .ins-transfer-amount { color: #999; text-decoration: line-through; opacity: 0.6; }
 .ins-transfer-card.rejected .ins-transfer-status { color: #C28E7E; opacity: 0.8; }
-
 /* ========================================== */
-/* 高级感 INS 风情侣空间邀请卡片 (180x100 迷你版) */
+/* 高级感 INS 风情侣空间邀请卡片 (终极齐平 + 紧凑防截断版) */
 /* ========================================== */
 .wc-bubble.invite {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
+    /* 🔪 终极杀招：彻底抹杀 JS 换行产生的幽灵空行，让卡片完美贴顶！ */
+    font-size: 0 !important; 
+    line-height: 0 !important;
+    white-space: normal !important;
+    display: flex !important;
+    flex-direction: column !important;
 }
-.ins-invite-card {
-    width: 180px !important;
-    height: 100px !important;
-    padding: 8px 12px !important;
-    background: #faf9f5; /* 奶白色背景 */
-    border-radius: 10px;
-    border: 1px solid #eaeaea;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.04);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
+
+.ins-invite-card-v2 {
+    width: 200px !important; /* 稍微收窄，显得更精致 */
+    height: auto !important; /* 自适应高度，绝不截断 */
+    min-height: 90px !important; /* 降低最小高度 */
+    position: relative;
+    border-radius: 14px; /* 圆角稍微收一点 */
+    overflow: hidden;
     cursor: pointer;
-    font-family: 'Georgia', serif;
-    box-sizing: border-box;
-}
-.ins-invite-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 4px;
-}
-.ins-invite-brand {
-    font-size: 8px;
-    letter-spacing: 1px;
-    color: #888;
-    text-transform: uppercase;
-    font-family: sans-serif;
-}
-.ins-invite-icon {
-    width: 12px;
-    height: 12px;
-    color: #d4c4b7;
-}
-.ins-invite-divider {
-    width: 100%;
-    height: 1px;
-    background: repeating-linear-gradient(to right, #d4c4b7 0, #d4c4b7 4px, transparent 4px, transparent 8px);
-    margin-bottom: 4px;
-}
-.ins-invite-main {
-    text-align: center;
-    flex: 1;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.05);
+    border: 1px solid rgba(255,255,255,0.9);
+    background: rgba(252, 251, 249, 0.88);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    padding: 12px 14px !important; /* 极致压缩内边距，告别巨大化 */
+    box-sizing: border-box;
+    margin: 0 !important; /* 🔪 绝对清零外边距，保证和头像齐平 */
 }
-.ins-invite-title {
-    font-size: 13px;
-    font-style: italic;
-    color: #4a413e;
-    margin-bottom: 2px;
+
+.ins-invite-card-v2:active {
+    transform: scale(0.96);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.03);
 }
-.ins-invite-subtitle {
-    font-size: 9px;
-    color: #9e948f;
-    font-family: sans-serif;
+
+.ins-invite-card-v2::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.1) 100%);
+    pointer-events: none;
+    z-index: 0;
 }
-.ins-invite-bottom {
+
+.ins-invite-v2-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.ins-invite-v2-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-family: sans-serif;
-    margin-top: 2px;
+    margin-bottom: 8px !important; /* 压缩间距 */
 }
-.ins-invite-status {
-    font-size: 8px;
+
+.ins-invite-v2-tag {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    font-size: 8px; /* 缩小标签 */
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: #A39E9C;
+    line-height: 1;
+}
+
+.ins-invite-v2-icon {
+    width: 14px;
+    height: 14px;
+    color: #D4C4B7;
+}
+
+.ins-invite-v2-body {
+    text-align: left;
+    margin-bottom: 12px !important; /* 压缩间距 */
+}
+
+.ins-invite-v2-title {
+    font-family: 'Georgia', serif;
+    font-size: 15px !important; /* 缩小标题 */
     font-weight: bold;
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: #fff;
-    border: 1px solid #eee;
+    font-style: italic;
+    color: #3A3533;
+    margin: 0 0 2px 0 !important;
+    letter-spacing: 0.5px;
+    line-height: 1.2;
 }
-.ins-invite-status.pending { color: #d4c4b7; }
-.ins-invite-status.accepted { color: #8f9e8b; }
-.ins-invite-status.rejected { color: #c28e7e; }
-.ins-invite-tap {
+
+.ins-invite-v2-subtitle {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    font-size: 9px; /* 缩小副标题 */
+    color: #9E948F;
+    letter-spacing: 0.5px;
+    line-height: 1;
+}
+
+.ins-invite-v2-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: auto !important;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    padding-top: 8px !important; /* 压缩间距 */
+}
+
+.ins-invite-v2-status {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    font-size: 10px; /* 缩小状态字号 */
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    line-height: 1;
+}
+
+.ins-invite-v2-status.pending { background: #F5F2EF; color: #A39E9C; }
+.ins-invite-v2-status.accepted { background: #F0F5F1; color: #8F9E8B; }
+.ins-invite-v2-status.rejected { background: #F9F0F0; color: #C28E7E; }
+
+.ins-invite-v2-action {
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
     font-size: 8px;
-    color: #ccc;
-    text-transform: uppercase;
+    font-weight: 700;
     letter-spacing: 1px;
+    color: #C2B8B2;
+    line-height: 1;
+    padding-bottom: 2px;
 }
+
 
 .wc-system-msg-text { background: rgba(0,0,0,0.1); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; text-align: center; max-width: 80%; }
 .wc-system-msg-text.transparent { background: transparent; color: #8E8E93; }

@@ -335,14 +335,14 @@ window.onload = async function() {
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
     
-    // 检查是否为 PWA 桌面模式 (添加到桌面后打开)
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    
-    if (isStandalone) {
-        // PWA 模式下，强制锁定 100vh，防止键盘弹出时整个页面被压缩导致漏出黑白底色
-        docStyle.setProperty('--app-height', `100vh`);
+    if (window.visualViewport) {
+        // 动态获取真实可视高度（键盘弹起时会变小），完美解决键盘遮挡问题
+        docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
+        // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
     } else {
-        // 浏览器模式下，使用 window.innerHeight 应对 Safari 底部地址栏的收缩
+        // 降级方案
         docStyle.setProperty('--app-height', `${window.innerHeight}px`);
     }
     
@@ -351,8 +351,29 @@ function updateAppViewportVars() {
     docStyle.setProperty('--keyboard-offset', '0px');
 }
 
-// 监听窗口大小变化（处理屏幕旋转或浏览器地址栏收缩）
-window.addEventListener('resize', updateAppViewportVars);
+// 监听可视区域变化（键盘弹出/收起）
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+        updateAppViewportVars();
+        // 键盘弹起导致高度变化时，稍微延迟一下让各个聊天列表自动滚动到底部，防止最新消息被挡住
+        setTimeout(() => {
+            if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
+            const simHistory = document.getElementById('wc-sim-chat-history');
+            if (simHistory) simHistory.scrollTop = simHistory.scrollHeight;
+            const pmHistory = document.getElementById('forum-pm-chat-history');
+            if (pmHistory) pmHistory.scrollTop = pmHistory.scrollHeight;
+            const dreamHistory = document.getElementById('dream-chat-history');
+            if (dreamHistory) dreamHistory.scrollTop = dreamHistory.scrollHeight;
+        }, 100);
+    });
+    // 防止 iOS 键盘弹出时整个页面被系统强行往上推
+    window.visualViewport.addEventListener('scroll', () => {
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+    });
+} else {
+    window.addEventListener('resize', updateAppViewportVars);
+}
 // 初始化调用一次
 updateAppViewportVars();
 
@@ -3339,27 +3360,29 @@ function wcRenderMessages(charId) {
                         </div>
                     </div>
                 </div>`;
-        }
-
- else if (msg.type === 'invite') {
+         } else if (msg.type === 'invite') {
             const statusText = msg.status === 'accepted' ? '已同意' : (msg.status === 'rejected' ? '已拒绝' : '等待回应');
             contentHtml = `
-                <div class="wc-bubble invite ins-invite-card" onclick="wcHandleInviteClick(${msg.id})">
-                    <div class="ins-invite-top">
-                        <span class="ins-invite-brand">LOVERS SPACE</span>
-                        <svg viewBox="0 0 24 24" class="ins-invite-icon"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                <!-- 👇 核心修复：加上 display: block 和 width: fit-content，绝对禁止父级拉伸！ -->
+                <div class="wc-bubble invite" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important; display: block !important; width: fit-content !important;">
+                    ${quoteHtml}
+                    <div class="ins-invite-card-v2" onclick="wcHandleInviteClick(${msg.id})">
+                        <div class="ins-invite-v2-content">
+                            <div class="ins-invite-v2-header">
+                                <div class="ins-invite-v2-tag">INVITATION</div>
+                                <svg class="ins-invite-v2-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                            </div>
+                            <div class="ins-invite-v2-body">
+                                <div class="ins-invite-v2-title">Lovers Space</div>
+                                <div class="ins-invite-v2-subtitle">To join the private space</div>
+                            </div>
+                            <div class="ins-invite-v2-footer">
+                                <div class="ins-invite-v2-status ${msg.status}">${statusText}</div>
+                                <div class="ins-invite-v2-action">TAP TO VIEW</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="ins-invite-divider"></div>
-                    <div class="ins-invite-main">
-                        <div class="ins-invite-title">Exclusive Invitation</div>
-                        <div class="ins-invite-subtitle">To join the private space</div>
-                    </div>
-                    <div class="ins-invite-bottom">
-                        <span class="ins-invite-status ${msg.status}">${statusText}</span>
-                        <span class="ins-invite-tap">Tap to view</span>
-                    </div>
-                </div>                    
-            `;
+                </div>`;
         } else if (msg.type === 'music_invite') {
             // 新增：音乐邀请卡片渲染
             contentHtml = `
@@ -4033,7 +4056,7 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 4. **其他指令** (按需使用)
    {"type":"voice", "content":"语音内容"}
    {"type":"transfer", "amount":100, "note":"备注"}
-   {"type":"invite", "status":"pending"} (恋人空间邀请)
+   如果收到【恋人空间邀请】，同意请回复：{"type":"invite_accept", "content":"好呀，我愿意"}；拒绝请回复：{"type":"invite_reject", "content":"抱歉，我觉得太快了"}
 5. **朋友圈互动** (如果你在【朋友圈动态】中看到了感兴趣的内容，可以进行互动)
    {"type":"moment_like", "content": 朋友圈ID数字}
    {"type":"moment_comment", "momentId": 朋友圈ID数字, "content":"你的评论内容"}
@@ -4412,7 +4435,10 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         const action = actions[i];
         if (!action) continue;
 
-        await wcDelay(1500 + Math.random() * 1000); // 模拟打字延迟
+        // 👇【核心修复】：第一条消息直接秒发！第二条及以后的消息才模拟打字延迟
+        if (i > 0) {
+            await wcDelay(1500 + Math.random() * 1000); 
+        }
         
         let extra = {};
         if (action.quote) {
@@ -4500,8 +4526,13 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             wcAddMessage(charId, 'them', 'text', action.content, extra);
             
             if (lsState.pendingCharId === charId) {
-                if (action.content.includes("同意") || action.content.includes("答应") || action.content.includes("好")) {
+                const agreeWords = ["同意", "答应", "好", "愿意", "可以", "没问题"];
+                if (agreeWords.some(word => action.content.includes(word))) {
                     lsConfirmBind(charId);
+                    const msgs = wcState.chats[charId];
+                    msgs.forEach(m => { if (m.type === 'invite') m.status = 'accepted'; });
+                    wcSaveData();
+                    wcRenderMessages(charId);
                 }
             }
         // 👇👇👇 从这里开始插入新增的代码 👇👇👇
@@ -4605,10 +4636,42 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             wcAddMessage(charId, 'system', 'system', `[系统内部信息: 你主动向 User 发起了语音通话请求，等待对方接听...]`, { hidden: true });
         // 👆 新增结束 👆
 
+        } else if (action.type === 'invite_accept') {
+            // AI 明确同意邀请
+            wcAddMessage(charId, 'them', 'text', action.content, extra);
+            if (lsState.pendingCharId === charId) {
+                lsConfirmBind(charId); // 绑定关系
+                // 更新聊天记录里的卡片状态为已同意
+                const msgs = wcState.chats[charId];
+                msgs.forEach(m => { if (m.type === 'invite') m.status = 'accepted'; });
+                wcSaveData();
+                wcRenderMessages(charId);
+                if (typeof showMainSystemNotification === 'function') {
+                    showMainSystemNotification("恋人空间", `${char.name} 同意了你的恋爱邀请！`, char.avatar);
+                }
+            }
+        } else if (action.type === 'invite_reject') {
+            // AI 明确拒绝邀请
+            wcAddMessage(charId, 'them', 'text', action.content, extra);
+            if (lsState.pendingCharId === charId) {
+                lsState.pendingCharId = null; // 清除等待状态
+                // 更新聊天记录里的卡片状态为已拒绝
+                const msgs = wcState.chats[charId];
+                msgs.forEach(m => { if (m.type === 'invite') m.status = 'rejected'; });
+                lsSaveData();
+                wcSaveData();
+                wcRenderMessages(charId);
+            }
         } else if (action.type === 'invite') {
-             // 处理恋人空间邀请回应
-             // 逻辑待定，目前暂不处理复杂逻辑
-        } else if (action.type === 'widget_note' || action.type === 'widget_photo') {
+             // 兜底：如果 AI 还是用了旧指令，直接当做同意处理
+             wcAddMessage(charId, 'them', 'text', action.content || "我同意啦~", extra);
+             if (lsState.pendingCharId === charId) {
+                 lsConfirmBind(charId);
+                 const msgs = wcState.chats[charId];
+                 msgs.forEach(m => { if (m.type === 'invite') m.status = 'accepted'; });
+                 wcSaveData();
+                 wcRenderMessages(charId);
+             }
             // 修复：AI 角色主动更新我的桌面小组件
             if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
                 const isPhoto = action.type === 'widget_photo';
