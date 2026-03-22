@@ -20443,22 +20443,24 @@ async function refreshApiQuota() {
     }
 }
 // ==========================================
-// 新增：位置功能核心逻辑 (发送位置 & 角色城市)
+// 新增：位置功能核心逻辑 (发送位置 & 角色城市 & 查看地图)
 // ==========================================
 
 let sendLocMapInstance = null;
-let sendLocCurrentType = 'real'; // 'real' 或 'virtual'
+let sendLocCurrentType = 'real'; 
 let sendLocRealAddress = "正在获取高精度定位...";
+let sendLocLat = 0;
+let sendLocLon = 0;
 
-// 1. 打开发送位置弹窗
+// 1. 打开发送位置弹窗 (User)
 function wcOpenSendLocationModal() {
-    wcCloseAllPanels(); // 关闭底部的更多面板
+    wcCloseAllPanels(); 
     const modal = document.getElementById('wc-modal-send-location');
     modal.style.display = 'flex';
     setTimeout(() => modal.classList.add('active'), 10);
     
-    wcSwitchSendLocTab('real'); // 默认打开真实定位
-    fetchSendLocation(); // 开始定位
+    wcSwitchSendLocTab('real'); 
+    fetchSendLocation(); 
 }
 
 function wcCloseSendLocationModal() {
@@ -20467,7 +20469,6 @@ function wcCloseSendLocationModal() {
     setTimeout(() => modal.style.display = 'none', 300);
 }
 
-// 切换发送位置 Tab
 function wcSwitchSendLocTab(tab) {
     sendLocCurrentType = tab;
     document.getElementById('send-loc-seg-real').classList.toggle('active', tab === 'real');
@@ -20475,23 +20476,22 @@ function wcSwitchSendLocTab(tab) {
     document.getElementById('send-loc-view-real').style.display = tab === 'real' ? 'block' : 'none';
     document.getElementById('send-loc-view-virtual').style.display = tab === 'virtual' ? 'block' : 'none';
     
-    // 如果切回真实地图，需要重新计算地图大小防止显示不全
     if (tab === 'real' && sendLocMapInstance) {
         setTimeout(() => sendLocMapInstance.invalidateSize(), 100);
     }
 }
 
-// 获取真实定位 (复用你原有的 Leaflet 逻辑)
+// 获取真实定位并渲染地图
 function fetchSendLocation() {
     const titleEl = document.getElementById('send-loc-real-address');
     titleEl.innerText = "正在获取高精度定位...";
     
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(async (pos) => {
-            const lat = pos.coords.latitude;
-            const lon = pos.coords.longitude;
+            sendLocLat = pos.coords.latitude;
+            sendLocLon = pos.coords.longitude;
             try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`, {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${sendLocLat}&lon=${sendLocLon}&zoom=18&addressdetails=1`, {
                     headers: { 'Accept-Language': 'zh-CN' }
                 });
                 const data = await res.json();
@@ -20503,24 +20503,23 @@ function fetchSendLocation() {
                     if (!address) address = data.display_name;
                 }
                 
-                sendLocRealAddress = address || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                sendLocRealAddress = address || `${sendLocLat.toFixed(4)}, ${sendLocLon.toFixed(4)}`;
                 titleEl.innerText = sendLocRealAddress;
 
                 // 渲染 Leaflet 地图
                 if (typeof L !== 'undefined') {
                     if (!sendLocMapInstance) {
                         sendLocMapInstance = L.map('send-real-map-container', {
-                            zoomControl: false, // 隐藏缩放按钮，保持极简
-                            attributionControl: false // 隐藏版权信息
-                        }).setView([lat, lon], 16);
+                            zoomControl: false, attributionControl: false
+                        }).setView([sendLocLat, sendLocLon], 16);
                         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(sendLocMapInstance);
                     } else {
-                        sendLocMapInstance.setView([lat, lon], 16);
+                        sendLocMapInstance.setView([sendLocLat, sendLocLon], 16);
                     }
                     setTimeout(() => { sendLocMapInstance.invalidateSize(); }, 100);
                 }
             } catch (e) {
-                sendLocRealAddress = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                sendLocRealAddress = `${sendLocLat.toFixed(4)}, ${sendLocLon.toFixed(4)}`;
                 titleEl.innerText = sendLocRealAddress;
             }
         }, (err) => {
@@ -20533,7 +20532,7 @@ function fetchSendLocation() {
     }
 }
 
-// 发送位置到聊天
+// 发送位置到聊天 (带上经纬度参数)
 function wcSubmitSendLocation() {
     const charId = wcState.activeChatId;
     if (!charId) return;
@@ -20541,10 +20540,13 @@ function wcSubmitSendLocation() {
     let locTitle = "";
     let locDesc = "";
     let isVirtual = false;
+    let lat = 0, lon = 0;
 
     if (sendLocCurrentType === 'real') {
         locTitle = sendLocRealAddress;
         locDesc = "真实地理位置";
+        lat = sendLocLat;
+        lon = sendLocLon;
     } else {
         const virtualInput = document.getElementById('send-loc-virtual-input').value.trim();
         if (!virtualInput) return alert("请输入虚拟地名哦~");
@@ -20553,12 +20555,12 @@ function wcSubmitSendLocation() {
         isVirtual = true;
     }
 
-    // 构造高级感位置卡片 HTML (作为 receipt 类型发送)
     const mapClass = isVirtual ? "wc-bubble-location-map virtual" : "wc-bubble-location-map";
     const markerClass = isVirtual ? "ins-loc-marker virtual-marker" : "ins-loc-marker";
     
+    // 核心：给卡片绑定 onclick 事件，传入参数打开地图弹窗
     const cardHtml = `
-        <div class="wc-bubble-location-card">
+        <div class="wc-bubble-location-card" onclick="window.wcOpenMapView(${isVirtual}, '${locTitle}', '${locDesc}', ${lat}, ${lon})">
             <div class="${mapClass}">
                 <div class="${markerClass}"></div>
             </div>
@@ -20569,33 +20571,45 @@ function wcSubmitSendLocation() {
         </div>
     `;
 
-    // 发送卡片
     wcAddMessage(charId, 'me', 'receipt', cardHtml);
 
-    // 给 AI 发送隐藏的系统提示，强制让它根据位置做出反应
-    const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚向你发送了一个地理位置。位置名称是：“${locTitle}”。请在接下来的回复中，根据这个地点做出自然的反应（比如问User去那里干嘛、或者说你也想去、或者根据该地点的环境进行描写）。]`;
+    const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚向你发送了一个地理位置。位置名称是：“${locTitle}”。请在接下来的回复中，根据这个地点做出自然的反应。]`;
     wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
 
     wcCloseSendLocationModal();
 }
 
 // ==========================================
-// 2. 角色所在城市设定逻辑
+// 2. 角色所在城市设定逻辑 (Char)
 // ==========================================
 let charLocCurrentType = 'real';
+let charLocMapInstance = null;
+let charLocLat = 0;
+let charLocLon = 0;
 
 function wcOpenCharLocationModal() {
     const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     if (!char) return;
     
-    // 读取已有配置
     const config = char.chatConfig || {};
     const locType = config.locationType || 'real';
-    const locName = config.locationName || '';
 
     wcSwitchCharLocTab(locType);
+    
     if (locType === 'virtual') {
-        document.getElementById('char-loc-virtual-input').value = locName;
+        document.getElementById('char-loc-virtual-input').value = config.locationName || '';
+    } else {
+        document.getElementById('char-loc-real-country').value = config.locationCountry || '';
+        document.getElementById('char-loc-real-province').value = config.locationProvince || '';
+        document.getElementById('char-loc-real-city').value = config.locationCity || '';
+        
+        // 如果之前存过经纬度，直接渲染地图
+        if (config.locationLat && config.locationLon) {
+            charLocLat = config.locationLat;
+            charLocLon = config.locationLon;
+            document.getElementById('char-loc-coords-display').innerText = `经纬度: ${charLocLat.toFixed(4)}, ${charLocLon.toFixed(4)}`;
+            renderCharLocMap(charLocLat, charLocLon);
+        }
     }
 
     const modal = document.getElementById('wc-modal-char-location');
@@ -20615,6 +20629,55 @@ function wcSwitchCharLocTab(tab) {
     document.getElementById('char-loc-seg-virtual').classList.toggle('active', tab === 'virtual');
     document.getElementById('char-loc-view-real').style.display = tab === 'real' ? 'block' : 'none';
     document.getElementById('char-loc-view-virtual').style.display = tab === 'virtual' ? 'block' : 'none';
+    
+    if (tab === 'real' && charLocMapInstance) {
+        setTimeout(() => charLocMapInstance.invalidateSize(), 100);
+    }
+}
+
+// 搜索 Char 的真实地理位置
+async function searchCharLocation() {
+    const country = document.getElementById('char-loc-real-country').value.trim();
+    const province = document.getElementById('char-loc-real-province').value.trim();
+    const city = document.getElementById('char-loc-real-city').value.trim();
+    
+    if (!country && !province && !city) return alert("请至少输入一个地名进行搜索哦~");
+    
+    const query = [country, province, city].filter(Boolean).join('+');
+    const coordsDisplay = document.getElementById('char-loc-coords-display');
+    coordsDisplay.innerText = "正在搜索地图坐标...";
+
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`, {
+            headers: { 'Accept-Language': 'zh-CN' }
+        });
+        const data = await res.json();
+        
+        if (data && data.length > 0) {
+            charLocLat = parseFloat(data[0].lat);
+            charLocLon = parseFloat(data[0].lon);
+            coordsDisplay.innerText = `经纬度: ${charLocLat.toFixed(4)}, ${charLocLon.toFixed(4)}`;
+            renderCharLocMap(charLocLat, charLocLon);
+        } else {
+            coordsDisplay.innerText = "未找到该地点的坐标，请检查拼写";
+        }
+    } catch (e) {
+        coordsDisplay.innerText = "搜索失败，网络异常";
+    }
+}
+
+function renderCharLocMap(lat, lon) {
+    if (typeof L !== 'undefined') {
+        if (!charLocMapInstance) {
+            charLocMapInstance = L.map('char-real-map-container', {
+                zoomControl: false, attributionControl: false
+            }).setView([lat, lon], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(charLocMapInstance);
+        } else {
+            charLocMapInstance.setView([lat, lon], 12);
+        }
+        setTimeout(() => { charLocMapInstance.invalidateSize(); }, 100);
+    }
 }
 
 function wcSubmitCharLocation() {
@@ -20623,51 +20686,124 @@ function wcSubmitCharLocation() {
     if (!char.chatConfig) char.chatConfig = {};
 
     let locName = "";
+    let aiPrompt = "";
+    let displayLoc = "";
+
     if (charLocCurrentType === 'virtual') {
         locName = document.getElementById('char-loc-virtual-input').value.trim();
         if (!locName) return alert("请输入虚拟城市名称哦~");
+        
+        char.chatConfig.locationType = 'virtual';
+        char.chatConfig.locationName = locName;
+        
+        displayLoc = locName;
+        aiPrompt = `[系统设定更新：你现在的居住地设定为“${locName}”。请在后续聊天中，严格符合该城市/异世界的背景设定，并保持与 User 异地/跨次元的逻辑。]`;
+    } else {
+        const country = document.getElementById('char-loc-real-country').value.trim();
+        const province = document.getElementById('char-loc-real-province').value.trim();
+        const city = document.getElementById('char-loc-real-city').value.trim();
+        if (!country && !province && !city) return alert("请至少输入国家、省份或城市名称哦~");
+        
+        locName = [country, province, city].filter(Boolean).join(' ');
+        
+        char.chatConfig.locationType = 'real';
+        char.chatConfig.locationCountry = country;
+        char.chatConfig.locationProvince = province;
+        char.chatConfig.locationCity = city;
+        char.chatConfig.locationName = locName;
+        char.chatConfig.locationLat = charLocLat;
+        char.chatConfig.locationLon = charLocLon;
+        
+        displayLoc = locName;
+        aiPrompt = `[系统设定更新：你现在的居住地设定为现实世界中的“${locName}”。请在后续聊天中，符合该地的气候、时差、文化背景，并保持与 User 异地的逻辑。]`;
     }
 
-    // 保存配置
-    char.chatConfig.locationType = charLocCurrentType;
-    char.chatConfig.locationName = locName;
     wcSaveData();
 
-    // 更新设置页面的显示文本
     const displayEl = document.getElementById('wc-setting-loc-display');
-    if (displayEl) {
-        displayEl.innerText = charLocCurrentType === 'real' ? '跟随我' : locName;
-    }
+    if (displayEl) displayEl.innerText = displayLoc;
 
-    // 注入一条系统记忆，让 AI 知道自己搬家了
-    let aiPrompt = "";
-    if (charLocCurrentType === 'real') {
-        aiPrompt = `[系统设定更新：你现在的居住地设定为“与 User 在同一座城市”。请在后续聊天中保持同城、同天气、同时区的逻辑。]`;
-    } else {
-        aiPrompt = `[系统设定更新：你现在的居住地设定为“${locName}”。请在后续聊天中，严格符合该城市/异世界的背景设定，并保持与 User 异地/跨次元的逻辑。]`;
-    }
     wcAddMessage(char.id, 'system', 'system', aiPrompt, { hidden: true });
 
     wcCloseCharLocationModal();
     alert("Ta 的城市设定已保存！");
 }
 
-// 修复：在打开聊天设置时，同步更新城市显示文本
 const originalWcOpenChatSettings = wcOpenChatSettings;
 wcOpenChatSettings = function() {
-    originalWcOpenChatSettings(); // 先执行原有的打开逻辑
-    
+    originalWcOpenChatSettings(); 
     const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     if (char && char.chatConfig) {
         const displayEl = document.getElementById('wc-setting-loc-display');
         if (displayEl) {
-            if (char.chatConfig.locationType === 'virtual' && char.chatConfig.locationName) {
+            if (char.chatConfig.locationName) {
                 displayEl.innerText = char.chatConfig.locationName;
-            } else if (char.chatConfig.locationType === 'real') {
-                displayEl.innerText = '跟随我';
             } else {
                 displayEl.innerText = '未设置';
             }
         }
     }
 };
+
+// ==========================================
+// 3. 查看地图详情弹窗 (点击聊天卡片触发)
+// ==========================================
+let viewMapInstance = null;
+let viewMapMarker = null;
+
+window.wcOpenMapView = function(isVirtual, title, desc, lat, lon) {
+    const modal = document.getElementById('wc-modal-map-view');
+    document.getElementById('view-map-title').innerText = title;
+    document.getElementById('view-map-desc').innerText = desc;
+    
+    const mapContainer = document.getElementById('view-map-container');
+    const virtualBg = document.getElementById('view-map-virtual-bg');
+    const coordsEl = document.getElementById('view-map-coords');
+
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+
+    if (isVirtual) {
+        // 虚拟位置：显示紫色网格背景，隐藏真实地图
+        virtualBg.style.display = 'flex';
+        coordsEl.innerText = "经纬度: 异世界坐标无法解析";
+        if (viewMapInstance) {
+            viewMapInstance.remove();
+            viewMapInstance = null;
+        }
+    } else {
+        // 真实位置：隐藏虚拟背景，渲染 Leaflet 地图
+        virtualBg.style.display = 'none';
+        coordsEl.innerText = `经纬度: ${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`;
+        
+        setTimeout(() => {
+            if (typeof L !== 'undefined') {
+                if (!viewMapInstance) {
+                    viewMapInstance = L.map('view-map-container', {
+                        zoomControl: false, attributionControl: false
+                    }).setView([lat, lon], 16);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(viewMapInstance);
+                    
+                    // 添加一个红色的定位大头针
+                    const customIcon = L.divIcon({
+                        className: 'custom-pin',
+                        html: `<svg viewBox="0 0 24 24" style="width:36px;height:36px;fill:#FF3B30;stroke:#FFF;stroke-width:2;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.3));"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3" fill="#FFF"></circle></svg>`,
+                        iconSize: [36, 36],
+                        iconAnchor: [18, 36]
+                    });
+                    viewMapMarker = L.marker([lat, lon], {icon: customIcon}).addTo(viewMapInstance);
+                } else {
+                    viewMapInstance.setView([lat, lon], 16);
+                    viewMapMarker.setLatLng([lat, lon]);
+                }
+                viewMapInstance.invalidateSize();
+            }
+        }, 300); // 等待弹窗动画结束再渲染地图，防止尺寸计算错误
+    }
+}
+
+window.wcCloseMapView = function() {
+    const modal = document.getElementById('wc-modal-map-view');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}

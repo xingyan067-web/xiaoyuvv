@@ -7774,3 +7774,27 @@ input::-webkit-inner-spin-button {
     line-height: 1.2 !important;
 }
 /* 👆 修改结束 👆 */
+/* ========================================== */
+/* 新增：地图搜索按钮与经纬度显示样式 */
+/* ========================================== */
+.ins-loc-search-btn {
+    width: 100%; padding: 10px; background: #F5F5F5; color: #111;
+    border: 1px solid #EAEAEA; border-radius: 12px; font-size: 13px; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+    margin-bottom: 16px; transition: background 0.2s;
+}
+.ins-loc-search-btn:active { background: #EAEAEA; }
+.ins-loc-search-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+
+.ins-loc-coords {
+    font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #888;
+    text-align: center; margin-bottom: 20px; background: #F9F9F9; padding: 6px; border-radius: 8px;
+}
+
+/* 聊天气泡位置卡片增加点击反馈 */
+.wc-bubble-location-card {
+    cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+}
+.wc-bubble-location-card:active {
+    transform: scale(0.96); box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+}
