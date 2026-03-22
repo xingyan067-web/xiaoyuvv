@@ -25,6 +25,118 @@ function initStandaloneMode() {
 // 立即执行检测
 initStandaloneMode();
 
+// --- 激活码逻辑 (V2强制重新激活版) ---
+
+/**
+ * 检查、生成并显示激活状态
+ */
+async function checkAndShowActivation() {
+    const overlay = document.getElementById('activation-overlay');
+    
+    // 1. 优先检查 localStorage (改用 V2 的 Key)
+    if (localStorage.getItem('ios_theme_activation_v2_fallback') === 'true') {
+        if (overlay) overlay.style.display = 'none';
+        return;
+    }
+
+    // 2. 尝试查询 IndexedDB (改用 V2 的 Key)
+    try {
+        const idbPromise = idb.get('ios_theme_activation_v2_status');
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500));
+        const activationStatus = await Promise.race([idbPromise, timeoutPromise]);
+        
+        if (activationStatus && activationStatus.activated) {
+            localStorage.setItem('ios_theme_activation_v2_fallback', 'true');
+            if (overlay) overlay.style.display = 'none';
+            return;
+        }
+    } catch (e) {
+        console.warn("数据库读取超时或为空，继续显示激活页");
+    }
+
+    // 3. 如果都没激活，显示激活页面
+    if (overlay) overlay.style.display = 'flex';
+}
+
+/**
+ * 验证用户输入的激活码
+ */
+function verifyActivation() {
+    const btn = document.querySelector('.bingo-btn');
+    const originalText = btn.innerText;
+    btn.innerText = "验证中...";
+    btn.disabled = true;
+
+    // 使用 setTimeout 让 UI 有时间渲染 "验证中..." 的文字
+    setTimeout(async () => {
+        try {
+            const qq = document.getElementById('qq-input').value.trim();
+            const userCode = document.getElementById('code-input').value.trim();
+
+            if (!qq || !userCode) {
+                alert('请输入QQ号和激活码。');
+                resetBtn();
+                return;
+            }
+
+            // 计算期望的激活码
+            const expectedCode = generateCodeForQQ(qq);
+
+            if (userCode.toUpperCase() === expectedCode.toUpperCase()) {
+                
+                // 1. 立即写入 localStorage (改用 V2 的 Key)
+                localStorage.setItem('ios_theme_activation_v2_fallback', 'true');
+                
+                // 2. 立即隐藏激活页面
+                const overlay = document.getElementById('activation-overlay');
+                if (overlay) overlay.style.display = 'none';
+                
+                alert('激活成功！欢迎使用。');
+
+                // 3. 异步后台保存 (改用 V2 的 Key)
+                try {
+                    await idb.set('ios_theme_activation_v2_status', {
+                        activated: true,
+                        qq: qq,
+                        activationTime: new Date().toISOString()
+                    });
+                } catch (dbError) {
+                    console.warn("后台保存数据库失败，但不影响使用", dbError);
+                }
+
+            } else {
+                alert('激活失败！激活码或QQ号错误。');
+                resetBtn();
+            }
+        } catch (error) {
+            alert("发生未知错误: " + error.message);
+            resetBtn();
+        }
+    }, 100);
+
+    function resetBtn() {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
+
+/**
+ * 根据QQ号生成激活码 (全新V2算法)
+ */
+function generateCodeForQQ(qq) {
+    const salt = "HONEY-STUDIO-V2-SECRET-20260309";
+    const baseString = `${qq}#${salt}`;
+    let hash = 0;
+    for (let i = 0; i < baseString.length; i++) {
+        const char = baseString.charCodeAt(i);
+        hash = ((hash << 7) - hash) + char;
+        hash |= 0;
+    }
+    hash = Math.abs(hash);
+    const hexHash = hash.toString(16).toUpperCase();
+    const qqInfo = `${qq.length}${qq.slice(-2)}`;
+    return `V2-${qqInfo}-${hexHash}`.substring(0, 16);
+}
 // --- 全局变量 ---
 const totalApps = 7; 
 let iconPresets = [];
@@ -178,7 +290,9 @@ const idb = {
 };
 
 // --- 初始化 ---
-window.onload = async function() {    
+window.onload = async function() {
+    // !!! 新增：在所有操作之前，首先检查激活状态
+    checkAndShowActivation();    
     initGrid(); 
     await loadAllData(); // 加载 IndexedDB 数据 (含布局恢复)
     
@@ -1162,7 +1276,10 @@ function clearAllData() {
             if (typeof wcClearCharactersPersistentSnapshot === 'function') {
                 await wcClearCharactersPersistentSnapshot();
             }
+            // 【V2修改点：保留新的激活状态】
+            const isActivated = localStorage.getItem('ios_theme_activation_v2_fallback');
             localStorage.clear();
+            if (isActivated) localStorage.setItem('ios_theme_activation_v2_fallback', isActivated);
 
             // 贯彻高级感：不弹原生 alert，直接让整个页面优雅淡出并刷新
             document.body.style.transition = 'opacity 0.6s ease';
