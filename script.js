@@ -574,28 +574,50 @@ async function loadAllData() {
         wallpaperPresets = presets.wallpapers || [];
         apiPresets = presets.apis || [];
 
-        // 7. 加载 API 设置
-        const apiConfig = await idb.get('ios_theme_api_config') || {};
-        if (apiConfig.baseUrl) document.getElementById('apiBaseUrl').value = apiConfig.baseUrl;
-        if (apiConfig.key) document.getElementById('apiKey').value = apiConfig.key;
-        if (apiConfig.temp) {
-            document.getElementById('tempSlider').value = apiConfig.temp;
-            document.getElementById('tempDisplay').innerText = apiConfig.temp;
+        // 7. 加载 API 设置 (双路适配)
+        const fullApiConfig = await idb.get('ios_theme_api_config') || {};
+        
+        // 兼容旧版单路数据
+        const primary = fullApiConfig.primary || { baseUrl: fullApiConfig.baseUrl, key: fullApiConfig.key, model: fullApiConfig.model, temp: fullApiConfig.temp };
+        const secondary = fullApiConfig.secondary || {};
+        const routes = fullApiConfig.routes || { phone: true, npc: false, forum: true };
+
+        // 填充主 API
+        if (primary.baseUrl) document.getElementById('apiBaseUrl').value = primary.baseUrl;
+        if (primary.key) document.getElementById('apiKey').value = primary.key;
+        if (primary.temp) {
+            document.getElementById('tempSlider').value = primary.temp;
+            document.getElementById('tempDisplay').innerText = primary.temp;
         }
-        if (apiConfig.limit) {
-            const limitEl = document.getElementById('apiMaxCallLimit');
-            if (limitEl) limitEl.value = apiConfig.limit;
-        }
-        if (apiConfig.model) {
+        if (primary.model) {
              const select = document.getElementById('modelSelect');
              if (select.options.length <= 1) {
                  const opt = document.createElement('option');
-                 opt.value = apiConfig.model;
-                 opt.innerText = apiConfig.model + " (已保存)";
-                 opt.selected = true;
+                 opt.value = primary.model; opt.innerText = primary.model + " (已保存)"; opt.selected = true;
                  select.appendChild(opt);
              }
         }
+
+        // 填充副 API
+        if (secondary.baseUrl) document.getElementById('secApiBaseUrl').value = secondary.baseUrl;
+        if (secondary.key) document.getElementById('secApiKey').value = secondary.key;
+        if (secondary.temp) {
+            document.getElementById('secTempSlider').value = secondary.temp;
+            document.getElementById('secTempDisplay').innerText = secondary.temp;
+        }
+        if (secondary.model) {
+             const select = document.getElementById('secModelSelect');
+             if (select.options.length <= 1) {
+                 const opt = document.createElement('option');
+                 opt.value = secondary.model; opt.innerText = secondary.model + " (已保存)"; opt.selected = true;
+                 select.appendChild(opt);
+             }
+        }
+
+        // 填充路由开关
+        document.getElementById('route-phone').checked = routes.phone;
+        document.getElementById('route-npc').checked = routes.npc;
+        document.getElementById('route-forum').checked = routes.forum;
 
         // 渲染列表
         renderAppEditors();
@@ -2000,27 +2022,76 @@ function filterWorldbook(keyword) {
     filtered.forEach(entry => container.appendChild(createEntryElement(entry)));
 }
 
-// --- API 设置逻辑 ---
-async function saveApiConfig() {
-    // 修复：增加对 apiMaxCallLimit 的空值检查
-    const limitEl = document.getElementById('apiMaxCallLimit');
-    const config = {
-        baseUrl: document.getElementById('apiBaseUrl').value,
-        key: document.getElementById('apiKey').value,
-        temp: document.getElementById('tempSlider').value,
-        model: document.getElementById('modelSelect').value,
-        limit: limitEl ? (parseInt(limitEl.value) || 0) : 0
-    };
-    await idb.set('ios_theme_api_config', config);
-    alert("API 配置已保存");
+// --- API 设置逻辑 (主副双路 + 额度查询) ---
+let currentApiTab = 'primary'; // 记录当前在哪个 Tab
+
+function switchApiTab(tab) {
+    currentApiTab = tab;
+    document.getElementById('tab-btn-primary').classList.remove('active');
+    document.getElementById('tab-btn-secondary').classList.remove('active');
+    document.getElementById('api-tab-primary').classList.remove('active');
+    document.getElementById('api-tab-secondary').classList.remove('active');
+
+    document.getElementById('tab-btn-' + tab).classList.add('active');
+    document.getElementById('api-tab-' + tab).classList.add('active');
+    
+    // 切换 Tab 时自动刷新一次额度
+    refreshCurrentApiQuota();
 }
 
-async function fetchModels() {
-    const baseUrl = document.getElementById('apiBaseUrl').value;
-    const key = document.getElementById('apiKey').value;
+// 核心：获取当前场景应该使用的 API 配置
+async function getActiveApiConfig(scene = 'chat') {
+    const fullConfig = await idb.get('ios_theme_api_config') || {};
+    const primary = fullConfig.primary || { baseUrl: fullConfig.baseUrl, key: fullConfig.key, model: fullConfig.model, temp: fullConfig.temp }; // 兼容旧数据
+    const secondary = fullConfig.secondary || {};
+    const routes = fullConfig.routes || {};
+
+    let useSecondary = false;
+    if (scene === 'phone' && routes.phone) useSecondary = true;
+    if (scene === 'npc' && routes.npc) useSecondary = true;
+    if (scene === 'forum' && routes.forum) useSecondary = true;
+
+    // 如果该场景开启了副 API，且副 API 填了地址和 Key，就用副 API，否则降级用主 API
+    if (useSecondary && secondary.key && secondary.baseUrl) {
+        return secondary;
+    }
+    return primary;
+}
+
+async function saveApiConfig() {
+    const config = {
+        primary: {
+            baseUrl: document.getElementById('apiBaseUrl').value,
+            key: document.getElementById('apiKey').value,
+            temp: document.getElementById('tempSlider').value,
+            model: document.getElementById('modelSelect').value
+        },
+        secondary: {
+            baseUrl: document.getElementById('secApiBaseUrl').value,
+            key: document.getElementById('secApiKey').value,
+            temp: document.getElementById('secTempSlider').value,
+            model: document.getElementById('secModelSelect').value
+        },
+        routes: {
+            phone: document.getElementById('route-phone').checked,
+            npc: document.getElementById('route-npc').checked,
+            forum: document.getElementById('route-forum').checked
+        }
+    };
+    await idb.set('ios_theme_api_config', config);
+    alert("API 配置已保存！");
+}
+
+async function fetchModels(targetTab) {
+    const isPrimary = targetTab === 'primary';
+    const baseUrl = isPrimary ? document.getElementById('apiBaseUrl').value : document.getElementById('secApiBaseUrl').value;
+    const key = isPrimary ? document.getElementById('apiKey').value : document.getElementById('secApiKey').value;
+    const selectId = isPrimary ? 'modelSelect' : 'secModelSelect';
+    const btnId = isPrimary ? 'fetchBtnPrimary' : 'fetchBtnSecondary';
+    
     if (!baseUrl || !key) return alert("请先填写 API 地址和密钥");
     
-    const btn = document.getElementById('fetchBtn');
+    const btn = document.getElementById(btnId);
     btn.innerText = "拉取中...";
     
     try {
@@ -2028,7 +2099,7 @@ async function fetchModels() {
             headers: { 'Authorization': `Bearer ${key}` }
         });
         const data = await res.json();
-        const select = document.getElementById('modelSelect');
+        const select = document.getElementById(selectId);
         select.innerHTML = '';
         
         if (data.data && Array.isArray(data.data)) {
@@ -2046,6 +2117,77 @@ async function fetchModels() {
         alert("拉取失败：" + e.message);
     } finally {
         btn.innerText = "拉取模型列表";
+    }
+}
+
+// 实时查询当前选中 Tab 的 API 额度
+async function refreshCurrentApiQuota() {
+    const quotaEl = document.getElementById('api-realtime-quota');
+    if (!quotaEl) return;
+    
+    quotaEl.innerText = "查询中...";
+    quotaEl.style.opacity = "0.5";
+
+    try {
+        const isPrimary = currentApiTab === 'primary';
+        const baseUrl = isPrimary ? document.getElementById('apiBaseUrl').value : document.getElementById('secApiBaseUrl').value;
+        const key = isPrimary ? document.getElementById('apiKey').value : document.getElementById('secApiKey').value;
+
+        if (!key || !baseUrl) {
+            throw new Error("未配置API");
+        }
+
+        const baseUrlMatch = baseUrl.match(/^(https?:\/\/[^\/]+)/);
+        const host = baseUrlMatch ? baseUrlMatch[1] : baseUrl;
+
+        const response = await fetch(`${host}/v1/dashboard/billing/subscription`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${key}` }
+        });
+
+        if (!response.ok) throw new Error("接口不支持");
+
+        const data = await response.json();
+        let balance = "未知";
+
+        if (data.balance !== undefined) balance = parseFloat(data.balance);
+        else if (data.data && data.data.balance !== undefined) balance = parseFloat(data.data.balance);
+        else if (data.remain_quota !== undefined) balance = parseFloat(data.remain_quota);
+        else if (data.data && data.data.remain_quota !== undefined) balance = parseFloat(data.data.remain_quota);
+        else if (data.total_available !== undefined) balance = parseFloat(data.total_available);
+        else if (data.quota !== undefined) {
+            let q = parseFloat(data.quota);
+            if (q > 10000) q = q / 500000; 
+            balance = q;
+        } else if (data.hard_limit_usd !== undefined) {
+            let total_usage = 0;
+            if (data.total_usage !== undefined) {
+                total_usage = data.total_usage / 100;
+            } else {
+                try {
+                    const now = new Date();
+                    const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+                    const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    const usageRes = await fetch(`${host}/v1/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, {
+                        headers: { 'Authorization': `Bearer ${key}` }
+                    });
+                    const usageData = await usageRes.json();
+                    if (usageData.total_usage !== undefined) total_usage = usageData.total_usage / 100;
+                } catch(e) {}
+            }
+            balance = data.hard_limit_usd - total_usage;
+        }
+
+        if (balance !== "未知" && !isNaN(balance)) {
+            if (balance > 10000) quotaEl.innerText = `充足`;
+            else quotaEl.innerText = `$ ${balance.toFixed(2)}`;
+        } else {
+            quotaEl.innerText = "格式不支持";
+        }
+    } catch (e) {
+        quotaEl.innerText = "接口不支持";
+    } finally {
+        quotaEl.style.opacity = "1";
     }
 }
 
@@ -2067,18 +2209,24 @@ function renderApiPresets() {
 function applyApiPreset(idx) {
     const p = apiPresets[idx];
     if (p) {
-        document.getElementById('apiBaseUrl').value = p.baseUrl;
-        document.getElementById('apiKey').value = p.key;
-        document.getElementById('tempSlider').value = p.temp;
-        document.getElementById('tempDisplay').innerText = p.temp;
+        const isPrimary = currentApiTab === 'primary';
+        const urlId = isPrimary ? 'apiBaseUrl' : 'secApiBaseUrl';
+        const keyId = isPrimary ? 'apiKey' : 'secApiKey';
+        const tempId = isPrimary ? 'tempSlider' : 'secTempSlider';
+        const tempDispId = isPrimary ? 'tempDisplay' : 'secTempDisplay';
+        const selectId = isPrimary ? 'modelSelect' : 'secModelSelect';
+
+        document.getElementById(urlId).value = p.baseUrl;
+        document.getElementById(keyId).value = p.key;
+        document.getElementById(tempId).value = p.temp;
+        document.getElementById(tempDispId).innerText = p.temp;
         
         if (p.model) {
-            const select = document.getElementById('modelSelect');
+            const select = document.getElementById(selectId);
             let exists = false;
             for (let i = 0; i < select.options.length; i++) {
                 if (select.options[i].value === p.model) {
-                    exists = true;
-                    break;
+                    exists = true; break;
                 }
             }
             if (!exists) {
@@ -2089,8 +2237,10 @@ function applyApiPreset(idx) {
             }
             select.value = p.model;
         }
+        refreshCurrentApiQuota(); // 应用预设后自动查额度
     }
 }
+
 
 // --- 通用模态框逻辑 ---
 function openNameModal(type) {
@@ -2141,17 +2291,19 @@ async function confirmSavePreset() {
             size: document.getElementById('fontSizeSlider').value
         });
         renderFontPresets();
-    } else if (pendingSaveType === 'api') {
+        } else if (pendingSaveType === 'api') {
+        const isPrimary = currentApiTab === 'primary';
         apiPresets.push({
             name,
-            baseUrl: document.getElementById('apiBaseUrl').value,
-            key: document.getElementById('apiKey').value,
-            temp: document.getElementById('tempSlider').value,
-            model: document.getElementById('modelSelect').value 
+            baseUrl: isPrimary ? document.getElementById('apiBaseUrl').value : document.getElementById('secApiBaseUrl').value,
+            key: isPrimary ? document.getElementById('apiKey').value : document.getElementById('secApiKey').value,
+            temp: isPrimary ? document.getElementById('tempSlider').value : document.getElementById('secTempSlider').value,
+            model: isPrimary ? document.getElementById('modelSelect').value : document.getElementById('secModelSelect').value 
         });
         renderApiPresets();
     }
-    await savePresetsData();
+    
+    savePresetsData();
     closeModal();
 }
 
@@ -4684,7 +4836,8 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                  wcSaveData();
                  wcRenderMessages(charId);
              }
-            // 修复：AI 角色主动更新我的桌面小组件
+        } else if (action.type === 'widget_photo' || action.type === 'widget_note') {
+            // 修复：独立出来，专门处理小组件指令
             if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
                 const isPhoto = action.type === 'widget_photo';
                 lsState.widgetData.currentMode = isPhoto ? 'photo' : 'note';
@@ -4728,7 +4881,7 @@ async function wcTriggerAIMoment(charId) {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return;
 
     try {
@@ -5168,7 +5321,7 @@ async function wcAutoGenerateSummary(charId, start, end) {
     const char = wcState.characters.find(c => c.id === charId);
     const msgs = wcState.chats[charId] || [];
     const sliceMsgs = msgs.slice(start, end + 1);
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     
     if (!apiConfig || !apiConfig.key) return;
 
@@ -7455,7 +7608,7 @@ async function wcGeneratePhonePrivacy() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -7596,7 +7749,7 @@ async function wcGenerateCharWallet() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     // 检查限制
@@ -7692,7 +7845,7 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
         return;
     }
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     // 检查限制
@@ -8034,7 +8187,7 @@ async function wcGeneratePhoneChats() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -8290,7 +8443,7 @@ async function wcSimTriggerAI() {
     const chat = char.phoneData.chats.find(c => c.id === wcActiveSimChatId);
     if (!chat) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请配置 API");
 
     // 检查限制
@@ -8538,7 +8691,7 @@ async function wcGeneratePhoneContacts() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+   const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     // 检查限制
@@ -10086,7 +10239,7 @@ async function lsTriggerNpcMessage() {
     
     const npc = contacts[Math.floor(Math.random() * contacts.length)];
     
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) return;
 
     try {
@@ -10491,7 +10644,7 @@ async function wcGenerateSummary() {
     if (isNaN(startIdx) || isNaN(endIdx)) return alert("请输入有效的起始和结束层数");
     if (startIdx < 0 || endIdx >= msgs.length || startIdx > endIdx) return alert("层数范围无效");
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const checkboxes = document.querySelectorAll('#wc-mem-summary-wb-list input[type="checkbox"]:checked');
@@ -10650,7 +10803,7 @@ async function wcGeneratePrivacyAndFavorites() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -10899,7 +11052,7 @@ async function wcGeneratePhoneFavorites() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -11127,7 +11280,7 @@ async function wcGeneratePhoneBrowser() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -11650,7 +11803,7 @@ function wcSaveShopSettings() {
 }
 
 async function wcGenerateShopItems() {
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -12500,7 +12653,7 @@ async function wcGeneratePhoneCart() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -14639,7 +14792,7 @@ async function endDreamAndSummarize() {
         return;
     }
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     // 修复：使用正确的 ID 获取按钮
@@ -14883,7 +15036,7 @@ function sendDreamMessage() {
 async function triggerDreamAI() {
     if (dreamState.currentChat.length === 0) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请先在主设置中配置 API");
 
     // 1. 基础设定
@@ -15583,9 +15736,9 @@ const systemUpdateLogs = [
         title: "欢迎来到小元机^这里是小元。",
         content: [
             "1.依旧爆改了几个UI页面",
-            "2.增加了API额度查询和token计算，这个API额度查询有一些站子会出现查询不了显示充足的情况（显示充足就是没有查询到）",            
-            "修了一些小问题嗯嗯对",
-            "不接受许愿和点菜，没进审核群和小红书群，有问题可以前往我的小红书@小元元元"
+            "2.增加了API额度查询和token计算，这个API额度查询有一些站子会出现查询不了显示充足的情况（显示充足就是没有查询到）",          
+            "3.增加了主副API，可以选择一些板块使用副API，如果没有开启副API，默认使用主API，并且我修了一些小问题嗯嗯对",
+            "不接受许愿和点菜，我也不在审核群和小红书群，有问题可以前往我的小红书@小元元元"
         ],
         notes: [
             "更新后若遇到界面显示异常，请尝试清除浏览器缓存。",
@@ -16611,7 +16764,7 @@ async function generateCharQa() {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     wcShowLoading("Ta 正在认真思考题目...");
@@ -16888,7 +17041,7 @@ async function aiAnswerUserQa(questions) {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     wcShowLoading("Ta 正在紧张作答中...");
@@ -17738,7 +17891,7 @@ async function lsRequestReply() {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const replyBtn = document.getElementById('ls-btn-request-reply');
@@ -18317,7 +18470,7 @@ window.forumTriggerReactionToUser = async function(postId, userCommentText) {
     const post = forumState.posts.find(p => p.id === postId);
     if (!post) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('forum');
     if (!apiConfig || !apiConfig.key) return;
 
     // 静默加载，不打断用户浏览
@@ -18435,7 +18588,7 @@ window.forumGenerateInteractions = async function(postId) {
     const post = forumState.posts.find(p => p.id === postId);
     if (!post) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('forum');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     wcShowLoading("正在召唤网友...");
@@ -18557,7 +18710,7 @@ window.forumGenerateMoreComments = async function(postId) {
     const post = forumState.posts.find(p => p.id === postId);
     if (!post) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('forum');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     wcShowLoading("正在加载更多评论...");
@@ -18902,10 +19055,9 @@ function forumSaveSettings() {
     alert("设定已保存！AI 生成帖子时将参考这些背景。");
 }
 
-// --- 核心：高强度活人感 AI 生成 (8帖 + 6评 + 绝对禁止生成User) ---
 // --- 核心：高强度活人感 AI 生成 (8帖 + 6评 + 绝对禁止生成User + 覆盖未收藏的旧帖) ---
 async function forumGenerateAIPosts(type) {
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('forum');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -19158,7 +19310,7 @@ function forumDirectGenFanfic() {
 
 // 内部核心：执行同人文 API 请求 (覆盖未收藏的旧文)
 async function _executeGenFanfic(basePrompt) {
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('forum');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -19507,7 +19659,7 @@ async function forumTriggerPMAI(chatId) {
     const chat = forumState.privateChats.find(c => c.id === chatId);
     if (!chat) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('forum');
     if (!apiConfig || !apiConfig.key) return;
 
     // 插入一个临时的“正在输入”气泡
@@ -19645,7 +19797,7 @@ async function wcActionVoiceCall() {
 
 // 2. AI 决定是否接听 (读取世界书、面具、记忆，严禁emoji)
 async function wcProcessCallDecision(char) {
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) {
         setTimeout(() => wcHangUpCall('rejected', "未配置API，无法接通"), 2000);
         return;
@@ -19856,7 +20008,7 @@ window.wcTriggerCallAI = async function() {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char || !wcState.callState.isActive) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return;
 
     // 开启说话动画和 SVG 音波

@@ -1088,62 +1088,147 @@
             </div>
         </div>
 
-        <!-- API 设置页面 -->
-        <div class="settings-modal sub-page" id="apiSettingsModal">
-            <div class="settings-header">
+        <!-- API 设置页面 (极简黑白灰 iOS 风 + 底部额度查询) -->
+        <div class="settings-modal sub-page" id="apiSettingsModal" style="background: #F2F2F7;">
+            <div class="settings-header" style="background: #FFF; border-bottom: 0.5px solid #E5E5EA;">
                 <div class="header-left">
-                    <button class="nav-btn" onclick="closeApiSettings()">
-                        <svg class="back-svg" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-                        <span>设置</span>
-                    </button>
+                    <button class="nav-btn" onclick="closeApiSettings()" style="color: #8E8E93; font-size: 16px; font-weight: normal;">返回</button>
                 </div>
-                <div class="header-title">API 配置</div>
+                <div class="header-title" style="color: #000; font-weight: 600;">API 配置</div>
                 <div class="header-right">
-                    <button class="nav-btn" onclick="saveApiConfig()">保存</button>
+                    <button class="nav-btn" onclick="saveApiConfig()" style="color: #000; font-size: 16px; font-weight: 500;">保存</button>
                 </div>
             </div>
-            <div class="settings-content ios-settings-content">
-                <div class="settings-title" style="margin-top:20px;">配置预设</div>
-                <div class="ios-list-group" style="padding:10px;">
-                    <div class="preset-list" id="apiPresetList">
-                        <div style="color:#999; font-size:13px; padding:5px;">暂无预设</div>
-                    </div>
-                    <button class="action-btn secondary" onclick="openNameModal('api')" style="margin-top:10px;">保存当前配置为预设</button>
-                </div>
-                <div class="settings-title">连接设置</div>
-                <div class="ios-list-group" style="padding: 0 16px;">
-                    <div class="settings-row">
-                        <div class="row-label">API 地址 (Base URL)</div>
-                        <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com/v1">
-                        <div style="font-size:11px; color:#888; margin-top:4px;">记得后缀/v1哦</div>
-                    </div>
-                    <div class="settings-row">
-                        <div class="row-label">API 密钥 (Key)</div>
-                        <input type="password" id="apiKey" placeholder="sk-...">
-                    </div>
-                </div>
-                <div class="settings-title">模型选择</div>
-                <div class="ios-list-group" style="padding: 0 16px;">
-                    <div class="settings-row">
-                        <button class="action-btn" onclick="fetchModels()" id="fetchBtn">拉取模型列表</button>
-                    </div>
-                    <div class="settings-row">
-                        <div class="row-label">选择模型</div>
-                        <select id="modelSelect" class="ios-select">
-                            <option value="" disabled selected>请先拉取模型</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="settings-title">参数设置</div>
-                <div class="ios-list-group" style="padding: 0 16px;">
-                    <div class="settings-row">
-                        <div class="row-label" style="display:flex; justify-content:space-between;">
-                            <span>温度 (Temperature)</span>
-                            <span id="tempDisplay" style="color:#888;">0.7</span>
+            
+            <div class="settings-content" style="display: flex; flex-direction: column; height: 100%; padding: 0;">
+                
+                <!-- 滚动内容区 -->
+                <div style="flex: 1; overflow-y: auto; padding-bottom: 40px;">
+                    
+                    <div class="ios-api-title">配置预设 (点击应用到当前选中的 API)</div>
+                    <div class="ios-api-card">
+                        <div class="preset-list" id="apiPresetList" style="margin-bottom: 12px;">
+                            <div style="color:#999; font-size:13px;">暂无预设</div>
                         </div>
-                        <input type="range" id="tempSlider" min="0" max="2" step="0.1" value="0.7" oninput="document.getElementById('tempDisplay').innerText = this.value">
+                        <button class="ios-api-btn" onclick="openNameModal('api')">保存当前配置为预设</button>
+                    </div>
+
+                    <!-- 主副 API 切换器 -->
+                    <div class="ios-api-segmented">
+                        <div class="ios-api-seg-btn active" id="tab-btn-primary" onclick="switchApiTab('primary')">主 API (默认)</div>
+                        <div class="ios-api-seg-btn" id="tab-btn-secondary" onclick="switchApiTab('secondary')">副 API (特定场景)</div>
+                    </div>
+
+                    <!-- ================= 主 API 面板 ================= -->
+                    <div id="api-tab-primary" class="api-tab-content active">
+                        <div class="ios-api-title">主 API 连接设置 (用于日常聊天等)</div>
+                        <div class="ios-api-card">
+                            <div class="ios-api-field">
+                                <label>API 地址 (Base URL)</label>
+                                <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com/v1">
+                                <div style="font-size: 11px; color: #8E8E93; margin-top: 6px;">宝宝记得要在url末尾加上/v1 TvT</div>
+                            </div>
+                            <div class="ios-api-field" style="margin-top: 16px;">
+                                <label>API 密钥 (Key)</label>
+                                <input type="password" id="apiKey" placeholder="sk-...">
+                            </div>
+                        </div>
+
+                        <div class="ios-api-title">主 API 模型选择</div>
+                        <div class="ios-api-card">
+                            <button class="ios-api-btn" onclick="fetchModels('primary')" id="fetchBtnPrimary" style="margin-bottom: 16px;">拉取模型列表</button>
+                            <div class="ios-api-field">
+                                <label>选择模型</label>
+                                <select id="modelSelect" class="ios-select-clean"></select>
+                            </div>
+                        </div>
+
+                        <div class="ios-api-title">主 API 参数</div>
+                        <div class="ios-api-card">
+                            <div class="ios-api-field">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <label style="margin: 0;">温度 (Temperature)</label>
+                                    <span id="tempDisplay" style="color: #8E8E93; font-size: 15px;">0.7</span>
+                                </div>
+                                <input type="range" id="tempSlider" min="0" max="2" step="0.1" value="0.7" oninput="document.getElementById('tempDisplay').innerText = this.value" style="accent-color: #111; width: 100%;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ================= 副 API 面板 ================= -->
+                    <div id="api-tab-secondary" class="api-tab-content">
+                        <div class="ios-api-title">副 API 专属应用场景</div>
+                        <div class="ios-api-card">
+                            <div class="ios-api-toggle-row">
+                                <div>
+                                    <div class="toggle-title">查手机内容生成</div>
+                                    <div class="toggle-desc">浏览器、私密记录、购物车等</div>
+                                </div>
+                                <input type="checkbox" id="route-phone" class="ls-toggle" style="accent-color: #111;">
+                            </div>
+                            <div class="ios-api-toggle-row">
+                                <div>
+                                    <div class="toggle-title">恋人空间互动</div>
+                                    <div class="toggle-desc">NPC消息、时空回信、默契挑战</div>
+                                </div>
+                                <input type="checkbox" id="route-npc" class="ls-toggle" style="accent-color: #111;">
+                            </div>
+                            <div class="ios-api-toggle-row" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0;">
+                                <div>
+                                    <div class="toggle-title">论坛内容生成</div>
+                                    <div class="toggle-desc">同人文、论坛帖子、评论等</div>
+                                </div>
+                                <input type="checkbox" id="route-forum" class="ls-toggle" style="accent-color: #111;">
+                            </div>
+                        </div>
+
+                        <div class="ios-api-title">副 API 连接设置</div>
+                        <div class="ios-api-card">
+                            <div class="ios-api-field">
+                                <label>API 地址 (Base URL)</label>
+                                <input type="text" id="secApiBaseUrl" placeholder="https://api.anthropic.com/v1">
+                                <div style="font-size: 11px; color: #8E8E93; margin-top: 6px;">宝宝记得要在url末尾加上/v1 TvT</div>
+                            </div>
+                            <div class="ios-api-field" style="margin-top: 16px;">
+                                <label>API 密钥 (Key)</label>
+                                <input type="password" id="secApiKey" placeholder="sk-ant-...">
+                            </div>
+                        </div>
+
+                        <div class="ios-api-title">副 API 模型选择</div>
+                        <div class="ios-api-card">
+                            <button class="ios-api-btn" onclick="fetchModels('secondary')" id="fetchBtnSecondary" style="margin-bottom: 16px;">拉取模型列表</button>
+                            <div class="ios-api-field">
+                                <label>选择模型</label>
+                                <select id="secModelSelect" class="ios-select-clean"></select>
+                            </div>
+                        </div>
+
+                        <div class="ios-api-title">副 API 参数</div>
+                        <div class="ios-api-card">
+                            <div class="ios-api-field">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <label style="margin: 0;">温度 (Temperature)</label>
+                                    <span id="secTempDisplay" style="color: #8E8E93; font-size: 15px;">0.7</span>
+                                </div>
+                                <input type="range" id="secTempSlider" min="0" max="2" step="0.1" value="0.7" oninput="document.getElementById('secTempDisplay').innerText = this.value" style="accent-color: #111; width: 100%;">
+                            </div>
+                        </div>
                     </div>
                 </div>
+
+                <!-- 底部：额度查询 (固定在底部) -->
+                <div class="api-quota-bottom-bar">
+                    <div class="api-quota-info-clean">
+                        <span class="quota-label">当前 API 剩余额度</span>
+                        <span class="quota-value" id="api-realtime-quota">--</span>
+                    </div>
+                    <button class="quota-refresh-btn" onclick="refreshCurrentApiQuota()">
+                        <svg viewBox="0 0 24 24"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.85L2 9"></path></svg>
+                        刷新
+                    </button>
+                </div>
+
             </div>
         </div>
 
