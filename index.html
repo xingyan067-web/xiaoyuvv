@@ -30,39 +30,6 @@
     
 </head>
 <body> <!-- 加上这一行 -->
-    <div id="activation-overlay">
-        <div class="activation-box">
-            <h2>WELCOME</h2>
-            <p>请输入授权的QQ号和激活码</p>
-            
-            <div class="input-group">
-                <label for="qq-input">QQ 号</label>
-                <input type="number" id="qq-input" placeholder="输入您的QQ号">
-            </div>
-            
-            <div class="input-group">
-                <label for="code-input">激活码</label>
-                <input type="text" id="code-input" placeholder="输入激活验证码">
-            </div>
-            
-            <!-- 低饱和渐变粉色按钮 -->
-            <button class="bingo-btn" onclick="verifyActivation()">
-                BINGO (´・ω・)ﾉ
-            </button>
-            
-            <div class="activation-footer">
-                一机一码 · 保护好我呀〒_〒<br>
-                请联系管理员获取专属码
-            </div>
-        </div>
-    </div>
-    <!-- 【新增】：立即执行脚本，防止刷新时闪烁 -->
-    <script>
-        if (localStorage.getItem('isActivated_qq_bound_v1') === 'true') {
-            document.getElementById('activation-overlay').style.display = 'none';
-        }
-    </script>
-
     <!-- 核心应用容器 -->
     <div id="app-root">
         

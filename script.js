@@ -25,118 +25,6 @@ function initStandaloneMode() {
 // 立即执行检测
 initStandaloneMode();
 
-// --- 激活码逻辑 (V2强制重新激活版) ---
-
-/**
- * 检查、生成并显示激活状态
- */
-async function checkAndShowActivation() {
-    const overlay = document.getElementById('activation-overlay');
-    
-    // 1. 优先检查 localStorage (改用 V2 的 Key)
-    if (localStorage.getItem('ios_theme_activation_v2_fallback') === 'true') {
-        if (overlay) overlay.style.display = 'none';
-        return;
-    }
-
-    // 2. 尝试查询 IndexedDB (改用 V2 的 Key)
-    try {
-        const idbPromise = idb.get('ios_theme_activation_v2_status');
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500));
-        const activationStatus = await Promise.race([idbPromise, timeoutPromise]);
-        
-        if (activationStatus && activationStatus.activated) {
-            localStorage.setItem('ios_theme_activation_v2_fallback', 'true');
-            if (overlay) overlay.style.display = 'none';
-            return;
-        }
-    } catch (e) {
-        console.warn("数据库读取超时或为空，继续显示激活页");
-    }
-
-    // 3. 如果都没激活，显示激活页面
-    if (overlay) overlay.style.display = 'flex';
-}
-
-/**
- * 验证用户输入的激活码
- */
-function verifyActivation() {
-    const btn = document.querySelector('.bingo-btn');
-    const originalText = btn.innerText;
-    btn.innerText = "验证中...";
-    btn.disabled = true;
-
-    // 使用 setTimeout 让 UI 有时间渲染 "验证中..." 的文字
-    setTimeout(async () => {
-        try {
-            const qq = document.getElementById('qq-input').value.trim();
-            const userCode = document.getElementById('code-input').value.trim();
-
-            if (!qq || !userCode) {
-                alert('请输入QQ号和激活码。');
-                resetBtn();
-                return;
-            }
-
-            // 计算期望的激活码
-            const expectedCode = generateCodeForQQ(qq);
-
-            if (userCode.toUpperCase() === expectedCode.toUpperCase()) {
-                
-                // 1. 立即写入 localStorage (改用 V2 的 Key)
-                localStorage.setItem('ios_theme_activation_v2_fallback', 'true');
-                
-                // 2. 立即隐藏激活页面
-                const overlay = document.getElementById('activation-overlay');
-                if (overlay) overlay.style.display = 'none';
-                
-                alert('激活成功！欢迎使用。');
-
-                // 3. 异步后台保存 (改用 V2 的 Key)
-                try {
-                    await idb.set('ios_theme_activation_v2_status', {
-                        activated: true,
-                        qq: qq,
-                        activationTime: new Date().toISOString()
-                    });
-                } catch (dbError) {
-                    console.warn("后台保存数据库失败，但不影响使用", dbError);
-                }
-
-            } else {
-                alert('激活失败！激活码或QQ号错误。');
-                resetBtn();
-            }
-        } catch (error) {
-            alert("发生未知错误: " + error.message);
-            resetBtn();
-        }
-    }, 100);
-
-    function resetBtn() {
-        btn.innerText = originalText;
-        btn.disabled = false;
-    }
-}
-
-/**
- * 根据QQ号生成激活码 (全新V2算法)
- */
-function generateCodeForQQ(qq) {
-    const salt = "HONEY-STUDIO-V2-SECRET-20260309";
-    const baseString = `${qq}#${salt}`;
-    let hash = 0;
-    for (let i = 0; i < baseString.length; i++) {
-        const char = baseString.charCodeAt(i);
-        hash = ((hash << 7) - hash) + char;
-        hash |= 0;
-    }
-    hash = Math.abs(hash);
-    const hexHash = hash.toString(16).toUpperCase();
-    const qqInfo = `${qq.length}${qq.slice(-2)}`;
-    return `V2-${qqInfo}-${hexHash}`.substring(0, 16);
-}
 // --- 全局变量 ---
 const totalApps = 7; 
 let iconPresets = [];
@@ -290,9 +178,7 @@ const idb = {
 };
 
 // --- 初始化 ---
-window.onload = async function() {
-    // !!! 新增：在所有操作之前，首先检查激活状态
-    checkAndShowActivation();    
+window.onload = async function() {    
     initGrid(); 
     await loadAllData(); // 加载 IndexedDB 数据 (含布局恢复)
     
@@ -1276,10 +1162,7 @@ function clearAllData() {
             if (typeof wcClearCharactersPersistentSnapshot === 'function') {
                 await wcClearCharactersPersistentSnapshot();
             }
-            // 【V2修改点：保留新的激活状态】
-            const isActivated = localStorage.getItem('ios_theme_activation_v2_fallback');
             localStorage.clear();
-            if (isActivated) localStorage.setItem('ios_theme_activation_v2_fallback', isActivated);
 
             // 贯彻高级感：不弹原生 alert，直接让整个页面优雅淡出并刷新
             document.body.style.transition = 'opacity 0.6s ease';
@@ -4431,8 +4314,21 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             })
         });
 
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
+        
+        // 👇👇👇 核心修复：拦截并显示真实的 API 错误原因 👇👇👇
+        if (!response.ok) {
+            const errMsg = (data.error && data.error.message) ? data.error.message : `HTTP 状态码错误: ${response.status}`;
+            throw new Error(errMsg);
+        }
+        if (data.error) {
+            throw new Error(data.error.message || JSON.stringify(data.error));
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 节点返回了异常数据，请检查【模型名称】是否填错，或更换 API 地址。详细报错：" + JSON.stringify(data));
+        }
+        // 👆👆👆 修复结束 👆👆👆
+
         let replyText = data.choices[0].message.content;
 
         // 👇 增强版：拉黑拦截逻辑 (支持多条消息队列和表情包) 👇
@@ -4896,10 +4792,16 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             wcTriggerAIMoment(charId);
         }
     }
+    
+    // 👇 新增：根据设定的概率触发手机后台数据暗中更新 (改备注/改签名/和NPC聊天)
+    const bgUpdateFreq = (char && char.chatConfig && char.chatConfig.bgUpdateFreq !== undefined) ? char.chatConfig.bgUpdateFreq : 30;
+    if (bgUpdateFreq > 0 && (Math.random() * 100) < bgUpdateFreq) {
+        wcTriggerBackgroundPhoneUpdate(charId);
+    }
 }
 
 // ==========================================
-// 核心修复：朋友圈生成逻辑
+// 核心修复：朋友圈生成逻辑 (带NPC评论版)
 // ==========================================
 async function wcTriggerAIMoment(charId) {
     console.log(`Char ${charId} 尝试发布朋友圈...`);
@@ -4932,6 +4834,15 @@ async function wcTriggerAIMoment(charId) {
             return `${m.sender === 'me' ? 'User' : char.name}: ${content}`;
         }).filter(Boolean).join('\n');
 
+        // 👇 新增：提取通讯录里的 NPC 列表，让 AI 知道有哪些熟人可以来评论
+        let npcListStr = "无";
+        if (char.phoneData && char.phoneData.contacts) {
+            const npcs = char.phoneData.contacts.filter(c => !c.isUser);
+            if (npcs.length > 0) {
+                npcListStr = npcs.map(n => `${n.name} (${n.desc})`).join('、');
+            }
+        }
+
         const now = new Date();
         const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
         
@@ -4940,6 +4851,7 @@ async function wcTriggerAIMoment(charId) {
         prompt += `【你的人设】：${char.prompt}\n`;
         if (wbInfo) prompt += `${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【你手机通讯录里的NPC朋友】：${npcListStr}\n`;
         prompt += `【当前时间】：${timeString}。\n\n`;
         
         prompt += `【最近的聊天记录（作为发朋友圈的灵感/背景）】：\n`;
@@ -4949,13 +4861,17 @@ async function wcTriggerAIMoment(charId) {
         prompt += `【要求】：\n`;
         prompt += `1. 朋友圈的内容通常是对最近聊天中发生的事情的感慨、吐槽、分享，或者对User的暗示。\n`;
         prompt += `2. 文案要符合日常朋友圈风格，生活化，不要太长，拒绝AI味。\n`;
-        prompt += `3. 【活人感排版（核心）】：为了更像真人，你可以自由选择以下三种发布形式之一（随机决定）：\n`;
-        prompt += `   - 纯文本：只有 text，imageDesc 留空。\n`;
-        prompt += `   - 纯图片：只有 imageDesc，text 留空（无字朋友圈，只发图）。\n`;
-        prompt += `   - 图文并茂：text 和 imageDesc 都有。\n`;
-        prompt += `4. 【自我评论】：如果你想在发完朋友圈后立刻“抢沙发”补充说明，或者统一回复，可以在 comment 字段填写内容。\n`;
+        prompt += `3. 【活人感排版】：你可以自由选择纯文本、纯图片或图文并茂。\n`;
+        prompt += `4. 【互动感（核心）】：你可以在 comment 字段填写自己的抢沙发补充（也可以不填写）。同时，请根据【通讯录NPC朋友】列表，生成 1-3 条 NPC 对这条朋友圈的评论 (npcComments)。\n`;
         prompt += `5. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
-        prompt += `{"text": "朋友圈文案内容(可留空)", "imageDesc": "配图的画面描述(可留空)", "comment": "你自己在该条朋友圈下的评论/补充(可留空)"}\n`;
+        prompt += `{
+  "text": "朋友圈文案内容(可留空)", 
+  "imageDesc": "配图的画面描述(可留空)", 
+  "comment": "你自己在该条朋友圈下的评论/补充(可留空)",
+  "npcComments": [
+    {"name": "NPC名字(必须从通讯录选)", "text": "NPC的评论内容"}
+  ]
+}\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -4974,7 +4890,8 @@ async function wcTriggerAIMoment(charId) {
         const momentData = JSON.parse(content);
 
         if (momentData && (momentData.text || momentData.imageDesc)) {
-            wcAIHandleMomentPost(charId, momentData.text || "", momentData.imageDesc || null, momentData.comment || null);
+            // 👇 修改：把 npcComments 传给处理函数
+            wcAIHandleMomentPost(charId, momentData.text || "", momentData.imageDesc || null, momentData.comment || null, momentData.npcComments || []);
             console.log(`Char ${charId} 成功发布朋友圈`);
         }
     } catch (e) {
@@ -4982,7 +4899,7 @@ async function wcTriggerAIMoment(charId) {
     }
 }
 
-function wcAIHandleMomentPost(charId, text, imageDesc, selfComment = null) {
+function wcAIHandleMomentPost(charId, text, imageDesc, selfComment = null, npcComments = []) {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
     
@@ -4998,9 +4915,18 @@ function wcAIHandleMomentPost(charId, text, imageDesc, selfComment = null) {
         comments: []
     };
     
-    // 如果 AI 传了自我评论，就加进评论列表里
+    // 1. 如果 AI 传了自我评论，加进评论列表里
     if (selfComment && selfComment.trim() !== "") {
         newMoment.comments.push({ name: char.name, text: selfComment.trim() });
+    }
+    
+    // 2. 把 NPC 的评论也加进去
+    if (Array.isArray(npcComments) && npcComments.length > 0) {
+        npcComments.forEach(npcC => {
+            if (npcC.name && npcC.text) {
+                newMoment.comments.push({ name: npcC.name, text: npcC.text });
+            }
+        });
     }
     
     wcState.moments.unshift(newMoment);
@@ -8638,13 +8564,26 @@ function renderSimHistory(history, meAvatar, themAvatar, isGroup = false) {
     const container = document.getElementById('wc-sim-chat-history');
     container.innerHTML = '';
     
+    let lastTime = 0;
+
     history.forEach(msg => {
+        // --- 新增：渲染时间戳 (间隔大于5分钟显示) ---
+        if (msg.time && (msg.time - lastTime > 5 * 60 * 1000)) {
+            const timeDiv = document.createElement('div');
+            timeDiv.style.textAlign = 'center';
+            timeDiv.style.margin = '10px 0';
+            // 使用系统自带的时间格式化函数
+            timeDiv.innerHTML = `<span style="background: rgba(0,0,0,0.1); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px;">${wcFormatSystemTime(msg.time)}</span>`;
+            container.appendChild(timeDiv);
+            lastTime = msg.time;
+        }
+
         const isMe = msg.sender === 'me'; 
         
         const row = document.createElement('div');
         row.style.display = 'flex';
         row.style.flexDirection = isMe ? 'row-reverse' : 'row';
-        row.style.marginBottom = '15px'; // 增加间距
+        row.style.marginBottom = '15px'; 
         row.style.alignItems = 'flex-start';
         row.style.width = '100%'; 
 
@@ -8678,22 +8617,32 @@ function renderSimHistory(history, meAvatar, themAvatar, isGroup = false) {
         }
 
         const bubble = document.createElement('div');
-        bubble.style.padding = '8px 12px';
-        bubble.style.borderRadius = '6px';
-        bubble.style.fontSize = '15px';
-        bubble.style.lineHeight = '1.4';
-        bubble.style.wordBreak = 'break-word';
         bubble.style.position = 'relative';
         
-        if (isMe) {
-            bubble.style.background = '#95EC69';
-            bubble.style.color = 'black';
+        // --- 新增：表情包和图片渲染逻辑 ---
+        if (msg.type === 'sticker' || msg.type === 'image') {
+            bubble.innerHTML = `<img src="${msg.content}" style="max-width: 120px; max-height: 120px; border-radius: 8px; display: block; object-fit: cover;">`;
+            bubble.style.background = 'transparent';
+            bubble.style.padding = '0';
         } else {
-            bubble.style.background = 'white';
-            bubble.style.color = 'black';
+            // 普通文本气泡
+            bubble.style.padding = '8px 12px';
+            bubble.style.borderRadius = '6px';
+            bubble.style.fontSize = '15px';
+            bubble.style.lineHeight = '1.4';
+            bubble.style.wordBreak = 'break-word';
+            if (isMe) {
+                bubble.style.background = '#111111'; // 适配高级黑白主题
+                bubble.style.color = '#FFFFFF';
+                bubble.style.borderBottomRightRadius = '2px';
+            } else {
+                bubble.style.background = '#FFFFFF';
+                bubble.style.color = '#111111';
+                bubble.style.border = '1px solid #F0F0F0';
+                bubble.style.borderBottomLeftRadius = '2px';
+            }
+            bubble.innerHTML = msg.content;
         }
-        
-                bubble.innerHTML = msg.content;
         
         contentDiv.appendChild(bubble);
         
@@ -9180,6 +9129,28 @@ function wcOpenChatSettings() {
     document.getElementById('wc-setting-proactive-toggle').checked = char.chatConfig.proactiveEnabled || false;
     document.getElementById('wc-setting-proactive-interval').value = char.chatConfig.proactiveInterval || 60;
     document.getElementById('wc-setting-moment-freq').value = char.chatConfig.momentFreq || 0;
+    // 👇 新增：动态注入后台小动作概率滑块 👇
+    let bgUpdateGroup = document.getElementById('wc-bg-update-group');
+    if (!bgUpdateGroup) {
+        const momentFreqEl = document.getElementById('wc-setting-moment-freq');
+        if (momentFreqEl) {
+            const parent = momentFreqEl.closest('.wc-form-group') || momentFreqEl.parentElement;
+            bgUpdateGroup = document.createElement('div');
+            bgUpdateGroup.id = 'wc-bg-update-group';
+            bgUpdateGroup.className = 'wc-form-group';
+            bgUpdateGroup.innerHTML = `
+                <label class="wc-form-label">后台小动作概率 (改备注/签名/找NPC) <span id="bg-update-freq-val">30%</span></label>
+                <input type="range" id="wc-setting-bg-update-freq" min="0" max="100" value="30" class="wc-form-input" style="padding:0;" oninput="document.getElementById('bg-update-freq-val').innerText = this.value + '%'">
+            `;
+            parent.parentNode.insertBefore(bgUpdateGroup, parent.nextSibling);
+        }
+    }
+    if (document.getElementById('wc-setting-bg-update-freq')) {
+        const val = char.chatConfig.bgUpdateFreq !== undefined ? char.chatConfig.bgUpdateFreq : 30;
+        document.getElementById('wc-setting-bg-update-freq').value = val;
+        document.getElementById('bg-update-freq-val').innerText = val + '%';
+    }
+    // 👆 新增结束 👆
 
     const wbList = document.getElementById('wc-setting-worldbook-list');
     wbList.innerHTML = '';
@@ -9306,6 +9277,12 @@ async function wcSaveChatSettings() {
     char.chatConfig.proactiveEnabled = document.getElementById('wc-setting-proactive-toggle').checked;
     char.chatConfig.proactiveInterval = parseInt(document.getElementById('wc-setting-proactive-interval').value) || 60;
     char.chatConfig.momentFreq = parseInt(document.getElementById('wc-setting-moment-freq').value) || 0;
+    // 👇 新增：保存后台小动作概率 👇
+    const bgUpdateFreqInput = document.getElementById('wc-setting-bg-update-freq');
+    if (bgUpdateFreqInput) {
+        char.chatConfig.bgUpdateFreq = parseInt(bgUpdateFreqInput.value) || 0;
+    }
+    // 👆 新增结束 👆
 
     const wbCheckboxes = document.querySelectorAll('#wc-setting-worldbook-list input[type="checkbox"]:checked');
     // 【修复】：这里原本写成了 summaryWorldbookEntries，导致保存失败，现在改回 worldbookEntries
@@ -10942,6 +10919,180 @@ async function wcGeneratePrivacyAndFavorites() {
         wcShowError("生成失败");
     }
 }
+// ==========================================
+// 新增：AI 后台暗中更新手机数据 (改备注/改签名/和NPC多回合聊天)
+// ==========================================
+async function wcTriggerBackgroundPhoneUpdate(charId) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await getActiveApiConfig('npc');
+    if (!apiConfig || !apiConfig.key) return;
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-20).map(m => {
+            if (m.isError || m.type === 'system') return null;
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return `${m.sender==='me'?'User':char.name}: ${content}`;
+        }).filter(Boolean).join('\n');
+
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        let npcListStr = "无";
+        if (char.phoneData && char.phoneData.contacts) {
+            const npcs = char.phoneData.contacts.filter(c => !c.isUser);
+            if (npcs.length > 0) {
+                npcListStr = npcs.map(n => `${n.name} (${n.desc})`).join('、');
+            }
+        }
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【最近你与User的聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `【你手机通讯录里的NPC】：${npcListStr}\n\n`;
+        
+        prompt += `请根据最近和 User 的聊天内容、情绪变化，决定是否要在你自己的手机里偷偷做一些更改，或者找通讯录里的 NPC 聊聊天。\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 如果聊天让你很开心/生气/暧昧，你可以修改【你手机里给 User 的备注名】 (newRemark)。\n`;
+        prompt += `2. 你可以修改你自己的个人主页网名 (newNickname) 和 个性签名 (newSign)。\n`;
+        prompt += `3. 你可以找通讯录里的某个 NPC 吐槽或分享刚才发生的事 (npcInteraction)。必须是一段有来有回的多句对话（至少3-6句）！\n`;
+        prompt += `4. 在对话中，你可以发送文本(text)或表情包(sticker)。\n`;
+        prompt += `5. 如果你觉得没必要改，对应字段填 null。\n`;
+        prompt += `6. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "newRemark": "给User的新备注名(不改填null)",
+  "newNickname": "你的新网名(不改填null)",
+  "newSign": "你的新个性签名(不改填null)",
+  "npcInteraction": {
+    "npcName": "你要联系的NPC名字(必须从通讯录选，不联系填null)",
+    "dialogue": [
+      {"sender": "me", "type": "text", "content": "在吗？刚才发生了一件事..."},
+      {"sender": "them", "type": "text", "content": "怎么了？"},
+      {"sender": "me", "type": "sticker", "content": "委屈"}
+    ]
+  }
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        if (!char.phoneData) char.phoneData = {};
+        if (!char.phoneData.profile) char.phoneData.profile = { nickname: char.name, sign: "暂无签名" };
+
+        let hasChanges = false;
+
+        if (result.newRemark && result.newRemark !== "null") {
+            char.phoneData.userRemark = result.newRemark;
+            if (char.phoneData.contacts) {
+                const uContact = char.phoneData.contacts.find(c => c.isUser);
+                if (uContact) uContact.name = result.newRemark;
+            }
+            if (char.phoneData.chats) {
+                const uChat = char.phoneData.chats.find(c => c.isUser);
+                if (uChat) uChat.name = result.newRemark;
+            }
+            wcAddMessage(charId, 'system', 'system', `[系统提示：${char.name} 偷偷在 Ta 的手机里，将你的备注改为了“${result.newRemark}”]`, { style: 'transparent' });
+            hasChanges = true;
+        }
+
+        if (result.newNickname && result.newNickname !== "null") {
+            char.phoneData.profile.nickname = result.newNickname;
+            hasChanges = true;
+        }
+        if (result.newSign && result.newSign !== "null") {
+            char.phoneData.profile.sign = result.newSign;
+            hasChanges = true;
+        }
+
+        // 处理：和 NPC 多回合聊天
+        if (result.npcInteraction && result.npcInteraction.npcName && result.npcInteraction.npcName !== "null" && result.npcInteraction.dialogue) {
+            const npcName = result.npcInteraction.npcName;
+            const dialogue = result.npcInteraction.dialogue;
+
+            if (!char.phoneData.chats) char.phoneData.chats = [];
+            let pChat = char.phoneData.chats.find(c => c.name === npcName);
+            if (!pChat) {
+                pChat = { id: Date.now(), name: npcName, avatar: getRandomNpcAvatar(), history: [] };
+                char.phoneData.chats.push(pChat);
+            }
+            
+            let feedText = `你感知到 ${char.name} 和 ${npcName} 进行了聊天：\n`;
+            let lastContent = "";
+
+            // 遍历对话数组，推入手机聊天记录
+            dialogue.forEach(msg => {
+                let finalContent = msg.content;
+                let finalType = msg.type || 'text';
+
+                // 解析表情包
+                if (finalType === 'sticker') {
+                    const stickerUrl = wcFindStickerUrlMulti(char.chatConfig.stickerGroupIds, msg.content);
+                    if (stickerUrl) {
+                        finalContent = stickerUrl;
+                    } else {
+                        finalType = 'text';
+                        finalContent = `[表情: ${msg.content}]`;
+                    }
+                }
+
+                pChat.history.push({ 
+                    sender: msg.sender, 
+                    type: finalType,
+                    content: finalContent,
+                    time: Date.now() - Math.floor(Math.random() * 10000) // 制造一点时间差
+                });
+                
+                const speaker = msg.sender === 'me' ? char.name : npcName;
+                let displayContent = finalType === 'sticker' ? '[表情包]' : finalContent;
+                feedText += `${speaker}: ${displayContent}\n`;
+                lastContent = displayContent;
+            });
+
+            pChat.lastMsg = lastContent;
+            pChat.time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            if (typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId) {
+                if (typeof lsAddFeed === 'function') {
+                    lsAddFeed(feedText.trim(), char.avatar);
+                }
+                wcAddMessage(charId, 'system', 'system', `[账号关联感知：${char.name} 刚刚和 ${npcName} 聊了天。]`, { style: 'transparent' });
+            }
+            hasChanges = true;
+        }
+
+        if (hasChanges) {
+            wcSaveData();
+        }
+
+    } catch (e) {
+        console.error("后台暗中更新手机数据失败:", e);
+    }
+}
+
 // ==========================================================================
 // 新增：微信收藏 (Favorites) 逻辑
 // ==========================================================================
