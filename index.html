@@ -2818,7 +2818,8 @@
 
                                     <div class="wc-form-group">
                                         <label class="wc-form-label">上下文条数限制 (0为不限制)</label>
-                                        <input type="number" id="wc-setting-context-limit" class="wc-form-input" value="0">
+                                        <input type="number" id="wc-setting-context-limit" class="wc-form-input" value="0" oninput="calculateRealtimeTokens()">
+
                                     </div>
                                     <div class="wc-form-group">
                                         <label class="wc-form-label">关联世界书条目 (多选)</label>

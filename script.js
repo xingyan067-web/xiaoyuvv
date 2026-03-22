@@ -9020,7 +9020,7 @@ function wcOpenChatSettings() {
         const div = document.createElement('div');
         div.className = 'wc-checkbox-item';
         const isChecked = char.chatConfig.stickerGroupIds && char.chatConfig.stickerGroupIds.includes(idx);
-        div.innerHTML = `<input type="checkbox" value="${idx}" ${isChecked ? 'checked' : ''}><span>${cat.name}</span>`;
+        div.innerHTML = `<input type="checkbox" value="${idx}" ${isChecked ? 'checked' : ''} onchange="calculateRealtimeTokens()"><span>${cat.name}</span>`;
         stickerList.appendChild(div);
     });
 
@@ -9042,8 +9042,9 @@ function wcOpenChatSettings() {
     
     wcRenderChatBgGallery(); // 【新增】：打开设置时渲染图库
     
-    // 👇 新增：打开设置时自动计算 Token
-    calculateChatTokens(char);
+    // 👇 新增：打开设置时自动计算 Token 和 查询额度
+    calculateRealtimeTokens();
+    refreshApiQuota();
     
     wcOpenModal('wc-modal-chat-settings');
 }
@@ -20055,6 +20056,11 @@ function confirmGlobalWbSelect() {
         currentWbCallback(selectedIds);
     }
 
+    // 触发实时 Token 计算 (如果当前在聊天设置页面)
+    if (typeof calculateRealtimeTokens === 'function') {
+        calculateRealtimeTokens();
+    }
+
     closeGlobalWbModal();
 }
 // ==========================================
@@ -20075,27 +20081,30 @@ function estimateTokens(text) {
     return Math.ceil(tokens);
 }
 
-// 计算当前聊天的各项 Token 占用 (已剔除内置提示词)
-function calculateChatTokens(char) {
+// 实时计算当前聊天的各项 Token 占用 (已剔除内置提示词)
+function calculateRealtimeTokens() {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     if (!char) return;
-    const config = char.chatConfig || {};
     
     let wbTokens = 0;
     let chatTokens = 0;
     let memTokens = 0;
     let stickerTokens = 0;
 
-    // 1. 计算世界书
-    if (config.worldbookEntries && config.worldbookEntries.length > 0) {
-        const linkedWbs = worldbookEntries.filter(e => config.worldbookEntries.includes(e.id.toString()));
+    // 1. 计算世界书 (从当前勾选的复选框读取)
+    const wbCheckboxes = document.querySelectorAll('#wc-setting-worldbook-list input[type="checkbox"]:checked');
+    const selectedWbIds = Array.from(wbCheckboxes).map(cb => cb.value);
+    if (selectedWbIds.length > 0) {
+        const linkedWbs = worldbookEntries.filter(e => selectedWbIds.includes(e.id.toString()));
         linkedWbs.forEach(wb => {
             wbTokens += estimateTokens(wb.title + wb.desc);
         });
     }
 
-    // 2. 计算聊天上下文
+    // 2. 计算聊天上下文 (从当前输入的限制条数读取)
     const msgs = wcState.chats[char.id] || [];
-    const limit = config.contextLimit > 0 ? config.contextLimit : 30;
+    let limit = parseInt(document.getElementById('wc-setting-context-limit').value);
+    if (isNaN(limit) || limit <= 0) limit = 30; // 默认30
     const recentMsgs = msgs.slice(-limit);
     recentMsgs.forEach(m => {
         if (!m.isError) {
@@ -20103,18 +20112,20 @@ function calculateChatTokens(char) {
         }
     });
 
-    // 3. 计算记忆
+    // 3. 计算记忆 (记忆条数不在当前面板修改，直接读 config)
     if (char.memories && char.memories.length > 0) {
-        const readCount = config.aiMemoryCount !== undefined ? config.aiMemoryCount : 5;
+        const readCount = (char.chatConfig && char.chatConfig.aiMemoryCount !== undefined) ? char.chatConfig.aiMemoryCount : 5;
         const recentMemories = char.memories.slice(0, readCount);
         recentMemories.forEach(m => {
             memTokens += estimateTokens(m.content);
         });
     }
 
-    // 4. 计算表情包
-    if (config.stickerGroupIds && config.stickerGroupIds.length > 0) {
-        config.stickerGroupIds.forEach(groupId => {
+    // 4. 计算表情包 (从当前勾选的复选框读取)
+    const stickerCheckboxes = document.querySelectorAll('#wc-setting-sticker-group-list input[type="checkbox"]:checked');
+    const selectedStickerIds = Array.from(stickerCheckboxes).map(cb => parseInt(cb.value));
+    if (selectedStickerIds.length > 0) {
+        selectedStickerIds.forEach(groupId => {
             const group = wcState.stickerCategories[groupId];
             if (group && group.list) {
                 group.list.forEach(s => {
@@ -20123,8 +20134,6 @@ function calculateChatTokens(char) {
             }
         });
     }
-
-    // 注意：已经移除了基础人设(char.prompt)的计算，完全不包含内置提示词！
 
     const totalTokens = wbTokens + chatTokens + memTokens + stickerTokens;
 
