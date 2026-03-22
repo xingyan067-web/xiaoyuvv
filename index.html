@@ -1860,6 +1860,14 @@
                                     <span class="wc-more-label">语音通话</span>
                                 </div>
                                 <!-- 👆 新增结束 👆 -->
+                                <!-- 👇 新增：发送位置按钮 👇 -->
+                                <div class="wc-more-item" onclick="wcOpenSendLocationModal()">
+                                    <div class="wc-more-icon-box">
+                                        <svg class="wc-icon" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                    </div>
+                                    <span class="wc-more-label">位置</span>
+                                </div>
+                                <!-- 👆 新增结束 👆 -->
 
                                 <!-- 新增购物按钮 -->
                                 <div class="wc-more-item" onclick="wcActionShopping()">
@@ -2818,7 +2826,21 @@
                                             </select>
                                         </div>
                                     </div>
-                                    <!-- 👆 新增结束 👆 -->                           
+                                    <!-- 👆 新增结束 👆 -->
+                                    <!-- 👇 新增：角色所在城市设定 👇 -->
+                                    <div class="wc-form-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #F0F0F0;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: #F9F9F9; padding: 12px 16px; border-radius: 12px; border: 1px solid #E5E5EA;" onclick="wcOpenCharLocationModal()">
+                                            <div style="display: flex; align-items: center; gap: 10px;">
+                                                <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: none; stroke: #111; stroke-width: 2;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                                                <span style="font-size: 15px; font-weight: 600; color: #111;">Ta 的所在城市</span>
+                                            </div>
+                                            <div style="display: flex; align-items: center; gap: 4px;">
+                                                <span id="wc-setting-loc-display" style="font-size: 13px; color: #888;">未设置</span>
+                                                <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; stroke: #CCC; fill: none; stroke-width: 2;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- 👆 新增结束 👆 -->
 <!-- 👇 修改：拉黑功能按钮 👇 -->
 <div class="wc-form-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #F0F0F0;">
     <button id="wc-setting-block-btn" class="ins-block-btn" onclick="handleBlockBtnClick()">拉黑该角色 (Block)</button>
@@ -3992,6 +4014,100 @@
         <div class="ins-token-footer">
             * 仅为本地字符估算值，实际消耗以模型计费为准
         </div>
+    </div>
+</div>
+<!-- ========================================== -->
+<!-- 新增：高级感位置功能弹窗 (发送位置 & 角色城市) -->
+<!-- ========================================== -->
+
+<!-- 1. 发送位置弹窗 -->
+<div class="ins-loc-modal-overlay" id="wc-modal-send-location" onclick="if(event.target===this) wcCloseSendLocationModal()">
+    <div class="ins-loc-modal-card">
+        <div class="ins-loc-close-btn" onclick="wcCloseSendLocationModal()">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </div>
+        
+        <div class="ins-loc-modal-header">
+            <div class="ins-loc-modal-title">发送位置</div>
+            <div class="ins-loc-modal-subtitle">SEND LOCATION</div>
+        </div>
+        
+        <div class="ins-loc-segment">
+            <div class="ins-loc-seg-btn active" id="send-loc-seg-real" onclick="wcSwitchSendLocTab('real')">真实定位</div>
+            <div class="ins-loc-seg-btn" id="send-loc-seg-virtual" onclick="wcSwitchSendLocTab('virtual')">虚拟坐标</div>
+        </div>
+        
+        <!-- 真实位置视图 -->
+        <div id="send-loc-view-real">
+            <div class="ins-loc-map-box">
+                <!-- 真正的 Leaflet 地图容器 -->
+                <div id="send-real-map-container" style="width: 100%; height: 100%; z-index: 1;"></div>
+                <!-- 悬浮在地图中心的定位点 -->
+                <div class="ins-loc-marker" style="position: absolute; z-index: 10; pointer-events: none;"></div>
+            </div>
+            <div class="ins-loc-info">
+                <div class="ins-loc-title" id="send-loc-real-address">正在获取高精度定位...</div>
+                <div class="ins-loc-desc">将发送你当前真实的地理位置</div>
+            </div>
+        </div>
+
+        <!-- 虚拟位置视图 -->
+        <div id="send-loc-view-virtual" style="display: none;">
+            <input type="text" id="send-loc-virtual-input" class="ins-loc-input" placeholder="输入地名 (如: 霍格沃茨)">
+            <div class="ins-loc-map-box virtual">
+                <div class="ins-loc-marker virtual-marker"></div>
+            </div>
+            <div class="ins-loc-info">
+                <div class="ins-loc-title">自定义虚拟位置</div>
+                <div class="ins-loc-desc">AI 将根据此地点生成环境与剧情</div>
+            </div>
+        </div>
+
+        <button class="ins-loc-submit-btn" onclick="wcSubmitSendLocation()">发送给 Ta</button>
+    </div>
+</div>
+
+<!-- 2. 角色所在城市设定弹窗 -->
+<div class="ins-loc-modal-overlay" id="wc-modal-char-location" onclick="if(event.target===this) wcCloseCharLocationModal()">
+    <div class="ins-loc-modal-card">
+        <div class="ins-loc-close-btn" onclick="wcCloseCharLocationModal()">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </div>
+        
+        <div class="ins-loc-modal-header">
+            <div class="ins-loc-modal-title">Ta 的所在城市</div>
+            <div class="ins-loc-modal-subtitle">CHAR LOCATION</div>
+        </div>
+        
+        <div class="ins-loc-segment">
+            <div class="ins-loc-seg-btn active" id="char-loc-seg-real" onclick="wcSwitchCharLocTab('real')">跟随我</div>
+            <div class="ins-loc-seg-btn" id="char-loc-seg-virtual" onclick="wcSwitchCharLocTab('virtual')">异地/异世界</div>
+        </div>
+
+        <!-- 真实位置视图 -->
+        <div id="char-loc-view-real">
+            <div class="ins-loc-map-box" style="height: 120px;">
+                <div class="ins-loc-marker"></div>
+            </div>
+            <div class="ins-loc-info">
+                <div class="ins-loc-title">与我同城</div>
+                <div class="ins-loc-desc">Ta 将与你共享同一片天空、天气与时区</div>
+            </div>
+        </div>
+
+        <!-- 虚拟位置视图 -->
+        <div id="char-loc-view-virtual" style="display: none;">
+            <input type="text" id="char-loc-virtual-input" class="ins-loc-input" placeholder="例如：哥谭市 / 赛博朋克夜之城">
+            <div class="ins-loc-map-box virtual" style="height: 120px;">
+                <div class="ins-loc-marker virtual-marker"></div>
+            </div>
+            <div class="ins-loc-info">
+                <div class="ins-loc-title">异地恋 / 跨次元</div>
+                <div class="ins-loc-desc">Ta 将固定生活在你设定的城市中</div>
+            </div>
+        </div>
+
+        <button class="ins-loc-submit-btn" onclick="wcSubmitCharLocation()">保存设定</button>
     </div>
 </div>
 

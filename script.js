@@ -4313,7 +4313,7 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         if (availableStickers.length > 0) {
             // 提取前 400 个表情包供 AI 使用
             const limitedStickers = availableStickers.slice(0, 400); 
-            systemPrompt += `【可用表情包】\n你可以发送表情包，当前可用的表情包描述有：${limitedStickers.join(', ')}。\n`;
+            systemPrompt += `【可用表情包】\n如果你想发送表情包，必须使用 {"type":"sticker", "content":"表情包描述"} 格式！当前可用的表情包描述有：${limitedStickers.join(', ')}。\n`;
             if (char.isGroup) {
                 systemPrompt += `(注意：在群聊中，你可以根据发言人的性格，从上述表情包中挑选合适的发送。)\n`;
             }
@@ -4585,10 +4585,35 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 if(line.trim()) return { type: 'text', content: line.trim() };
             }).filter(Boolean);
         } else {
-            const contentRegex = /"content":\s*"([^"]+)"/g;
-            let match;
-            while ((match = contentRegex.exec(cleanText)) !== null) {
-                actions.push({ type: 'text', content: match[1] });
+            // 改进的降级正则提取，尝试保留 type 和 senderName
+            const blockRegex = /\{[^{}]*\}/g;
+            const blocks = cleanText.match(blockRegex);
+            if (blocks) {
+                blocks.forEach(block => {
+                    const typeMatch = block.match(/"type"\s*:\s*"([^"]+)"/);
+                    const contentMatch = block.match(/"content"\s*:\s*"([^"]+)"/);
+                    const senderMatch = block.match(/"senderName"\s*:\s*"([^"]+)"/);
+                    
+                    if (contentMatch) {
+                        let actionObj = {
+                            type: typeMatch ? typeMatch[1] : 'text',
+                            content: contentMatch[1]
+                        };
+                        if (senderMatch) {
+                            actionObj.senderName = senderMatch[1];
+                        }
+                        actions.push(actionObj);
+                    }
+                });
+            }
+            
+            // 如果还是没提取到，用最基础的 content 提取
+            if (actions.length === 0) {
+                const contentRegex = /"content":\s*"([^"]+)"/g;
+                let match;
+                while ((match = contentRegex.exec(cleanText)) !== null) {
+                    actions.push({ type: 'text', content: match[1] });
+                }
             }
         }
     }
@@ -20333,7 +20358,8 @@ async function refreshApiQuota() {
     quotaEl.style.opacity = "0.5";
 
     try {
-        const apiConfig = await idb.get('ios_theme_api_config');
+        // 【核心修复】：使用新的双路 API 获取方法，读取当前聊天所用的 API 配置
+        const apiConfig = await getActiveApiConfig('chat');
         if (!apiConfig || !apiConfig.key || !apiConfig.baseUrl) {
             throw new Error("未配置API");
         }
@@ -20416,3 +20442,232 @@ async function refreshApiQuota() {
         quotaEl.style.opacity = "1";
     }
 }
+// ==========================================
+// 新增：位置功能核心逻辑 (发送位置 & 角色城市)
+// ==========================================
+
+let sendLocMapInstance = null;
+let sendLocCurrentType = 'real'; // 'real' 或 'virtual'
+let sendLocRealAddress = "正在获取高精度定位...";
+
+// 1. 打开发送位置弹窗
+function wcOpenSendLocationModal() {
+    wcCloseAllPanels(); // 关闭底部的更多面板
+    const modal = document.getElementById('wc-modal-send-location');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+    
+    wcSwitchSendLocTab('real'); // 默认打开真实定位
+    fetchSendLocation(); // 开始定位
+}
+
+function wcCloseSendLocationModal() {
+    const modal = document.getElementById('wc-modal-send-location');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+// 切换发送位置 Tab
+function wcSwitchSendLocTab(tab) {
+    sendLocCurrentType = tab;
+    document.getElementById('send-loc-seg-real').classList.toggle('active', tab === 'real');
+    document.getElementById('send-loc-seg-virtual').classList.toggle('active', tab === 'virtual');
+    document.getElementById('send-loc-view-real').style.display = tab === 'real' ? 'block' : 'none';
+    document.getElementById('send-loc-view-virtual').style.display = tab === 'virtual' ? 'block' : 'none';
+    
+    // 如果切回真实地图，需要重新计算地图大小防止显示不全
+    if (tab === 'real' && sendLocMapInstance) {
+        setTimeout(() => sendLocMapInstance.invalidateSize(), 100);
+    }
+}
+
+// 获取真实定位 (复用你原有的 Leaflet 逻辑)
+function fetchSendLocation() {
+    const titleEl = document.getElementById('send-loc-real-address');
+    titleEl.innerText = "正在获取高精度定位...";
+    
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`, {
+                    headers: { 'Accept-Language': 'zh-CN' }
+                });
+                const data = await res.json();
+                
+                let address = data.display_name;
+                if (data.address) {
+                    const a = data.address;
+                    address = `${a.city || a.town || a.province || ''} ${a.suburb || a.county || ''} ${a.road || ''}`.trim();
+                    if (!address) address = data.display_name;
+                }
+                
+                sendLocRealAddress = address || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                titleEl.innerText = sendLocRealAddress;
+
+                // 渲染 Leaflet 地图
+                if (typeof L !== 'undefined') {
+                    if (!sendLocMapInstance) {
+                        sendLocMapInstance = L.map('send-real-map-container', {
+                            zoomControl: false, // 隐藏缩放按钮，保持极简
+                            attributionControl: false // 隐藏版权信息
+                        }).setView([lat, lon], 16);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(sendLocMapInstance);
+                    } else {
+                        sendLocMapInstance.setView([lat, lon], 16);
+                    }
+                    setTimeout(() => { sendLocMapInstance.invalidateSize(); }, 100);
+                }
+            } catch (e) {
+                sendLocRealAddress = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                titleEl.innerText = sendLocRealAddress;
+            }
+        }, (err) => {
+            sendLocRealAddress = "定位失败或未授权";
+            titleEl.innerText = sendLocRealAddress;
+        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+    } else {
+        sendLocRealAddress = "设备不支持定位";
+        titleEl.innerText = sendLocRealAddress;
+    }
+}
+
+// 发送位置到聊天
+function wcSubmitSendLocation() {
+    const charId = wcState.activeChatId;
+    if (!charId) return;
+
+    let locTitle = "";
+    let locDesc = "";
+    let isVirtual = false;
+
+    if (sendLocCurrentType === 'real') {
+        locTitle = sendLocRealAddress;
+        locDesc = "真实地理位置";
+    } else {
+        const virtualInput = document.getElementById('send-loc-virtual-input').value.trim();
+        if (!virtualInput) return alert("请输入虚拟地名哦~");
+        locTitle = virtualInput;
+        locDesc = "自定义虚拟坐标";
+        isVirtual = true;
+    }
+
+    // 构造高级感位置卡片 HTML (作为 receipt 类型发送)
+    const mapClass = isVirtual ? "wc-bubble-location-map virtual" : "wc-bubble-location-map";
+    const markerClass = isVirtual ? "ins-loc-marker virtual-marker" : "ins-loc-marker";
+    
+    const cardHtml = `
+        <div class="wc-bubble-location-card">
+            <div class="${mapClass}">
+                <div class="${markerClass}"></div>
+            </div>
+            <div class="wc-bubble-location-info">
+                <div class="wc-bubble-location-title">${locTitle}</div>
+                <div class="wc-bubble-location-desc">${locDesc}</div>
+            </div>
+        </div>
+    `;
+
+    // 发送卡片
+    wcAddMessage(charId, 'me', 'receipt', cardHtml);
+
+    // 给 AI 发送隐藏的系统提示，强制让它根据位置做出反应
+    const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚向你发送了一个地理位置。位置名称是：“${locTitle}”。请在接下来的回复中，根据这个地点做出自然的反应（比如问User去那里干嘛、或者说你也想去、或者根据该地点的环境进行描写）。]`;
+    wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
+
+    wcCloseSendLocationModal();
+}
+
+// ==========================================
+// 2. 角色所在城市设定逻辑
+// ==========================================
+let charLocCurrentType = 'real';
+
+function wcOpenCharLocationModal() {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    
+    // 读取已有配置
+    const config = char.chatConfig || {};
+    const locType = config.locationType || 'real';
+    const locName = config.locationName || '';
+
+    wcSwitchCharLocTab(locType);
+    if (locType === 'virtual') {
+        document.getElementById('char-loc-virtual-input').value = locName;
+    }
+
+    const modal = document.getElementById('wc-modal-char-location');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function wcCloseCharLocationModal() {
+    const modal = document.getElementById('wc-modal-char-location');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+function wcSwitchCharLocTab(tab) {
+    charLocCurrentType = tab;
+    document.getElementById('char-loc-seg-real').classList.toggle('active', tab === 'real');
+    document.getElementById('char-loc-seg-virtual').classList.toggle('active', tab === 'virtual');
+    document.getElementById('char-loc-view-real').style.display = tab === 'real' ? 'block' : 'none';
+    document.getElementById('char-loc-view-virtual').style.display = tab === 'virtual' ? 'block' : 'none';
+}
+
+function wcSubmitCharLocation() {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    if (!char.chatConfig) char.chatConfig = {};
+
+    let locName = "";
+    if (charLocCurrentType === 'virtual') {
+        locName = document.getElementById('char-loc-virtual-input').value.trim();
+        if (!locName) return alert("请输入虚拟城市名称哦~");
+    }
+
+    // 保存配置
+    char.chatConfig.locationType = charLocCurrentType;
+    char.chatConfig.locationName = locName;
+    wcSaveData();
+
+    // 更新设置页面的显示文本
+    const displayEl = document.getElementById('wc-setting-loc-display');
+    if (displayEl) {
+        displayEl.innerText = charLocCurrentType === 'real' ? '跟随我' : locName;
+    }
+
+    // 注入一条系统记忆，让 AI 知道自己搬家了
+    let aiPrompt = "";
+    if (charLocCurrentType === 'real') {
+        aiPrompt = `[系统设定更新：你现在的居住地设定为“与 User 在同一座城市”。请在后续聊天中保持同城、同天气、同时区的逻辑。]`;
+    } else {
+        aiPrompt = `[系统设定更新：你现在的居住地设定为“${locName}”。请在后续聊天中，严格符合该城市/异世界的背景设定，并保持与 User 异地/跨次元的逻辑。]`;
+    }
+    wcAddMessage(char.id, 'system', 'system', aiPrompt, { hidden: true });
+
+    wcCloseCharLocationModal();
+    alert("Ta 的城市设定已保存！");
+}
+
+// 修复：在打开聊天设置时，同步更新城市显示文本
+const originalWcOpenChatSettings = wcOpenChatSettings;
+wcOpenChatSettings = function() {
+    originalWcOpenChatSettings(); // 先执行原有的打开逻辑
+    
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (char && char.chatConfig) {
+        const displayEl = document.getElementById('wc-setting-loc-display');
+        if (displayEl) {
+            if (char.chatConfig.locationType === 'virtual' && char.chatConfig.locationName) {
+                displayEl.innerText = char.chatConfig.locationName;
+            } else if (char.chatConfig.locationType === 'real') {
+                displayEl.innerText = '跟随我';
+            } else {
+                displayEl.innerText = '未设置';
+            }
+        }
+    }
+};

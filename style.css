@@ -1404,10 +1404,36 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-sticker-item.shake { animation: wcShake 0.2s infinite; }
 @keyframes wcShake { 0% { transform: rotate(0deg); } 25% { transform: rotate(1deg); } 50% { transform: rotate(0deg); } 75% { transform: rotate(-1deg); } 100% { transform: rotate(0deg); } }
 
-.wc-more-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; padding: 24px; }
-.wc-more-item { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; }
-.wc-more-icon-box { width: 60px; height: 60px; background: #fff; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: #333; border: 1px solid #E5E5EA; }
-.wc-more-label { font-size: 12px; color: var(--wc-text-secondary); text-align: center; }
+/* 👇 修改后：精致小图标 + 支持上下滑动的更多面板 👇 */
+.wc-more-grid { 
+    display: grid; 
+    grid-template-columns: repeat(4, 1fr); 
+    gap: 15px 10px; /* 缩小间距 */
+    padding: 20px 15px; 
+    overflow-y: auto; /* 核心：允许上下滑动 */
+    align-content: start; /* 顶部对齐 */
+    flex: 1; /* 占满面板剩余空间 */
+    -webkit-overflow-scrolling: touch; /* 苹果手机丝滑滚动 */
+}
+.wc-more-item { 
+    display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; 
+}
+.wc-more-icon-box { 
+    width: 50px; height: 50px; /* 盒子变小 */
+    background: #fff; border-radius: 14px; /* 圆角微调 */
+    display: flex; align-items: center; justify-content: center; 
+    color: #333; border: 1px solid #E5E5EA; 
+}
+/* 强制限制里面的 SVG 图标大小 */
+.wc-more-icon-box svg {
+    width: 24px !important; 
+    height: 24px !important;
+}
+.wc-more-label { 
+    font-size: 11px; /* 字体变小 */
+    color: var(--wc-text-secondary); text-align: center; 
+}
+/* 👆 修改结束 👆 */
 
 .wc-modal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 1; transition: opacity 0.2s; }
 .wc-modal.hidden { display: none; opacity: 0; pointer-events: none; }
@@ -7609,3 +7635,142 @@ input::-webkit-inner-spin-button {
 }
 .quota-refresh-btn:active { background: #E5E5EA; }
 .quota-refresh-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
+/* ========================================== */
+/* 新增：高级感位置功能弹窗 (居中 INS 风) */
+/* ========================================== */
+.ins-loc-modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 35000; opacity: 0; transition: opacity 0.3s ease;
+}
+.ins-loc-modal-overlay.active { display: flex; opacity: 1; }
+
+.ins-loc-modal-card {
+    width: 85%; max-width: 320px; background: #FFFFFF; border-radius: 24px;
+    padding: 24px; box-sizing: border-box; box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+    transform: scale(0.95) translateY(10px); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+}
+.ins-loc-modal-overlay.active .ins-loc-modal-card { transform: scale(1) translateY(0); }
+
+.ins-loc-close-btn {
+    position: absolute; top: 16px; right: 16px; width: 28px; height: 28px;
+    background: #F5F5F5; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.2s; z-index: 10;
+}
+.ins-loc-close-btn:active { background: #EAEAEA; }
+.ins-loc-close-btn svg { width: 14px; height: 14px; stroke: #888; stroke-width: 2; fill: none; }
+
+.ins-loc-modal-header { text-align: center; margin-bottom: 20px; }
+.ins-loc-modal-title { font-size: 18px; font-weight: 700; color: #111; margin-bottom: 4px; letter-spacing: 0.5px; }
+.ins-loc-modal-subtitle { font-size: 9px; font-weight: 800; color: #CCC; letter-spacing: 2px; text-transform: uppercase; font-family: 'Courier New', Courier, monospace; }
+
+.ins-loc-segment { display: flex; background: #F2F2F7; border-radius: 12px; padding: 3px; margin-bottom: 20px; }
+.ins-loc-seg-btn { flex: 1; text-align: center; padding: 8px 0; font-size: 13px; font-weight: 600; color: #8E8E93; border-radius: 10px; cursor: pointer; transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1); }
+.ins-loc-seg-btn.active { background: #FFFFFF; color: #111; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+
+.ins-loc-input {
+    width: 100%; background: #F9F9F9; border: 1px solid #F0F0F0; border-radius: 14px;
+    padding: 14px 16px; font-size: 14px; color: #111; outline: none; box-sizing: border-box;
+    margin-bottom: 16px; transition: border 0.2s, background 0.2s;
+}
+.ins-loc-input:focus { background: #FFF; border-color: #111; }
+.ins-loc-input::placeholder { color: #B2B2B2; }
+
+.ins-loc-map-box {
+    width: 100%; height: 140px; background-color: #FAFAFA; border-radius: 16px;
+    border: 1px solid #F0F0F0; margin-bottom: 20px; position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    background-image: linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+    background-size: 15px 15px;
+}
+.ins-loc-map-box.virtual {
+    background-color: #FBF9FC; border-color: #F2EBF7;
+    background-image: linear-gradient(rgba(175,82,222,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(175,82,222,0.05) 1px, transparent 1px);
+}
+
+.ins-loc-marker {
+    width: 40px; height: 40px; background: rgba(17,17,17,0.05); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; animation: insPulse 2s infinite;
+}
+.ins-loc-marker::after {
+    content: ''; width: 12px; height: 12px; background: #111; border-radius: 50%;
+    border: 3px solid #FFF; box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.ins-loc-marker.virtual-marker::after { background: #AF52DE; }
+
+@keyframes insPulse {
+    0% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(17,17,17,0.1); }
+    70% { transform: scale(1); box-shadow: 0 0 0 15px rgba(17,17,17,0); }
+    100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(17,17,17,0); }
+}
+
+.ins-loc-info { text-align: center; margin-bottom: 24px; }
+.ins-loc-title { font-size: 14px; font-weight: 600; color: #111; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }
+.ins-loc-desc { font-size: 12px; color: #8E8E93; }
+
+.ins-loc-submit-btn {
+    width: 100%; padding: 14px; background: #111; color: #FFF; border: none;
+    border-radius: 14px; font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: transform 0.2s; letter-spacing: 1px;
+}
+.ins-loc-submit-btn:active { transform: scale(0.96); }
+
+/* 👇 修改后：完美比例 + 彻底修复留白 Bug 👇 */
+.wc-bubble-location-card {
+    width: 200px; /* 宽度调整为精致的 200px */
+    background: #FFF; 
+    border-radius: 12px; 
+    overflow: hidden;
+    border: 1px solid #E5E5EA; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    display: flex; 
+    flex-direction: column;
+    /* 🔪 核心杀招：彻底抹杀代码换行带来的幽灵空白！ */
+    white-space: normal !important; 
+    line-height: normal !important;
+    font-size: 0 !important; /* 消除所有节点间的空隙 */
+}
+.wc-bubble-location-map {
+    width: 100%; 
+    height: 80px; /* 地图高度压扁，比例更协调 */
+    background: #F5F5F5; 
+    position: relative;
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px);
+    background-size: 10px 10px;
+}
+.wc-bubble-location-map.virtual {
+    background-color: #FBF9FC;
+    background-image: linear-gradient(rgba(175,82,222,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(175,82,222,0.08) 1px, transparent 1px);
+}
+.wc-bubble-location-info { 
+    padding: 10px 12px; 
+    background: #FFF;
+    display: flex;
+    flex-direction: column;
+    gap: 4px; /* 精准控制两行文字的间距 */
+}
+.wc-bubble-location-title { 
+    font-size: 14px !important; 
+    font-weight: 600; 
+    color: #111; 
+    margin: 0 !important; /* 清除多余外边距 */
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+    line-height: 1.2 !important;
+}
+.wc-bubble-location-desc { 
+    font-size: 11px !important; 
+    color: #888; 
+    margin: 0 !important; /* 清除多余外边距 */
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+    line-height: 1.2 !important;
+}
+/* 👆 修改结束 👆 */
