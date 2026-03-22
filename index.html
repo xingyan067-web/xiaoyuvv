@@ -1440,26 +1440,23 @@
  <div class="ins-music-fp-timer" id="music-fp-timer" onclick="musicStopListenTogether()" title="点击结束一起听歌">00:00</div>
                     </div>
                     
-                    <!-- 🌟 中间区域：点击任意位置切换模式 🌟 -->
-                    <div class="ins-music-fp-center-area" onclick="toggleLyricMode()">
-                        <!-- 中间：黑胶唱片 -->
-                        <div class="ins-music-fp-record-container">
-                            <div class="ins-music-fp-record" id="music-fp-record">
-                                <img src="" id="music-fp-cover" class="ins-music-fp-cover">
-                            </div>
+                    <!-- 中间：黑胶唱片 -->
+                    <div class="ins-music-fp-record-container">
+                        <div class="ins-music-fp-record" id="music-fp-record">
+                            <img src="" id="music-fp-cover" class="ins-music-fp-cover">
                         </div>
-                        
-                        <!-- 歌曲信息 -->
-                        <div class="ins-music-fp-info">
-                            <div class="ins-music-fp-song" id="music-fp-title">Song Title</div>
-                            <div class="ins-music-fp-artist" id="music-fp-artist">Artist</div>
-                        </div>
+                    </div>
+                    
+                    <!-- 歌曲信息 -->
+                    <div class="ins-music-fp-info">
+                        <div class="ins-music-fp-song" id="music-fp-title">Song Title</div>
+                        <div class="ins-music-fp-artist" id="music-fp-artist">Artist</div>
+                    </div>
 
-                        <!-- 滚动歌词 -->
-                        <div class="ins-music-fp-lyrics-container" id="music-fp-lyrics-container">
-                            <div class="ins-music-fp-lyrics" id="music-fp-lyrics">
-                                <div class="ins-music-lyric-line">Pure Music...</div>
-                            </div>
+                    <!-- 滚动歌词 -->
+                    <div class="ins-music-fp-lyrics-container" id="music-fp-lyrics-container">
+                        <div class="ins-music-fp-lyrics" id="music-fp-lyrics">
+                            <div class="ins-music-lyric-line">Pure Music...</div>
                         </div>
                     </div>
                     
@@ -1925,74 +1922,33 @@
                         </div>
                     </div>
                     <!-- Shopping Full Page (New Full Screen) -->
-                    <div id="wc-view-shopping" style="background: #FFFFFF;">
-                        <!-- 全新高级感顶栏 -->
-                        <div class="ins-shop-header">
-                            <div class="ins-shop-title" onclick="wcCloseShoppingPage()">
-                                <span class="ins-shop-title-en">STORE</span>
-                                <span class="ins-shop-title-cn">商城</span>
+                    <div id="wc-view-shopping">
+                        <div class="wc-navbar" style="position: relative; background: #fdfbf7; border-bottom: none; box-shadow: 0 2px 10px rgba(212, 196, 183, 0.15);">
+                            <div class="wc-nav-left">
+                                <button class="wc-nav-btn" onclick="wcCloseShoppingPage()">
+                                    <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                </button>
                             </div>
-                            <div class="ins-shop-line"></div>
-                            <div class="ins-shop-actions">
-                                <div class="ins-shop-btn" onclick="wcOpenShopSettingsModal()" title="世界书设置">
-                                    <svg viewBox="0 0 24 24"><path d="M4 21v-7"></path><path d="M4 10V3"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M20 21v-5"></path><path d="M20 12V3"></path><path d="M1 14h6"></path><path d="M9 8h6"></path><path d="M17 16h6"></path></svg>
-                                </div>
-                                <div class="ins-shop-btn" onclick="wcGenerateShopItems()" title="刷新进货">
-                                    <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                                </div>
+                            <!-- 修改：移除顶部的 Tab，改为纯标题 -->
+                            <div class="wc-nav-title" style="font-weight: 600; color: #4a413e;">
+                                购物
                             </div>
-                        </div>
-
-                        <!-- 横向滚动商品列表 -->
-                        <div class="wc-main-content" style="padding: 0; background: transparent; position: relative; display: flex; flex-direction: column; z-index: 5;">
-                            <div id="shop-list-mall" class="shop-list ins-shop-scroll-container active">
-                                <div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">点击右上角生成商品</div>
-                            </div>
-                            <div id="shop-list-takeout" class="shop-list ins-shop-scroll-container" style="display: none;">
-                                <div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">点击右上角生成外卖</div>
+                            <div class="wc-nav-right" style="gap: 10px;">
+                                <button class="wc-nav-btn" onclick="wcOpenShopSettingsModal()">
+                                    <svg class="wc-icon" viewBox="0 0 24 24"><path d="M4 21v-7"></path><path d="M4 10V3"></path><path d="M12 21v-9"></path><path d="M12 8V3"></path><path d="M20 21v-5"></path><path d="M20 12V3"></path><path d="M1 14h6"></path><path d="M9 8h6"></path><path d="M17 16h6"></path></svg>
+                                </button>
+                                <button class="wc-nav-btn" onclick="wcGenerateShopItems()">
+                                    <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                                </button>
                             </div>
                         </div>
-
-                        <!-- 主页：星际环绕分类轨道 -->
-                        <div class="orbit-category-container" 
-                             ontouchstart="wcCatTouchStart(event)" 
-                             ontouchmove="wcCatTouchMove(event)" 
-                             ontouchend="wcCatTouchEnd(event)">
-                            <div class="orbit-wheel" id="wc-cat-orbit-wheel">
-                                <!-- 节点由 JS 生成 -->
+                        <!-- 修改：增加 padding-bottom 防止列表被底部胶囊遮挡 -->
+                        <div class="wc-main-content" style="padding-top: 64px; padding-bottom: 100px; background: #fdfbf7; position: relative;">
+                            <div id="shop-list-mall" class="shop-list active" style="padding: 16px;">
+                                <div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成商品</div>
                             </div>
-                        </div>
-                        
-                        <!-- 塔罗牌详情弹窗 & 3D滑动容器 -->
-                        <div class="tarot-modal-overlay" id="wc-tarot-modal">
-                            <div class="tarot-slider-container" id="wc-tarot-slider" 
-                                 ontouchstart="wcTarotTouchStart(event)" 
-                                 ontouchmove="wcTarotTouchMove(event)" 
-                                 ontouchend="wcTarotTouchEnd(event)">
-                                <!-- 塔罗牌将在这里生成 -->
-                            </div>
-                            
-                            <!-- 塔罗牌底部的星际轨道 -->
-                            <div class="tarot-orbit-container"
-                                 ontouchstart="wcTarotTouchStart(event)" 
-                                 ontouchmove="wcTarotTouchMove(event)" 
-                                 ontouchend="wcTarotTouchEnd(event)">
-                                <div class="tarot-orbit-wheel" id="wc-tarot-orbit-wheel">
-                                    <!-- 节点由 JS 生成 -->
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 添加/编辑商品弹窗 -->
-                        <div class="add-modal-overlay" id="wc-add-product-modal">
-                            <div class="add-card">
-                                <h3 id="wc-add-modal-title">添加新商品</h3>
-                                <input type="hidden" id="wc-add-id"> <!-- 隐藏的ID字段 -->
-                                <input type="text" id="wc-add-name" class="add-input" placeholder="商品名称">
-                                <input type="text" id="wc-add-desc" class="add-input" placeholder="商品描述">
-                                <input type="number" id="wc-add-price" class="add-input" placeholder="价格 (如 99.00)">
-                                <button class="add-btn" onclick="wcSaveNewProduct()">保存</button>
-                                <button class="add-btn cancel" onclick="document.getElementById('wc-add-product-modal').classList.remove('active')">取消</button>
+                            <div id="shop-list-takeout" class="shop-list" style="display: none; padding: 16px;">
+                                <div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成外卖</div>
                             </div>
                         </div>
 
@@ -2380,9 +2336,11 @@
                             
                             <div class="wc-form-group">
                                 <label class="wc-form-label">关联世界书 (仅用于本次总结)</label>
-                                <div id="wc-mem-summary-wb-list" class="wc-checkbox-list" style="max-height: 150px; overflow-y: auto;">
-                                    <!-- JS 注入 -->
+                                <div class="ins-wb-select-btn" onclick="openGlobalWbModal('wc-mem-summary-wb-list', 'wc-mem-summary-wb-count')">
+                                    <span class="title">选择要关联的世界书</span>
+                                    <span class="count" id="wc-mem-summary-wb-count">已选 0 项</span>
                                 </div>
+                                <div id="wc-mem-summary-wb-list" style="display: none;"></div>
                             </div>
 
                             <button id="wc-btn-generate-summary" class="wc-btn-primary" onclick="wcGenerateSummary()">开始生成</button>
@@ -2406,9 +2364,11 @@
                             
                             <div class="wc-form-group">
                                 <label class="wc-form-label">关联世界书 (仅用于总结)</label>
-                                <div id="wc-mem-setting-wb-list" class="wc-checkbox-list" style="max-height: 200px; overflow-y: auto;">
-                                    <!-- JS 注入 -->
+                                <div class="ins-wb-select-btn" onclick="openGlobalWbModal('wc-mem-setting-wb-list', 'wc-mem-setting-wb-count')">
+                                    <span class="title">选择要关联的世界书</span>
+                                    <span class="count" id="wc-mem-setting-wb-count">已选 0 项</span>
                                 </div>
+                                <div id="wc-mem-setting-wb-list" style="display: none;"></div>
                             </div>
                             
                             <button class="wc-btn-primary" onclick="wcSaveMemorySettings()">保存设置</button>
@@ -2533,9 +2493,11 @@
                         <div class="wc-modal-body">
                             <div class="wc-form-group">
                                 <label class="wc-form-label">关联世界书 (用于生成商品/外卖)</label>
-                                <div id="wc-shop-setting-wb-list" class="wc-checkbox-list" style="max-height: 200px; overflow-y: auto;">
-                                    <!-- JS 注入 -->
+                                <div class="ins-wb-select-btn" onclick="openGlobalWbModal('wc-shop-setting-wb-list', 'wc-shop-setting-wb-count')">
+                                    <span class="title">选择要关联的世界书</span>
+                                    <span class="count" id="wc-shop-setting-wb-count">已选 0 项</span>
                                 </div>
+                                <div id="wc-shop-setting-wb-list" style="display: none;"></div>
                             </div>
                             <button class="wc-btn-primary" onclick="wcSaveShopSettings()">保存设置</button>
                         </div>
@@ -2635,43 +2597,67 @@
                     </div>
                 </div>
 
-
                 <!-- CHAT SETTINGS MODAL -->
                 <div id="wc-modal-chat-settings" class="wc-modal hidden" style="z-index: 2500; align-items: flex-start;">
                     <div class="wc-modal-content" style="background: #F2F2F7; display: flex; flex-direction: column; height: 100%; width: 100%; max-width: 100%; border-radius: 0; margin: 0;">
-                        <div class="wc-navbar" style="position: sticky; top: 0; flex-shrink: 0;">
-                            <div class="wc-nav-left">
-                                <button class="wc-nav-btn" onclick="wcCloseModal('wc-modal-chat-settings')">        <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>                                                                  </button>
-                            </div>
-                            <div class="wc-nav-title">聊天设置</div>
-                            <div class="wc-nav-right">
-                                <button class="wc-nav-btn" style="color: var(--wc-accent-green); font-weight: 600;" onclick="wcSaveChatSettings()">保存</button>
-                            </div>
-                        </div>
-                        
-                        <!-- 顶部头像与心跳区域 -->
-                        <div class="wc-chat-settings-header">
-                            <div class="wc-cs-avatar-container active" id="wc-cs-char-btn" onclick="wcSwitchChatSettingsTab('char')">
-                                <img id="wc-cs-char-avatar-display" src="" class="wc-cs-avatar">
-                                <div class="wc-cs-name" id="wc-cs-char-name-display">Char</div>
-                            </div>
-                            
-                            <div class="wc-cs-heartbeat-container" id="wc-cs-heart-btn" onclick="wcSwitchChatSettingsTab('heart')">
-                                <svg class="wc-cs-heartbeat-line" viewBox="0 0 100 30">
-                                    <polyline points="0,15 20,15 30,5 40,25 50,15 60,15 70,0 80,30 90,15 100,15" fill="none" stroke="#FF3B30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <!-- 顶部悬浮操作栏 (双箭头 & 双勾) -->
+                        <div class="wc-cs-header-actions">
+                            <div class="wc-cs-icon-btn" onclick="wcCloseModal('wc-modal-chat-settings')">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="11 17 6 12 11 7"></polyline>
+                                    <polyline points="18 17 13 12 18 7"></polyline>
                                 </svg>
                             </div>
-                            
-                            <div class="wc-cs-avatar-container" id="wc-cs-user-btn" onclick="wcSwitchChatSettingsTab('user')">
-                                <img id="wc-cs-user-avatar-display" src="" class="wc-cs-avatar">
-                                <div class="wc-cs-name" id="wc-cs-user-name-display">User</div>
+                            <div class="wc-cs-icon-btn" onclick="wcSaveChatSettings()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="2 12 7 17 16 6"></polyline>
+                                    <polyline points="8 12 13 17 22 6"></polyline>
+                                </svg>
                             </div>
                         </div>
+
+                        <!-- 顶部 U型 星际宇宙导航区 -->
+                        <div class="wc-cs-orbit-nav-container" id="wc-cs-nav-container">
+                            <div class="wc-cs-orbit-bg"></div>
+                            
+                            <!-- 随机星光轨迹点缀 -->
+                            <div class="wc-cs-star-dust" style="width:4px;height:4px;top:120px;left:20%;animation-delay:0s;"></div>
+                            <div class="wc-cs-star-dust" style="width:3px;height:3px;top:180px;left:80%;animation-delay:1s;"></div>
+                            <div class="wc-cs-star-dust" style="width:5px;height:5px;top:220px;left:40%;animation-delay:0.5s;"></div>
+                            <div class="wc-cs-star-dust" style="width:2px;height:2px;top:140px;left:90%;animation-delay:1.5s;"></div>
+
+                            <!-- 旋转轮盘 -->
+                            <div class="wc-cs-orbit-wheel" id="wc-cs-orbit-wheel" style="--rotation: 0;">
+                                <!-- 左侧：Char 头像 -->
+                                <div class="wc-cs-orbit-item item-0" id="wc-cs-char-btn" onclick="wcSwitchChatSettingsTab('char')">
+                                    <div class="wc-cs-item-content">
+                                        <img id="wc-cs-char-avatar-display" src="" alt="Char">
+                                    </div>
+                                </div>
+                                <!-- 中间：五角星 (高级设置) -->
+                                <div class="wc-cs-orbit-item item-1 active" id="wc-cs-heart-btn" onclick="wcSwitchChatSettingsTab('heart')">
+                                    <div class="wc-cs-item-content">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <!-- 右侧：User 头像 -->
+                                <div class="wc-cs-orbit-item item-2" id="wc-cs-user-btn" onclick="wcSwitchChatSettingsTab('user')">
+                                    <div class="wc-cs-item-content">
+                                        <img id="wc-cs-user-avatar-display" src="" alt="User">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 隐藏的名字标签，防止原JS报错 -->
+                        <span id="wc-cs-char-name-display" style="display:none;"></span>
+                        <span id="wc-cs-user-name-display" style="display:none;"></span>
 
                         <div class="wc-modal-body" style="padding-top: 10px; max-height: none; flex: 1; overflow-y: auto;">
                             
                             <!-- Char Tab -->
-                            <div id="wc-cs-tab-char" class="wc-cs-tab-content active">
+                            <div id="wc-cs-tab-char" class="wc-cs-tab-content" style="display: none;">
                                 <div class="wc-settings-section">
                                     <div class="wc-settings-section-title">角色设置 (仅当前聊天)</div>
                                     <div class="wc-avatar-row">
@@ -2735,7 +2721,7 @@
                             </div>
 
                             <!-- Heart Tab -->
-                            <div id="wc-cs-tab-heart" class="wc-cs-tab-content" style="display: none;">
+                            <div id="wc-cs-tab-heart" class="wc-cs-tab-content active">
                                 <!-- Advanced Settings -->
                                 <div class="wc-settings-section">
                                     <div class="wc-settings-section-title">高级设置</div>
@@ -2762,9 +2748,11 @@
                                     </div>
                                     <div class="wc-form-group">
                                         <label class="wc-form-label">关联世界书条目 (多选)</label>
-                                        <div id="wc-setting-worldbook-list" class="wc-checkbox-list">
-                                            <!-- Checkboxes injected via JS -->
+                                        <div class="ins-wb-select-btn" onclick="openGlobalWbModal('wc-setting-worldbook-list', 'wc-setting-wb-count')">
+                                            <span class="title">选择要关联的世界书</span>
+                                            <span class="count" id="wc-setting-wb-count">已选 0 项</span>
                                         </div>
+                                        <div id="wc-setting-worldbook-list" style="display: none;"></div>
                                     </div>
                                     <div class="wc-form-group">
                                         <label class="wc-form-label">关联表情包分组 (多选)</label>
@@ -3384,7 +3372,11 @@
                         <div class="wc-modal-body" style="flex: 1; overflow-y: auto; padding: 20px;">
                             <div class="wc-form-group">
                                 <label class="wc-form-label" style="color: #111; font-weight: bold;">关联世界书 (提供背景)</label>
-                                <div id="forum-setting-wb-list" class="wc-checkbox-list" style="max-height: 150px; background: #F9F9F9; border: 1px solid #F0F0F0;"></div>
+                                <div class="ins-wb-select-btn" onclick="openGlobalWbModal('forum-setting-wb-list', 'forum-setting-wb-count', 'forum-wb-cb')">
+                                    <span class="title">选择要关联的世界书</span>
+                                    <span class="count" id="forum-setting-wb-count">已选 0 项</span>
+                                </div>
+                                <div id="forum-setting-wb-list" style="display: none;"></div>
                             </div>
                             <div class="wc-form-group">
                                 <label class="wc-form-label" style="color: #111; font-weight: bold;">关联角色 (NPC会参与发帖/评论)</label>
@@ -3563,7 +3555,11 @@
         </div>
         <div class="dream-modal-body">
             <div class="dream-section-title">关联世界书</div>
-            <div id="dream-wb-list" class="dream-list-container"></div>
+            <div class="ins-wb-select-btn" onclick="openGlobalWbModal('dream-wb-list', 'dream-wb-count', '', () => { dreamState.selectedWbIds = Array.from(document.querySelectorAll('#dream-wb-list input:checked')).map(cb=>cb.value); dreamSaveData(); })">
+                <span class="title">选择要关联的世界书</span>
+                <span class="count" id="dream-wb-count">已选 0 项</span>
+            </div>
+            <div id="dream-wb-list" style="display: none;"></div>
             
             <div class="dream-section-title" style="margin-top: 20px; display: flex; justify-content: space-between;">
                 <span>梦境预设</span>
@@ -3761,23 +3757,23 @@
         </div>
     </div>
 </div>
-<!-- ========================================== -->
-<!-- 新增：高级文字图片描述卡片弹窗 (极简版) -->
-<!-- ========================================== -->
-<div class="desc-card-overlay" id="wc-image-desc-overlay" onclick="wcCloseImageDescCard()">
-    <div class="desc-card-wrapper" onclick="event.stopPropagation()">
-        <!-- 卡片主体 -->
-        <div class="desc-card-content">
-            <div class="desc-card-header">
-                <span class="desc-card-tag">IMAGE DESC</span>
-                <button class="desc-card-close" onclick="wcCloseImageDescCard()">×</button>
-            </div>
-            <div class="desc-card-body" id="wc-image-desc-body">
-                <!-- 描述内容将在这里显示 -->
+        <!-- ========================================== -->
+        <!-- 全局高级世界书选择弹窗 (INS 折叠风) -->
+        <!-- ========================================== -->
+        <div id="global-wb-modal" class="ins-wb-modal-overlay">
+            <div class="ins-wb-modal-card">
+                <div class="ins-wb-modal-header">
+                    <h3>Worldbook</h3>
+                    <button onclick="closeGlobalWbModal()">×</button>
+                </div>
+                <div class="ins-wb-modal-body" id="global-wb-modal-body">
+                    <!-- JS 动态注入折叠分组 -->
+                </div>
+                <div class="ins-wb-modal-footer">
+                    <button class="ins-wb-confirm-btn" onclick="confirmGlobalWbSelect()">确认选择</button>
+                </div>
             </div>
         </div>
-    </div>
-</div>
 
 </body>
 </html>

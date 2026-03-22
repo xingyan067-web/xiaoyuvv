@@ -5851,17 +5851,8 @@ function wcOpenMemorySummaryModal() {
     document.getElementById('wc-mem-total-count-label').innerText = `当前聊天总层数: ${msgs.length}`;
     
     const list = document.getElementById('wc-mem-summary-wb-list');
-    list.innerHTML = '';
-    if (worldbookEntries.length === 0) {
-        list.innerHTML = '<div style="color:#999; font-size:13px;">暂无世界书条目</div>';
-    } else {
-        worldbookEntries.forEach(entry => {
-            const div = document.createElement('div');
-            div.className = 'wc-checkbox-item';
-            div.innerHTML = `<input type="checkbox" value="${entry.id}"><span>${entry.title} (${entry.type})</span>`;
-            list.appendChild(div);
-        });
-    }
+    list.innerHTML = ''; // 默认不选
+    document.getElementById('wc-mem-summary-wb-count').innerText = `已选 0 项`;
     
     wcOpenModal('wc-modal-memory-summary');
 }
@@ -5875,20 +5866,14 @@ function wcOpenMemorySettingsModal() {
 
     const list = document.getElementById('wc-mem-setting-wb-list');
     list.innerHTML = '';
-    
-    if (!char.chatConfig.summaryWorldbookEntries) char.chatConfig.summaryWorldbookEntries = [];
-
-    if (worldbookEntries.length === 0) {
-        list.innerHTML = '<div style="color:#999; font-size:13px;">暂无世界书条目</div>';
-    } else {
-        worldbookEntries.forEach(entry => {
-            const div = document.createElement('div');
-            div.className = 'wc-checkbox-item';
-            const isChecked = char.chatConfig.summaryWorldbookEntries.includes(entry.id.toString());
-            div.innerHTML = `<input type="checkbox" value="${entry.id}" ${isChecked ? 'checked' : ''}><span>${entry.title} (${entry.type})</span>`;
-            list.appendChild(div);
+    let memWbCount = 0;
+    if (char.chatConfig.summaryWorldbookEntries) {
+        char.chatConfig.summaryWorldbookEntries.forEach(id => {
+            list.innerHTML += `<input type="checkbox" value="${id}" checked>`;
+            memWbCount++;
         });
     }
+    document.getElementById('wc-mem-setting-wb-count').innerText = `已选 ${memWbCount} 项`;
 
     wcOpenModal('wc-modal-memory-settings');
 }
@@ -8780,7 +8765,48 @@ function wcSwitchChatSettingsTab(tab) {
     document.getElementById(`wc-cs-tab-${tab}`).style.display = 'block';
     document.getElementById(`wc-cs-tab-${tab}`).classList.add('active');
     document.getElementById(`wc-cs-${tab}-btn`).classList.add('active');
+
+    // 👇 新增：星际轨道旋转逻辑 👇
+    const wheel = document.getElementById('wc-cs-orbit-wheel');
+    if (wheel) {
+        let targetRotation = 0;
+        if (tab === 'char') targetRotation = -23; // 对应左侧 item-0
+        else if (tab === 'heart') targetRotation = 0; // 对应中间 item-1
+        else if (tab === 'user') targetRotation = 23; // 对应右侧 item-2
+        
+        wheel.style.setProperty('--rotation', targetRotation);
+    }
 }
+// ==========================================
+// 新增：聊天设置星际轨道滑动切换逻辑
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+    const navContainer = document.getElementById('wc-cs-nav-container');
+    if (!navContainer) return;
+
+    let startX = 0;
+    const tabs = ['char', 'heart', 'user'];
+
+    navContainer.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX;
+    }, {passive: true});
+
+    navContainer.addEventListener('touchend', e => {
+        let endX = e.changedTouches[0].clientX;
+        let diff = endX - startX;
+        
+        // 找到当前激活的 tab 索引
+        let currentIdx = 1; // 默认 heart
+        if (document.getElementById('wc-cs-char-btn').classList.contains('active')) currentIdx = 0;
+        if (document.getElementById('wc-cs-user-btn').classList.contains('active')) currentIdx = 2;
+
+        if (diff > 50 && currentIdx > 0) {
+            wcSwitchChatSettingsTab(tabs[currentIdx - 1]); // 向右滑，看左边的
+        } else if (diff < -50 && currentIdx < 2) {
+            wcSwitchChatSettingsTab(tabs[currentIdx + 1]); // 向左滑，看右边的
+        }
+    });
+});
 
 // 【新增】：渲染聊天背景图库
 function wcRenderChatBgGallery() {
@@ -8927,17 +8953,14 @@ function wcOpenChatSettings() {
 
     const wbList = document.getElementById('wc-setting-worldbook-list');
     wbList.innerHTML = '';
-    if (worldbookEntries.length === 0) {
-        wbList.innerHTML = '<div style="color:#999; font-size:13px;">暂无世界书条目</div>';
-    } else {
-        worldbookEntries.forEach(entry => {
-            const div = document.createElement('div');
-            div.className = 'wc-checkbox-item';
-            const isChecked = char.chatConfig.worldbookEntries && char.chatConfig.worldbookEntries.includes(entry.id.toString());
-            div.innerHTML = `<input type="checkbox" value="${entry.id}" ${isChecked ? 'checked' : ''}><span>${entry.title} (${entry.type})</span>`;
-            wbList.appendChild(div);
+    let wbCount = 0;
+    if (char.chatConfig.worldbookEntries) {
+        char.chatConfig.worldbookEntries.forEach(id => {
+            wbList.innerHTML += `<input type="checkbox" value="${id}" checked>`;
+            wbCount++;
         });
     }
+    document.getElementById('wc-setting-wb-count').innerText = `已选 ${wbCount} 项`;
 
     const stickerList = document.getElementById('wc-setting-sticker-group-list');
     stickerList.innerHTML = '';
@@ -8962,8 +8985,8 @@ function wcOpenChatSettings() {
     wcUpdateCssPresetSelect();
     wcState.tempImage = '';
     
-    // Default to Char tab
-    wcSwitchChatSettingsTab('char');
+    // Default to Heart (Advanced) tab
+    wcSwitchChatSettingsTab('heart');
     
     wcRenderChatBgGallery(); // 【新增】：打开设置时渲染图库
     
@@ -11520,21 +11543,14 @@ function wcSwitchShopTab(tab) {
 function wcOpenShopSettingsModal() {
     const list = document.getElementById('wc-shop-setting-wb-list');
     list.innerHTML = '';
-    
-    if (!wcState.shopData.config) wcState.shopData.config = { worldbookEntries: [] };
-    const selectedWbs = wcState.shopData.config.worldbookEntries || [];
-
-    if (worldbookEntries.length === 0) {
-        list.innerHTML = '<div style="color:#999; font-size:13px;">暂无世界书条目</div>';
-    } else {
-        worldbookEntries.forEach(entry => {
-            const div = document.createElement('div');
-            div.className = 'wc-checkbox-item';
-            const isChecked = selectedWbs.includes(entry.id.toString());
-            div.innerHTML = `<input type="checkbox" value="${entry.id}" ${isChecked ? 'checked' : ''}><span>${entry.title} (${entry.type})</span>`;
-            list.appendChild(div);
+    let shopWbCount = 0;
+    if (wcState.shopData.config && wcState.shopData.config.worldbookEntries) {
+        wcState.shopData.config.worldbookEntries.forEach(id => {
+            list.innerHTML += `<input type="checkbox" value="${id}" checked>`;
+            shopWbCount++;
         });
     }
+    document.getElementById('wc-shop-setting-wb-count').innerText = `已选 ${shopWbCount} 项`;
 
     wcOpenModal('wc-modal-shop-settings');
 }
@@ -14604,19 +14620,14 @@ function dreamRenderSettings() {
     // 1. 渲染世界书列表
     const wbList = document.getElementById('dream-wb-list');
     wbList.innerHTML = '';
-    if (typeof worldbookEntries !== 'undefined' && worldbookEntries.length > 0) {
-        worldbookEntries.forEach(entry => {
-            const isChecked = dreamState.selectedWbIds.includes(entry.id.toString());
-            wbList.innerHTML += `
-                <div class="dream-item-row">
-                    <span>${entry.title}</span>
-                    <input type="checkbox" class="dream-checkbox" value="${entry.id}" ${isChecked ? 'checked' : ''} onchange="dreamToggleWb(this)">
-                </div>
-            `;
+    let dreamWbCount = 0;
+    if (dreamState.selectedWbIds) {
+        dreamState.selectedWbIds.forEach(id => {
+            wbList.innerHTML += `<input type="checkbox" value="${id}" checked>`;
+            dreamWbCount++;
         });
-    } else {
-        wbList.innerHTML = '<div style="color:#999; font-size:12px;">暂无世界书，请在主界面添加</div>';
     }
+    document.getElementById('dream-wb-count').innerText = `已选 ${dreamWbCount} 项`;
 
     // 2. 渲染预设列表 (带左滑删除)
     const presetList = document.getElementById('dream-preset-list');
@@ -18693,10 +18704,14 @@ function forumOpenSettings() {
     // 渲染世界书列表
     const wbList = document.getElementById('forum-setting-wb-list');
     wbList.innerHTML = '';
-    worldbookEntries.forEach(entry => {
-        const isChecked = forumState.config.worldbookIds.includes(entry.id.toString());
-        wbList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" value="${entry.id}" class="forum-wb-cb" ${isChecked ? 'checked' : ''}><span>${entry.title}</span></div>`;
-    });
+    let forumWbCount = 0;
+    if (forumState.config.worldbookIds) {
+        forumState.config.worldbookIds.forEach(id => {
+            wbList.innerHTML += `<input type="checkbox" value="${id}" class="forum-wb-cb" checked>`;
+            forumWbCount++;
+        });
+    }
+    document.getElementById('forum-setting-wb-count').innerText = `已选 ${forumWbCount} 项`;
 
     // 渲染角色列表
     const charList = document.getElementById('forum-setting-char-list');
@@ -19785,4 +19800,106 @@ function wcAddCallMessage(sender, text) {
     div.innerHTML = formattedText;
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
+}
+// ==========================================
+// 新增：全局高级世界书选择弹窗逻辑
+// ==========================================
+let currentWbTargetListId = '';
+let currentWbTargetCountId = '';
+let currentWbCheckboxClass = '';
+let currentWbCallback = null;
+
+function openGlobalWbModal(listId, countId, checkboxClass = '', callback = null) {
+    currentWbTargetListId = listId;
+    currentWbTargetCountId = countId;
+    currentWbCheckboxClass = checkboxClass;
+    currentWbCallback = callback;
+
+    // 1. 读取当前已选的 ID
+    const hiddenInputs = document.querySelectorAll(`#${listId} input[type="checkbox"]:checked`);
+    const selectedIds = Array.from(hiddenInputs).map(input => input.value);
+
+    // 2. 渲染弹窗内容
+    const container = document.getElementById('global-wb-modal-body');
+    container.innerHTML = '';
+
+    if (!worldbookGroups || worldbookGroups.length === 0 || !worldbookEntries || worldbookEntries.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 20px; font-size:14px;">暂无世界书，请先在主界面添加哦~</div>';
+    } else {
+        worldbookGroups.forEach((group, index) => {
+            const entries = worldbookEntries.filter(e => e.type === group);
+            if (entries.length === 0) return;
+
+            const selectedInGroup = entries.filter(e => selectedIds.includes(e.id.toString())).length;
+            const isExpanded = index === 0 ? 'expanded' : ''; // 默认展开第一个
+
+            let html = `
+                <div class="ins-wb-group ${isExpanded}">
+                    <div class="ins-wb-group-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="ins-wb-group-title">${group} <span class="ins-wb-group-count">${selectedInGroup}/${entries.length}</span></div>
+                        <svg class="ins-wb-group-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div class="ins-wb-group-content">
+            `;
+
+            entries.forEach(entry => {
+                const isChecked = selectedIds.includes(entry.id.toString()) ? 'checked' : '';
+                html += `
+                    <label class="ins-wb-item">
+                        <input type="checkbox" value="${entry.id}" class="global-wb-checkbox" ${isChecked} onchange="updateGlobalWbGroupCount(this)">
+                        <span class="ins-wb-item-title">${entry.title}</span>
+                    </label>
+                `;
+            });
+
+            html += `</div></div>`;
+            container.innerHTML += html;
+        });
+    }
+
+    // 3. 显示弹窗
+    const modal = document.getElementById('global-wb-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function updateGlobalWbGroupCount(checkbox) {
+    const groupEl = checkbox.closest('.ins-wb-group');
+    const total = groupEl.querySelectorAll('.global-wb-checkbox').length;
+    const checked = groupEl.querySelectorAll('.global-wb-checkbox:checked').length;
+    groupEl.querySelector('.ins-wb-group-count').innerText = `${checked}/${total}`;
+}
+
+function closeGlobalWbModal() {
+    const modal = document.getElementById('global-wb-modal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+function confirmGlobalWbSelect() {
+    // 1. 获取弹窗中所有勾选的 ID
+    const selectedCheckboxes = document.querySelectorAll('#global-wb-modal-body .global-wb-checkbox:checked');
+    const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+    // 2. 更新隐藏的列表 (完美兼容原有的保存逻辑)
+    const hiddenList = document.getElementById(currentWbTargetListId);
+    if (hiddenList) {
+        hiddenList.innerHTML = '';
+        selectedIds.forEach(id => {
+            hiddenList.innerHTML += `<input type="checkbox" value="${id}" class="${currentWbCheckboxClass}" checked>`;
+        });
+    }
+
+    // 3. 更新按钮上的数量显示
+    const countDisplay = document.getElementById(currentWbTargetCountId);
+    if (countDisplay) {
+        countDisplay.innerText = `已选 ${selectedIds.length} 项`;
+    }
+
+    // 4. 触发回调 (如果有)
+    if (currentWbCallback) {
+        currentWbCallback(selectedIds);
+    }
+
+    closeGlobalWbModal();
 }
