@@ -4511,7 +4511,12 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 
     } catch (error) {
         console.error("API 请求失败:", error);
-        wcAddMessage(charId, 'system', 'system', `[API Error] ${error.message}`, { style: 'transparent', isError: true });
+        // 👇 替换成我们炫酷的弹窗！
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[API Error] API 节点返回了异常数据，请检查【模型名称】是否填错，或更换 API 地址。详细报错：\n${error.message}`);
+        } else {
+            wcAddMessage(charId, 'system', 'system', `[API Error] ${error.message}`, { style: 'transparent', isError: true });
+        }
     } finally {
         // 【修复】：恢复标题时也要判空
         if (titleEl && !charIdOverride) titleEl.innerText = originalTitle;    
@@ -21075,3 +21080,47 @@ window.wcCloseMapView = function() {
     modal.classList.remove('active');
     setTimeout(() => modal.style.display = 'none', 300);
 }
+// ==========================================
+// 新增：API 报错弹窗控制逻辑
+// ==========================================
+window.showApiErrorModal = function(errorMsg) {
+    const modal = document.getElementById('api-error-modal');
+    const textContainer = document.getElementById('api-error-text');
+    const btnText = document.getElementById('copy-btn-text');
+    
+    if (modal && textContainer) {
+        textContainer.innerText = errorMsg;
+        if (btnText) btnText.innerText = '一键复制报错信息'; // 重置按钮文字
+        
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('active'), 10);
+    }
+};
+
+window.closeApiErrorModal = function() {
+    const modal = document.getElementById('api-error-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
+    }
+};
+
+window.copyApiErrorText = function() {
+    const text = document.getElementById('api-error-text').innerText;
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    document.body.appendChild(textArea);
+    textArea.select();
+    
+    try {
+        document.execCommand('copy');
+        const btnText = document.getElementById('copy-btn-text');
+        if (btnText) btnText.innerText = '复制成功！';
+        if (navigator.vibrate) navigator.vibrate(50);
+    } catch (err) {
+        alert('复制失败，请手动长按上方灰色区域的文本进行复制哦~');
+    }
+    document.body.removeChild(textArea);
+};

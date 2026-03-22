@@ -441,6 +441,54 @@ input::-webkit-inner-spin-button {
     -webkit-mask-image: linear-gradient(45deg, black 30%, transparent 30%, transparent 70%, black 70%);
     mask-image: linear-gradient(45deg, black 30%, transparent 30%, transparent 70%, black 70%);
 }
+/* ========================================== */
+/* 新增：高级感 API 报错专属弹窗样式 */
+/* ========================================== */
+.api-error-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 99999; opacity: 0; transition: opacity 0.3s ease;
+}
+.api-error-overlay.active { display: flex; opacity: 1; }
+
+.api-error-card {
+    width: 85%; max-width: 340px; background: #FFFFFF; border-radius: 24px;
+    padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+    display: flex; flex-direction: column;
+    transform: scale(0.95) translateY(10px); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+}
+.api-error-overlay.active .api-error-card { transform: scale(1) translateY(0); }
+
+.api-error-close {
+    position: absolute; top: 16px; right: 16px; width: 28px; height: 28px;
+    background: #F5F5F5; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #888; transition: background 0.2s;
+}
+.api-error-close:active { background: #EAEAEA; color: #111; }
+.api-error-close svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+.api-error-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; color: #FF3B30; }
+.api-error-header svg { width: 24px; height: 24px; stroke: currentColor; stroke-width: 2; fill: none; }
+.api-error-title { font-size: 18px; font-weight: 700; letter-spacing: 0.5px; color: #111; }
+
+.api-error-content {
+    background: #F9F9F9; border: 1px solid #F0F0F0; border-radius: 12px;
+    padding: 14px; font-family: 'Courier New', Courier, monospace; font-size: 12px;
+    color: #333; line-height: 1.6; max-height: 220px; overflow-y: auto;
+    word-break: break-all; white-space: pre-wrap; margin-bottom: 20px;
+    user-select: text !important; -webkit-user-select: text !important;
+}
+
+.api-error-btn {
+    width: 100%; padding: 14px; background: #111; color: #FFF; border: none;
+    border-radius: 14px; font-size: 15px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: transform 0.2s, background 0.2s;
+}
+.api-error-btn:active { transform: scale(0.96); background: #333; }
+.api-error-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
 
 /* --- APP 样式 --- */
 .grid-cell { width: 100%; height: 100%; display: flex; justify-content: center; align-items: flex-start; position: relative; }

@@ -4143,5 +4143,34 @@
         </div>
     </div>
 </div>
+<!-- ========================================== -->
+<!-- 新增：高级感 API 报错专属弹窗 -->
+<!-- ========================================== -->
+<div class="api-error-overlay" id="api-error-modal" onclick="if(event.target===this) closeApiErrorModal()">
+    <div class="api-error-card">
+        <!-- 关闭按钮 -->
+        <div class="api-error-close" onclick="closeApiErrorModal()">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </div>
+        
+        <!-- 标题 -->
+        <div class="api-error-header">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <div class="api-error-title">API 请求异常</div>
+        </div>
+
+        <!-- 报错文本区 -->
+        <div class="api-error-content" id="api-error-text">
+            <!-- 报错内容会通过 JS 填入这里 -->
+        </div>
+
+        <!-- 复制按钮 -->
+        <button class="api-error-btn" onclick="copyApiErrorText()">
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2v1"></path></svg>
+            <span id="copy-btn-text">一键复制报错信息</span>
+        </button>
+    </div>
+</div>
+
 </body>
 </html>
