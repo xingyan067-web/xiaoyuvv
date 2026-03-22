@@ -4057,9 +4057,9 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
    {"type":"voice", "content":"语音内容"}
    {"type":"transfer", "amount":100, "note":"备注"}
    如果收到【恋人空间邀请】，同意请回复：{"type":"invite_accept", "content":"好呀，我愿意"}；拒绝请回复：{"type":"invite_reject", "content":"抱歉，我觉得太快了"}
-5. **朋友圈互动** (如果你在【朋友圈动态】中看到了感兴趣的内容，可以进行互动)
+5. **朋友圈互动** (如果你在【朋友圈动态】中看到了感兴趣的内容，或者有人评论了你，你可以进行互动)
    {"type":"moment_like", "content": 朋友圈ID数字}
-   {"type":"moment_comment", "momentId": 朋友圈ID数字, "content":"你的评论内容"}
+   {"type":"moment_comment", "momentId": 朋友圈ID数字, "content":"你的评论内容(如果是回复某人，请写'回复 xxx: 内容')"}
 6. **音乐邀请互动** (核心强制)
    如果用户向你发送了 [邀请听歌] 的卡片，你必须根据当前人设和心情决定是否同意。
    - 如果同意，请回复：{"type":"music_accept", "content":"好呀，一起听~"}
@@ -4159,11 +4159,12 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         const recentMoments = wcState.moments.slice(0, 5); 
         if (recentMoments.length > 0) {
             systemPrompt += `【朋友圈动态 (Moments) - 这是一个社交网络环境】\n`;
-            systemPrompt += `你可以看到用户(User)和其他人发布朋友圈。如果用户发了新内容，你可以点赞或评论。\n`;
+            systemPrompt += `你可以看到所有人（包括你自己、User和其他NPC）发布的朋友圈。\n`;
+            systemPrompt += `你可以对任何人的朋友圈进行点赞、评论。如果有人评论了你的朋友圈，或者你想在别人的朋友圈里回复某人的评论，你也可以进行回复。\n`;
             recentMoments.forEach(m => {
                 const commentsStr = m.comments ? m.comments.map(c => `${c.name}: ${c.text}`).join(' | ') : '无';
                 const likesStr = m.likes ? m.likes.join(', ') : '无';
-                systemPrompt += `[ID:${m.id}] 发帖人:${m.name} | 内容:${m.text} | 图片:${m.imageDesc || '无'} | 点赞:${likesStr} | 评论:[${commentsStr}]\n`;
+                systemPrompt += `[朋友圈ID:${m.id}] 发帖人:${m.name} | 内容:${m.text} | 图片:${m.imageDesc || '无'} | 点赞:${likesStr} | 评论:[${commentsStr}]\n`;
             });
             systemPrompt += `\n`;
         }
@@ -4505,7 +4506,7 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             const commentText = action.content || action.comment;
             if (momentId && commentText) {
                 wcAIHandleComment(charId, momentId, commentText);
-                wcAddMessage(charId, 'system', 'system', `[系统提示: 你刚刚评论了用户的朋友圈: "${commentText}"]`, { hidden: true });
+                wcAddMessage(charId, 'system', 'system', `[系统提示: 你刚刚在朋友圈发表了评论: "${commentText}"]`, { hidden: true });
             }
         }
         // --- 新增结束 ---
@@ -4763,8 +4764,9 @@ async function wcTriggerAIMoment(charId) {
         prompt += `   - 纯文本：只有 text，imageDesc 留空。\n`;
         prompt += `   - 纯图片：只有 imageDesc，text 留空（无字朋友圈，只发图）。\n`;
         prompt += `   - 图文并茂：text 和 imageDesc 都有。\n`;
-        prompt += `4. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
-        prompt += `{"text": "朋友圈文案内容(可留空)", "imageDesc": "配图的画面描述(可留空)"}\n`;
+        prompt += `4. 【自我评论】：如果你想在发完朋友圈后立刻“抢沙发”补充说明，或者统一回复，可以在 comment 字段填写内容。\n`;
+        prompt += `5. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
+        prompt += `{"text": "朋友圈文案内容(可留空)", "imageDesc": "配图的画面描述(可留空)", "comment": "你自己在该条朋友圈下的评论/补充(可留空)"}\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -4782,8 +4784,8 @@ async function wcTriggerAIMoment(charId) {
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
         const momentData = JSON.parse(content);
 
-        if (momentData && momentData.text) {
-            wcAIHandleMomentPost(charId, momentData.text, momentData.imageDesc || null);
+        if (momentData && (momentData.text || momentData.imageDesc)) {
+            wcAIHandleMomentPost(charId, momentData.text || "", momentData.imageDesc || null, momentData.comment || null);
             console.log(`Char ${charId} 成功发布朋友圈`);
         }
     } catch (e) {
@@ -4791,7 +4793,7 @@ async function wcTriggerAIMoment(charId) {
     }
 }
 
-function wcAIHandleMomentPost(charId, text, imageDesc) {
+function wcAIHandleMomentPost(charId, text, imageDesc, selfComment = null) {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
     
@@ -4807,10 +4809,16 @@ function wcAIHandleMomentPost(charId, text, imageDesc) {
         comments: []
     };
     
+    // 如果 AI 传了自我评论，就加进评论列表里
+    if (selfComment && selfComment.trim() !== "") {
+        newMoment.comments.push({ name: char.name, text: selfComment.trim() });
+    }
+    
     wcState.moments.unshift(newMoment);
     wcSaveData();
     wcRenderMoments();
 }
+
 
 function wcAIHandleComment(charId, momentId, text) {
     const char = wcState.characters.find(c => c.id === charId);
