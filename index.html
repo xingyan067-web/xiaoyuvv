@@ -2767,6 +2767,35 @@
 
                             <!-- Heart Tab -->
                             <div id="wc-cs-tab-heart" class="wc-cs-tab-content active">
+<!-- 👇 新增：API 消耗与状态区块 👇 -->
+<div class="wc-settings-section">
+    <div class="wc-settings-section-title">API 消耗与状态</div>
+    
+    <!-- 剩余额度 -->
+    <div class="ins-token-row">
+        <div class="ins-token-left">
+            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" ry="2"></rect><path d="M21 12H17"></path><path d="M17 10V14"></path></svg>
+            <span>剩余 API 额度</span>
+        </div>
+        <div class="ins-token-right">
+            <span class="ins-token-value highlight" id="ui-api-quota">--</span>
+            <svg class="ins-token-action-icon" viewBox="0 0 24 24" onclick="refreshApiQuota()"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.85L2 9"></path></svg>
+        </div>
+    </div>
+
+    <!-- 占用 Token -->
+    <div class="ins-token-row clickable" onclick="openTokenModal()">
+        <div class="ins-token-left">
+            <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>
+            <span>当前占用 Token</span>
+        </div>
+        <div class="ins-token-right">
+            <span class="ins-token-value" id="ui-total-token">计算中...</span>
+            <svg class="ins-token-action-icon" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </div>
+    </div>
+</div>
+<!-- 👆 新增结束 👆 -->
                                 <!-- Advanced Settings -->
                                 <div class="wc-settings-section">
                                     <div class="wc-settings-section-title">高级设置</div>
@@ -3836,6 +3865,49 @@
                 </div>
             </div>
         </div>
+<!-- ========================================== -->
+<!-- 新增：Token 明细高级弹窗 -->
+<!-- ========================================== -->
+<div class="ins-token-modal-overlay" id="tokenDetailModal">
+    <div class="ins-token-card">
+        <div class="ins-token-card-header">
+            <div class="ins-token-card-title">Token 占用明细</div>
+            <div class="ins-token-card-close" onclick="closeTokenModal()">
+                <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </div>
+        </div>
+        
+        <div class="ins-token-list">
+            <div class="ins-token-item">
+                <span>世界书设定</span>
+                <span class="num" id="detail-token-wb">0</span>
+            </div>
+            <div class="ins-token-item">
+                <span>聊天上下文</span>
+                <span class="num" id="detail-token-chat">0</span>
+            </div>
+            <div class="ins-token-item">
+                <span>记忆与潜意识</span>
+                <span class="num" id="detail-token-mem">0</span>
+            </div>
+            <div class="ins-token-item">
+                <span>表情包描述</span>
+                <span class="num" id="detail-token-sticker">0</span>
+            </div>
+            
+            <div class="ins-token-divider"></div>
+            
+            <div class="ins-token-item total">
+                <span>合计占用</span>
+                <span class="num" id="detail-token-total">0</span>
+            </div>
+        </div>
+
+        <div class="ins-token-footer">
+            * 仅为本地字符估算值，实际消耗以模型计费为准
+        </div>
+    </div>
+</div>
 
 </body>
 </html>

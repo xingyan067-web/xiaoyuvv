@@ -3190,8 +3190,12 @@ function wcGenerateTimeGapPrompt(msgs, referenceTime = Date.now()) {
     const nowDate = new Date(referenceTime);
 
     const gapMs = referenceTime - lastMsgTime;
-    const gapHours = Math.floor(gapMs / (1000 * 60 * 60));
+    const gapMinutes = Math.floor(gapMs / 60000);
+    const gapHours = Math.floor(gapMinutes / 60);
     const gapDays = Math.floor(gapHours / 24);
+    
+    const remainHours = gapHours % 24;
+    const remainMinutes = gapMinutes % 60;
 
     // 核心：判断是否跨天了（即使只隔了几个小时，只要过了零点就是新的一天）
     const isSameDay = lastDate.getFullYear() === nowDate.getFullYear() &&
@@ -3199,25 +3203,32 @@ function wcGenerateTimeGapPrompt(msgs, referenceTime = Date.now()) {
                       lastDate.getDate() === nowDate.getDate();
 
     let prompt = `\n【时间感知与断联反应 (最高优先级)】\n`;
+    
+    // 精确计算时间差字符串
+    let timeGapStr = "";
+    if (gapDays > 0) timeGapStr += `${gapDays}天`;
+    if (remainHours > 0) timeGapStr += `${remainHours}小时`;
+    if (remainMinutes > 0 || timeGapStr === "") timeGapStr += `${remainMinutes}分钟`;
+
+    prompt += `> 内部信息：距离你们上一次聊天已经过去了 ${timeGapStr}。\n`;
 
     if (!isSameDay) {
         prompt += `> 📅 日期变动提示：注意！你们的对话已经跨天了。上次聊天是在 ${lastDate.getMonth()+1}月${lastDate.getDate()}日，现在已经是新的一天（${nowDate.getMonth()+1}月${nowDate.getDate()}日）。\n`;
         prompt += `> 状态要求：请务必表现出“新的一天”的真实感。如果是早晨，可以自然地道早安、询问昨晚睡得好不好或分享今天的计划；如果是其他时间，也要体现出隔天聊天的感觉。\n`;
-    } else {
-        prompt += `> 内部信息：距离你们上一次聊天已经过去了 ${gapHours > 0 ? gapHours + ' 个小时' : Math.floor(gapMs / 60000) + ' 分钟'}。\n`;
     }
     
     if (gapDays >= 3) {
         prompt += `> 状态要求：这是一个很长的空白期！请在回复中强烈且自然地体现出“久别重逢”、“漫长等待”或“断联后的情绪”（如：担忧、思念、生气、试探、冷淡等，必须符合你的人设）。\n`;
-    } else if (gapHours >= 2 && isSameDay) {
-        prompt += `> 状态要求：自然地体现出半天没联系的时间流逝感（如：问问对方这半天去忙什么了，或者顺着当前时间打招呼）。\n`;
+    } else if (gapHours >= 2) {
+        prompt += `> 状态要求：自然地体现出一段时间没联系的时间流逝感（如：问问对方这段时间去忙什么了，或者顺着当前时间打招呼）。\n`;
+    } else if (gapMinutes < 5) {
+        prompt += `> 状态要求：你们正在进行连贯的对话，请保持聊天的连贯性和即时感，不需要刻意强调时间。\n`;
+    } else {
+        prompt += `> 状态要求：距离上次回复有一小段时间，可以稍微表现出等待后的回应，但不要过度夸张。\n`;
     }
 
     prompt += `> 【硬性禁止】：绝对不要机械地报出具体数字（禁止说“我们已经3天没说话了”或“过了5个小时”）。\n`;
     prompt += `> 【表现手法】：时间必须自然融入对话。通过语气、微动作（MicroActions）、或者对当前环境/光线的描写来侧面烘托时间感。情绪是底色，自然流露，而非刻意展示。\n`;
-
-    // 如果是同一天且间隔小于2小时，不输出这段提示，避免AI过度反应
-    if (isSameDay && gapHours < 2) return "";
 
     return prompt;
 }
@@ -9030,6 +9041,9 @@ function wcOpenChatSettings() {
     wcSwitchChatSettingsTab('heart');
     
     wcRenderChatBgGallery(); // 【新增】：打开设置时渲染图库
+    
+    // 👇 新增：打开设置时自动计算 Token
+    calculateChatTokens(char);
     
     wcOpenModal('wc-modal-chat-settings');
 }
@@ -15563,6 +15577,22 @@ function injectDreamToChar(cardId) {
 // --- 系统更新日志数据 ---
 const systemUpdateLogs = [
    {
+        version: "小元机 03.22",
+        date: "2026.03.22",
+        title: "欢迎来到小元机^这里是小元。",
+        content: [
+            "1.依旧爆改了几个UI页面",
+            "2.增加了API额度查询和token计算，这个API额度查询有一些站子会出现查询不了显示充足的情况（显示充足就是没有查询到）",            
+            "修了一些小问题嗯嗯对",
+            "不接受许愿和点菜，没进审核群和小红书群，有问题可以前往我的小红书@小元元元"
+        ],
+        notes: [
+            "更新后若遇到界面显示异常，请尝试清除浏览器缓存。",
+            "请妥善保管您的数据，建议定期在设置中进行备份。",
+            "一机一码，禁止二传二贩"
+        ]
+    },
+   {
         version: "小元机 03.20",
         date: "2026.03.20",
         title: "欢迎来到小元机^这里是小元。",
@@ -15742,7 +15772,7 @@ function renderUpdateLogs() {
         
         <div style="margin-bottom: 8px;"><strong>桌面APP介绍：</strong></div>
         <ul style="padding-left: 20px; margin: 0 0 12px 0;">
-            <li style="margin-bottom: 8px;"><strong>APP1为聊天：</strong>左上角圆形头像为创建角色，右上角的接听键为退出，删除角色前往contacts通讯录页面左滑角色删除，点击角色可以查手机，聊天页面点击对方头像可以快捷进入查手机。聊天设置中的心跳线是可以点击的！！！在心跳线页面里面关联世界书，导入聊天页面气泡美化，设置壁纸等等。回车键为用户发送键，那个小飞机图标是char回复键，拉黑角色后点击是以弹窗形式出现角色消息，角色消息会储存在chat页面（就是会话列表页面）的小卡片头像里面。爆改了朋友圈UI，点击朋友圈头像显示全部朋友圈，点击单个日期可查看单日朋友圈</li>
+            <li style="margin-bottom: 8px;"><strong>APP1为聊天：</strong>左上角圆形头像为创建角色，右上角的接听键为退出，删除角色前往contacts通讯录页面左滑角色删除，点击角色可以查手机，聊天页面点击对方头像可以快捷进入查手机。回车键为用户发送键，那个小飞机图标是char回复键，拉黑角色后点击是以弹窗形式出现角色消息，角色消息会储存在chat页面（就是会话列表页面）的小卡片头像里面。爆改了朋友圈UI，点击朋友圈头像显示全部朋友圈，点击单个日期可查看单日朋友圈</li>
             <li style="margin-bottom: 8px;"><strong>APP2为情侣空间：</strong><br>
             ① 可以选择开启桌面小组件（有便利贴和拍立得两种模式），选择发送概率，char就会在桌面发送消息或图片。<br>
             ② 关联账号：开启后，char会实时感知用户和其他人聊天，你可以选择NPC回复频率（注意：这个比较耗费额度），你也可以知道NPC给char发送消息，并且可以进入查手机，帮char回复。</li>
@@ -20026,4 +20056,202 @@ function confirmGlobalWbSelect() {
     }
 
     closeGlobalWbModal();
+}
+// ==========================================
+// 新增：Token 计算与 API 额度查询逻辑 (增强版)
+// ==========================================
+
+// 粗略估算 Token (中文按 1.2 算，英文按 0.3 算)
+function estimateTokens(text) {
+    if (!text) return 0;
+    let tokens = 0;
+    for (let i = 0; i < text.length; i++) {
+        if (text.charCodeAt(i) > 255) {
+            tokens += 1.2;
+        } else {
+            tokens += 0.3;
+        }
+    }
+    return Math.ceil(tokens);
+}
+
+// 计算当前聊天的各项 Token 占用 (已剔除内置提示词)
+function calculateChatTokens(char) {
+    if (!char) return;
+    const config = char.chatConfig || {};
+    
+    let wbTokens = 0;
+    let chatTokens = 0;
+    let memTokens = 0;
+    let stickerTokens = 0;
+
+    // 1. 计算世界书
+    if (config.worldbookEntries && config.worldbookEntries.length > 0) {
+        const linkedWbs = worldbookEntries.filter(e => config.worldbookEntries.includes(e.id.toString()));
+        linkedWbs.forEach(wb => {
+            wbTokens += estimateTokens(wb.title + wb.desc);
+        });
+    }
+
+    // 2. 计算聊天上下文
+    const msgs = wcState.chats[char.id] || [];
+    const limit = config.contextLimit > 0 ? config.contextLimit : 30;
+    const recentMsgs = msgs.slice(-limit);
+    recentMsgs.forEach(m => {
+        if (!m.isError) {
+            chatTokens += estimateTokens(m.content);
+        }
+    });
+
+    // 3. 计算记忆
+    if (char.memories && char.memories.length > 0) {
+        const readCount = config.aiMemoryCount !== undefined ? config.aiMemoryCount : 5;
+        const recentMemories = char.memories.slice(0, readCount);
+        recentMemories.forEach(m => {
+            memTokens += estimateTokens(m.content);
+        });
+    }
+
+    // 4. 计算表情包
+    if (config.stickerGroupIds && config.stickerGroupIds.length > 0) {
+        config.stickerGroupIds.forEach(groupId => {
+            const group = wcState.stickerCategories[groupId];
+            if (group && group.list) {
+                group.list.forEach(s => {
+                    stickerTokens += estimateTokens(s.desc);
+                });
+            }
+        });
+    }
+
+    // 注意：已经移除了基础人设(char.prompt)的计算，完全不包含内置提示词！
+
+    const totalTokens = wbTokens + chatTokens + memTokens + stickerTokens;
+
+    // 更新 UI
+    const uiTotal = document.getElementById('ui-total-token');
+    if (uiTotal) uiTotal.innerText = `约 ${totalTokens.toLocaleString()}`;
+    
+    const dWb = document.getElementById('detail-token-wb');
+    if (dWb) dWb.innerText = wbTokens.toLocaleString();
+    
+    const dChat = document.getElementById('detail-token-chat');
+    if (dChat) dChat.innerText = chatTokens.toLocaleString();
+    
+    const dMem = document.getElementById('detail-token-mem');
+    if (dMem) dMem.innerText = memTokens.toLocaleString();
+    
+    const dSticker = document.getElementById('detail-token-sticker');
+    if (dSticker) dSticker.innerText = stickerTokens.toLocaleString();
+    
+    const dTotal = document.getElementById('detail-token-total');
+    if (dTotal) dTotal.innerText = totalTokens.toLocaleString();
+}
+
+// 打开/关闭弹窗
+function openTokenModal() {
+    const modal = document.getElementById('tokenDetailModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function closeTokenModal() {
+    const modal = document.getElementById('tokenDetailModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+// 查询 API 额度 (终极完美适配版)
+async function refreshApiQuota() {
+    const quotaEl = document.getElementById('ui-api-quota');
+    if (!quotaEl) return;
+    
+    quotaEl.innerText = "查询中...";
+    quotaEl.style.opacity = "0.5";
+
+    try {
+        const apiConfig = await idb.get('ios_theme_api_config');
+        if (!apiConfig || !apiConfig.key || !apiConfig.baseUrl) {
+            throw new Error("未配置API");
+        }
+
+        // 提取基础域名
+        const baseUrlMatch = apiConfig.baseUrl.match(/^(https?:\/\/[^\/]+)/);
+        const host = baseUrlMatch ? baseUrlMatch[1] : apiConfig.baseUrl;
+
+        // 1. 先请求 subscription 接口
+        const response = await fetch(`${host}/v1/dashboard/billing/subscription`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${apiConfig.key}` }
+        });
+
+        if (!response.ok) throw new Error("接口不支持");
+
+        const data = await response.json();
+        let balance = "未知";
+
+        // 2. 解析数据
+        if (data.balance !== undefined) {
+            balance = parseFloat(data.balance);
+        } else if (data.data && data.data.balance !== undefined) {
+            balance = parseFloat(data.data.balance);
+        } else if (data.remain_quota !== undefined) {
+            balance = parseFloat(data.remain_quota);
+        } else if (data.data && data.data.remain_quota !== undefined) {
+            balance = parseFloat(data.data.remain_quota);
+        } else if (data.total_available !== undefined) {
+            balance = parseFloat(data.total_available);
+        } else if (data.quota !== undefined) {
+            let q = parseFloat(data.quota);
+            if (q > 10000) q = q / 500000; 
+            balance = q;
+        } else if (data.hard_limit_usd !== undefined) {
+            // 针对你截图里的情况：有总额度，但没有已用额度
+            let total_usage = 0;
+            if (data.total_usage !== undefined) {
+                total_usage = data.total_usage / 100;
+            } else {
+                // 尝试去另一个隐藏接口查已用额度
+                try {
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    const startDate = `${year}-${month}-01`;
+                    const endDate = `${year}-${month}-${day}`;
+                    
+                    const usageRes = await fetch(`${host}/v1/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, {
+                        headers: { 'Authorization': `Bearer ${apiConfig.key}` }
+                    });
+                    const usageData = await usageRes.json();
+                    if (usageData.total_usage !== undefined) {
+                        total_usage = usageData.total_usage / 100;
+                    }
+                } catch(e) {
+                    console.warn("无法获取已用额度");
+                }
+            }
+            balance = data.hard_limit_usd - total_usage;
+        }
+
+        // 3. 渲染到界面
+        if (balance !== "未知" && !isNaN(balance)) {
+            // 如果额度大于 10000（比如截图里的一亿），直接显示“充足”，保持排版优雅
+            if (balance > 10000) {
+                quotaEl.innerText = `充足`;
+            } else {
+                quotaEl.innerText = `$ ${balance.toFixed(2)}`;
+            }
+        } else {
+            quotaEl.innerText = "格式不支持";
+        }
+
+    } catch (e) {
+        console.warn("额度查询失败:", e);
+        quotaEl.innerText = "接口不支持";
+    } finally {
+        quotaEl.style.opacity = "1";
+    }
 }
