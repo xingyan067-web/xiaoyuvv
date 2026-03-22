@@ -8770,43 +8770,13 @@ function wcSwitchChatSettingsTab(tab) {
     const wheel = document.getElementById('wc-cs-orbit-wheel');
     if (wheel) {
         let targetRotation = 0;
-        if (tab === 'char') targetRotation = -23; // 对应左侧 item-0
+        if (tab === 'char') targetRotation = -26; // 对应左侧 item-0
         else if (tab === 'heart') targetRotation = 0; // 对应中间 item-1
-        else if (tab === 'user') targetRotation = 23; // 对应右侧 item-2
+        else if (tab === 'user') targetRotation = 26; // 对应右侧 item-2
         
         wheel.style.setProperty('--rotation', targetRotation);
     }
 }
-// ==========================================
-// 新增：聊天设置星际轨道滑动切换逻辑
-// ==========================================
-document.addEventListener('DOMContentLoaded', () => {
-    const navContainer = document.getElementById('wc-cs-nav-container');
-    if (!navContainer) return;
-
-    let startX = 0;
-    const tabs = ['char', 'heart', 'user'];
-
-    navContainer.addEventListener('touchstart', e => {
-        startX = e.touches[0].clientX;
-    }, {passive: true});
-
-    navContainer.addEventListener('touchend', e => {
-        let endX = e.changedTouches[0].clientX;
-        let diff = endX - startX;
-        
-        // 找到当前激活的 tab 索引
-        let currentIdx = 1; // 默认 heart
-        if (document.getElementById('wc-cs-char-btn').classList.contains('active')) currentIdx = 0;
-        if (document.getElementById('wc-cs-user-btn').classList.contains('active')) currentIdx = 2;
-
-        if (diff > 50 && currentIdx > 0) {
-            wcSwitchChatSettingsTab(tabs[currentIdx - 1]); // 向右滑，看左边的
-        } else if (diff < -50 && currentIdx < 2) {
-            wcSwitchChatSettingsTab(tabs[currentIdx + 1]); // 向左滑，看右边的
-        }
-    });
-});
 
 // 【新增】：渲染聊天背景图库
 function wcRenderChatBgGallery() {
@@ -8992,6 +8962,36 @@ function wcOpenChatSettings() {
     
     wcOpenModal('wc-modal-chat-settings');
 }
+// ==========================================
+// 新增：聊天设置星际轨道滑动切换逻辑
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+    const navContainer = document.getElementById('wc-cs-nav-container');
+    if (!navContainer) return;
+
+    let startX = 0;
+    const tabs = ['char', 'heart', 'user'];
+
+    navContainer.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX;
+    }, {passive: true});
+
+    navContainer.addEventListener('touchend', e => {
+        let endX = e.changedTouches[0].clientX;
+        let diff = endX - startX;
+        
+        // 找到当前激活的 tab 索引
+        let currentIdx = 1; // 默认 heart
+        if (document.getElementById('wc-cs-char-btn').classList.contains('active')) currentIdx = 0;
+        if (document.getElementById('wc-cs-user-btn').classList.contains('active')) currentIdx = 2;
+
+        if (diff > 50 && currentIdx > 0) {
+            wcSwitchChatSettingsTab(tabs[currentIdx - 1]); // 向右滑，看左边的
+        } else if (diff < -50 && currentIdx < 2) {
+            wcSwitchChatSettingsTab(tabs[currentIdx + 1]); // 向左滑，看右边的
+        }
+    });
+});
 
 function wcImportMaskToChat(maskId) {
     if (!maskId) return;

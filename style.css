@@ -2125,7 +2125,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-cs-icon-btn svg { width: 20px; height: 20px; stroke-width: 2; }
 
 .wc-cs-orbit-nav-container {
-    height: 180px;
+    height: 200px;
     position: relative;
     flex-shrink: 0;
     overflow: hidden;
@@ -2133,7 +2133,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 }
 .wc-cs-orbit-bg {
     position: absolute;
-    top: -390px; left: 50%;
+    top: -380px; left: 50%;
     transform: translateX(-50%);
     width: 500px; height: 500px;
     border-radius: 50%;
@@ -2160,7 +2160,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 }
 .wc-cs-orbit-wheel {
     position: absolute;
-    top: -390px; left: 50%;
+    top: -380px; left: 50%;
     width: 500px; height: 500px;
     margin-left: -250px;
     border-radius: 50%;
@@ -2176,9 +2176,9 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     transform: rotate(calc(var(--init-angle) * 1deg)) translateY(250px);
     cursor: pointer;
 }
-.wc-cs-orbit-item.item-0 { --init-angle: 24; }
+.wc-cs-orbit-item.item-0 { --init-angle: 20; }
 .wc-cs-orbit-item.item-1 { --init-angle: 0; }
-.wc-cs-orbit-item.item-2 { --init-angle: -24; }
+.wc-cs-orbit-item.item-2 { --init-angle: -20; }
 
 .wc-cs-item-content {
     width: 100%; height: 100%;
