@@ -4119,18 +4119,70 @@ input::-webkit-inner-spin-button {
 }
 
 /* ========================================== */
-/* 长按菜单样式 */
+/* 长按菜单样式 (iOS 横向图标风) */
 /* ========================================== */
 .dream-context-menu {
-    position: fixed; background: #FFF; border: 2px solid #111; border-radius: 0;
-    box-shadow: 4px 4px 0px #111; z-index: 10000; display: none; flex-direction: column;
-    min-width: 120px; font-family: 'Courier New', monospace; font-weight: bold;
+    position: fixed;
+    background: rgba(35, 35, 35, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 12px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    z-index: 10000;
+    display: none;
+    flex-direction: row; /* 改为横向排列 */
+    align-items: center;
+    padding: 0;
+    border: none; /* 去掉原来的硬边框 */
 }
+
+/* 底部/顶部小三角 (支持动态翻转) */
+.dream-context-menu::after {
+    content: '';
+    position: absolute;
+    top: var(--triangle-top, 100%);
+    bottom: var(--triangle-bottom, auto);
+    left: 50%;
+    transform: translateX(-50%) rotate(var(--triangle-rotate, 0deg));
+    border-width: 7px 7px 0;
+    border-style: solid;
+    border-color: rgba(35, 35, 35, 0.85) transparent transparent transparent;
+}
+
 .dream-ctx-item {
-    padding: 12px 16px; font-size: 13px; border-bottom: 1px dashed #CCC; cursor: pointer;
+    padding: 12px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid rgba(255, 255, 255, 0.15); /* 极细分割线 */
+    transition: background 0.2s;
 }
-.dream-ctx-item:last-child { border-bottom: none; }
-.dream-ctx-item:active { background: #F4F4F4; }
+
+.dream-ctx-item:first-child {
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+}
+
+.dream-ctx-item:last-child {
+    border-right: none;
+    border-top-right-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+.dream-ctx-item:active {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.dream-ctx-item svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: #FFFFFF;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
 /* ========================================== */
 /* 梦境卡片 - 云朵注入按钮 */
 /* ========================================== */

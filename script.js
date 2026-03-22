@@ -13833,7 +13833,8 @@ async function musicImportPlaylist() {
         
         if (dataDetail.code === 200 && dataDetail.playlist) {
             // 2. 获取歌单所有歌曲
-            const resTracks = await fetch(`https://zm.armoe.cn/playlist/track/all?id=${plId}&limit=50`);
+            // 👇 就是修改下面这一行，把 limit=50 改成 limit=1000 👇
+            const resTracks = await fetch(`https://zm.armoe.cn/playlist/track/all?id=${plId}&limit=1000`);
             const dataTracks = await resTracks.json();
             
             let tracks = [];
@@ -15383,18 +15384,28 @@ function showDreamContextMenu(e, index, type = 'user') {
     dreamSelectedMsgIndex = index;
     const menu = document.getElementById('dream-context-menu');
     
-    // 动态生成菜单内容
+    // 动态生成菜单内容 (纯 SVG 图标)
     menu.innerHTML = '';
     if (type === 'user') {
         menu.innerHTML = `
-            <div class="dream-ctx-item" onclick="editDreamMsg()">EDIT / 编辑</div>
-            <div class="dream-ctx-item" style="color: #FF3B30;" onclick="deleteDreamMsg()">DELETE / 删除</div>
+            <div class="dream-ctx-item" onclick="editDreamMsg()">
+                <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            </div>
+            <div class="dream-ctx-item" onclick="deleteDreamMsg()">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </div>
         `;
     } else if (type === 'ai') {
         menu.innerHTML = `
-            <div class="dream-ctx-item" onclick="regenerateDreamMsg()">RETRY / 重生成</div>
-            <div class="dream-ctx-item" onclick="editDreamMsg()">EDIT / 编辑</div>
-            <div class="dream-ctx-item" style="color: #FF3B30;" onclick="deleteDreamMsg()">DELETE / 删除</div>
+            <div class="dream-ctx-item" onclick="regenerateDreamMsg()">
+                <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            </div>
+            <div class="dream-ctx-item" onclick="editDreamMsg()">
+                <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            </div>
+            <div class="dream-ctx-item" onclick="deleteDreamMsg()">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </div>
         `;
     }
 
@@ -15402,18 +15413,60 @@ function showDreamContextMenu(e, index, type = 'user') {
     let x = e.clientX || (e.touches && e.touches[0].clientX);
     let y = e.clientY || (e.touches && e.touches[0].clientY);
 
-    const menuWidth = 120;
-    const menuHeight = type === 'ai' ? 140 : 100; // AI菜单多一项，高度增加
+    // 估算菜单宽高 (每个 item 约 60px 宽，高度约 44px)
+    const menuWidth = type === 'ai' ? 180 : 120;
+    const menuHeight = 44; 
     const screenW = window.innerWidth;
-    const screenH = window.innerHeight;
+    
+    // 计算居中位置：X轴居中于点击点，Y轴在点击点上方
+    let leftPos = x - (menuWidth / 2);
+    let topPos = y - menuHeight - 20; // 距离手指上方 20px
 
-    if (x + menuWidth > screenW) x = screenW - menuWidth - 10;
-    if (y + menuHeight > screenH) y = screenH - menuHeight - 10;
+    // 边界保护：防止超出屏幕左右
+    if (leftPos < 10) leftPos = 10;
+    if (leftPos + menuWidth > screenW - 10) leftPos = screenW - menuWidth - 10;
 
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
+    // 边界保护：如果上方空间不够，就显示在手指下方，并翻转小三角
+    if (topPos < 10) {
+        topPos = y + 30;
+        menu.style.setProperty('--triangle-top', '-7px');
+        menu.style.setProperty('--triangle-bottom', 'auto');
+        menu.style.setProperty('--triangle-rotate', '180deg');
+    } else {
+        // 正常显示在上方
+        menu.style.setProperty('--triangle-top', '100%');
+        menu.style.setProperty('--triangle-bottom', 'auto');
+        menu.style.setProperty('--triangle-rotate', '0deg');
+    }
+
+    menu.style.left = leftPos + 'px';
+    menu.style.top = topPos + 'px';
     menu.style.display = 'flex';
 }
+// ==========================================
+// 新增：全局监听 - 点击任意位置隐藏梦境菜单
+// ==========================================
+document.addEventListener('touchstart', (e) => {
+    const menu = document.getElementById('dream-context-menu');
+    // 如果菜单正在显示
+    if (menu && menu.style.display === 'flex') {
+        // 并且点击的区域不是菜单本身
+        if (!e.target.closest('#dream-context-menu')) {
+            menu.style.display = 'none';
+            dreamSelectedMsgIndex = -1; // 重置选中状态
+        }
+    }
+}, { passive: true });
+
+document.addEventListener('mousedown', (e) => {
+    const menu = document.getElementById('dream-context-menu');
+    if (menu && menu.style.display === 'flex') {
+        if (!e.target.closest('#dream-context-menu')) {
+            menu.style.display = 'none';
+            dreamSelectedMsgIndex = -1;
+        }
+    }
+});
 
 // 重新生成 AI 回复
 function regenerateDreamMsg() {
