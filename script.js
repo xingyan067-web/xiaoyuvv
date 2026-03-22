@@ -3938,7 +3938,7 @@ async function wcTriggerAI(charIdOverride = null) {
         return;
     }
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.baseUrl || !apiConfig.key || !apiConfig.model) {
         if (!charIdOverride) alert("请先在系统设置中配置 API 地址、密钥并选择模型！");
         aiGeneratingLocks[charId] = false;
@@ -17673,7 +17673,7 @@ async function lsGenerateAILetter() {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     // 1. 关闭祈愿菜单，显示动画覆盖层
