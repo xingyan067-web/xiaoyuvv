@@ -3338,21 +3338,30 @@ function wcFormatSystemTime(timestamp) {
 function wcGenerateTimeGapPrompt(msgs, referenceTime = Date.now()) {
     if (!msgs || msgs.length === 0) return "";
     
-    // 找到最后一条实质性消息（排除系统提示和报错）
-    let lastMsgTime = 0;
-    for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i].type !== 'system' && !msgs[i].isError) {
-            lastMsgTime = msgs[i].time;
+    const validMsgs = msgs.filter(m => m.type !== 'system' && !m.isError);
+    if (validMsgs.length === 0) return "";
+
+    // 把当前时间作为最后的时间点加入数组
+    let times = validMsgs.map(m => m.time);
+    times.push(referenceTime);
+
+    let gapMs = 0;
+    let lastDate = null;
+    let nowDate = null;
+
+    // 核心修复：从后往前找最大的断层，只要找到第一个大于 10 分钟的断层就说明是“上次聊天”
+    for (let i = times.length - 1; i > 0; i--) {
+        const diff = times[i] - times[i - 1];
+        if (diff > 10 * 60 * 1000) { // 大于10分钟算作一次断联
+            gapMs = diff;
+            lastDate = new Date(times[i - 1]);
+            nowDate = new Date(times[i]);
             break;
         }
     }
 
-    if (lastMsgTime === 0) return "";
+    if (gapMs === 0) return "";
 
-    const lastDate = new Date(lastMsgTime);
-    const nowDate = new Date(referenceTime);
-
-    const gapMs = referenceTime - lastMsgTime;
     const gapMinutes = Math.floor(gapMs / 60000);
     const gapHours = Math.floor(gapMinutes / 60);
     const gapDays = Math.floor(gapHours / 24);
@@ -3360,38 +3369,18 @@ function wcGenerateTimeGapPrompt(msgs, referenceTime = Date.now()) {
     const remainHours = gapHours % 24;
     const remainMinutes = gapMinutes % 60;
 
-    // 核心：判断是否跨天了（即使只隔了几个小时，只要过了零点就是新的一天）
     const isSameDay = lastDate.getFullYear() === nowDate.getFullYear() &&
                       lastDate.getMonth() === nowDate.getMonth() &&
                       lastDate.getDate() === nowDate.getDate();
 
-    let prompt = `\n【时间感知与断联反应 (最高优先级)】\n`;
-    
-    // 精确计算时间差字符串
     let timeGapStr = "";
     if (gapDays > 0) timeGapStr += `${gapDays}天`;
     if (remainHours > 0) timeGapStr += `${remainHours}小时`;
     if (remainMinutes > 0 || timeGapStr === "") timeGapStr += `${remainMinutes}分钟`;
 
-    prompt += `> 内部信息：距离你们上一次聊天已经过去了 ${timeGapStr}。\n`;
-
-    if (!isSameDay) {
-        prompt += `> 📅 日期变动提示：注意！你们的对话已经跨天了。上次聊天是在 ${lastDate.getMonth()+1}月${lastDate.getDate()}日，现在已经是新的一天（${nowDate.getMonth()+1}月${nowDate.getDate()}日）。\n`;
-        prompt += `> 状态要求：请务必表现出“新的一天”的真实感。如果是早晨，可以自然地道早安、询问昨晚睡得好不好或分享今天的计划；如果是其他时间，也要体现出隔天聊天的感觉。\n`;
-    }
-    
-    if (gapDays >= 3) {
-        prompt += `> 状态要求：这是一个很长的空白期！请在回复中强烈且自然地体现出“久别重逢”、“漫长等待”或“断联后的情绪”（如：担忧、思念、生气、试探、冷淡等，必须符合你的人设）。\n`;
-    } else if (gapHours >= 2) {
-        prompt += `> 状态要求：自然地体现出一段时间没联系的时间流逝感（如：问问对方这段时间去忙什么了，或者顺着当前时间打招呼）。\n`;
-    } else if (gapMinutes < 5) {
-        prompt += `> 状态要求：你们正在进行连贯的对话，请保持聊天的连贯性和即时感，不需要刻意强调时间。\n`;
-    } else {
-        prompt += `> 状态要求：距离上次回复有一小段时间，可以稍微表现出等待后的回应，但不要过度夸张。\n`;
-    }
-
-    prompt += `> 【硬性禁止】：绝对不要机械地报出具体数字（禁止说“我们已经3天没说话了”或“过了5个小时”）。\n`;
-    prompt += `> 【表现手法】：时间必须自然融入对话。通过语气、微动作（MicroActions）、或者对当前环境/光线的描写来侧面烘托时间感。情绪是底色，自然流露，而非刻意展示。\n`;
+    // 融合你提供的精简版提示词
+    let prompt = `\n【系统通知：时间感知】\n`;
+    prompt += `> 距离上次互动已过去 ${timeGapStr}。话题可能已中断，请以 ${msgs[0]?.name || '你'} 的身份自然地开启新话题，或对时间流逝做出反应，自然地延续之前的对话。\n`;
 
     return prompt;
 }
@@ -4151,7 +4140,7 @@ async function wcTriggerAI(charIdOverride = null) {
             
             // 👇【新增这一行】：强制 AI 多人发言
             groupPrompt += `【活跃群聊铁律】：这是一个多人活跃群聊！当 User 发话时，绝对不能只有一个人回复！你必须让群里**至少 2 到 3 个不同的成员**出来接话、互相吐槽或回应 User。严禁冷场！\n`;            
-            groupPrompt += `【角色扮演铁律 (最高防串戏警告)】：你必须严格区分每个人的性格和身份！绝对禁止角色串台词！\n`;
+            groupPrompt += `【角色扮演铁律 (最高防串戏警告)】：你必须严格区分每个人的性格和身份，请严格扮演每个角色的人设，不同角色之间应有明显的性格和语气差异绝对，禁止角色串台词！\n`;
             groupPrompt += `> 警告：如果 "senderName" 是 "张三"，那么 "content" 必须且只能是张三会说的话，绝对不能包含李四的设定、记忆或语气！\n`;
             groupPrompt += `> 每次生成回复前，必须在 <thinking> 中核对当前发言人的名字和设定，确保 100% 匹配！\n`;
             groupPrompt += `【丰富互动】：群里的每一个成员都可以发送文本(text)、表情包(sticker)、图片(image)、语音(voice)或转账(transfer)。\n`;
@@ -4170,12 +4159,12 @@ async function wcTriggerAI(charIdOverride = null) {
    - 严格代入你的人设性格，思考你对 User 当前话语或行为的真实心理反应。
    - 思考完毕后，再输出最终的 JSON 回复。
 3. **现实与世界观感知 (Reality & World Awareness)**：你的所有回应 **必须** 深度融合当前的时间流逝感以及 [世界观设定]。不要把设定当成死板的说明书，要将其化作你生活中的常识自然流露。
-4. **绝对防 OOC (Anti-OOC)**：你的语气、用词习惯、对待 User 的态度必须与人设 100% 吻合。如果人设是冷酷的，绝不能突然热情；如果人设是傲娇的，绝不能直白表达爱意。
+4. **绝对防 OOC (Anti-OOC)**：你的语气、用词习惯、对待 User 的态度必须与人设 100% 吻合。
 
 # 情境信息 (Contextual Information)
 -   **当前时间**: ${timeString} ${dayString}
 -   **当前时段氛围参考**: ${timeSlotVibe}
--   **时间观念 (强制)**: 你必须具备强大的时间观念。你的作息、行为、对话内容都必须符合当前的具体时间点和星期。例如，深夜时你不应该说“刚下班”，周末时你不应该说“正在上课”（除非人设特殊规定）。
+-   **时间观念 (强制)**: 你应知晓当前时间${dayString} ${timeString}，但除非对话内容明确相关，否则不要主动提及或评论时间（例如，不要催促我睡觉），你的作息、行为、对话内容都必须符合当前的具体时间点和星期。
 ${timeGapPrompt ? timeGapPrompt + '\n' : ''}
 -   **世界观设定 (World Information)**: 以下是你所在世界的既定事实、传说和背景。你必须将其视为绝对真理。
 ${worldBookContent}
@@ -4201,19 +4190,10 @@ ${worldBookContent}
     
 2.  **对话节奏 (核心强制)**:
     -   **风格**: fragmentation、colloquialism,the reply must be concise and forceful.
-    -   **绝对禁止长文本**: 你必须模拟真实人类在线聊天的碎片化习惯。
-    -   **拆分回复**: 将一个完整的意图拆分成 **2-5条** 简短的、口语化的消息。每一条消息都是数组中的一个独立对象。
+    -   **绝对禁止长文本**: 你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息。
+    -   **关键规则**: 请保持回复消息数量的**随机性和多样性**，并且每一条消息都是数组中的一个独立对象。
+    -   **防重复**: 严禁输出重复的句子或重复的对话序列！
     -   **语义完整**: 确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。
-    -   **举例说明**:
-        -   **错误示范 (把所有话挤在一起)**: '[{"type":"text", "content":"我刚才去楼下便利店了，看到你喜欢喝的那个牌子的牛奶在打折，就帮你带了一瓶回来，已经放冰箱啦。"}]'
-        -   **错误示范 (一句话强行断开)**: '[{"type":"text", "content":"我刚才去楼下"}, {"type":"text", "content":"便利店了。"}]'
-        -   **正确示范 (模拟真人)**:
-            '[
-              {"type":"text", "content":"我刚刚下楼了趟"},
-              {"type":"text", "content":"看到你爱喝的那个牛奶在打折"},
-              {"type":"sticker", "content":"开心"},
-              {"type":"text", "content":"顺手帮你带了瓶，放冰箱啦~"}
-            ]'            
 # 对话开始 (Conversation Start)
 // ...
 你现在将开始角色扮演。用户的消息在下方。请遵循以上所有规则，以你的角色身份进行回应。
@@ -4230,14 +4210,14 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 4. **其他指令** (按需使用)
    {"type":"voice", "content":"语音内容"}
    {"type":"transfer", "amount":100, "note":"备注"}
-   如果收到【恋人空间邀请】，同意请回复：{"type":"invite_accept", "content":"好呀，我愿意"}；拒绝请回复：{"type":"invite_reject", "content":"抱歉，我觉得太快了"}
+   如果收到【恋人空间邀请】，同意请回复：{"type":"invite_accept", "content":"你的回复内容"}；拒绝请回复：{"type":"invite_reject", "content":"你的回复内容"}
 5. **朋友圈互动** (如果你在【朋友圈动态】中看到了感兴趣的内容，或者有人评论了你，你可以进行互动)
    {"type":"moment_like", "content": 朋友圈ID数字}
    {"type":"moment_comment", "momentId": 朋友圈ID数字, "content":"你的评论内容(如果是回复某人，请写'回复 xxx: 内容')"}
 6. **音乐邀请互动** (核心强制)
    如果用户向你发送了 [邀请听歌] 的卡片，你必须根据当前人设和心情决定是否同意。
-   - 如果同意，请回复：{"type":"music_accept", "content":"好呀，一起听~"}
-   - 如果拒绝，请回复：{"type":"music_reject", "content":"我现在有点忙，晚点吧。"}
+   - 如果同意，请回复：{"type":"music_accept", "content":"你的回复内容"}
+   - 如果拒绝，请回复：{"type":"music_reject", "content":"你的回复内容"}
 7. **主动语音通话** (按需使用)
    如果你想念User 或者你觉得当前氛围极佳，又或者有非常重要/暧昧的话想对 User 说，你可以主动向 User 发起语音通话！
    {"type":"call_invite", "content":"(你的内心OS：我想听听你的声音了)"}
@@ -4324,9 +4304,16 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         if (availableStickers.length > 0) {
             // 提取前 400 个表情包供 AI 使用
             const limitedStickers = availableStickers.slice(0, 400); 
-            systemPrompt += `【可用表情包】\n如果你想发送表情包，必须使用 {"type":"sticker", "content":"表情包描述"} 格式！当前可用的表情包描述有：${limitedStickers.join(', ')}。\n`;
+            
+            // 融合你提供的精简版表情包指令，并保持 JSON 格式要求
+            systemPrompt += `\n【表情包能力 (可选)】\n`;
+            systemPrompt += `你可以根据对话氛围，自行判断是否发送表情包辅助表达。\n`;
+            systemPrompt += `> ⚠️严格限制：必须完全精确地从以下列表中选择，严禁凭空捏造不存在的名称：[${limitedStickers.join(', ')}]\n`;
+            systemPrompt += `> 格式要求：必须使用 {"type":"sticker", "content":"精确名称"}\n`;
+            systemPrompt += `> 发送频率：不要连续重复发送同一表情，尽量丰富一点，不要每次回复都发表情。\n`;
+            
             if (char.isGroup) {
-                systemPrompt += `(注意：在群聊中，你可以根据发言人的性格，从上述表情包中挑选合适的发送。)\n`;
+                systemPrompt += `(注意：在群聊中，你可以根据发言人的性格挑选合适的表情包。)\n`;
             }
         }
         
@@ -4648,6 +4635,57 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
     }
 
     // 移除强制拆分逻辑，完全信任 AI 的 JSON 结构，防止一句话被错误切断
+
+    // 👇 新增：去重逻辑，防止 AI 抽风输出重复的段落序列 👇
+    let finalActions = [];
+    for (let i = 0; i < actions.length; i++) {
+        const action = actions[i];
+        if (!action || !action.content) continue;
+        
+        // 相邻去重 (防止 A, A)
+        if (finalActions.length > 0) {
+            const lastAction = finalActions[finalActions.length - 1];
+            if (lastAction.type === action.type && lastAction.content === action.content) {
+                continue;
+            }
+        }
+        finalActions.push(action);
+    }
+
+    // 检查是否存在前后两半完全一样的情况 (防止 A,B, A,B)
+    const len = finalActions.length;
+    if (len >= 4 && len % 2 === 0) {
+        const half = len / 2;
+        let isRepeat = true;
+        for (let i = 0; i < half; i++) {
+            if (finalActions[i].content !== finalActions[i + half].content) {
+                isRepeat = false;
+                break;
+            }
+        }
+        if (isRepeat) {
+            finalActions = finalActions.slice(0, half);
+        }
+    }
+    
+    // 检查是否存在前中后三分之一完全一样的情况 (防止 A,B, A,B, A,B)
+    const len3 = finalActions.length;
+    if (len3 >= 6 && len3 % 3 === 0) {
+        const third = len3 / 3;
+        let isRepeat = true;
+        for (let i = 0; i < third; i++) {
+            if (finalActions[i].content !== finalActions[i + third].content || finalActions[i].content !== finalActions[i + 2 * third].content) {
+                isRepeat = false;
+                break;
+            }
+        }
+        if (isRepeat) {
+            finalActions = finalActions.slice(0, third);
+        }
+    }
+
+    actions = finalActions;
+    // 👆 去重逻辑结束 👆
 
     for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
@@ -8583,6 +8621,7 @@ async function wcSimTriggerAI() {
         prompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
         prompt += `> 必须将长回复拆分成多条短消息（1-4条），严禁把所有话挤在一个气泡里！\n`;
         prompt += `> 【重要约束】：绝对不要凭空捏造没有发生过的事情。请严格基于现有的聊天记录上下文进行自然的日常问候、吐槽或顺延当前话题。\n`;
+        prompt += `> 【防重复约束】：严禁输出重复的句子或重复的对话序列！\n`;
         prompt += `> 【格式约束 (最高优先级)】：你必须先输出 <thinking> 标签进行思考，然后再输出 JSON 数组。**必须且只能**输出合法的 JSON 数组，严禁漏掉引号、括号或逗号！严禁输出损坏的 JSON 格式！\n`;
 
         
@@ -9690,7 +9729,7 @@ function checkProactiveMessages() {
             const msgs = wcState.chats[char.id] || [];
             let lastTime = 0;
             
-            // 【修复1】：准确找到最后一条非系统、非报错的实质性消息时间
+            // 准确找到最后一条非系统、非报错的实质性消息时间
             for (let i = msgs.length - 1; i >= 0; i--) {
                 if (!msgs[i].isError && msgs[i].type !== 'system') {
                     lastTime = msgs[i].time;
@@ -9701,19 +9740,35 @@ function checkProactiveMessages() {
             // 如果完全没有聊天记录，使用当前时间兜底，防止一上来就疯狂触发
             if (lastTime === 0) lastTime = now; 
 
-            // 【修复2】：判断时间间隔，并且确保当前没有正在生成回复
+            // 判断时间间隔，并且确保当前没有正在生成回复
             if (now - lastTime > interval && !aiGeneratingLocks[char.id]) {
                 console.log(`触发 ${char.name} 主动消息`);
                 
-                // 【核心强化】：注入极强的现实感知与强制思考指令，防止主动发消息时 OOC
+                // 👇 新增：精确计算时间差 👇
+                const gapMs = now - lastTime;
+                const gapMinutes = Math.floor(gapMs / 60000);
+                const gapHours = Math.floor(gapMinutes / 60);
+                const gapDays = Math.floor(gapHours / 24);
+                const remainHours = gapHours % 24;
+                const remainMinutes = gapMinutes % 60;
+
+                let timeGapStr = "";
+                if (gapDays > 0) timeGapStr += `${gapDays}天`;
+                if (remainHours > 0) timeGapStr += `${remainHours}小时`;
+                if (remainMinutes > 0 || timeGapStr === "") timeGapStr += `${remainMinutes}分钟`;
+                // 👆 时间差计算结束 👆
+
                 const nowStr = new Date().toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-                const proactivePrompt = `[系统内部强制指令：现实时间已经来到了 ${nowStr}，距离你们上次聊天已经过去很久了。
-请你现在**主动**给 User 发送消息。
+                
+                // 👇 融合你的精简提示词，并保留思维链与防OOC 👇
+                const proactivePrompt = `[系统通知：距离上次互动已过去 ${timeGapStr}。话题可能已中断。
+请以 ${char.name} 的身份主动发起新话题，或自然地延续之前的对话，对时间流逝做出反应。
+
 【行动前必须在 <thinking> 标签中进行深度思考】：
-1. 现实感知：结合你的人设（${char.name}）和当前的时间点，你现在应该在做什么？（工作、休息、吃饭、还是失眠？）
-2. 动机分析：你为什么会突然想起 User 并给 Ta 发消息？（是因为看到了某样东西、遇到了某件事、还是单纯的思念/无聊？）
-3. 绝对防 OOC：你的语气必须 100% 符合人设！绝对不要说“好久不见”这种AI味重的话，要像真人一样自然地切入话题（例如分享一张照片、吐槽一件事、或者直接问对方在干嘛）。
-思考完毕后，再输出符合你人设的 JSON 消息数组！]`;
+1. 现实感知：当前现实时间是 ${nowStr}。结合你的人设，你现在应该在做什么？
+2. 动机分析：你为什么会突然给 User 发消息？
+3. 绝对防 OOC：语气必须 100% 符合人设，像真人一样自然切入，拒绝AI味。
+思考完毕后，输出符合你人设的 JSON 消息数组！]`;
                 
                 wcAddMessage(char.id, 'system', 'system', proactivePrompt, { hidden: true });
                 
@@ -10428,6 +10483,7 @@ async function lsTriggerNpcMessage() {
         prompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
         prompt += `> 必须将长回复拆分成多条短消息（1-4条），严禁把所有话挤在一个气泡里！\n`;
         prompt += `> 【重要约束】：绝对不要凭空捏造没有发生过的事情、没有做过的约定或不存在的剧情。请严格基于现有的聊天记录上下文进行自然的日常问候、吐槽或顺延当前话题。\n`;
+        prompt += `> 【防重复约束】：严禁输出重复的句子或重复的对话序列！\n`;
         prompt += `> 【格式约束 (最高优先级)】：你必须先输出 <thinking> 标签进行思考，然后再输出 JSON 数组。**必须且只能**输出合法的 JSON 数组，严禁漏掉引号、括号或逗号！严禁输出损坏的 JSON 格式！\n`;
 
 
