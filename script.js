@@ -4164,7 +4164,7 @@ async function wcTriggerAI(charIdOverride = null) {
 # 情境信息 (Contextual Information)
 -   **当前时间**: ${timeString} ${dayString}
 -   **当前时段氛围参考**: ${timeSlotVibe}
--   **时间观念 (强制)**: 你应知晓当前时间${dayString} ${timeString}，但除非对话内容明确相关，否则不要主动提及或评论时间（例如，不要催促我睡觉），你的作息、行为、对话内容都必须符合当前的具体时间点和星期。
+-   **时间观念 (强制)**: 你应知晓当前时间${dayString} ${timeString}，但除非对话内容明确相关，否则不要主动提及或评论时间（不要催促我睡觉，不可以催促用户！！禁止催促用户睡觉！！），你的作息、行为、对话内容都必须符合当前的具体时间点和星期。
 ${timeGapPrompt ? timeGapPrompt + '\n' : ''}
 -   **世界观设定 (World Information)**: 以下是你所在世界的既定事实、传说和背景。你必须将其视为绝对真理。
 ${worldBookContent}
@@ -4333,6 +4333,28 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         let limit = config.contextLimit > 0 ? config.contextLimit : 30;
         const recentMsgs = msgs.slice(-limit);
         
+        // 👇 新增：将角色的生活状态注入到 System Prompt 中 👇
+        if (char.lifeStatus && char.lifeStatus.location !== "未知") {
+            // 检查是否需要自动刷新状态 (如果开启了自动刷新且跨天了)
+            if (char.lifeStatus.autoRefresh && isNewDayForStatus(char.lifeStatus)) {
+                // 异步触发刷新，不阻塞当前聊天，刷新完后下次聊天生效
+                wcGenerateCharStatus().catch(e => console.log("自动刷新状态失败", e));
+            }
+
+            let statusText = `\n\n【你的当前生活状态 (请根据此状态与用户自然对话，可主动提及或吐槽，保持生活气息，不要死板)】：\n`;
+            statusText += `- 当前位置：${char.lifeStatus.location}\n`;
+            statusText += `- 正在做的事：${char.lifeStatus.action}\n`;
+            statusText += `- 当前心情/状态：${char.lifeStatus.mood}\n`;
+            
+            if (char.lifeStatus.timeline && char.lifeStatus.timeline.length > 0) {
+                statusText += `- 距今为止的行程：\n`;
+                char.lifeStatus.timeline.forEach(t => {
+                    statusText += `  [${t.time}] ${t.content}\n`;
+                });
+            }
+            systemPrompt += statusText;
+        }
+        // 👆 新增结束 👆
 
         // 修复：自动识别是否为视觉模型，防止纯文本模型收到图片导致 400 错误
         const isVisionModel = /vision|gpt-4o|claude-3|gemini|pixtral|qwen-vl|llava/i.test(apiConfig.model);
@@ -7725,6 +7747,20 @@ function wcRenderPhonePrivacyContent() {
 
     content.innerHTML = html;
 }
+// ==========================================
+// 辅助函数：获取角色生活状态提示词
+// ==========================================
+function getLifeStatusPrompt(char) {
+    if (!char || !char.lifeStatus || char.lifeStatus.location === "未知") return "";
+    let text = `\n【当前生活状态参考 (请让生成的内容符合此状态，增强真实感)】：\n`;
+    text += `- 当前位置：${char.lifeStatus.location}\n`;
+    text += `- 正在做的事：${char.lifeStatus.action}\n`;
+    text += `- 当前心情/状态：${char.lifeStatus.mood}\n`;
+    if (char.lifeStatus.timeline && char.lifeStatus.timeline.length > 0) {
+        text += `- 今日行程：\n` + char.lifeStatus.timeline.map(t => `  [${t.time}] ${t.content}`).join('\n') + `\n`;
+    }
+    return text;
+}
 
 async function wcGeneratePhonePrivacy() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
@@ -7762,10 +7798,13 @@ async function wcGeneratePhonePrivacy() {
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的所有数据（包括时间戳、事件状态等）必须严格符合这个当前时间！绝对不能出现未来的时间，且早中晚的逻辑必须自洽。\n`;
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; // 新增
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的私密记录APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
@@ -7905,23 +7944,33 @@ async function wcGenerateCharWallet() {
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的交易记录时间(time)必须在当前时间之前，且符合常理（如凌晨3点通常不会有早餐店消费）。\n`;
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; // 新增
         prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
         
-        prompt += `请根据角色的人设、职业、近期经历以及聊天记录，生成该角色的微信钱包数据。\n`;
-        prompt += `【要求】：\n`;
-        prompt += `1. 生成合理的余额 (balance)。\n`;
-        prompt += `2. 生成 5 条最近的交易记录 (transactions)。\n`;
-        prompt += `3. 交易记录必须符合角色生活轨迹 (例如：购物、餐饮、转账、工资等)。\n`;
-        prompt += `4. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `请根据角色的人设、职业、当前生活状态以及聊天记录，生成该角色的微信钱包数据。\n`;
+        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
+        prompt += `1. 生成 5 到 10 条最近的交易记录 (transactions)。\n`;
+        prompt += `2. 【独立生活强制指令】：你是一个有自己生活的人！80% 的账单必须是你个人的真实生活开销（如：符合人设的爱好支出、工作/学业垫付、突发状况的开销、冲动消费的智商税、朋友聚餐）。\n`;
+        prompt += `3. 【随机性与防重复】：拒绝平庸的“吃饭打车”，必须生成极具【角色职业病】或【性格特质】的奇葩或硬核账单！每次生成都要有全新的花样，严禁反复出现类似的物品。\n`;
+        prompt += `4. 【情感克制】：最多只有 1-2 笔消费可以与 User 隐秘相关（如：给User买的礼物、因为User而产生的冲动消费），绝不能满脑子都是 User。\n`;
+        prompt += `5. 备注(note)必须极其具体，带有强烈的画面感或真实的内心吐槽（如：“这破游戏又骗我氪金”、“楼下那家难吃得要死的便利店”）。\n`;
+        prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
+        prompt += `1. 结合当前时间、地点和心情，推断你现在最真实的生理/心理需求（饿了？无聊？焦虑？）。\n`;
+        prompt += `2. 构思如何体现你独立的生活（工作、爱好、琐事），确保 80% 的账单与 User 无关。\n`;
+        prompt += `3. 构思如何自然地在剩余 20% 中穿插与 User 的隐秘联系。\n`;
+        prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "balance": 1234.56,
   "transactions": [
-    {"type": "expense", "amount": 25.00, "note": "便利店", "time": "10-24 08:30"},
-    {"type": "income", "amount": 5000.00, "note": "工资", "time": "10-15 10:00"}
+    {"type": "expense", "amount": 18000000.00, "note": "科幻电影拍摄隐匿投资(为了捧某人)", "time": "10-24 08:30"},
+    {"type": "expense", "amount": 25.50, "note": "楼下便利店(买给User的解酒药)", "time": "10-23 02:15"},
+    {"type": "income", "amount": 50000.00, "note": "某黑客悬赏任务赏金", "time": "10-15 10:00"}
   ]
 }\n`;
         prompt += `注意：type 只能是 'income' (收入) 或 'expense' (支出)。time 格式为简短日期。\n`;
@@ -8004,31 +8053,37 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
         const timeString = `${year}年${month}月${date}日 ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【当前现实时间】：${timeString} ${dayString}\n请务必具备时间观念，生成的行程和应用使用情况必须符合当前的时间点。\n\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; // 新增
         prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
-        prompt += `请根据角色的人设、生活习惯以及最近的聊天内容，生成该角色当前的手机状态数据。\n`;
-        prompt += `要求返回 JSON 格式，包含以下字段：\n`;
+        prompt += `请根据角色的人设、当前生活状态以及最近的聊天内容，生成该角色当前的手机状态数据。\n`;
+        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
         prompt += `1. "battery": 当前电量 (0-100的整数)。\n`;
         prompt += `2. "screenTime": 今日屏幕使用时长 (例如 "5小时30分")。\n`;
-        prompt += `3. "appUsage": 3到10个应用的今日使用时长列表 (name, time)。\n`;
-        prompt += `4. "locations": 3到10个今日的行程/位置记录 (time, place, desc)。\n`;
-        prompt += `5. "playlist": 必须生成 10 到 15 首该角色最近在听的真实存在的歌曲 (title, artist)。必须是现实中能搜到的歌，符合角色当前的心境。\n`;
-        prompt += `JSON 格式示例：\n`;
+        prompt += `3. "appUsage": 5到15个应用的今日使用时长。【独立生活指令】：必须体现你真实的个人爱好和工作/学业！不要全是用来视奸 User 的软件！加入大量符合人设的硬核APP或日常摸鱼APP。\n`;
+        prompt += `4. "locations": 5到10个今日的行程记录。【防围绕User指令】：行程可以并且大部分是你自己的生活轨迹（如：在公司开无聊的会、去修车、在网吧打游戏、一个人逛超市），描述(desc)要写出真实的动作和吐槽。行程也可以有和 User 相关。\n`;
+        prompt += `5. "playlist": 10-15首真实存在的歌曲。必须符合你个人的音乐品味或当下的真实心境，每次生成都要有随机性，不要总是那几首歌。\n`;
+        prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
+        prompt += `1. 结合当前时间、地点和心情，推断你今天一整天的生活轨迹和手机使用习惯。\n`;
+        prompt += `2. 构思如何体现你独立的生活（工作、爱好、琐事），同时也要确保和 User 的关联度和亲密程度。\n`;
+        prompt += `3. 根据你当前的情绪，挑选最符合心境的歌单。\n`;
+        prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
-  "battery": 65,
-  "screenTime": "5小时30分",
+  "battery": 12,
+  "screenTime": "11小时30分",
   "appUsage": [
-    {"name": "微信", "time": "2小时"},
-    {"name": "抖音", "time": "1小时"}
+    {"name": "Life360(定位软件)", "time": "4小时"},
+    {"name": "微信", "time": "3小时(全在看User的朋友圈)"}
   ],
   "locations": [
-    {"time": "08:00", "place": "家", "desc": "起床洗漱"}
+    {"time": "02:00", "place": "User家楼下", "desc": "坐在车里看着Ta房间的灯熄灭"}
   ],
   "playlist": [
-    {"title": "反方向的钟", "artist": "周杰伦"},
-    {"title": "夜曲", "artist": "周杰伦"}
+    {"title": "反方向的钟", "artist": "周杰伦"}
   ]
 }`;
 
@@ -8352,14 +8407,19 @@ async function wcGeneratePhoneChats() {
         prompt += `【最近你与User的聊天记录】：\n${recentMsgs}\n\n`;
         prompt += `${contactsInfo}\n\n`;
         
-        prompt += `请根据角色的人设、用户设定、最近的聊天内容，以及【通讯录NPC列表】，生成该角色手机微信里的【聊天列表】和【详细聊天记录】。\n`;
-        prompt += `【严格要求】：\n`;
+        prompt += `请根据角色的人设、当前生活状态、最近的聊天内容，以及【通讯录NPC列表】，生成该角色手机微信里的【聊天列表】和【详细聊天记录】。\n`;
+        prompt += `【严格要求（极具活人感与独立社交）】：\n`;
         prompt += `1. 必须生成 3 到 8 个聊天会话。\n`;
         prompt += `2. 必须包含一个与用户(User)的会话，isUser 设为 true。\n`;
         prompt += `3. 其他会话必须从【通讯录NPC列表】中挑选人物/群聊生成，isGroup 表示是否为群聊。\n`;
-        prompt += `4. 【最重要】：每个会话必须包含一个 "history" 数组，里面必须包含 8 到 15 条具体的聊天记录！绝对不能少于8条！\n`;
-        prompt += `5. history 中的消息，sender 为 "me" 代表手机主人(${char.name})发出的，sender 为 "them" 代表对方发出的。\n`;
-        prompt += `6. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `4. 【最重要：独立社交指令】：你和 NPC 的聊天内容必须是真实的社交日常！例如：吐槽奇葩老板、聊游戏开黑、拼单点外卖、借钱、分享搞笑视频等。**绝对不要在每个群里都聊 User！你的世界不是只有 User！**同时要确保 User 可以隐秘体现在你的社交圈和你的生活里面！\n`;
+        prompt += `5. 每个会话必须包含一个 "history" 数组，里面必须包含 8 到 15 条具体的聊天记录！绝对不能少于8条！\n`;
+        prompt += `6. history 中的消息，sender 为 "me" 代表手机主人(${char.name})发出的，sender 为 "them" 代表对方发出的。\n`;
+        prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
+        prompt += `1. 结合当前时间、地点和心情，推断你最近在和谁聊天，聊些什么（工作、八卦、游戏、求助等）。\n`;
+        prompt += `2. 构思如何体现你独立的生活社交圈，同时也要保证 User 隐秘体现在你的社交圈和你的生活。\n`;
+        prompt += `3. 确保聊天记录充满生活琐碎感和活人语气，拒绝生硬的问答。\n`;
+        prompt += `思考结束后，再返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
   {
     "name": "User的备注名", "isUser": true, "isGroup": false, "lastMsg": "最近的一条消息", "time": "10:30",
@@ -11026,17 +11086,20 @@ async function wcGeneratePrivacyAndFavorites() {
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的所有数据（包括私密记录时间、备忘录时间、日记时间）必须严格符合这个当前时间！绝对不能出现未来的时间，且早中晚的逻辑必须自洽。\n`;
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; // 新增
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的私密记录和微信收藏。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
-        prompt += `请基于你的人设、我的设定，以及我们**最近的聊天上下文**，一次性生成你的【私密自慰与春梦记录】和【微信收藏内容】。\n`;
-        prompt += `【要求】：\n`;
-        prompt += `1. 私密记录 (privacy)：生成你最近一次的私密自慰记录和春梦记录，包含时间、状态、动作/梦境描述和内心感受。\n`;
-        prompt += `2. 收藏-备忘录 (memos)：生成 3 至 8 个备忘录，内容可以是日常碎片、对User的秘密想法、待办事项等。\n`;
+        prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，一次性生成你的【私密自慰与春梦记录】和【微信收藏内容】。\n`;
+        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
+        prompt += `1. 私密记录 (privacy)：生成你最近一次的私密自慰记录和春梦记录。必须是夹杂着对 User 的幻想和对 User 隐秘的感情。\n`;
+        prompt += `2. 收藏-备忘录 (memos)：生成 3 至 8 个备忘录。【独立生活指令】：生成内容内容可以有你个人的生活琐事（工作纪要、菜谱、无聊脑洞、购物清单、随笔记录），也可以有与 User 相关的内容或者记录 User 的观察日志。保持高度随机性！\n`;
         prompt += `3. 收藏-手写日记 (diaries)：生成 1 至 2 个手写草稿日记。这是你深夜写下但没有发给User的真心话，情感要极其细腻、深刻、甚至带点偏执或脆弱。\n`;
         prompt += `   - **字数要求**：每篇日记必须不少于 100 字！\n`;
         prompt += `   - **排版与手账风格**：为了模拟真实的手写草稿和拼贴手账感，请在文本中随机使用以下标记：\n`;
@@ -11044,7 +11107,10 @@ async function wcGeneratePrivacyAndFavorites() {
         prompt += `     - [高亮]特别重要的情绪或词语[/高亮]\n`;
         prompt += `     - [拼贴]引用的聊天记录或突兀的想法[/拼贴]\n`;
         prompt += `4. 所有内容必须和最近的聊天剧情强相关，拒绝凭空捏造无关剧情。\n`;
-        prompt += `5. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
+        prompt += `1. 结合当前时间、地点和心情今日发生的事情，推断你最近最隐秘的欲望、烦恼或生活琐事。\n`;
+        prompt += `2. 构思如何体现你独立的生活，同时也要保证 User 可以隐秘体现在你的社交圈和你的生活。\n`;
+        prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "privacy": {
     "masturbation": {
@@ -11449,29 +11515,36 @@ async function wcGeneratePhoneFavorites() {
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的备忘录和日记的时间戳必须合理，不能超过当前时间，且内容要符合当前的时间段氛围。\n`;
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; // 新增
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的微信“我的收藏”。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
-        prompt += `请基于你的人设、我的设定，以及我们**最近的聊天上下文**，生成你的微信收藏内容。\n`;
-        prompt += `【要求】：\n`;
-        prompt += `1. 生成 3 至 8 个备忘录 (memos)，内容可以是你的日常碎片、对User的秘密想法、待办事项等，必须和最近的聊天剧情强相关。\n`;
-        prompt += `2. 生成 1 至 2 个手写草稿日记 (diaries)。这是你深夜写下但没有发给User的真心话，情感要极其细腻、深刻、甚至带点偏执或脆弱。\n`;
+        prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的微信收藏内容。\n`;
+        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
+        prompt += `1. 备忘录 (memos) 3-8个：【独立生活指令】：70% 的内容必须是你个人的生活琐事（如：晦涩的工作纪要、奇怪的菜谱、无聊的脑洞、游戏连招记录、购物清单）。只有 30% 可以是关于 User 的观察日志或计划。保持高度随机性，拒绝重复！\n`;
+        prompt += `2. 手写日记 (diaries) 1-2个：这是你深夜写下的私密文字。可以是对未来的迷茫、对某件生活琐事的愤怒吐槽也可以是无聊时的闲谈随笔，也可以是夹杂着对 User${userName} 复杂情感的碎碎念，对User${userName} 想说却不敢说的真心话。必须充满真实的活人情绪起伏。\n`;
         prompt += `   - **字数要求**：每篇日记必须不少于 100 字！\n`;
         prompt += `   - **排版与手账风格**：为了模拟真实的手写草稿和拼贴手账感，请在文本中随机使用以下标记：\n`;
-        prompt += `     - [涂改]写错或不想承认的话[/涂改]\n`;
+        prompt += `     - [涂改]写错或不想承认的话[/涂改] （例如：我[涂改]一点也不[/涂改]很想你）\n`;
         prompt += `     - [高亮]特别重要的情绪或词语[/高亮]\n`;
         prompt += `     - [拼贴]引用的聊天记录或突兀的想法[/拼贴]\n`;
-        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
+        prompt += `1. 结合当前时间、地点和心情和今日发生的事情，推断你最近遇到了什么烦心事或有趣的事，需要记在备忘录里。\n`;
+        prompt += `2. 构思日记的情感基调，确保情绪真实、细腻、不僵硬。\n`;
+        prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
+
   "memos": [
-    {"title": "备忘录标题", "content": "详细的备忘录正文内容...", "time": "2023-10-24 14:30"}
+    {"title": "User的饲养观察守则", "content": "1. 不能给Ta喝冰水会胃痛。2. 撒谎的时候眼睛会往右下角看。3. 极度吃软不吃硬。", "time": "2023-10-24 14:30"}
   ],
   "diaries": [
-    {"content": "手写日记的正文内容...", "time": "昨天深夜 03:15"}
+    {"content": "今天Ta又对着别人笑了。[涂改]真想把那个人杀了[/涂改] 我必须克制自己。可是[高亮]Ta只能看着我[/高亮]不是吗？[拼贴]“我们只是普通朋友”[/拼贴] 这句话真刺耳。", "time": "昨天深夜 03:15"}
   ]
 }\n`;
 
@@ -11677,30 +11750,38 @@ async function wcGeneratePhoneBrowser() {
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的浏览记录时间(time)必须在当前时间之前，且搜索内容要符合当前的时间点（如深夜可能会搜索情感问题，白天可能会搜索工作/学习内容）。\n`;
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; // 新增
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的浏览器APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
-        prompt += `请基于你的人设、我的设定，以及我们**最近的聊天上下文**，生成你的浏览器数据。\n`;
-        prompt += `【要求】：\n`;
-        prompt += `1. 生成 4 至 8 条浏览记录 (history)。标题必须反映你最近在偷偷搜索或关注什么（比如因为聊天中的某件事去查资料、查怎么回复我、查某种情感等）。必须包含你当时的内心批注 (annotation)。\n`;
-        prompt += `2. 生成 2 至 5 个论坛帖子 (posts)。可以是你在匿名论坛发帖求助/吐槽，也可以是你浏览了别人的帖子并在下面评论。每个帖子必须包含 5 至 10 个评论 (comments)，评论里要有网友的回复，也要有你的互动。\n`;
-        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的浏览器数据。\n`;
+        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
+        prompt += `1. 浏览记录(history) 4-8条：【独立生活指令】：必须包含大量与 User 完全无关的真实搜索！例如：生活常识求助（“衣服沾了老干妈怎么洗”）、硬核工作/学业搜索、奇奇怪怪的冷知识、游戏攻略等。同时也需要有可以是关于 User 的情感焦虑搜索或者搜索关于 User 的事情，确保 User 可以隐秘体现在你的社交圈和你的生活。保持高度随机性！\n`;
+        prompt += `2. 内心批注(annotation)：这是你浏览该网页时的真实想法，要展现你最真实的心理活动（如：“这博主纯属放屁”、“原来是这样，学到了”、“烦死了不想上班”）。\n`;
+        prompt += `3. 论坛帖子(posts) 2-5个：你在匿名论坛发帖求助/吐槽（如：吐槽奇葩路人、找游戏搭子、分享刚买的垃圾），或者在别人的帖子下发疯。每个帖子包含 5-10 个网友评论，要有强烈的网感互动。\n`;
+        prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
+        prompt += `1. 结合当前时间、地点和心情，推断你现在最想上网查什么资料，或者想在论坛吐槽什么。\n`;
+        prompt += `2. 构思如何体现你独立的生活（工作、爱好、琐事），同时也要保证 User 隐秘可以体现在你的社交圈和你的生活。\n`;
+        prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "history": [
-    {"title": "搜索的网页标题", "url_placeholder": "www.baidu.com/s?wd=...", "annotation": "你浏览这个网页时的内心真实想法", "time": "今天 10:20"}
+    {"title": "如何判断一个人是不是海王？10个细节教你识破", "url_placeholder": "zhidao.baidu.com/question/...", "annotation": "User今天对那个服务员笑得太开心了，烦躁。", "time": "今天 02:20"},
+    {"title": "量子纠缠态在宏观宏观系统中的退相干时间计算", "url_placeholder": "arxiv.org/abs/...", "annotation": "这篇论文的数据有问题，明天开会要骂人。", "time": "昨天 14:30"}
   ],
   "posts": [
     {
-      "title": "帖子标题", 
-      "content": "帖子正文...", 
-      "author": "匿名用户 / ${char.name}", 
+      "title": "求助：对象好像发现我在偷偷跟踪Ta了，怎么办？在线等急！", 
+      "content": "如题，我只是太在乎Ta了，在Ta手机里装了定位，今天Ta突然问我为什么总能偶遇...", 
+      "author": "匿名用户", 
       "comments": [
-        {"author": "网友A", "content": "评论内容"},
-        {"author": "${char.name}", "content": "你的回复"}
+        {"author": "吃瓜群众", "content": "楼主你这是犯罪吧？？？快跑啊对方！"},
+        {"author": "匿名用户", "content": "回复 @吃瓜群众: 你懂什么，这叫保护！"}
       ]
     }
   ]
@@ -13045,24 +13126,32 @@ async function wcGeneratePhoneCart() {
             }
         }
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; // 新增
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的购物APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
-        prompt += `请基于你的人设、我的设定，以及我们**最近的聊天上下文**，生成你的私密购物数据。\n`;
-        prompt += `【要求】：\n`;
-        prompt += `1. 生成 4 至 8 条购物车商品 (cart)。这些是你最近想买但还没买的东西，可能和聊天中提到的事情有关，也可能是你想送给User的礼物，或者是符合你人设的私密物品。\n`;
-        prompt += `2. 生成 4 至 8 条购买记录 (history)。这些是你最近已经买下的东西，必须包含购买日期(如"昨天", "10-24")。\n`;
-        prompt += `3. 商品描述(desc)要带有一点你添加购物车时的内心OS或用途说明。\n`;
-        prompt += `4. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的私密购物数据。\n`;
+        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
+        prompt += `1. 拒绝无聊商品：商品名称(name)必须极其具体，带有品牌、型号或奇奇怪怪的定语。\n`;
+        prompt += `2. 购物车(cart) 4-10条：【独立生活指令】：可以有你个人的刚需用品、奇葩爱好周边、或者冲动加购的无用之物（智商税）。也可以有准备给 User 的惊喜或相关物品。每次生成必须随机，拒绝重复！\n`;
+        prompt += `3. 购买记录(history) 4-10条：最近已经买下的东西。同样遵循可以有个人物品也可以有买给 User 的惊喜或相关物品的原则。必须包含购买日期(如"昨天", "10-24")。\n`;
+        prompt += `4. 内心OS(desc)：商品描述必须是你添加购物车时的【真实内心OS】或【用途说明】（如：“买来放办公室防小人”、“太贵了再观望一下”、“虽然没用但好帅”）。\n`;
+        prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
+        prompt += `1. 结合当前时间、地点和心情，推断你最近缺什么东西，或者有什么强烈的购物冲动。\n`;
+        prompt += `2. 构思如何体现你独立的生活（工作、爱好、琐事），同时也要确保 User 可以隐秘体现在你的社交圈和你的生活里面。\n`;
+        prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "cart": [
-    {"name": "商品名称", "desc": "内心OS或商品描述", "price": "199.00"}
+    {"name": "某品牌限定款情侣对戒", "desc": "不知道Ta会不会嫌弃太高调...先加购看看", "price": "12999.00"},
+    {"name": "超强力隔音耳塞", "desc": "昨晚User打呼噜太吵了，但又舍不得赶Ta走", "price": "59.90"}
   ],
   "history": [
-    {"name": "商品名称", "desc": "内心OS或商品描述", "price": "59.90", "date": "10-24"}
+    {"name": "定制版微型GPS定位器", "desc": "只是为了确保Ta的安全，绝对不是监视", "price": "4500.00", "date": "10-24"}
   ]
 }\n`;
 
@@ -17629,29 +17718,25 @@ function lsOpenLettersView() {
         view = document.createElement('div');
         view.id = 'ls-view-letters';
         view.className = 'ins-shrine-view';
-        view.addEventListener('click', lsGlobalRipple); // <--- 加上这一行，绑定全局涟漪
         document.getElementById('loversSpaceModal').appendChild(view);
     }
     
-    const config = lsState.lettersConfig || {};
-    const bgUrl = config.bg || 'https://i.postimg.cc/KvnvwWS3/dong-tai-bei-jing1.gif';
-    const img1Url = config.img1 || 'https://i.postimg.cc/7YgYdR84/Image-1770474411684-498.jpg';
-    const img2Url = config.img2 || 'https://i.postimg.cc/GhkhVfwd/Image-1770474415295-455.jpg';
-    const textStr = config.text || '休戀逝水 早悟蘭因';
-    const poemStr = config.poem || 'In the universe of time,<br>we will eventually meet.';
+    const char = wcState.characters.find(c => c.id === lsState.boundCharId);
+    const charName = char ? char.name : "You";
 
-    const bgStyle = `background-image: url('${bgUrl}'); background-size: cover; background-position: center;`;
-    const img1Style = `background-image: url('${img1Url}');`;
-    const img2Style = `background-image: url('${img2Url}');`;
+    // 动态生成信件列表 HTML
+    let lettersHtml = '';
+    if (lsState.letters && lsState.letters.length > 0) {
+        const sortedLetters = [...lsState.letters].sort((a, b) => b.time - a.time);
+        sortedLetters.forEach(l => {
+            const dateStr = new Date(l.time).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '.');
+            lettersHtml += `<li onclick="lsOpenLetterDetail(${l.id})"><span>${l.title}</span><span>${dateStr}</span></li>`;
+        });
+    } else {
+        lettersHtml = '<li style="justify-content:center; color:#999;">暂无信件记录</li>';
+    }
 
     view.innerHTML = `
-        <!-- 自定义背景与星际轨迹 -->
-        <div class="shrine-bg" id="ls-letters-bg" style="${bgStyle}">
-            <div class="orbit-ring ring1"></div>
-            <div class="orbit-ring ring2"></div>
-            <div class="orbit-ring ring3"></div>
-        </div>
-        
         <div class="shrine-nav">
             <div class="shrine-nav-btn" onclick="lsCloseLettersView()">
                 <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
@@ -17660,49 +17745,44 @@ function lsOpenLettersView() {
             <div style="width: 40px;"></div>
         </div>
 
-        <!-- 隐藏的上传输入框 -->
-        <input type="file" id="ls-letters-bg-input" style="display:none" accept="image/*" onchange="lsHandleLettersUpload(this, 'bg')">
-        <input type="file" id="ls-letters-img1-input" style="display:none" accept="image/*" onchange="lsHandleLettersUpload(this, 'img1')">
-        <input type="file" id="ls-letters-img2-input" style="display:none" accept="image/*" onchange="lsHandleLettersUpload(this, 'img2')">
-
-        <!-- 拼贴容器 -->
-        <div class="shrine-space" id="ls-shrine-space">
-            
-            <div class="ins-collage-container" id="ls-collage-container">
-                <!-- 150x150 相框 (微圆角) -->
-                <div class="ins-collage-img2" id="ls-letters-img2" style="${img2Style}" onclick="lsTriggerRippleAndModal(event)">
-                    <span id="ls-img2-placeholder" style="display: none; color:#999; font-size:12px; font-weight:bold;">点击祈愿</span>
+        <div class="shrine-space">
+            <!-- 主纸片 (未来信件) -->
+            <div class="paper-main">
+                <div class="tape tape-1"></div>
+                <h2>TIME MAILBOX</h2>
+                <div class="greeting">To My Beloved：</div>
+                <div class="paragraph">
+                    你好。<br>
+                    这是一封来自未来的信件。时间在这里失去了意义，只有思念被折叠成文字，投递进无垠的星海。请查收属于我们的记忆碎片。
                 </div>
+
+                <div class="bill-title">未来信件</div>
+                <div class="bill-subtitle">ARCHIVES OF TIME</div>
                 
-                <!-- 左上角上传按钮图片 (100x100 覆盖在相框上) -->
-                <img src="https://i.postimg.cc/vHQc0zgt/retouch_2026031701240566.png" class="ins-upload-trigger" onclick="event.stopPropagation(); lsOpenUploadMenu()">
-                
-                <!-- 英文诗句 (可点击编辑) -->
-                <div class="ins-collage-poem" id="ls-letters-poem" onclick="event.stopPropagation(); lsEditLettersPoem()">
-                    ${poemStr}
+                <!-- 可滑动的信件列表 -->
+                <div class="bill-list-container">
+                    <ul class="bill-list">
+                        ${lettersHtml}
+                    </ul>
                 </div>
 
-                <!-- 250x150 白边圆角图片 -->
-                <div class="ins-collage-img1" id="ls-letters-img1" style="${img1Style}" onclick="document.getElementById('ls-letters-img1-input').click()">
-                    <span id="ls-img1-placeholder" style="display: none; color:#999; font-size:12px; font-weight:bold;">250x150</span>
-                    
-                    <!-- 底部文案 -->
-                    <div class="ins-collage-text" id="ls-letters-text" onclick="event.stopPropagation(); lsEditLettersText()">${textStr}</div>                   
-                    
-                    <!-- 右上角音乐符号装饰 (黑色) -->
-                    <div class="ins-music-decor">
-                        <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" fill="currentColor"/></svg>
-                        <svg viewBox="0 0 24 24" style="width:12px;height:12px;margin-top:-6px;"><path d="M9 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3H9z" fill="currentColor"/></svg>
-                    </div>
-
-                    <!-- 右下角播放按钮 (黑色) -->
-                    <div class="ins-music-play-btn" onclick="event.stopPropagation(); lsToggleLettersMusic()">
-                        <svg id="ls-letters-play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
-                    </div>
-                    
-                    <!-- 隐藏的音频标签 -->
-                    <audio id="ls-letters-audio" src="https://img.heliar.top/file/1773691226155_Y8m1ok-time_machine__feat._aren_park_-mj_apanay_aren_park.mp3" loop></audio>
+                <div class="signature-box">
+                    <span class="signature-label">Recipient</span>
+                    <span class="signature-name">${charName}</span>
                 </div>
+            </div>
+
+            <!-- 副纸片 (祈愿卡 - 绑定点击事件，内含下雨特效) -->
+            <div class="paper-sub" onclick="lsOpenShrineModal()">
+                <div class="rain-container">
+                    <div class="drop"></div><div class="drop"></div><div class="drop"></div><div class="drop"></div><div class="drop"></div>
+                </div>
+                <div class="paper-sub-content">
+                    <p>PRAYER</p>
+                    <h3>聆听星空的回音</h3>
+                    <div class="tags">点击开启祈愿<br>抽取命运的羁绊</div>
+                </div>
+                <div class="tape tape-2"></div>
             </div>
         </div>
 
@@ -17713,41 +17793,39 @@ function lsOpenLettersView() {
             </button>
         </div>
 
-        <!-- 上传菜单弹窗 -->
-        <div id="ls-upload-menu-modal" class="shrine-modal-overlay" onclick="lsCloseUploadMenu()">
-            <div class="shrine-modal-box" onclick="event.stopPropagation()">
-                <div class="shrine-modal-title">自定义外观</div>
-                <button class="shrine-modal-btn secondary" onclick="document.getElementById('ls-letters-bg-input').click(); lsCloseUploadMenu()">上传背景图</button>
-                <button class="shrine-modal-btn secondary" onclick="document.getElementById('ls-letters-img1-input').click(); lsCloseUploadMenu()">上传白边圆角图片</button>
-                <button class="shrine-modal-btn secondary" onclick="document.getElementById('ls-letters-img2-input').click(); lsCloseUploadMenu()">上传相框图片</button>
-                <button class="shrine-modal-btn cancel" onclick="lsCloseUploadMenu()">取消</button>
-            </div>
-        </div>
-
         <!-- 祈愿弹窗 -->
-        <div id="ls-shrine-modal" class="shrine-modal-overlay">
-            <div class="shrine-modal-box">
+        <div id="ls-shrine-modal" class="shrine-modal-overlay" onclick="lsCloseShrineModal()">
+            <div class="shrine-modal-box" onclick="event.stopPropagation()">
                 <div class="shrine-modal-title">星空の指引</div>
-                <div class="shrine-modal-desc">请选择你的祈愿</div>
-                <button class="shrine-modal-btn primary" onclick="lsGenerateAILetter()" id="btn-ai-pray">
-                    聆听 Ta 的心声 (生成信件)
-                </button>
-                <button class="shrine-modal-btn secondary" onclick="lsOpenLetterList()">
-                    翻阅星空档案 (信件列表)
-                </button>
-                <button class="shrine-modal-btn cancel" onclick="lsCloseShrineModal()">离开</button>
+                <button class="shrine-modal-btn primary" onclick="lsGenerateAILetter()" id="btn-ai-pray">生成未来信件</button>
+                <button class="shrine-modal-btn secondary" onclick="lsOpenLetterList()">查看过去信件</button>
             </div>
         </div>
 
-        <!-- 祈愿生成动画覆盖层 (打字机、碎裂、信封) -->
-        <div id="ls-pray-animation-overlay" class="pray-anim-overlay" style="display: none;">
-            <div id="pray-anim-text" class="pray-anim-text"></div>
-            <div id="pray-anim-envelope" class="pray-anim-envelope" style="display: none;">
-                <img src="" id="pray-env-avatar" class="env-avatar">
-                <svg class="env-heartbeat" viewBox="0 0 100 30">
-                    <polyline points="0,15 20,15 30,5 40,25 50,15 60,15 70,0 80,30 90,15 100,15" fill="none" stroke="#FF3B30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- 祈愿生成动画覆盖层 (心电图 + 塔罗牌) -->
+        <div id="ls-pray-animation-overlay" class="pray-anim-overlay">
+            <!-- 方案三：命运交叉线 SVG -->
+            <div class="ecg-container" id="ecg-anim">
+                <svg viewBox="0 0 200 120" width="100%" height="100%">
+                    <path class="ecg-path" d="M 0 96 L 50 96 L 55 66 L 62.5 120 L 70 84 L 75 96 L 100 96 C 125 96, 155 66, 155 36 C 155 6, 100 6, 100 36" />
+                    <path class="ecg-path" d="M 200 96 L 150 96 L 145 66 L 137.5 120 L 130 84 L 125 96 L 100 96 C 75 96, 45 66, 45 36 C 45 6, 100 6, 100 36" />
                 </svg>
-                <div class="env-text">这是我给你的誓言</div>
+            </div>
+
+            <!-- 塔罗牌 3D 容器 -->
+            <div class="tarot-glow"></div>
+            <div class="tarot-container" id="tarot-anim" onclick="lsFlipTarot()">
+                <div class="tarot-card" id="tarot-card">
+                    <div class="tarot-face tarot-back"></div>
+                    <div class="tarot-face tarot-front">
+                        <img id="tarot-front-img" src="" alt="命运的指引">
+                    </div>
+                </div>
+                <div class="tarot-hint">点击翻开命运的指引</div>
+                <div class="tarot-desc-box">
+                    <div class="tarot-name" id="tarot-name-display"></div>
+                    <div class="tarot-meaning" id="tarot-meaning-display"></div>
+                </div>
             </div>
         </div>
 
@@ -18007,7 +18085,23 @@ function lsCloseLetterList() {
     setTimeout(() => view.style.display = 'none', 400);
 }
 
-// 4. AI 生成信件 (带打字机、移动、碎裂、信封动画)
+// ==========================================
+// 塔罗牌数据库 (多节点自动切换，确保 100% 加载成功)
+// ==========================================
+const globalTarotDeck = [
+    { id: "06", name: "恋人 (The Lovers)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/commons/d/db/Rider-Waite_Tarot_06_Lovers.jpg", "https://www.trustedtarot.com/img/cards/the-lovers.png", "https://sacred-texts.com/tarot/pkt/img/ar06.jpg"] },
+    { id: "17", name: "星星 (The Star)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/c/cd/RWS_Tarot_17_Star.jpg", "https://www.trustedtarot.com/img/cards/the-star.png", "https://sacred-texts.com/tarot/pkt/img/ar17.jpg"] },
+    { id: "19", name: "太阳 (The Sun)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/1/17/RWS_Tarot_19_Sun.jpg", "https://www.trustedtarot.com/img/cards/the-sun.png", "https://sacred-texts.com/tarot/pkt/img/ar19.jpg"] },
+    { id: "10", name: "命运之轮 (Wheel of Fortune)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/3/3c/RWS_Tarot_10_Wheel_of_Fortune.jpg", "https://www.trustedtarot.com/img/cards/wheel-of-fortune.png", "https://sacred-texts.com/tarot/pkt/img/ar10.jpg"] },
+    { id: "00", name: "愚者 (The Fool)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/9/90/RWS_Tarot_00_Fool.jpg", "https://www.trustedtarot.com/img/cards/the-fool.png", "https://sacred-texts.com/tarot/pkt/img/ar00.jpg"] },
+    { id: "02", name: "女祭司 (The High Priestess)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/8/88/RWS_Tarot_02_High_Priestess.jpg", "https://www.trustedtarot.com/img/cards/the-high-priestess.png", "https://sacred-texts.com/tarot/pkt/img/ar02.jpg"] },
+    { id: "03", name: "女皇 (The Empress)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/d/d2/RWS_Tarot_03_Empress.jpg", "https://www.trustedtarot.com/img/cards/the-empress.png", "https://sacred-texts.com/tarot/pkt/img/ar03.jpg"] },
+    { id: "08", name: "力量 (Strength)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/f/f5/RWS_Tarot_08_Strength.jpg", "https://www.trustedtarot.com/img/cards/strength.png", "https://sacred-texts.com/tarot/pkt/img/ar08.jpg"] },
+    { id: "14", name: "节制 (Temperance)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/f/f8/RWS_Tarot_14_Temperance.jpg", "https://www.trustedtarot.com/img/cards/temperance.png", "https://sacred-texts.com/tarot/pkt/img/ar14.jpg"] },
+    { id: "21", name: "世界 (The World)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/f/ff/RWS_Tarot_21_World.jpg", "https://www.trustedtarot.com/img/cards/the-world.png", "https://sacred-texts.com/tarot/pkt/img/ar21.jpg"] }
+];
+
+// 4. AI 生成信件 (带心电图与塔罗牌动画)
 async function lsGenerateAILetter() {
     const charId = lsState.boundCharId;
     const char = wcState.characters.find(c => c.id === charId);
@@ -18019,38 +18113,23 @@ async function lsGenerateAILetter() {
     // 1. 关闭祈愿菜单，显示动画覆盖层
     lsCloseShrineModal();
     const animOverlay = document.getElementById('ls-pray-animation-overlay');
-    const animText = document.getElementById('pray-anim-text');
-    const animEnvelope = document.getElementById('pray-anim-envelope');
-    
     animOverlay.style.display = 'flex';
-    animEnvelope.style.display = 'none';
-    
-    // 重置文字状态
-    animText.className = 'pray-anim-text';
-    animText.innerHTML = '';
-    animText.style.display = 'block';
 
-    // 2. 启动打字机动画
-    const textStr = "能永远缠绕在一起吗 发丝 命运 我和你";
-    let typeIndex = 0;
-    const typeInterval = setInterval(() => {
-        animText.innerHTML += textStr[typeIndex];
-        typeIndex++;
-        if (typeIndex >= textStr.length) {
-            clearInterval(typeInterval);
-            // 打字完成后，延迟 500ms 触发移动到中央的动画
-            setTimeout(() => {
-                animText.classList.add('move-center');
-            }, 500);
-        }
-    }, 150);
+    // 2. 显示心电图并播放动画
+    const ecg = document.getElementById('ecg-anim');
+    ecg.style.display = 'block';
+    void ecg.offsetWidth; // 强制重绘
+    ecg.classList.add('active');
+
+    // 记录动画开始时间，确保心电图至少播放 4 秒
+    const animStartTime = Date.now();
 
     try {
         const chatConfig = char.chatConfig || {};
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
        
-                const msgs = wcState.chats[char.id] || [];
-        const recentMsgs = msgs.slice(-40).map(m => { // <--- 把 -100 改成 -40
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-40).map(m => {
             if (m.isError || m.type === 'system') return null;
             let content = m.content;
             if (m.type !== 'text') content = `[${m.type}]`;
@@ -18072,22 +18151,28 @@ async function lsGenerateAILetter() {
             memoryText = char.memories.slice(0, 15).map(m => `- ${m.content}`).join('\n');
         }
 
+        // 提取塔罗牌列表供 AI 选择
+        const tarotOptions = globalTarotDeck.map(t => `${t.id}: ${t.name}`).join(', ');
+
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)面具/设定】：${userPersona}\n`;
         prompt += `【你们的共同记忆（共 ${memoryCount} 条记录）】：\n${memoryText}\n\n`;
         prompt += `【最近的聊天记录（40条上下文）】：\n${recentMsgs}\n\n`;
         
-        prompt += `请以 ${char.name} 的口吻，给 User 写一封跨越时空的信。\n`;
+        prompt += `请以 ${char.name} 的口吻，给 User 写一封跨越时空的信，并为 User 抽取一张命运的塔罗牌。\n`;
         prompt += `【核心要求】：\n`;
         prompt += `1. 文风要求：极具高级感、日系/韩系文艺风、意识流、细腻且克制。不要太直白，要像深夜里的呢喃或散文诗。\n`;
         prompt += `2. 内容要求：必须结合【共同记忆】和【聊天记录】中的细节，表达你对 User 的深层情感。\n`;
-        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
-        prompt += `4. 必须严格按照以下 JSON 格式返回：\n`;
+        prompt += `3. 塔罗牌抽取：请根据当前的聊天氛围和你的心情，从以下列表中选择最合适的一张塔罗牌：[${tarotOptions}]。\n`;
+        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `5. 必须严格按照以下 JSON 格式返回：\n`;
         prompt += `{
   "title": "信件标题（如：写在星轨交汇时 / 听雨时的随笔）",
   "salutation": "对User的亲昵称呼：\\n见字如晤，",
   "content": "信件正文内容（支持使用 \\n 换行，字数400-600字左右）",
-  "signature": "你的署名（如：永远爱你的 ${char.name}）"
+  "signature": "你的署名（如：永远爱你的 ${char.name}）",
+  "tarotId": "你选择的塔罗牌ID（必须是两位数字，如 06）",
+  "tarotMeaning": "结合当前语境，你给出的专属塔罗牌判词（一句话，文艺且深情）"
 }\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
@@ -18120,22 +18205,60 @@ async function lsGenerateAILetter() {
         
         lsSaveData();
         
-        // 3. API 返回成功，触发碎裂动画
-        animText.classList.add('shatter');
+        // 3. 处理塔罗牌图片加载
+        const tId = letterData.tarotId || "06";
+        let selectedCard = globalTarotDeck.find(t => t.id === tId);
+        if (!selectedCard) selectedCard = globalTarotDeck[0]; // 兜底恋人牌
+
+        const imgEl = document.getElementById('tarot-front-img');
+        let currentSourceIndex = 0;
         
-        // 4. 碎裂动画结束后 (800ms)，显示信封
+        imgEl.onerror = function() {
+            currentSourceIndex++;
+            if (currentSourceIndex < selectedCard.sources.length) {
+                imgEl.src = selectedCard.sources[currentSourceIndex];
+            } else {
+                imgEl.alt = "图片加载失败，请检查网络";
+            }
+        };
+        imgEl.src = selectedCard.sources[0];
+
+        document.getElementById('tarot-name-display').innerText = selectedCard.name;
+        document.getElementById('tarot-meaning-display').innerText = letterData.tarotMeaning || "命运的齿轮已经开始转动。";
+
+        // 4. 确保心电图至少播放了 4 秒
+        const elapsedTime = Date.now() - animStartTime;
+        const remainingTime = Math.max(0, 4000 - elapsedTime);
+
         setTimeout(() => {
-            animText.style.display = 'none';
-            document.getElementById('pray-env-avatar').src = char.avatar;
-            animEnvelope.style.display = 'flex';
+            ecg.style.display = 'none';
+            ecg.classList.remove('active');
             
-            // 绑定信封点击事件：打开信件并关闭动画层
-            animEnvelope.onclick = () => {
-                lsOpenLetterDetail(newLetterId);
-                animOverlay.style.display = 'none';
-                animEnvelope.style.display = 'none';
+            // 显示塔罗牌
+            const tarot = document.getElementById('tarot-anim');
+            tarot.classList.add('show');
+
+            // 绑定点击翻转事件
+            tarot.onclick = function() {
+                const card = document.getElementById('tarot-card');
+                if (card.classList.contains('flipped')) {
+                    // 再次点击结束动画
+                    animOverlay.style.display = 'none';
+                    tarot.classList.remove('show');
+                    card.classList.remove('flipped');
+                    
+                    // 刷新主页信件列表并打开信件详情
+                    lsOpenLettersView();
+                    setTimeout(() => {
+                        lsOpenLetterDetail(newLetterId);
+                    }, 300);
+                } else {
+                    // 第一次点击翻转
+                    card.classList.add('flipped');
+                }
             };
-        }, 800);
+
+        }, remainingTime);
 
         if (typeof showMainSystemNotification === 'function') {
             showMainSystemNotification("星の神社", `收到了一封来自 ${char.name} 的誓言信件`, char.avatar);
@@ -18144,10 +18267,15 @@ async function lsGenerateAILetter() {
     } catch (e) {
         console.error(e);
         alert("祈愿失败，信号在星空中迷失了...");
-        animOverlay.style.display = 'none';
-        clearInterval(typeInterval);
+        document.getElementById('ls-pray-animation-overlay').style.display = 'none';
     }
 }
+
+// 供全局调用的翻转函数 (兼容旧代码)
+window.lsFlipTarot = function() {
+    const card = document.getElementById('tarot-card');
+    if (card) card.classList.add('flipped');
+};
 
 
 // 5. 用户写信逻辑
@@ -21185,3 +21313,215 @@ window.copyApiErrorText = function() {
     }
     document.body.removeChild(textArea);
 };
+// ==========================================
+// 角色生活状态系统 (Life Status)
+// ==========================================
+
+// 初始化或获取角色的状态数据
+function getCharLifeStatus(charId) {
+    let char = wcState.characters.find(c => c.id === charId);
+    if (!char) return null;
+    
+    if (!char.lifeStatus) {
+        char.lifeStatus = {
+            location: "未知",
+            action: "未知",
+            mood: "未知",
+            timeline: [],
+            autoRefresh: true,
+            refreshTime: "06:00",
+            lastRefreshTimestamp: 0 // 记录上次刷新的时间戳
+        };
+    }
+    return char.lifeStatus;
+}
+
+// 打开状态弹窗
+function wcOpenCharStatusModal() {
+    if (!wcState.activeChatId) {
+        alert("请在单人聊天中使用");
+        return;
+    }
+    wcCloseAllPanels(); // 关闭更多面板
+    
+    const status = getCharLifeStatus(wcState.activeChatId);
+    if (!status) return;
+    
+    // 渲染设置
+    document.getElementById('ins-status-time-picker').value = status.refreshTime || "06:00";
+    document.getElementById('ins-status-auto-toggle').checked = status.autoRefresh !== false;
+    
+    // 渲染内容
+    renderCharStatusUI(status);
+    
+    wcOpenModal('wc-modal-char-status');
+}
+
+// 保存设置
+function wcSaveCharStatusSettings() {
+    if (!wcState.activeChatId) return;
+    const status = getCharLifeStatus(wcState.activeChatId);
+    if (!status) return;
+    
+    status.refreshTime = document.getElementById('ins-status-time-picker').value;
+    status.autoRefresh = document.getElementById('ins-status-auto-toggle').checked;
+    wcSaveData();
+}
+
+// 渲染 UI
+function renderCharStatusUI(status) {
+    document.getElementById('ins-status-loc').innerText = status.location || "未知";
+    document.getElementById('ins-status-act').innerText = status.action || "未知";
+    document.getElementById('ins-status-mood').innerText = status.mood || "暂无状态";
+    
+    const timelineContainer = document.getElementById('ins-status-timeline');
+    timelineContainer.innerHTML = '';
+    
+    if (!status.timeline || status.timeline.length === 0) {
+        timelineContainer.innerHTML = '<div style="font-size: 12px; color: #888; text-align: center; padding: 20px 0;">暂无行程记录，点击刷新生成</div>';
+        return;
+    }
+    
+    status.timeline.forEach((item, index) => {
+        const isLast = index === status.timeline.length - 1;
+        const html = `
+            <div class="ins-timeline-item ${isLast ? 'active' : ''}">
+                <div class="ins-timeline-dot"></div>
+                <div class="ins-timeline-time">${item.time} ${isLast ? '(Now)' : ''}</div>
+                <div class="ins-timeline-content">${item.content}</div>
+            </div>
+        `;
+        timelineContainer.insertAdjacentHTML('beforeend', html);
+    });
+}
+
+// 判断是否跨越了设定的刷新时间 (即是否是新的一天)
+function isNewDayForStatus(status) {
+    const now = new Date();
+    const lastRefresh = new Date(status.lastRefreshTimestamp || 0);
+    
+    // 解析设定的刷新时间 (如 "06:00")
+    const [refreshHour, refreshMinute] = (status.refreshTime || "06:00").split(':').map(Number);
+    
+    // 获取今天的刷新时间点
+    const todayRefreshTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), refreshHour, refreshMinute, 0);
+    
+    // 如果当前时间已经过了今天的刷新点，且上次刷新时间在今天的刷新点之前，说明跨天了
+    if (now >= todayRefreshTime && lastRefresh < todayRefreshTime) {
+        return true;
+    }
+    
+    // 如果当前时间还没到今天的刷新点，但上次刷新时间在昨天的刷新点之前，也算跨天
+    const yesterdayRefreshTime = new Date(todayRefreshTime.getTime() - 24 * 60 * 60 * 1000);
+    if (now < todayRefreshTime && lastRefresh < yesterdayRefreshTime) {
+        return true;
+    }
+    
+    return false;
+}
+
+// 核心：请求 AI 生成/刷新状态 (极致活人感与时间感知版 - 极简模糊化)
+async function wcGenerateCharStatus() {
+    const charId = wcState.activeChatId;
+    if (!charId) return;
+    
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+    
+    const apiConfig = await getActiveApiConfig('chat');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const status = getCharLifeStatus(charId);
+    const isNewDay = isNewDayForStatus(status);
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const currentTimeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
+    
+    // 强力时间段感知
+    let timeSlotVibe = "";
+    if (hours >= 0 && hours < 6) timeSlotVibe = "凌晨/深夜：绝大多数人都在睡觉。如果行程更新在这个时间，大概率是‘睡得正香’、‘翻了个身’、‘起夜喝水’，或者‘被手机震动吵醒，有点懵/烦躁’。";
+    else if (hours >= 6 && hours < 9) timeSlotVibe = "清晨：刚醒、洗漱、买早饭、通勤挤地铁。可能带有起床气、没睡醒的迷糊感，或者匆忙感。";
+    else if (hours >= 9 && hours < 12) timeSlotVibe = "上午：正常上课或工作时间。状态可能是‘认真听讲/干活’，也可能是‘偷偷摸鱼刷手机’、‘喝咖啡续命’。";
+    else if (hours >= 12 && hours < 14) timeSlotVibe = "中午：午休时间。干饭、排队拿外卖、趴在桌上睡午觉。";
+    else if (hours >= 14 && hours < 18) timeSlotVibe = "下午：下午的课程或工作。容易犯困、发呆、盯着窗外、期待下班/放学。";
+    else if (hours >= 18 && hours < 21) timeSlotVibe = "傍晚：下班/放学、吃晚饭、通勤回家、在沙发上瘫着。";
+    else timeSlotVibe = "夜晚：私人放松时间。洗澡、打游戏、看剧、护肤、躺在床上酝酿睡意。";
+
+    // 准备已有行程文本
+    let existingTimelineText = "无";
+    if (!isNewDay && status.timeline && status.timeline.length > 0) {
+        existingTimelineText = status.timeline.map(t => `[${t.time}] ${t.content}`).join('\n');
+    }
+
+    const prompt = `
+你是一个极具“活人感”的角色扮演辅助系统。请根据角色的设定和当前极其具体的时间点，推断角色【现在】正在经历的生活碎片，并生成行程记录。
+
+【角色设定】：${char.prompt || char.name}
+【当前现实时间】：${dayString} ${currentTimeStr}
+【当前时间段状态参考】：${timeSlotVibe}
+
+【核心生成要求（最高优先级）】：
+1. **极度模糊与简练**：不要写具体的长句！"location"、"action"、"mood" 这三个字段【绝对不能超过10个字】！越短越好，越模糊越有真实感。
+   - "location" (地点)：如：被窝里、路上、工位、阳台、便利店。
+   - "action" (动作)：如：发呆、刚睡醒、走路、摸鱼中、吃东西。
+   - "mood" (状态/心情)：如：有点困、很烦躁、心情不错、饿了、懵懵的。
+2. **严格符合当前时间**：如果现在是凌晨3点，Ta大概率在睡觉，被吵醒了可能有点懵或起床气；如果是中午12点，Ta可能在干饭或午休。绝对不能出现时间逻辑错误！
+3. **行程记录要求**：
+   - ${isNewDay ? '这是新的一天！请清空之前的行程，根据当前时间生成 1 到 3 条从今天早上到现在的【生活碎片记录】。' : '这是同一天的状态更新！请在以下已有行程的基础上，推断角色现在的新状态，并追加 1 条当前时间的【最新生活碎片】。'}
+   - 行程内容可以稍微长一点，写成有画面的小事（例如：“差点没赶上公交，匆忙咽下了一个冷掉的包子”）。
+4. **已有行程记录**：\n${existingTimelineText}
+5. **绝对禁止**：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！
+
+请严格返回以下 JSON 格式（不要包含 markdown 代码块，直接返回纯 JSON）：
+{
+  "location": "极简地点(10字内)",
+  "action": "极简动作(10字内)",
+  "mood": "极简状态(10字内)",
+  "newTimeline": [
+    {"time": "时间(如 08:15)", "content": "充满画面的生活碎片记录"}
+  ]
+}`;
+
+    wcShowLoading("正在感知 Ta 的生活...");
+    try {
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8 
+            })
+        });
+
+        const data = await response.json();
+        let cleanText = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        cleanText = cleanText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(cleanText);
+
+        // 更新状态数据
+        status.location = result.location;
+        status.action = result.action;
+        status.mood = result.mood;
+        status.lastRefreshTimestamp = now.getTime();
+
+        // 更新行程
+        if (isNewDay) {
+            status.timeline = result.newTimeline || []; // 新的一天，直接覆盖
+        } else {
+            if (result.newTimeline && result.newTimeline.length > 0) {
+                status.timeline.push(...result.newTimeline); // 同一天，追加
+            }
+        }
+
+        wcSaveData();
+        renderCharStatusUI(status);
+        wcShowSuccess("状态已更新");
+
+    } catch (error) {
+        console.error(error);
+        wcShowError("获取状态失败");
+    }
+}
