@@ -3229,6 +3229,29 @@ function wcHandleBack() {
         wcRenderChats(); 
     }
 }
+// --- 新增：更新聊天顶栏状态显示 ---
+function updateChatTopBarStatus(char) {
+    const titleEl = document.getElementById('wc-nav-title');
+    if (!titleEl) return;
+    
+    let displayName = char.note || char.name;
+    if (char.isGroup && char.members) {
+        displayName += ` (${char.members.length})`;
+    }
+    
+    let statusHtml = '';
+    // 【修改】：只显示 action (正在干的事情)
+    if (!char.isGroup && char.lifeStatus && char.lifeStatus.action && char.lifeStatus.action !== "未知") {
+        statusHtml = `<div style="font-size: 11px; color: #8E8E93; font-weight: normal; margin-top: 2px; line-height: 1;">${char.lifeStatus.action}</div>`;
+    }
+    
+    titleEl.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2;">
+            <div style="font-size: 17px; font-weight: 600; color: #111;">${displayName}</div>
+            ${statusHtml}
+        </div>
+    `;
+}
 
 // --- WeChat Chat Logic ---
 function wcOpenChat(charId) {
@@ -3255,12 +3278,7 @@ function wcOpenChat(charId) {
     if (btnExit) btnExit.style.display = 'none'; // 确保隐藏退出键
     
     const titleEl = document.getElementById('wc-nav-title');
-    let displayName = char.note || char.name;
-    // 【新增】：如果是群聊，在名字后面加上人数
-    if (char.isGroup && char.members) {
-        displayName += ` (${char.members.length})`;
-    }
-    titleEl.innerText = displayName;
+    updateChatTopBarStatus(char); // 调用新函数渲染顶栏
     titleEl.onclick = null;
     titleEl.style.cursor = 'default';    
     const rightContainer = document.getElementById('wc-nav-right-container');
@@ -4334,27 +4352,37 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         const recentMsgs = msgs.slice(-limit);
         
         // 👇 新增：将角色的生活状态注入到 System Prompt 中 👇
-        if (char.lifeStatus && char.lifeStatus.location !== "未知") {
-            // 检查是否需要自动刷新状态 (如果开启了自动刷新且跨天了)
-            if (char.lifeStatus.autoRefresh && isNewDayForStatus(char.lifeStatus)) {
-                // 异步触发刷新，不阻塞当前聊天，刷新完后下次聊天生效
-                wcGenerateCharStatus().catch(e => console.log("自动刷新状态失败", e));
-            }
+        if (!char.lifeStatus) {
+            char.lifeStatus = { location: "未知", action: "未知", mood: "未知", timeline: [], autoRefresh: true, refreshTime: "06:00", lastRefreshTimestamp: 0 };
+        }
+        
+        // 检查是否跨越了现实中的刷新时间，如果跨天，只清空行程记录，保留当前动作(模拟在线状态)
+        if (char.lifeStatus.autoRefresh && isNewDayForStatus(char.lifeStatus)) {
+            // 仅清空行程，保留 location, action, mood
+            char.lifeStatus.timeline = [];
+            // 注意：这里不更新 lastRefreshTimestamp，等真正调 API 刷新时才更新
+            wcSaveData();
+        }
 
-            let statusText = `\n\n【你的当前生活状态 (请根据此状态与用户自然对话，可主动提及或吐槽，保持生活气息，不要死板)】：\n`;
+        let statusText = `\n\n【你的当前生活状态 (请根据此状态与用户自然对话，保持生活气息)】：\n`;
+        if (char.lifeStatus.location !== "未知" || char.lifeStatus.action !== "未知") {
             statusText += `- 当前位置：${char.lifeStatus.location}\n`;
             statusText += `- 正在做的事：${char.lifeStatus.action}\n`;
-            statusText += `- 当前心情/状态：${char.lifeStatus.mood}\n`;
-            
-            if (char.lifeStatus.timeline && char.lifeStatus.timeline.length > 0) {
-                statusText += `- 距今为止的行程：\n`;
-                char.lifeStatus.timeline.forEach(t => {
-                    statusText += `  [${t.time}] ${t.content}\n`;
-                });
-            }
-            systemPrompt += statusText;
+        } else {
+            statusText += `- 当前状态：未知 (新的一天，等待更新)\n`;
+        }
+        systemPrompt += statusText;
+
+        // 概率触发状态更新 (只允许更新 location 和 action)
+        const statusUpdateProb = 30; // 30% 概率
+        if (Math.random() * 100 < statusUpdateProb) {
+            systemPrompt += `\n【生活状态同步更新指令 (概率触发)】：\n`;
+            systemPrompt += `根据当前时间和聊天内容，如果你的位置或正在做的事情发生了变化，请在 JSON 数组中加入一条指令来更新你的状态。\n`;
+            systemPrompt += `指令格式：{"type":"update_status", "location":"新地点(10字内)", "action":"新动作(10字内)"}\n`;
         }
         // 👆 新增结束 👆
+
+
 
         // 修复：自动识别是否为视觉模型，防止纯文本模型收到图片导致 400 错误
         const isVisionModel = /vision|gpt-4o|claude-3|gemini|pixtral|qwen-vl|llava/i.test(apiConfig.model);
@@ -4950,6 +4978,39 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                  wcSaveData();
                  wcRenderMessages(charId);
              }
+                     } else if (action.type === 'update_status') {
+            if (!char.lifeStatus) {
+                char.lifeStatus = { location: "未知", action: "未知", mood: "未知", timeline: [], autoRefresh: true, refreshTime: "06:00", lastRefreshTimestamp: Date.now() };
+            }
+            
+            let locationChanged = false;
+            let newLocation = action.location || char.lifeStatus.location;
+            
+            // 判断位置是否发生实质性变化 (且不是从未知变来的)
+            if (action.location && action.location !== "未知" && action.location !== char.lifeStatus.location) {
+                // 如果原本不是未知，说明是中途移动了，触发提示
+                if (char.lifeStatus.location !== "未知") {
+                    locationChanged = true;
+                }
+            }
+
+            // 只更新地点和动作
+            if (action.location) char.lifeStatus.location = action.location;
+            if (action.action) char.lifeStatus.action = action.action;
+
+            wcSaveData();
+            
+            // 实时刷新顶栏
+            if (typeof updateChatTopBarStatus === 'function') {
+                updateChatTopBarStatus(char);
+            }
+            
+            // 如果位置改变了，插入一条可见的系统提示
+            if (locationChanged) {
+                wcAddMessage(charId, 'system', 'system', `[系统提示: ${char.name} 正在前往 ${newLocation}]`, { style: 'transparent' });
+            }
+            
+
         } else if (action.type === 'widget_photo' || action.type === 'widget_note') {
             // 修复：独立出来，专门处理小组件指令
             if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
@@ -5944,10 +6005,7 @@ function wcCloseMemoryPage() {
     if (globalNavbar) globalNavbar.style.display = 'flex';
     
     const char = wcState.characters.find(c => c.id === wcState.activeChatId);
-    const titleEl = document.getElementById('wc-nav-title');
-    let displayName = char.note || char.name;
-    if (char.isGroup && char.members) displayName += ` (${char.members.length})`;
-    titleEl.innerText = displayName;
+    if (char) updateChatTopBarStatus(char);
 }
 
 function wcRenderMemories() {
@@ -7950,27 +8008,24 @@ async function wcGenerateCharWallet() {
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
-        prompt += lifeStatusPrompt; // 新增
+        prompt += lifeStatusPrompt; 
         prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
         
-        prompt += `请根据角色的人设、职业、当前生活状态以及聊天记录，生成该角色的微信钱包数据。\n`;
-        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
-        prompt += `1. 生成 5 到 10 条最近的交易记录 (transactions)。\n`;
-        prompt += `2. 【独立生活强制指令】：你是一个有自己生活的人！80% 的账单必须是你个人的真实生活开销（如：符合人设的爱好支出、工作/学业垫付、突发状况的开销、冲动消费的智商税、朋友聚餐）。\n`;
-        prompt += `3. 【随机性与防重复】：拒绝平庸的“吃饭打车”，必须生成极具【角色职业病】或【性格特质】的奇葩或硬核账单！每次生成都要有全新的花样，严禁反复出现类似的物品。\n`;
-        prompt += `4. 【情感克制】：最多只有 1-2 笔消费可以与 User 隐秘相关（如：给User买的礼物、因为User而产生的冲动消费），绝不能满脑子都是 User。\n`;
-        prompt += `5. 备注(note)必须极其具体，带有强烈的画面感或真实的内心吐槽（如：“这破游戏又骗我氪金”、“楼下那家难吃得要死的便利店”）。\n`;
+        prompt += `请根据角色的人设、当前生活状态以及聊天记录，生成该角色的微信钱包数据。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. 【反模板化警告】：绝对禁止生成随机的、毫无逻辑的账单！\n`;
+        prompt += `2. 账单必须是【今日行程】和【聊天记录】的直接体现！如果行程里写了“在便利店买水”，账单里就必须有便利店的支出；如果聊天里说“刚打车回家”，就必须有打车费。\n`;
+        prompt += `3. 生成 5 到 10 条最近的交易记录 (transactions)。时间线必须与行程记录完美吻合！\n`;
+        prompt += `4. 备注(note)必须极其具体，带有强烈的画面感或真实的内心吐槽（例如：“和User去吃的那家超贵的日料”、“下雨天溢价的打车费”）。\n`;
         prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
-        prompt += `1. 结合当前时间、地点和心情，推断你现在最真实的生理/心理需求（饿了？无聊？焦虑？）。\n`;
-        prompt += `2. 构思如何体现你独立的生活（工作、爱好、琐事），确保 80% 的账单与 User 无关。\n`;
-        prompt += `3. 构思如何自然地在剩余 20% 中穿插与 User 的隐秘联系。\n`;
+        prompt += `1. 逐条分析【今日行程】和【聊天记录】，把里面提到的活动转化为具体的消费金额。\n`;
+        prompt += `2. 确保账单的时间(time)与事件发生的时间逻辑一致。\n`;
         prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "balance": 1234.56,
   "transactions": [
-    {"type": "expense", "amount": 18000000.00, "note": "科幻电影拍摄隐匿投资(为了捧某人)", "time": "10-24 08:30"},
-    {"type": "expense", "amount": 25.50, "note": "楼下便利店(买给User的解酒药)", "time": "10-23 02:15"},
-    {"type": "income", "amount": 50000.00, "note": "某黑客悬赏任务赏金", "time": "10-15 10:00"}
+    {"type": "expense", "amount": 25.50, "note": "具体的消费备注", "time": "10-23 02:15"},
+    {"type": "income", "amount": 5000.00, "note": "收入备注", "time": "10-15 10:00"}
   ]
 }\n`;
         prompt += `注意：type 只能是 'income' (收入) 或 'expense' (支出)。time 格式为简短日期。\n`;
@@ -8058,32 +8113,29 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【当前现实时间】：${timeString} ${dayString}\n请务必具备时间观念，生成的行程和应用使用情况必须符合当前的时间点。\n\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
-        prompt += lifeStatusPrompt; // 新增
+        prompt += lifeStatusPrompt; 
         prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
         prompt += `请根据角色的人设、当前生活状态以及最近的聊天内容，生成该角色当前的手机状态数据。\n`;
-        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
-        prompt += `1. "battery": 当前电量 (0-100的整数)。\n`;
-        prompt += `2. "screenTime": 今日屏幕使用时长 (例如 "5小时30分")。\n`;
-        prompt += `3. "appUsage": 5到15个应用的今日使用时长。【独立生活指令】：必须体现你真实的个人爱好和工作/学业！不要全是用来视奸 User 的软件！加入大量符合人设的硬核APP或日常摸鱼APP。\n`;
-        prompt += `4. "locations": 5到10个今日的行程记录。【防围绕User指令】：行程可以并且大部分是你自己的生活轨迹（如：在公司开无聊的会、去修车、在网吧打游戏、一个人逛超市），描述(desc)要写出真实的动作和吐槽。行程也可以有和 User 相关。\n`;
-        prompt += `5. "playlist": 10-15首真实存在的歌曲。必须符合你个人的音乐品味或当下的真实心境，每次生成都要有随机性，不要总是那几首歌。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. "battery": 当前电量。如果现在是深夜且Ta一直在和你聊天，电量应该偏低。\n`;
+        prompt += `2. "appUsage": 5到15个应用的今日使用时长。必须映射【今日行程】！如果行程里在打游戏，游戏APP时长就高；如果在外面跑，导航APP时长就高。\n`;
+        prompt += `3. "locations": 5到10个今日的行程记录。必须与传入的【当前生活状态参考】中的行程保持一致，并在此基础上进行细节扩写和吐槽(desc)。\n`;
+        prompt += `4. "playlist": 10-15首真实存在的歌曲。必须完美契合Ta今天的心情(mood)和聊天氛围！\n`;
         prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
-        prompt += `1. 结合当前时间、地点和心情，推断你今天一整天的生活轨迹和手机使用习惯。\n`;
-        prompt += `2. 构思如何体现你独立的生活（工作、爱好、琐事），同时也要确保和 User 的关联度和亲密程度。\n`;
-        prompt += `3. 根据你当前的情绪，挑选最符合心境的歌单。\n`;
+        prompt += `1. 分析【当前生活状态】和【聊天记录】，确定今天的主基调（忙碌、悠闲、伤心、甜蜜）。\n`;
+        prompt += `2. 根据主基调，推断手机电量、APP使用偏好和听歌品味。\n`;
         prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "battery": 12,
   "screenTime": "11小时30分",
   "appUsage": [
-    {"name": "Life360(定位软件)", "time": "4小时"},
-    {"name": "微信", "time": "3小时(全在看User的朋友圈)"}
+    {"name": "APP名称", "time": "4小时"}
   ],
   "locations": [
-    {"time": "02:00", "place": "User家楼下", "desc": "坐在车里看着Ta房间的灯熄灭"}
+    {"time": "02:00", "place": "地点", "desc": "具体的动作和吐槽"}
   ],
   "playlist": [
-    {"title": "反方向的钟", "artist": "周杰伦"}
+    {"title": "歌名", "artist": "歌手"}
   ]
 }`;
 
@@ -9541,12 +9593,7 @@ async function wcSaveChatSettings() {
     }
     await wcSaveData();
     
-    let displayName = char.note || char.name;
-    // 【新增】：如果是群聊，在名字后面加上人数
-    if (char.isGroup && char.members) {
-        displayName += ` (${char.members.length})`;
-    }
-    document.getElementById('wc-nav-title').innerText = displayName;
+    updateChatTopBarStatus(char);
     wcApplyChatConfig(char);
     wcRenderMessages(char.id); 
     wcRenderChats(); 
@@ -11092,24 +11139,21 @@ async function wcGeneratePrivacyAndFavorites() {
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
-        prompt += lifeStatusPrompt; // 新增
+        prompt += lifeStatusPrompt; 
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的私密记录和微信收藏。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
         prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，一次性生成你的【私密自慰与春梦记录】和【微信收藏内容】。\n`;
-        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
-        prompt += `1. 私密记录 (privacy)：生成你最近一次的私密自慰记录和春梦记录。必须是夹杂着对 User 的幻想和对 User 隐秘的感情。\n`;
-        prompt += `2. 收藏-备忘录 (memos)：生成 3 至 8 个备忘录。【独立生活指令】：生成内容内容可以有你个人的生活琐事（工作纪要、菜谱、无聊脑洞、购物清单、随笔记录），也可以有与 User 相关的内容或者记录 User 的观察日志。保持高度随机性！\n`;
-        prompt += `3. 收藏-手写日记 (diaries)：生成 1 至 2 个手写草稿日记。这是你深夜写下但没有发给User的真心话，情感要极其细腻、深刻、甚至带点偏执或脆弱。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. 【反模板化警告】：绝对禁止生成空泛的随笔！所有的内容必须是对【今天发生的事情】和【聊天中的情绪】的深刻复盘！\n`;
+        prompt += `2. 私密记录 (privacy)：必须夹杂着对 User 的幻想，且情绪要承接最近聊天中的氛围（如：聊天中吵架了，私密记录里可能是带着恨意的发泄；聊天很甜，则是温柔的渴望）。\n`;
+        prompt += `3. 收藏-备忘录 (memos) 3-8个：记录今天行程中遇到的琐事，或者为了下次和User见面做的攻略/计划也可以是记录关于User的一些事情和小事。\n`;
+        prompt += `4. 收藏-手写日记 (diaries) 1-2个：这是你深夜写下的真心话。必须是对今天某件具体事情（行程或聊天中的某句话）的深刻反思、纠结或偏执。\n`;
         prompt += `   - **字数要求**：每篇日记必须不少于 100 字！\n`;
-        prompt += `   - **排版与手账风格**：为了模拟真实的手写草稿和拼贴手账感，请在文本中随机使用以下标记：\n`;
-        prompt += `     - [涂改]写错或不想承认的话[/涂改]\n`;
-        prompt += `     - [高亮]特别重要的情绪或词语[/高亮]\n`;
-        prompt += `     - [拼贴]引用的聊天记录或突兀的想法[/拼贴]\n`;
-        prompt += `4. 所有内容必须和最近的聊天剧情强相关，拒绝凭空捏造无关剧情。\n`;
+        prompt += `   - **排版与手账风格**：请在文本中随机使用以下标记：[涂改]写错的话[/涂改]、[高亮]重要的词[/高亮]、[拼贴]引用的聊天记录[/拼贴]\n`;
         prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
-        prompt += `1. 结合当前时间、地点和心情今日发生的事情，推断你最近最隐秘的欲望、烦恼或生活琐事。\n`;
-        prompt += `2. 构思如何体现你独立的生活，同时也要保证 User 可以隐秘体现在你的社交圈和你的生活。\n`;
+        prompt += `1. 提炼【今日行程】和【聊天记录】中让你情绪波动最大的点。\n`;
+        prompt += `2. 围绕这个情绪点，构思你的日记和私密记录。\n`;
         prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "privacy": {
@@ -11135,6 +11179,7 @@ async function wcGeneratePrivacyAndFavorites() {
     ]
   }
 }\n`;
+
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -11523,11 +11568,11 @@ async function wcGeneratePhoneFavorites() {
         prompt += `【用户(User)设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; // 新增
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的微信“我的收藏”。\n`;
-        prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
-        
-        prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的微信收藏内容。\n`;
-        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
-        prompt += `1. 备忘录 (memos) 3-8个：【独立生活指令】：70% 的内容必须是你个人的生活琐事（如：晦涩的工作纪要、奇怪的菜谱、无聊的脑洞、游戏连招记录、购物清单）。只有 30% 可以是关于 User 的观察日志或计划。保持高度随机性，拒绝重复！\n`;
+        prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;               
+        prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的微信收藏内容。\n`;       
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. 【反模板化警告】：绝对禁止生成空泛的随笔！所有的内容必须是对【今天发生的事情】和【聊天中的情绪】的深刻复盘！\n`;
+        prompt += `1. 备忘录 (memos) 3-8个：【独立生活指令】：可以是关于你个人的生活琐事（如：晦涩的工作纪要、奇怪的菜谱、无聊的脑洞、游戏连招记录、购物清单）。也可以是关于 User 的观察日志或计划。保持高度随机性，拒绝重复！重点是要和今天行程事件与聊天记录关联！！要注意你是一个真实的人！\n`;
         prompt += `2. 手写日记 (diaries) 1-2个：这是你深夜写下的私密文字。可以是对未来的迷茫、对某件生活琐事的愤怒吐槽也可以是无聊时的闲谈随笔，也可以是夹杂着对 User${userName} 复杂情感的碎碎念，对User${userName} 想说却不敢说的真心话。必须充满真实的活人情绪起伏。\n`;
         prompt += `   - **字数要求**：每篇日记必须不少于 100 字！\n`;
         prompt += `   - **排版与手账风格**：为了模拟真实的手写草稿和拼贴手账感，请在文本中随机使用以下标记：\n`;
@@ -11535,7 +11580,7 @@ async function wcGeneratePhoneFavorites() {
         prompt += `     - [高亮]特别重要的情绪或词语[/高亮]\n`;
         prompt += `     - [拼贴]引用的聊天记录或突兀的想法[/拼贴]\n`;
         prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
-        prompt += `1. 结合当前时间、地点和心情和今日发生的事情，推断你最近遇到了什么烦心事或有趣的事，需要记在备忘录里。\n`;
+        prompt += `1. 结合当前时间、地点和心情，今日发生的事情和聊天记录，推断你最近遇到了什么烦心事或有趣的事，需要记在备忘录里。\n`;
         prompt += `2. 构思日记的情感基调，确保情绪真实、细腻、不僵硬。\n`;
         prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
@@ -11756,36 +11801,36 @@ async function wcGeneratePhoneBrowser() {
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
-        prompt += lifeStatusPrompt; // 新增
+        prompt += lifeStatusPrompt; 
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的浏览器APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
         prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的浏览器数据。\n`;
-        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
-        prompt += `1. 浏览记录(history) 4-8条：【独立生活指令】：必须包含大量与 User 完全无关的真实搜索！例如：生活常识求助（“衣服沾了老干妈怎么洗”）、硬核工作/学业搜索、奇奇怪怪的冷知识、游戏攻略等。同时也需要有可以是关于 User 的情感焦虑搜索或者搜索关于 User 的事情，确保 User 可以隐秘体现在你的社交圈和你的生活。保持高度随机性！\n`;
-        prompt += `2. 内心批注(annotation)：这是你浏览该网页时的真实想法，要展现你最真实的心理活动（如：“这博主纯属放屁”、“原来是这样，学到了”、“烦死了不想上班”）。\n`;
-        prompt += `3. 论坛帖子(posts) 2-5个：你在匿名论坛发帖求助/吐槽（如：吐槽奇葩路人、找游戏搭子、分享刚买的垃圾），或者在别人的帖子下发疯。每个帖子包含 5-10 个网友评论，要有强烈的网感互动。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. 【反模板化警告】：绝对禁止生成毫无关联的随机搜索！每一条浏览记录都必须能在【今日行程】或【聊天记录】中找到原因！\n`;
+        prompt += `2. 浏览记录(history) 4-8条：如果今天行程里去了超市，可能会搜某个菜的做法；如果聊天里User提到了某部电影，可能会搜影评；如果今天心情烦躁，可能会搜缓解焦虑的方法。必须是顺理成章的延伸！\n`;
+        prompt += `3. 内心批注(annotation)：这是你浏览该网页时的真实想法。必须结合你当下的心情(mood)来写，展现你最真实的心理活动。\n`;
+        prompt += `4. 论坛帖子(posts) 2-5个：你在匿名论坛发帖求助/吐槽。帖子的内容必须是对【今天发生的事情】或【刚刚和User聊天的内容】的复盘、纠结或吐槽！\n`;
         prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
-        prompt += `1. 结合当前时间、地点和心情，推断你现在最想上网查什么资料，或者想在论坛吐槽什么。\n`;
-        prompt += `2. 构思如何体现你独立的生活（工作、爱好、琐事），同时也要保证 User 隐秘可以体现在你的社交圈和你的生活。\n`;
+        prompt += `1. 仔细阅读【今日行程】和【聊天记录】，提取出 3-5 个关键事件或情绪点。\n`;
+        prompt += `2. 针对这些事件，推断你会在浏览器里搜索什么，或者在论坛里发什么帖子。\n`;
         prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "history": [
-    {"title": "如何判断一个人是不是海王？10个细节教你识破", "url_placeholder": "zhidao.baidu.com/question/...", "annotation": "User今天对那个服务员笑得太开心了，烦躁。", "time": "今天 02:20"},
-    {"title": "量子纠缠态在宏观宏观系统中的退相干时间计算", "url_placeholder": "arxiv.org/abs/...", "annotation": "这篇论文的数据有问题，明天开会要骂人。", "time": "昨天 14:30"}
+    {"title": "搜索的网页标题", "url_placeholder": "zhidao.baidu.com/question/...", "annotation": "你真实的内心批注", "time": "今天 02:20"}
   ],
   "posts": [
     {
-      "title": "求助：对象好像发现我在偷偷跟踪Ta了，怎么办？在线等急！", 
-      "content": "如题，我只是太在乎Ta了，在Ta手机里装了定位，今天Ta突然问我为什么总能偶遇...", 
+      "title": "论坛帖子标题", 
+      "content": "帖子正文内容...", 
       "author": "匿名用户", 
       "comments": [
-        {"author": "吃瓜群众", "content": "楼主你这是犯罪吧？？？快跑啊对方！"},
-        {"author": "匿名用户", "content": "回复 @吃瓜群众: 你懂什么，这叫保护！"}
+        {"author": "网友A", "content": "评论内容"}
       ]
     }
   ]
 }\n`;
+
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -13131,27 +13176,26 @@ async function wcGeneratePhoneCart() {
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
-        prompt += lifeStatusPrompt; // 新增
+        prompt += lifeStatusPrompt; 
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的购物APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
         prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的私密购物数据。\n`;
-        prompt += `【核心要求（极具活人感与独立生活气息）】：\n`;
-        prompt += `1. 拒绝无聊商品：商品名称(name)必须极其具体，带有品牌、型号或奇奇怪怪的定语。\n`;
-        prompt += `2. 购物车(cart) 4-10条：【独立生活指令】：可以有你个人的刚需用品、奇葩爱好周边、或者冲动加购的无用之物（智商税）。也可以有准备给 User 的惊喜或相关物品。每次生成必须随机，拒绝重复！\n`;
-        prompt += `3. 购买记录(history) 4-10条：最近已经买下的东西。同样遵循可以有个人物品也可以有买给 User 的惊喜或相关物品的原则。必须包含购买日期(如"昨天", "10-24")。\n`;
-        prompt += `4. 内心OS(desc)：商品描述必须是你添加购物车时的【真实内心OS】或【用途说明】（如：“买来放办公室防小人”、“太贵了再观望一下”、“虽然没用但好帅”）。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. 【反模板化警告】：绝对禁止生成老套的“防小人”、“智商税”等固定模板商品！商品必须与今天发生的事强相关！\n`;
+        prompt += `2. 购物车(cart) 4-10条：如果聊天里User说冷，你可能会加购暖宝宝；如果今天行程里你去了健身房，可能会加购蛋白粉；如果你们吵架了，可能会加购道歉礼物。必须有明确的因果关系！\n`;
+        prompt += `3. 购买记录(history) 4-10条：最近已经买下的东西。同样必须映射你们最近的聊天话题或你的生活状态。\n`;
+        prompt += `4. 内心OS(desc)：商品描述必须是你添加购物车时的【真实内心OS】。要体现出你买这个东西的动机（是因为User，还是因为今天遇到的某件事）。\n`;
         prompt += `【强制思考指令】：在输出 JSON 之前，你必须先使用 <thinking> 标签进行内心独白。思考过程必须包含：\n`;
-        prompt += `1. 结合当前时间、地点和心情，推断你最近缺什么东西，或者有什么强烈的购物冲动。\n`;
-        prompt += `2. 构思如何体现你独立的生活（工作、爱好、琐事），同时也要确保 User 可以隐秘体现在你的社交圈和你的生活里面。\n`;
+        prompt += `1. 仔细阅读【今日行程】和【聊天记录】，找出你目前最缺什么，或者最想给User买什么。\n`;
+        prompt += `2. 构思具体的商品名称（带品牌或定语，显得真实）。\n`;
         prompt += `思考结束后，再返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "cart": [
-    {"name": "某品牌限定款情侣对戒", "desc": "不知道Ta会不会嫌弃太高调...先加购看看", "price": "12999.00"},
-    {"name": "超强力隔音耳塞", "desc": "昨晚User打呼噜太吵了，但又舍不得赶Ta走", "price": "59.90"}
+    {"name": "具体的商品名称", "desc": "你加购时的真实内心OS", "price": "129.00"}
   ],
   "history": [
-    {"name": "定制版微型GPS定位器", "desc": "只是为了确保Ta的安全，绝对不是监视", "price": "4500.00", "date": "10-24"}
+    {"name": "具体的商品名称", "desc": "购买原因OS", "price": "45.00", "date": "10-24"}
   ]
 }\n`;
 
@@ -21346,7 +21390,12 @@ function wcOpenCharStatusModal() {
     
     const status = getCharLifeStatus(wcState.activeChatId);
     if (!status) return;
-    
+    // 如果跨天了，只清空 timeline，保留当前状态(模拟在线)
+    if (status.autoRefresh && isNewDayForStatus(status)) {
+        status.timeline = [];
+        wcSaveData();
+    }
+
     // 渲染设置
     document.getElementById('ins-status-time-picker').value = status.refreshTime || "06:00";
     document.getElementById('ins-status-auto-toggle').checked = status.autoRefresh !== false;
@@ -21518,6 +21567,11 @@ async function wcGenerateCharStatus() {
 
         wcSaveData();
         renderCharStatusUI(status);
+        // 手动刷新后，同步更新聊天顶栏
+        if (wcState.activeChatId === charId) {
+            const char = wcState.characters.find(c => c.id === charId);
+            if (char) updateChatTopBarStatus(char);
+        }
         wcShowSuccess("状态已更新");
 
     } catch (error) {
