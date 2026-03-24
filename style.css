@@ -8437,3 +8437,106 @@ input::-webkit-inner-spin-button {
     padding: 16px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 10px;
 }
 .re-save-btn:active { transform: scale(0.98); }
+/* ========================================== */
+/* 全屏播放器：距离与时长文本样式 */
+/* ========================================== */
+.ins-music-fp-meta {
+    font-size: 12px;
+    color: #888;
+    margin-top: 12px;
+    letter-spacing: 1px;
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* 聊天界面的音乐卡片：已结束状态 */
+.ins-music-chat-card.ended {
+    background: #F9F9F9;
+    border-color: #EAEAEA;
+}
+.ins-music-chat-card.ended .ins-music-chat-tag {
+    color: #999; border-color: #CCC;
+}
+.ins-music-chat-card.ended .ins-music-chat-song,
+.ins-music-chat-card.ended .ins-music-chat-artist {
+    color: #888;
+}
+.ins-music-chat-card.ended .ins-music-chat-bottom {
+    color: #007AFF; font-weight: bold;
+}
+
+/* ========================================== */
+/* 听歌总结弹窗样式 (250x300px) */
+/* ========================================== */
+.summary-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 35000; opacity: 0; transition: opacity 0.3s ease;
+}
+.summary-overlay.active { display: flex; opacity: 1; }
+
+.summary-card {
+    width: 250px; height: 300px; /* 严格锁定尺寸 */
+    background: #FFFFFF; border-radius: 24px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+    display: flex; flex-direction: column;
+    padding: 20px; position: relative;
+    transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+}
+.summary-overlay.active .summary-card { transform: scale(1); }
+
+.summary-close {
+    position: absolute; top: 12px; right: 12px; width: 24px; height: 24px;
+    background: #F5F5F5; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #888; font-size: 14px; transition: background 0.2s;
+}
+.summary-close:active { background: #EAEAEA; }
+
+.summary-title {
+    text-align: center; font-size: 14px; font-weight: 800; color: #111;
+    letter-spacing: 2px; margin-bottom: 20px; text-transform: uppercase;
+}
+
+.summary-avatars-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 25px; padding: 0 10px;
+}
+.summary-avatar {
+    width: 48px; height: 48px; border-radius: 50%; object-fit: cover;
+    border: 2px solid #F0F0F0; box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+.ecg-box {
+    flex: 1; height: 30px; margin: 0 10px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; position: relative;
+}
+.ecg-line {
+    width: 100%; height: 100%;
+    fill: none; stroke: #FF3B30; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 150; stroke-dashoffset: 150;
+    animation: heartbeat 2s linear infinite;
+    filter: drop-shadow(0 2px 4px rgba(255,59,48,0.4));
+}
+@keyframes heartbeat {
+    0% { stroke-dashoffset: 150; }
+    50% { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: -150; }
+}
+
+.summary-stats {
+    display: flex; flex-direction: column; gap: 12px;
+    background: #F9F9F9; border-radius: 16px; padding: 15px;
+    border: 1px solid #F0F0F0; flex: 1; justify-content: center;
+}
+.stat-row { display: flex; justify-content: space-between; align-items: center; }
+.stat-label { font-size: 11px; color: #888; }
+.stat-value { font-size: 13px; font-weight: 700; color: #111; font-family: monospace; }
+.stat-divider { height: 1px; background: dashed 1px #EAEAEA; margin: 2px 0; }
+.stat-time-col { display: flex; flex-direction: column; gap: 4px; }
+.stat-time-item { display: flex; justify-content: space-between; font-size: 10px; }
+.stat-time-item .t-label { color: #999; }
+.stat-time-item .t-val { color: #555; font-family: monospace; font-weight: bold; }

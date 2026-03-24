@@ -1522,7 +1522,11 @@
                             <img src="" id="music-fp-avatar-user" class="ins-music-fp-avatar">
                             <img src="" id="music-fp-avatar-char" class="ins-music-fp-avatar char">
                         </div>
- <div class="ins-music-fp-timer" id="music-fp-timer" onclick="musicStopListenTogether()" title="点击结束一起听歌">00:00</div>
+                        <!-- 👇 新增：距离与时长显示 👇 -->
+                        <div class="ins-music-fp-meta" id="music-fp-meta">相距 -- 公里，一起听了 0 小时 0 分钟</div>
+                        
+                        <!-- 隐藏原来的计时器，因为我们用上面的新排版了 -->
+                        <div class="ins-music-fp-timer" id="music-fp-timer" style="display: none;">00:00</div>
                     </div>
                     
                     <!-- 🌟 中间区域：点击任意位置切换模式 🌟 -->
@@ -3433,9 +3437,10 @@
         <div id="music-char-invite-modal" class="wc-modal-overlay hidden" style="z-index: 16000; align-items: center; justify-content: center; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); background: rgba(0,0,0,0.4);">
             <div class="ins-korean-invite-card">
                 <div class="invite-header">
-                    <span class="invite-tag">MUSIC INVITATION</span>
+                    <span class="invite-tag">音乐邀请</span>
                     <button class="invite-close" onclick="musicRejectCharInvite()">
-                        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 19 17.59 13.41 12z"/></svg>
+                        <!-- 👇 换成了极简清晰的细线叉号 SVG 👇 -->
+                        <svg viewBox="0 0 24 24" stroke="#888" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
                 
@@ -3444,7 +3449,7 @@
                         <img src="" id="char-invite-avatar" class="invite-avatar">
                     </div>
                     <h2 id="char-invite-name" class="invite-name">Name</h2>
-                    <p class="invite-text">"Wants to listen to music with you."</p>
+                    <p class="invite-text">“想和你一起听首歌...”</p>
                     
                     <div class="invite-song-box" id="char-invite-song-box" style="display: none;">
                         <div class="vinyl-icon">
@@ -3452,14 +3457,14 @@
                         </div>
                         <div class="song-info">
                             <div id="char-invite-song-name" class="song-name">Song Name</div>
-                            <div class="song-artist">Recommended track</div>
+                            <div class="song-artist">推荐曲目</div>
                         </div>
                     </div>
                 </div>
 
                 <div class="invite-actions">
-                    <button class="btn-reject" onclick="musicRejectCharInvite()">Decline</button>
-                    <button class="btn-accept" onclick="musicAcceptCharInvite()">Accept</button>
+                    <button class="btn-reject" onclick="musicRejectCharInvite()">婉拒</button>
+                    <button class="btn-accept" onclick="musicAcceptCharInvite()">接受</button>
                 </div>
             </div>
         </div> 
@@ -4229,6 +4234,8 @@
         <!-- 虚拟位置视图 -->
         <div id="char-loc-view-virtual" style="display: none;">
             <input type="text" id="char-loc-virtual-input" class="ins-loc-input" placeholder="例如：霍格沃茨 / 赛博朋克夜之城">
+            <!-- 👇 新增：自定义距离输入框 👇 -->
+            <input type="text" id="char-loc-virtual-distance" class="ins-loc-input" placeholder="自定义距离 (如: 999999 / 光年之外)" style="margin-top: -6px;">
             <div class="ins-loc-map-box virtual" style="height: 120px;">
                 <div class="ins-loc-marker virtual-marker"></div>
             </div>
@@ -4359,6 +4366,50 @@
         </div>
     </div>
 </div>
+        <!-- ========================================== -->
+        <!-- 新增：听歌总结报告弹窗 (250x300px) -->
+        <!-- ========================================== -->
+        <div class="summary-overlay" id="music-modal-summary" onclick="musicCloseSummaryModal(event)">
+            <div class="summary-card" onclick="event.stopPropagation()">
+                <div class="summary-close" onclick="musicCloseSummaryModal()">×</div>
+                <div class="summary-title">Listening Report</div>
+                
+                <!-- 头像与心电图 -->
+                <div class="summary-avatars-row">
+                    <img src="" id="summary-avatar-user" class="summary-avatar">
+                    <div class="ecg-box">
+                        <svg viewBox="0 0 100 30" preserveAspectRatio="none">
+                            <path class="ecg-line" d="M 0 15 L 20 15 L 25 5 L 35 25 L 40 15 L 60 15 L 65 5 L 75 25 L 80 15 L 100 15"></path>
+                        </svg>
+                    </div>
+                    <img src="" id="summary-avatar-char" class="summary-avatar">
+                </div>
 
+                <!-- 数据统计 -->
+                <div class="summary-stats">
+                    <div class="stat-row">
+                        <span class="stat-label">本次听歌时长</span>
+                        <span class="stat-value" id="summary-duration">00:00:00</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">聆听歌曲数量</span>
+                        <span class="stat-value" id="summary-song-count">0 首</span>
+                    </div>
+                    
+                    <div class="stat-divider"></div>
+                    
+                    <div class="stat-time-col">
+                        <div class="stat-time-item">
+                            <span class="t-label">开始</span>
+                            <span class="t-val" id="summary-start-time">--</span>
+                        </div>
+                        <div class="stat-time-item">
+                            <span class="t-label">结束</span>
+                            <span class="t-val" id="summary-end-time">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 </body>
 </html>

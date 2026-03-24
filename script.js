@@ -3566,19 +3566,34 @@ function wcRenderMessages(charId) {
                     </div>
                 </div>`;
         } else if (msg.type === 'music_invite') {
-            // 新增：音乐邀请卡片渲染
+            let statusText = msg.status === 'ended' ? '已结束，点击查看报告' : 'Tap to join';
+            let onClickAttr = '';
+            
+            if (msg.status === 'ended') {
+                // 如果听歌已结束，点击打开总结报告
+                onClickAttr = `onclick="musicOpenSummaryModal('${msg.id}')"`;
+            } else {
+                if (msg.sender === 'them') {
+                    // 如果是 Char 发出的邀请，点击卡片重新打开确认弹窗
+                    onClickAttr = `onclick="musicShowCharInviteModal(${charId}, '${msg.songTitle || ''}')"`;
+                } else {
+                    // 如果是 User 发出的邀请，点击卡片执行接受逻辑
+                    onClickAttr = `onclick="musicAcceptInvite(${charId}, '${msg.songId}', '${msg.songTitle}', '${msg.songArtist}', '${msg.songCover}')"`;
+                }
+            }
+
             contentHtml = `
-                <div class="wc-bubble music-invite" onclick="musicAcceptInvite(${charId}, '${msg.songId}', '${msg.songTitle}', '${msg.songArtist}', '${msg.songCover}')">
-                    <div class="ins-music-chat-card">
+                <div class="wc-bubble music-invite" ${onClickAttr}>
+                    <div class="ins-music-chat-card ${msg.status === 'ended' ? 'ended' : ''}">
                         <div class="ins-music-chat-top">
                             <div class="ins-music-chat-tag">Listen</div>
                             <svg class="ins-music-chat-icon" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
                         </div>
                         <div class="ins-music-chat-mid">
-                            <div class="ins-music-chat-song">${msg.songTitle}</div>
-                            <div class="ins-music-chat-artist">${msg.songArtist}</div>
+                            <div class="ins-music-chat-song">${msg.songTitle || '未知歌曲'}</div>
+                            <div class="ins-music-chat-artist">${msg.songArtist || '未知歌手'}</div>
                         </div>
-                        <div class="ins-music-chat-bottom">Tap to join</div>
+                        <div class="ins-music-chat-bottom">${statusText}</div>
                     </div>
                 </div>`;
 
@@ -4236,9 +4251,9 @@ async function wcTriggerAI(charIdOverride = null) {
 - 主动退出一起听歌: {"type":"music_exit", "content":"我有点事，先不听啦"}
 请在回复中自然地体现出你们正在一起听歌的氛围，或者配合你的切歌/点播动作进行说明。\n`;
         } else {
-            musicContextPrompt = `\n【主动邀请听歌特权】\n如果你觉得当前氛围很好，或者你想分享一首歌给User，你可以主动邀请User一起听歌！
-请在JSON数组中加入指令：{"type":"music_invite_user", "songName":"你想听的歌曲名(可选)", "content":"邀请的话语"}
-这会在User的屏幕上弹出一个精美的邀请卡片。\n`;
+            musicContextPrompt = `\n【主动邀请听歌特权 (强烈建议使用)】\n如果你觉得当前氛围很好，或者你想分享一首歌给User，你**必须**主动邀请User一起听歌！
+请在JSON数组中加入指令：{"type":"music_invite_user", "songName":"你想听的歌曲名(最好从你的手机歌单里选，或者选一首真实存在的流行歌)", "content":"邀请的话语"}
+注意：只要你提到了“一起听歌”，就必须带上这个 JSON 指令，否则 User 看不到邀请卡片！\n`;
         }
         // 👇 修复：让 AI 知道自己被拉黑了，并且记住自己被拉黑后发过的话 👇
         let blockPrompt = "";
@@ -4865,6 +4880,22 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         }
     }
 
+    // 👇 新增：智能拦截兜底，防止 AI 忘了发邀请指令 👇
+    let hasMusicInvite = finalActions.some(a => a.type === 'music_invite_user' || a.type === 'music_invite');
+    if (!hasMusicInvite) {
+        // 检查文本中是否包含强烈的听歌暗示
+        const textContent = finalActions.map(a => a.content).join(' ');
+        if (textContent.includes('一起听歌') || textContent.includes('听首歌') || textContent.includes('分享一首歌')) {
+            console.log("拦截到 AI 听歌暗示，自动补全邀请卡片指令");
+            finalActions.push({
+                type: 'music_invite_user',
+                songName: '随机推荐',
+                content: '' // 文本已经在前面的气泡里了，这里留空防止重复
+            });
+        }
+    }
+    // 👆 兜底逻辑结束 👆
+
     actions = finalActions;
     // 👆 去重逻辑结束 👆
 
@@ -5063,11 +5094,24 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             wcAddMessage(charId, 'them', 'text', action.content || "我先不听啦~", extra);
             musicForceStopListenTogether(charId);
             
-                } else if (action.type === 'music_invite_user') {
-            wcAddMessage(charId, 'them', 'text', action.content || "我们一起听歌吧？", extra);
+        } else if (action.type === 'music_invite_user' || action.type === 'music_invite') {
+            // 1. 先把 AI 说的邀请话语发出来
+            if (action.content) {
+                wcAddMessage(charId, 'them', 'text', action.content, extra);
+            }
+            
+            // 2. 再发送一张音乐邀请卡片到聊天记录
+            wcAddMessage(charId, 'them', 'music_invite', '邀请听歌', {
+                songTitle: action.songName || '随机推荐',
+                songArtist: char.name,
+                status: 'pending'
+            });
+            
+            // 3. 弹出屏幕中间的精美邀请弹窗
             musicShowCharInviteModal(charId, action.songName);      
             
         // 👇 新增：解析 AI 主动打来的电话 👇
+
         } else if (action.type === 'call_invite') {
             wcShowIncomingCall(charId);
             wcAddMessage(charId, 'system', 'system', `[系统内部信息: 你主动向 User 发起了语音通话请求，等待对方接听...]`, { hidden: true });
@@ -13998,7 +14042,9 @@ const musicState = {
         active: false,
         charId: null,
         startTime: 0,
-        timerInterval: null
+        timerInterval: null,
+        totalListenSeconds: 0,
+        sessionSongCount: 0
     },
     pendingAddSong: null
 };
@@ -14025,7 +14071,9 @@ async function musicSaveData() {
         listenTogether: {
             active: musicState.listenTogether.active,
             charId: musicState.listenTogether.charId,
-            startTime: musicState.listenTogether.startTime
+            startTime: musicState.listenTogether.startTime,
+            totalListenSeconds: musicState.listenTogether.totalListenSeconds,
+            sessionSongCount: musicState.listenTogether.sessionSongCount
         }
     });
 }
@@ -14289,6 +14337,19 @@ window.musicAcceptInvite = function(charId, songId, title, artist, cover) {
     musicOpenFullPlayer();
 };
 
+// 计算两个经纬度之间的距离 (公里)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+    const R = 6371; // 地球半径
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return (R * c).toFixed(2);
+}
+
 function musicStartListenTogether(charId, isResume = false) {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
@@ -14296,54 +14357,112 @@ function musicStartListenTogether(charId, isResume = false) {
     musicState.listenTogether.active = true;
     musicState.listenTogether.charId = charId;
     
-    // 如果不是刷新恢复的，就重置开始时间并保存
     if (!isResume) {
         musicState.listenTogether.startTime = Date.now();
+        musicState.listenTogether.sessionSongCount = 1; // 初始算1首
         musicSaveData();
     }
     
-    // 获取用户头像 (优先取聊天设置里的面具头像)
     const userAvatar = (char.chatConfig && char.chatConfig.userAvatar) ? char.chatConfig.userAvatar : wcState.user.avatar;
-    
     document.getElementById('music-fp-avatar-user').src = userAvatar;
     document.getElementById('music-fp-avatar-char').src = char.avatar;
     document.getElementById('music-fp-together').style.display = 'flex';
     
+    // 尝试获取真实距离或虚拟距离
+    let distanceStr = "未知距离";
+    
+    if (char.chatConfig && char.chatConfig.locationType === 'virtual') {
+        // 如果是虚拟世界，直接读取自定义距离
+        if (char.chatConfig.virtualDistance) {
+            distanceStr = char.chatConfig.virtualDistance;
+            // 如果用户输入的是纯数字，自动加上"公里"，否则直接显示文本（如"光年之外"）
+            if (!isNaN(distanceStr)) {
+                distanceStr += " 公里";
+            }
+        } else {
+            distanceStr = "跨越次元";
+        }
+    } else if (char.chatConfig && char.chatConfig.locationLat && char.chatConfig.locationLon) {
+        // 如果是现实世界，计算经纬度距离
+        if (typeof sendLocLat !== 'undefined' && sendLocLat !== 0) {
+            const dist = calculateDistance(sendLocLat, sendLocLon, char.chatConfig.locationLat, char.chatConfig.locationLon);
+            if (dist) distanceStr = `${dist} 公里`;
+        } else if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition((pos) => {
+                const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, char.chatConfig.locationLat, char.chatConfig.locationLon);
+                if (dist) distanceStr = `${dist} 公里`; // 异步获取成功后更新变量，setInterval 会自动读到新值
+            }, () => {}, { timeout: 5000 });
+        }
+    }
+
     if (musicState.listenTogether.timerInterval) clearInterval(musicState.listenTogether.timerInterval);
     
     musicState.listenTogether.timerInterval = setInterval(() => {
-        const diff = Math.floor((Date.now() - musicState.listenTogether.startTime) / 1000);
-        const m = Math.floor(diff / 60).toString().padStart(2, '0');
-        const s = (diff % 60).toString().padStart(2, '0');
-        const timeStr = `${m}:${s}`;
+        const currentSessionSeconds = Math.floor((Date.now() - musicState.listenTogether.startTime) / 1000);
+        const totalSeconds = (musicState.listenTogether.totalListenSeconds || 0) + currentSessionSeconds;
         
-        const timerEl = document.getElementById('music-fp-timer');
-        // 修复：HTML中胶囊计时器的ID是 capsule-timer，不是 capsule-island-timer
+        const totalHours = Math.floor(totalSeconds / 3600);
+        const totalMins = Math.floor((totalSeconds % 3600) / 60);
+        
+        const metaEl = document.getElementById('music-fp-meta');
+        if (metaEl) {
+            metaEl.innerText = `相距 ${distanceStr}，一起听了 ${totalHours} 小时 ${totalMins} 分钟`;
+        }
+
+        const m = Math.floor(currentSessionSeconds / 60).toString().padStart(2, '0');
+        const s = (currentSessionSeconds % 60).toString().padStart(2, '0');
         const capsuleTimerEl = document.getElementById('capsule-timer'); 
-        
-        if (timerEl) timerEl.innerText = timeStr;
-        if (capsuleTimerEl) capsuleTimerEl.innerText = timeStr; // 同步更新胶囊上的时间
-    }, 1000); // 修复：补全了 setInterval 的闭合和 1000ms 参数
-} // 修复：补全了函数的闭合大括号
+        if (capsuleTimerEl) capsuleTimerEl.innerText = `${m}:${s}`;
+    }, 1000);
+}
 
 
 // 【新增】：手动结束一起听歌
 window.musicStopListenTogether = function() {
     if (confirm("要结束和 Ta 的一起听歌吗？")) {
-        const charId = musicState.listenTogether.charId; // 先保存 ID
-        musicState.listenTogether.active = false;
-        musicState.listenTogether.charId = null;
-        clearInterval(musicState.listenTogether.timerInterval);
-        document.getElementById('music-fp-together').style.display = 'none';
-        musicSaveData();
-         // 修复：结束听歌时重置胶囊的计时器显示
-        const capsuleTimerEl = document.getElementById('capsule-timer');
-        if (capsuleTimerEl) capsuleTimerEl.innerText = "00:00";      
-        // 【修复】：告诉 AI 结束了听歌
-        if (charId) {
+        const charId = musicState.listenTogether.charId;
+        
+        // 1. 计算本次时长并累加到总时长
+        const sessionDurationMs = Date.now() - musicState.listenTogether.startTime;
+        const sessionSeconds = Math.floor(sessionDurationMs / 1000);
+        musicState.listenTogether.totalListenSeconds = (musicState.listenTogether.totalListenSeconds || 0) + sessionSeconds;
+        
+        // 2. 构造总结数据
+        const summaryData = {
+            startTime: musicState.listenTogether.startTime,
+            endTime: Date.now(),
+            durationMs: sessionDurationMs,
+            songCount: musicState.listenTogether.sessionSongCount || 1
+        };
+
+        // 3. 找到聊天记录中最近的一条 music_invite，将其状态改为 ended 并附上数据
+        if (charId && wcState.chats[charId]) {
+            const msgs = wcState.chats[charId];
+            for (let i = msgs.length - 1; i >= 0; i--) {
+                if (msgs[i].type === 'music_invite' && msgs[i].status !== 'ended') {
+                    msgs[i].status = 'ended';
+                    msgs[i].summaryData = summaryData;
+                    break;
+                }
+            }
             wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 用户结束了和你的“一起听歌”。]`, { hidden: true });       
         }
-        alert("已结束一起听歌。");
+
+        // 4. 清理状态
+        musicState.listenTogether.active = false;
+        musicState.listenTogether.charId = null;
+        musicState.listenTogether.sessionSongCount = 0;
+        clearInterval(musicState.listenTogether.timerInterval);
+        document.getElementById('music-fp-together').style.display = 'none';
+        
+        const capsuleTimerEl = document.getElementById('capsule-timer');
+        if (capsuleTimerEl) capsuleTimerEl.innerText = "00:00";      
+        
+        musicSaveData();
+        wcSaveData();
+        if (charId === wcState.activeChatId) wcRenderMessages(charId); // 刷新聊天界面卡片
+        
+        alert("已结束一起听歌。聊天界面的卡片已生成听歌报告。");
     }
 };
 
@@ -14445,6 +14564,12 @@ async function musicPlaySong(id, title, artist, cover) {
             // 【核心修复】：捕获 play() 的 Promise 异常，防止 NotSupportedError 报错卡死
             audioPlayer.play().then(() => {
                 musicState.isPlaying = true;
+                
+                // 如果正在一起听歌，增加歌曲数量
+                if (musicState.listenTogether.active) {
+                    musicState.listenTogether.sessionSongCount = (musicState.listenTogether.sessionSongCount || 0) + 1;
+                }
+
                 document.getElementById('music-mini-player').style.display = 'flex';
                 musicUpdatePlayerUI();
                 musicCloseSearch();
@@ -15135,15 +15260,40 @@ async function musicCharPlaySelected(charId, songId, songName) {
 
 // AI 强制退出一起听歌 (不弹确认框)
 function musicForceStopListenTogether(charId) {
+    const sessionDurationMs = Date.now() - musicState.listenTogether.startTime;
+    const sessionSeconds = Math.floor(sessionDurationMs / 1000);
+    musicState.listenTogether.totalListenSeconds = (musicState.listenTogether.totalListenSeconds || 0) + sessionSeconds;
+    
+    const summaryData = {
+        startTime: musicState.listenTogether.startTime,
+        endTime: Date.now(),
+        durationMs: sessionDurationMs,
+        songCount: musicState.listenTogether.sessionSongCount || 1
+    };
+
+    if (charId && wcState.chats[charId]) {
+        const msgs = wcState.chats[charId];
+        for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].type === 'music_invite' && msgs[i].status !== 'ended') {
+                msgs[i].status = 'ended';
+                msgs[i].summaryData = summaryData;
+                break;
+            }
+        }
+    }
+
     musicState.listenTogether.active = false;
     musicState.listenTogether.charId = null;
+    musicState.listenTogether.sessionSongCount = 0;
     clearInterval(musicState.listenTogether.timerInterval);
     
     const togetherEl = document.getElementById('music-fp-together');
     if (togetherEl) togetherEl.style.display = 'none';
     
     musicSaveData();
-    // 确保这里没有 hidden: true，这样用户就能在聊天界面看到
+    wcSaveData();
+    if (charId === wcState.activeChatId) wcRenderMessages(charId);
+
     wcAddMessage(charId, 'system', 'system', `[系统提示: 对方已退出一起听歌]`, { style: 'transparent' });
 }
 
@@ -15188,6 +15338,32 @@ function musicRejectCharInvite() {
     }
 }
 
+// 新增：后台静默搜索并播放的辅助函数
+async function musicSilentSearchAndPlay(keyword) {
+    if (!keyword) return false;
+    try {
+        const res = await fetch(`https://zm.armoe.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
+        const data = await res.json();
+        if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
+            const track = data.result.songs[0];
+            const newSong = {
+                id: track.id,
+                title: track.name,
+                artist: track.ar.map(a => a.name).join(', '),
+                cover: track.al.picUrl + '?param=100y100'
+            };
+            if (!musicState.currentPlaylist) musicState.currentPlaylist = [];
+            musicState.currentPlaylist.push(newSong);
+            musicState.currentIndex = musicState.currentPlaylist.length - 1;
+            musicPlaySong(newSong.id, newSong.title, newSong.artist, newSong.cover);
+            return true;
+        }
+    } catch (e) {
+        console.error("静默搜索失败", e);
+    }
+    return false;
+}
+
 async function musicAcceptCharInvite() {
     const modal = document.getElementById('music-char-invite-modal');
     modal.classList.add('hidden');
@@ -15197,23 +15373,54 @@ async function musicAcceptCharInvite() {
         const charId = pendingCharInviteData.charId;
         const songName = pendingCharInviteData.songName;
         
-        // 【修复】：不发送可见的文本消息，改为发送隐藏的系统提示给 AI
         wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 用户接受了你的听歌邀请，你们现在正在一起听歌。]`, { hidden: true });
         
-        // 打开音乐播放器并建立连接
         openMusicApp();
         musicStartListenTogether(charId);
         musicOpenFullPlayer();
 
-        // 如果 AI 指定了歌曲，自动搜索并播放
-        if (songName) {
-            document.getElementById('music-search-input').value = songName;
-            await musicPerformSearch();
-            if (musicState.currentPlaylist.length > 0) {
-                musicPlayFromSearch(0);
+        let playSuccess = false;
+
+        // 1. 第一重：尝试搜索 AI 指定的歌曲
+        if (songName && songName !== '随机推荐') {
+            playSuccess = await musicSilentSearchAndPlay(songName);
+        }
+
+        // 2. 第二重兜底：如果没搜到，从 Char 手机的“最近常听”歌单里随机挑一首
+        if (!playSuccess) {
+            const char = wcState.characters.find(c => c.id === charId);
+            if (char && char.phoneData && char.phoneData.settings && char.phoneData.settings.playlist && char.phoneData.settings.playlist.length > 0) {
+                const charPlaylist = char.phoneData.settings.playlist;
+                const randomSong = charPlaylist[Math.floor(Math.random() * charPlaylist.length)];
+                
+                playSuccess = await musicSilentSearchAndPlay(`${randomSong.title} ${randomSong.artist}`);
+                if (playSuccess) {
+                    wcAddMessage(charId, 'system', 'system', `[系统提示: 由于之前指定的歌曲未找到，系统自动从你的常听歌单中随机播放了《${randomSong.title}》]`, { style: 'transparent' });
+                }
             }
         }
 
+        // 3. 第三重兜底：如果 Char 没歌单，从 User 的全局歌单里随机挑一首
+        if (!playSuccess && musicState.playlists && musicState.playlists.length > 0) {
+            const validPlaylists = musicState.playlists.filter(pl => pl.tracks && pl.tracks.length > 0);
+            if (validPlaylists.length > 0) {
+                const randomPl = validPlaylists[Math.floor(Math.random() * validPlaylists.length)];
+                const randomSong = randomPl.tracks[Math.floor(Math.random() * randomPl.tracks.length)];
+                
+                musicState.currentPlaylist = [...randomPl.tracks];
+                const songIdx = randomPl.tracks.findIndex(s => s.id === randomSong.id);
+                musicState.currentIndex = songIdx !== -1 ? songIdx : 0;
+                
+                musicPlaySong(randomSong.id, randomSong.title, randomSong.artist, randomSong.cover);
+                playSuccess = true;
+                wcAddMessage(charId, 'system', 'system', `[系统提示: 系统自动从 User 的歌单中随机播放了《${randomSong.title}》]`, { style: 'transparent' });
+            }
+        }
+
+        // 4. 终极提示：如果连 User 都没有歌单，只能提示手动点播了
+        if (!playSuccess) {
+            alert("抱歉宝宝，Ta 推荐的歌曲未找到，且你们都没有预设歌单。请手动搜索播放一首歌曲吧~");
+        }
         
         pendingCharInviteData = null;
     }
@@ -21441,6 +21648,7 @@ function wcOpenCharLocationModal() {
     
     if (locType === 'virtual') {
         document.getElementById('char-loc-virtual-input').value = config.locationName || '';
+        document.getElementById('char-loc-virtual-distance').value = config.virtualDistance || ''; // 读取自定义距离
     } else {
         document.getElementById('char-loc-real-country').value = config.locationCountry || '';
         document.getElementById('char-loc-real-province').value = config.locationProvince || '';
@@ -21534,10 +21742,12 @@ function wcSubmitCharLocation() {
 
     if (charLocCurrentType === 'virtual') {
         locName = document.getElementById('char-loc-virtual-input').value.trim();
+        const virtualDist = document.getElementById('char-loc-virtual-distance').value.trim(); // 获取自定义距离
         if (!locName) return alert("请输入虚拟城市名称哦~");
         
         char.chatConfig.locationType = 'virtual';
         char.chatConfig.locationName = locName;
+        char.chatConfig.virtualDistance = virtualDist; // 保存自定义距离
         
         displayLoc = locName;
         aiPrompt = `[系统设定更新：你现在的居住地设定为“${locName}”。请在后续聊天中，严格符合该城市/异世界的背景设定，并保持与 User 异地/跨次元的逻辑。]`;
@@ -22324,6 +22534,55 @@ window.wcOpenReceiptDetail = function(msgId) {
 window.wcCloseReceiptDetail = function(e) {
     if (e && e.target.id !== 'wc-modal-receipt' && !e.target.classList.contains('rcpt-close')) return;
     const modal = document.getElementById('wc-modal-receipt');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+};
+// ==========================================
+// 听歌总结弹窗逻辑
+// ==========================================
+window.musicOpenSummaryModal = function(msgId) {
+    const charId = wcState.activeChatId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const msgs = wcState.chats[charId];
+    const msg = msgs.find(m => m.id.toString() === msgId.toString());
+    if (!msg || !msg.summaryData) return alert("报告数据已丢失");
+
+    const data = msg.summaryData;
+
+    // 渲染头像
+    const userAvatar = (char.chatConfig && char.chatConfig.userAvatar) ? char.chatConfig.userAvatar : wcState.user.avatar;
+    document.getElementById('summary-avatar-user').src = userAvatar;
+    document.getElementById('summary-avatar-char').src = char.avatar;
+
+    // 格式化时长 (HH:MM:SS)
+    const totalSecs = Math.floor(data.durationMs / 1000);
+    const h = Math.floor(totalSecs / 3600).toString().padStart(2, '0');
+    const m = Math.floor((totalSecs % 3600) / 60).toString().padStart(2, '0');
+    const s = (totalSecs % 60).toString().padStart(2, '0');
+    document.getElementById('summary-duration').innerText = `${h}:${m}:${s}`;
+
+    // 歌曲数量
+    document.getElementById('summary-song-count').innerText = `${data.songCount} 首`;
+
+    // 格式化开始和结束时间 (YYYY-MM-DD HH:MM:SS)
+    const formatFullTime = (ts) => {
+        const d = new Date(ts);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+    };
+    document.getElementById('summary-start-time').innerText = formatFullTime(data.startTime);
+    document.getElementById('summary-end-time').innerText = formatFullTime(data.endTime);
+
+    // 显示弹窗
+    const modal = document.getElementById('music-modal-summary');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.musicCloseSummaryModal = function(e) {
+    if (e && e.target.id !== 'music-modal-summary') return;
+    const modal = document.getElementById('music-modal-summary');
     modal.classList.remove('active');
     setTimeout(() => modal.style.display = 'none', 300);
 };
