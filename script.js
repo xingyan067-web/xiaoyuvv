@@ -3240,8 +3240,9 @@ function updateChatTopBarStatus(char) {
     }
     
     let statusHtml = '';
-    // 【修改】：只显示 action (正在干的事情)
-    if (!char.isGroup && char.lifeStatus && char.lifeStatus.action && char.lifeStatus.action !== "未知") {
+    // 【修改】：增加判断，如果关闭了生活状态开关，则不显示
+    const isLifeStatusEnabled = char.chatConfig && char.chatConfig.lifeStatusEnabled !== false;
+    if (isLifeStatusEnabled && !char.isGroup && char.lifeStatus && char.lifeStatus.action && char.lifeStatus.action !== "未知") {
         statusHtml = `<div style="font-size: 11px; color: #8E8E93; font-weight: normal; margin-top: 2px; line-height: 1;">${char.lifeStatus.action}</div>`;
     }
     
@@ -4364,21 +4365,23 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             wcSaveData();
         }
 
-        let statusText = `\n\n【你的当前生活状态 (请根据此状态与用户自然对话，保持生活气息)】：\n`;
-        if (char.lifeStatus.location !== "未知" || char.lifeStatus.action !== "未知") {
-            statusText += `- 当前位置：${char.lifeStatus.location}\n`;
-            statusText += `- 正在做的事：${char.lifeStatus.action}\n`;
-        } else {
-            statusText += `- 当前状态：未知 (新的一天，等待更新)\n`;
-        }
-        systemPrompt += statusText;
+        if (config.lifeStatusEnabled !== false) {
+            let statusText = `\n\n【你的当前生活状态 (请根据此状态与用户自然对话，保持生活气息)】：\n`;
+            if (char.lifeStatus.location !== "未知" || char.lifeStatus.action !== "未知") {
+                statusText += `- 当前位置：${char.lifeStatus.location}\n`;
+                statusText += `- 正在做的事：${char.lifeStatus.action}\n`;
+            } else {
+                statusText += `- 当前状态：未知 (新的一天，等待更新)\n`;
+            }
+            systemPrompt += statusText;
 
-        // 概率触发状态更新 (只允许更新 location 和 action)
-        const statusUpdateProb = 30; // 30% 概率
-        if (Math.random() * 100 < statusUpdateProb) {
-            systemPrompt += `\n【生活状态同步更新指令 (概率触发)】：\n`;
-            systemPrompt += `根据当前时间和聊天内容，如果你的位置或正在做的事情发生了变化，请在 JSON 数组中加入一条指令来更新你的状态。\n`;
-            systemPrompt += `指令格式：{"type":"update_status", "location":"新地点(10字内)", "action":"新动作(10字内)"}\n`;
+            // 概率触发状态更新 (只允许更新 location 和 action)
+            const statusUpdateProb = 30; // 30% 概率
+            if (Math.random() * 100 < statusUpdateProb) {
+                systemPrompt += `\n【生活状态同步更新指令 (概率触发)】：\n`;
+                systemPrompt += `根据当前时间和聊天内容，如果你的位置或正在做的事情发生了变化，请在 JSON 数组中加入一条指令来更新你的状态。\n`;
+                systemPrompt += `指令格式：{"type":"update_status", "location":"新地点(10字内)", "action":"新动作(10字内)"}\n`;
+            }
         }
         // 👆 新增结束 👆
 
@@ -7810,6 +7813,7 @@ function wcRenderPhonePrivacyContent() {
 // ==========================================
 function getLifeStatusPrompt(char) {
     if (!char || !char.lifeStatus || char.lifeStatus.location === "未知") return "";
+    if (char.chatConfig && char.chatConfig.lifeStatusEnabled === false) return "";
     let text = `\n【当前生活状态参考 (请让生成的内容符合此状态，增强真实感)】：\n`;
     text += `- 当前位置：${char.lifeStatus.location}\n`;
     text += `- 正在做的事：${char.lifeStatus.action}\n`;
@@ -7897,10 +7901,23 @@ async function wcGeneratePhonePrivacy() {
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const privacyData = JSON.parse(content);
+        
+        let privacyData;
+        try {
+            privacyData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.privacy = privacyData;
@@ -7911,7 +7928,11 @@ async function wcGeneratePhonePrivacy() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[查手机生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 
@@ -8041,10 +8062,23 @@ async function wcGenerateCharWallet() {
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const walletData = JSON.parse(content);
+        
+        let walletData;
+        try {
+            walletData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.wallet = walletData;
@@ -8055,7 +8089,11 @@ async function wcGenerateCharWallet() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[钱包生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 
@@ -8150,10 +8188,23 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let contentStr = data.choices[0].message.content;
         contentStr = contentStr.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         contentStr = contentStr.replace(/```json/g, '').replace(/```/g, '').trim();
-        const settingsData = JSON.parse(contentStr);
+        
+        let settingsData;
+        try {
+            settingsData = JSON.parse(contentStr);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + contentStr.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.settings = settingsData;
@@ -8163,7 +8214,11 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[状态生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 
@@ -9335,7 +9390,8 @@ function wcOpenChatSettings() {
     document.getElementById('wc-setting-char-avatar').src = char.avatar;
     document.getElementById('wc-setting-char-name').value = char.name;
     document.getElementById('wc-setting-char-note').value = char.note || "";
-        document.getElementById('wc-setting-char-prompt').value = char.prompt || "";
+    document.getElementById('wc-setting-char-prompt').value = char.prompt || "";
+    document.getElementById('wc-setting-life-status-toggle').checked = char.chatConfig.lifeStatusEnabled !== false; // 默认开启
     // 读取拉黑状态并更新按钮
     // 获取需要隐藏的元素容器
     const nameRow = document.getElementById('wc-setting-char-name').closest('.wc-avatar-row');
@@ -9544,6 +9600,7 @@ async function wcSaveChatSettings() {
     if (!char.chatConfig) char.chatConfig = {};
     char.chatConfig.userName = document.getElementById('wc-setting-user-name').value;
     char.chatConfig.userPersona = document.getElementById('wc-setting-user-prompt').value;
+    char.chatConfig.lifeStatusEnabled = document.getElementById('wc-setting-life-status-toggle').checked;
     
     if (wcState.tempImage && wcState.tempImageType === 'setting-user') {
         char.chatConfig.userAvatar = wcState.tempImage;
@@ -11192,10 +11249,23 @@ async function wcGeneratePrivacyAndFavorites() {
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const resultData = JSON.parse(content);
+        
+        let resultData;
+        try {
+            resultData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         
@@ -11216,7 +11286,11 @@ async function wcGeneratePrivacyAndFavorites() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[一键破解失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 // ==========================================
@@ -11544,6 +11618,7 @@ async function wcGeneratePhoneFavorites() {
         const realMsgs = wcState.chats[char.id] || [];
         const recentMsgs = realMsgs.slice(-30).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
         const chatConfig = char.chatConfig || {};
+        const userName = chatConfig.userName || wcState.user.name; // 👈 新增这一行，定义 userName
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
 
         // 核心修复：只读取关联的世界书
@@ -11844,10 +11919,23 @@ async function wcGeneratePhoneBrowser() {
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const browserData = JSON.parse(content);
+        
+        let browserData;
+        try {
+            browserData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.browser = browserData;
@@ -11858,7 +11946,11 @@ async function wcGeneratePhoneBrowser() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[浏览器生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 // ==========================================================================
@@ -13211,10 +13303,23 @@ async function wcGeneratePhoneCart() {
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const cartData = JSON.parse(content);
+        
+        let cartData;
+        try {
+            cartData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.cartApp = cartData;
@@ -13225,7 +13330,11 @@ async function wcGeneratePhoneCart() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[购物车生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 // ==========================================================================
