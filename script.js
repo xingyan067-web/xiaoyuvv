@@ -3605,7 +3605,22 @@ function wcRenderMessages(charId) {
         // 👆 新增的代码到这里结束 👆
         
         } else {
-            contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}${msg.content}</div>`;
+        
+            // 检测是否为双语格式 (支持跨行匹配，兼容多个 <br>)
+            const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
+            const match = msg.content.match(bilingualRegex);
+            
+            if (match) {
+                // 深度清理首尾的多余换行和空白
+                const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+                const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+                const transId = 'trans-' + Math.random().toString(36).substr(2, 9);
+                
+                // 核心修复：压缩为单行，彻底消除 pre-wrap 带来的幽灵空白
+                contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" onclick="const el = document.getElementById('${transId}'); if(el.style.display==='none'){el.style.display='block';}else{el.style.display='none';}" style="cursor: pointer; -webkit-tap-highlight-color: transparent;">${quoteHtml}<div style="word-break: break-word; width: 100%;">${originalText}</div><div id="${transId}" style="display: none; width: 100%; margin-top: 8px;"><div style="height: 1px; width: 100%; background-color: ${msg.sender === 'me' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)'}; margin-bottom: 8px;"></div><div style="font-size: 14px; word-break: break-word; color: ${msg.sender === 'me' ? '#CCCCCC' : '#888888'};">${translatedText}</div></div></div>`;
+            } else {
+                contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}${msg.content}</div>`;
+            }
         }
 
         const checkboxHtml = `<div class="wc-msg-checkbox ${wcState.multiSelectedIds.includes(msg.id) ? 'checked' : ''}" onclick="wcToggleMultiSelectMsg(${msg.id})"></div>`;
@@ -4240,10 +4255,15 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
    如果你想念User 或者你觉得当前氛围极佳，又或者有非常重要/暧昧的话想对 User 说，你可以主动向 User 发起语音通话！
    {"type":"call_invite", "content":"(你的内心OS：我想听听你的声音了)"}
 `;
+
         if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
-            systemPrompt += `\n【桌面小组件互动】\n你和用户绑定了恋人空间，并且用户在手机桌面上放置了你的专属小组件。你有 ${lsState.widgetUpdateFreq}% 的概率在回复时顺便更新这个小组件。\n如果决定更新，请在JSON数组中加入一条指令：\n- 发送便利贴：{"type":"widget_note", "content":"留言内容"}\n- 发送拍立得照片：{"type":"widget_photo", "content":"照片画面描述"}\n注意：每次最多只发一个组件更新指令。\n`;
+            // 核心修复：将概率判断移到代码底层，防止 AI 幻觉导致 100% 触发
+            const widgetRand = Math.random() * 100;
+            if (widgetRand < lsState.widgetUpdateFreq) {
+                systemPrompt += `\n【桌面小组件互动 (本次回复强制触发)】\n你和用户绑定了恋人空间，并且用户在手机桌面上放置了你的专属小组件。请在本次回复的 JSON 数组中，务必加入一条指令来更新这个小组件：\n- 发送便利贴：{"type":"widget_note", "content":"留言内容"}\n- 发送拍立得照片：{"type":"widget_photo", "content":"照片画面描述"}\n注意：只需发一个组件更新指令。\n`;
+            }
         }
- 
+
         systemPrompt += groupPrompt; // 👈 加上这一行
         systemPrompt += `\n示例输出：
 [
@@ -8980,7 +9000,25 @@ function renderSimHistory(history, meAvatar, themAvatar, isGroup = false) {
                 bubble.style.border = '1px solid #F0F0F0';
                 bubble.style.borderBottomLeftRadius = '2px';
             }
-            bubble.innerHTML = msg.content;
+            // 检测是否为双语格式
+            const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
+            const match = msg.content.match(bilingualRegex);
+            
+            if (match) {
+                const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+                const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+                const transId = 'sim-trans-' + Math.random().toString(36).substr(2, 9);
+                
+                bubble.style.cursor = 'pointer';
+                bubble.onclick = function() { 
+                    const el = document.getElementById(transId); 
+                    if(el.style.display==='none'){el.style.display='block';}else{el.style.display='none';} 
+                };
+                // 核心修复：压缩为单行
+                bubble.innerHTML = `<div style="word-break: break-word; width: 100%;">${originalText}</div><div id="${transId}" style="display: none; width: 100%; margin-top: 8px;"><div style="height: 1px; width: 100%; background-color: ${isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)'}; margin-bottom: 8px;"></div><div style="font-size: 13px; word-break: break-word; color: ${isMe ? '#CCCCCC' : '#888888'};">${translatedText}</div></div>`;
+            } else {
+                bubble.innerHTML = msg.content;
+            }
         }
         
         contentDiv.appendChild(bubble);
@@ -20277,11 +20315,27 @@ function forumRenderPMChatHistory() {
         } else {
             avatarHtml = `<img src="${forumState.profile.avatar}" class="forum-pm-bubble-avatar">`;
         }
-
         // 👇👇👇 将下面的 div.innerHTML 替换掉 👇👇👇
+        const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
+        const match = msg.content.match(bilingualRegex);
+        
+        let bubbleContentHtml = msg.content;
+        let onClickAttr = "";
+        const isMe = msg.sender === 'me';
+
+        if (match) {
+            const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+            const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+            const transId = 'pm-trans-' + Math.random().toString(36).substr(2, 9);
+            
+            onClickAttr = `onclick="const el = document.getElementById('${transId}'); if(el.style.display==='none'){el.style.display='block';}else{el.style.display='none';}" style="cursor: pointer; -webkit-tap-highlight-color: transparent;"`;
+            // 核心修复：压缩为单行
+            bubbleContentHtml = `<div style="word-break: break-word; width: 100%;">${originalText}</div><div id="${transId}" style="display: none; width: 100%; margin-top: 8px;"><div style="height: 1px; width: 100%; background-color: ${isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)'}; margin-bottom: 8px;"></div><div style="font-size: 13px; word-break: break-word; color: ${isMe ? '#CCCCCC' : '#888888'};">${translatedText}</div></div>`;
+        }
+
         div.innerHTML = `
             ${avatarHtml}
-            <div class="forum-pm-bubble">${msg.content}</div>
+            <div class="forum-pm-bubble" ${onClickAttr}>${bubbleContentHtml}</div>
         `;
         // 👆👆👆 替换结束 👆👆👆
         
