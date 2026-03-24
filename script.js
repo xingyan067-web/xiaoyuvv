@@ -5136,7 +5136,8 @@ async function wcTriggerAIMoment(charId) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -7896,7 +7897,8 @@ async function wcGeneratePhonePrivacy() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                 temperature: parseFloat(apiConfig.temp) || 0.8
+                 temperature: parseFloat(apiConfig.temp) || 0.8,
+                 max_tokens: 4000
             })
         });
 
@@ -8057,7 +8059,8 @@ async function wcGenerateCharWallet() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.7
+                temperature: 0.7,
+                max_tokens: 4000
             })
         });
 
@@ -8183,7 +8186,8 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.7
+                temperature: 0.7,
+                max_tokens: 4000
             })
         });
 
@@ -8552,8 +8556,8 @@ async function wcGeneratePhoneChats() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
-
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -8812,8 +8816,8 @@ async function wcSimTriggerAI() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
-
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -9060,8 +9064,8 @@ async function wcGeneratePhoneContacts() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
-
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -10657,8 +10661,8 @@ async function lsTriggerNpcMessage() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
-
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -11244,7 +11248,8 @@ async function wcGeneratePrivacyAndFavorites() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -11364,7 +11369,8 @@ async function wcTriggerBackgroundPhoneUpdate(charId) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -11674,7 +11680,8 @@ async function wcGeneratePhoneFavorites() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -11914,7 +11921,8 @@ async function wcGeneratePhoneBrowser() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -12454,7 +12462,8 @@ async function wcGenerateShopItems() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -13298,7 +13307,8 @@ async function wcGeneratePhoneCart() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -15421,7 +15431,8 @@ async function endDreamAndSummarize() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.7
+                temperature: 0.7,
+                max_tokens: 4000
             })
         });
 
@@ -17426,7 +17437,8 @@ const apiConfig = await getActiveApiConfig('npc');
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -17676,7 +17688,8 @@ async function aiAnswerUserQa(questions) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -18335,7 +18348,8 @@ async function lsGenerateAILetter() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -18584,7 +18598,8 @@ async function lsRequestReply() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -19160,7 +19175,8 @@ window.forumTriggerReactionToUser = async function(postId, userCommentText) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -19277,7 +19293,8 @@ window.forumGenerateInteractions = async function(postId) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -19404,7 +19421,8 @@ window.forumGenerateMoreComments = async function(postId) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -20351,7 +20369,8 @@ async function forumTriggerPMAI(chatId) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -20493,7 +20512,8 @@ async function wcProcessCallDecision(char) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.7
+                temperature: 0.7,
+                max_tokens: 4000
             })
         });
 
