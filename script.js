@@ -4229,14 +4229,14 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 4. **其他指令** (按需使用)
    {"type":"voice", "content":"语音内容"}
    {"type":"transfer", "amount":100, "note":"备注"}
-   如果收到【恋人空间邀请】，同意请回复：{"type":"invite_accept", "content":"你的回复内容"}；拒绝请回复：{"type":"invite_reject", "content":"你的回复内容"}
+   如果收到【恋人空间邀请】，同意请回复：{"type":"invite_accept", "content":"符合你人设的同意话语"}；拒绝请回复：{"type":"invite_reject", "content":"符合你人设的拒绝话语"}
 5. **朋友圈互动** (如果你在【朋友圈动态】中看到了感兴趣的内容，或者有人评论了你，你可以进行互动)
    {"type":"moment_like", "content": 朋友圈ID数字}
    {"type":"moment_comment", "momentId": 朋友圈ID数字, "content":"你的评论内容(如果是回复某人，请写'回复 xxx: 内容')"}
 6. **音乐邀请互动** (核心强制)
    如果用户向你发送了 [邀请听歌] 的卡片，你必须根据当前人设和心情决定是否同意。
-   - 如果同意，请回复：{"type":"music_accept", "content":"你的回复内容"}
-   - 如果拒绝，请回复：{"type":"music_reject", "content":"你的回复内容"}
+   - 如果同意，请回复：{"type":"music_accept", "content":"符合你人设的同意话语"}
+   - 如果拒绝，请回复：{"type":"music_reject", "content":"符合你人设的拒绝话语"}
 7. **主动语音通话** (按需使用)
    如果你想念User 或者你觉得当前氛围极佳，又或者有非常重要/暧昧的话想对 User 说，你可以主动向 User 发起语音通话！
    {"type":"call_invite", "content":"(你的内心OS：我想听听你的声音了)"}
@@ -4412,9 +4412,9 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             } else if (m.type === 'transfer') {
                 content = `[转账: ${m.amount}元, 备注: ${m.note}, 状态: ${m.status}]`;
             } else if (m.type === 'invite') {
-                content = `[系统提示: 用户向你发送了“恋人空间”开启邀请。如果同意，请回复“我同意”或类似的话；如果拒绝，请回复拒绝理由。]`;
+                content = `[系统提示: 用户向你发送了“恋人空间”开启邀请。请根据你的人设和当前对User的情感状态决定是否同意。在回复中自然地表达你的决定，展现出符合你性格的反应（例如傲娇、害羞、开心等），不要像机器人一样死板。]`;
             } else if (m.type === 'music_invite') {
-                content = `[系统提示: 用户向你发送了“一起听歌”邀请，歌曲名：《${m.songTitle || '未知'}》。请务必回复 {"type":"music_accept", "content":"同意的话"} 或 {"type":"music_reject", "content":"拒绝的话"}]`;                         
+                content = `[系统提示: 用户向你发送了“一起听歌”邀请，歌曲名：《${m.songTitle || '未知'}》。请根据你的人设和当前心情决定是否同意，并在回复中自然地表达出来，可以评价一下这首歌或者表达你想和User一起听歌的心情，请务必回复 {"type":"music_accept", "content":"符合你人设的同意话语"} 或 {"type":"music_reject", "content":"符合你人设的拒绝话语"}。]`;                                    
             } else if (m.type === 'receipt') {
                 content = `[发送了一张应用内卡片]`; // 修复：防止发送大量 HTML 导致 400 错误
             }
