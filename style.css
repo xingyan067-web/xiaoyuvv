@@ -2859,8 +2859,9 @@ input::-webkit-inner-spin-button {
     /* ========================================== */
     .tarot-modal-overlay {
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        /* 👈 恢复白色毛玻璃背景，这样黑色的轨道和灰色的侧边卡片才能显现出来 */
         background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-        display: none; /* 👈 核心修复：默认彻底隐藏，防止隐形遮罩阻挡底层滑动 */
+        display: none; 
         flex-direction: column; align-items: center; justify-content: center;
         z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.4s ease;
     }
@@ -2871,12 +2872,15 @@ input::-webkit-inner-spin-button {
         display: flex; align-items: center; justify-content: center; perspective: 1000px;
     }
 
-    .tarot-card {
+    /* 👈 增加父级限制，防止被恋人空间的同名样式污染变短 */
+    .tarot-slider-container .tarot-card {
         position: absolute; width: 200px; height: 450px;
         background: #0B0C10; color: #FFF; display: flex; flex-direction: column;
         padding: 24px; box-shadow: 0 30px 60px rgba(0,0,0,0.4); box-sizing: border-box;
         transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease;
         opacity: 0; pointer-events: none;
+        border-radius: 0;
+        transform-style: flat;
     }
     
     .tarot-card::before {
@@ -8145,3 +8149,291 @@ input::-webkit-inner-spin-button {
 }
 .ins-toggle-switch input:checked + .ins-slider { background-color: #111; }
 .ins-toggle-switch input:checked + .ins-slider:before { transform: translateX(16px); }
+/* ========================================== */
+/* 新增：食谱系统 (Recipe) 核心样式 */
+/* ========================================== */
+
+/* 新版：左上角高级排版标题 */
+.recipe-top-title {
+    padding: calc(env(safe-area-inset-top, 20px) + 20px) 20px 10px 20px;
+    cursor: pointer; transition: opacity 0.2s; z-index: 10; position: relative;
+}
+.recipe-top-title:active { opacity: 0.5; }
+.recipe-top-title .en { 
+    font-family: 'Georgia', serif; font-size: 32px; font-weight: 900; 
+    color: #111; letter-spacing: -1px; line-height: 1.1; 
+}
+.recipe-top-title .cn { 
+    font-size: 11px; color: #888; font-weight: bold; letter-spacing: 2px; 
+    margin-top: 6px; display: flex; align-items: center; gap: 8px; 
+}
+.recipe-top-title .cn span { 
+    font-family: monospace; font-size: 9px; background: #E5E5EA; 
+    padding: 2px 6px; border-radius: 4px; color: #555; 
+}
+
+/* 底部钢琴键 Tab */
+.recipe-piano-tabs {
+    position: absolute; bottom: 0; left: 0; width: 100%;
+    height: calc(80px + env(safe-area-inset-bottom, 20px));
+    background: #F9F9F9; display: flex; gap: 4px; padding: 0 20px;
+    align-items: flex-end; border-top: 1px solid #EAEAEA; z-index: 20;
+}
+.piano-key {
+    flex: 1; height: 60px; background: #FFFFFF;
+    border: 1px solid #EAEAEA; border-bottom: none;
+    border-radius: 16px 16px 0 0;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.02);
+    color: #888; font-family: 'Georgia', serif; font-weight: bold; font-style: italic;
+}
+.piano-key.active {
+    height: 85px; /* 钢琴键弹出效果 */
+    background: #111; color: #FFF;
+    box-shadow: 0 -8px 25px rgba(0,0,0,0.15);
+    border-color: #111;
+}
+
+/* 内容区 (调整底部留白给钢琴键) */
+.ins-recipe-content { padding: 10px 20px calc(100px + env(safe-area-inset-bottom, 20px)) 20px; overflow-y: auto; flex: 1; }
+.recipe-card {
+    background: #FFFFFF; border-radius: 24px; padding: 24px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.03); border: 1px solid #F5F5F5;
+    display: none; animation: wcFadeIn 0.3s ease;
+}
+.recipe-card.active { display: block; }
+
+.recipe-card-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 24px; border-bottom: 1px dashed #E5E5EA; padding-bottom: 16px;
+}
+.recipe-date { font-family: 'Courier New', Courier, monospace; font-size: 12px; font-weight: bold; color: #888; letter-spacing: 1px; }
+.recipe-edit-btn { font-size: 12px; color: #007AFF; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.recipe-edit-btn svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+/* 餐食条目 */
+.meal-item { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 24px; position: relative; }
+.meal-item:last-child { margin-bottom: 0; }
+.meal-icon-box {
+    width: 44px; height: 44px; border-radius: 14px; background: #F9F9F9;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+    border: 1px solid #F0F0F0; flex-shrink: 0; z-index: 2;
+}
+.meal-info { flex: 1; padding-top: 2px; }
+.meal-name { font-family: 'Georgia', serif; font-size: 15px; font-weight: bold; color: #111; margin-bottom: 6px; font-style: italic; }
+.meal-desc { font-size: 13px; color: #555; line-height: 1.5; background: #F9F9F9; padding: 10px 12px; border-radius: 10px; }
+.meal-item:not(:last-child)::after {
+    content: ''; position: absolute; left: 21px; top: 44px; bottom: -24px; width: 2px; background: #F0F0F0; z-index: 1;
+}
+
+/* 底部按钮 */
+.recipe-action-btn {
+    width: 100%; height: 50px; border-radius: 16px; border: none;
+    font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 30px;
+    display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform 0.2s;
+}
+.recipe-action-btn:active { transform: scale(0.96); }
+.btn-dark { background: #111; color: #FFF; box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
+.btn-light { background: #F5F5F5; color: #111; border: 1px solid #EAEAEA; margin-top: 12px; }
+
+        /* ========================================== */
+        /* 🌟 全新：200x120 极简神秘感食谱卡片 🌟 */
+        /* ========================================== */
+        .ins-recipe-bubble {
+            width: 200px; height: 120px; background: #0A0A0B; border-radius: 16px;
+            position: relative; overflow: hidden; cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+            align-self: flex-end; border: 1px solid rgba(255,255,255,0.08);
+        }
+        .ins-recipe-bubble.them {
+            align-self: flex-start; background: #FFFFFF;
+            border: 1px solid #EAEAEA; box-shadow: 0 8px 25px rgba(0,0,0,0.04);
+        }
+        .ins-recipe-bubble:active { transform: scale(0.95); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .ins-recipe-bubble::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: radial-gradient(rgba(255,255,255,0.1) 1px, transparent 1px);
+            background-size: 3px 3px; opacity: 0.3; pointer-events: none;
+        }
+        .r-watermark {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-family: 'Georgia', serif; font-size: 48px; font-weight: 900; font-style: italic;
+            color: rgba(255, 255, 255, 0.03); pointer-events: none; white-space: nowrap; letter-spacing: 2px; z-index: 1;
+        }
+        .ins-recipe-bubble.them .r-watermark { color: rgba(0, 0, 0, 0.03); }
+        .r-top { position: absolute; top: 14px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: center; z-index: 2; }
+        .r-tag { font-family: 'Courier New', Courier, monospace; font-size: 9px; font-weight: bold; color: #888; letter-spacing: 2px; text-transform: uppercase; }
+        .r-cross { width: 10px; height: 10px; position: relative; opacity: 0.5; }
+        .r-cross::before, .r-cross::after { content: ''; position: absolute; background: #FFF; }
+        .r-cross::before { top: 4px; left: 0; width: 10px; height: 1px; }
+        .r-cross::after { top: 0; left: 4px; width: 1px; height: 10px; }
+        .ins-recipe-bubble.them .r-cross::before, .ins-recipe-bubble.them .r-cross::after { background: #111; }
+        .r-center { position: absolute; top: 45px; left: 16px; z-index: 2; }
+        .r-title { font-family: 'Georgia', serif; font-size: 16px; font-weight: 600; color: #FFF; letter-spacing: 0.5px; line-height: 1.2; }
+        .ins-recipe-bubble.them .r-title { color: #111; }
+        .r-subtitle { font-size: 10px; color: #666; margin-top: 4px; font-family: -apple-system, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+        .r-bottom { position: absolute; bottom: 14px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: flex-end; z-index: 2; }
+        .r-line { flex: 1; height: 1px; background: rgba(255, 255, 255, 0.15); margin-right: 12px; margin-bottom: 4px; }
+        .ins-recipe-bubble.them .r-line { background: rgba(0, 0, 0, 0.1); }
+        .r-action { font-size: 9px; color: #999; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 4px; }
+        .r-action svg { width: 10px; height: 10px; stroke: currentColor; stroke-width: 2; fill: none; }
+        .r-update-dot { width: 6px; height: 6px; background: #FF3B30; border-radius: 50%; box-shadow: 0 0 8px rgba(255, 59, 48, 0.8); animation: pulseDot 2s infinite; }
+        @keyframes pulseDot { 0% { transform: scale(0.8); opacity: 0.8; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(0.8); opacity: 0.8; } }
+        .r-tag.updated { color: #111; background: #F5F5F5; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
+
+/* 详情弹窗 */
+.recipe-modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    display: none; align-items: center; justify-content: center; z-index: 20000;
+    opacity: 0; transition: opacity 0.3s ease;
+}
+.recipe-modal-overlay.active { display: flex; opacity: 1; }
+.recipe-modal-box {
+    width: 85%; max-width: 320px; background: #FFFFFF; border-radius: 24px;
+    padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+    transform: scale(0.95) translateY(10px); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    border: 1px solid #F0F0F0;
+}
+.recipe-modal-overlay.active .recipe-modal-box { transform: scale(1) translateY(0); }
+.rm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #F5F5F5; padding-bottom: 16px; }
+.rm-title { font-size: 18px; font-weight: 700; color: #111; letter-spacing: 0.5px; }
+.rm-close { width: 28px; height: 28px; background: #F5F5F5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #888; }
+.rm-close svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
+.rm-content { display: flex; flex-direction: column; gap: 16px; max-height: 60vh; overflow-y: auto; }
+.rm-meal-item { display: flex; align-items: flex-start; gap: 12px; }
+.rm-meal-label { width: 40px; font-size: 12px; font-weight: 800; color: #CCC; text-transform: uppercase; letter-spacing: 1px; padding-top: 2px; }
+.rm-meal-detail { flex: 1; background: #F9F9F9; padding: 12px; border-radius: 12px; border: 1px solid #F0F0F0; }
+.rm-text-normal { font-size: 14px; color: #333; line-height: 1.5; }
+.rm-edit-group { display: flex; flex-direction: column; gap: 6px; }
+.rm-text-old { font-size: 12px; color: #999; text-decoration: line-through; text-decoration-color: #FF3B30; opacity: 0.7; }
+.rm-text-new { font-size: 14px; color: #111; font-weight: 600; line-height: 1.5; display: flex; align-items: flex-start; gap: 6px; }
+.rm-text-new::before { content: '↳'; color: #007AFF; font-weight: bold; font-family: monospace; }
+.rm-edit-author { font-size: 10px; color: #007AFF; background: rgba(0,122,255,0.1); padding: 2px 6px; border-radius: 4px; align-self: flex-start; margin-top: 4px; }
+/* ========================================== */
+/* 🌟 新增：聊天卡片 (极简票据风 200x120) 🌟 */
+/* ========================================== */
+.ins-order-bubble {
+    width: 200px; height: 120px; border-radius: 16px; position: relative;
+    cursor: pointer; box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex; overflow: hidden; box-sizing: border-box;
+}
+.ins-order-bubble:active { transform: scale(0.96); box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+
+/* Ta 给 User 点的外卖 (冷白票据风) */
+.ins-order-bubble.delivery { align-self: flex-start; background: #FFFFFF; border: 1px solid #EAEAEA; }
+.delivery .stub { width: 36px; border-right: 1px dashed #E0E0E0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #FAFAFA; flex-shrink: 0; }
+.delivery .stub-text { writing-mode: vertical-rl; transform: rotate(180deg); font-family: 'Courier New', Courier, monospace; font-size: 10px; color: #999; letter-spacing: 2px; }
+.delivery .main { flex: 1; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
+.delivery .tag { font-size: 9px; font-weight: 800; color: #111; background: #F0F0F0; padding: 3px 6px; border-radius: 4px; align-self: flex-start; letter-spacing: 1px; }
+.delivery .title { font-family: 'Georgia', serif; font-size: 16px; font-weight: bold; color: #111; margin-top: auto; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.delivery .desc { font-size: 11px; color: #888; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.delivery .bottom { display: flex; justify-content: space-between; align-items: flex-end; font-family: monospace; font-size: 11px; color: #555; border-top: 1px solid #F5F5F5; padding-top: 6px; }
+.delivery .stamp { position: absolute; right: -10px; top: 10px; width: 50px; height: 50px; border: 2px solid rgba(0,0,0,0.05); border-radius: 50%; display: flex; align-items: center; justify-content: center; transform: rotate(-15deg); pointer-events: none; }
+.delivery .stamp::after { content: 'PAID'; font-size: 12px; font-weight: 900; color: rgba(0,0,0,0.05); letter-spacing: 1px; }
+
+/* User 给 Ta 买的礼物 (黑金高奢风) */
+.ins-order-bubble.gift { align-self: flex-end; background: #0A0A0B; border: 1px solid rgba(255,255,255,0.1); }
+.gift::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle at center, rgba(212, 175, 55, 0.15) 0%, transparent 50%); pointer-events: none; }
+.gift .main { flex: 1; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; position: relative; z-index: 1; overflow: hidden; }
+.gift .tag { font-size: 9px; font-weight: 800; color: #D4AF37; border: 1px solid rgba(212, 175, 55, 0.5); padding: 3px 6px; border-radius: 4px; align-self: flex-start; letter-spacing: 1px; background: rgba(212, 175, 55, 0.05); }
+.gift .title { font-family: 'Georgia', serif; font-size: 18px; font-style: italic; color: #FFF; margin-top: auto; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gift .desc { font-size: 11px; color: #999; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gift .barcode { height: 12px; width: 100%; opacity: 0.4; background-image: repeating-linear-gradient(to right, #FFF 0, #FFF 2px, transparent 2px, transparent 4px, #FFF 4px, #FFF 5px, transparent 5px, transparent 8px, #FFF 8px, #FFF 10px, transparent 10px, transparent 12px); }
+
+/* 代付请求卡片 (灰蓝风) */
+.ins-order-bubble.daifu { align-self: flex-end; background: #F5F7FA; border: 1px solid #DFE6EC; }
+.daifu .main { flex: 1; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
+.daifu .tag { font-size: 9px; font-weight: 800; color: #4A5568; background: rgba(74, 85, 104, 0.1); padding: 3px 6px; border-radius: 4px; align-self: flex-start; letter-spacing: 1px; }
+.daifu .title { font-family: 'Georgia', serif; font-size: 18px; font-weight: bold; color: #2D3748; margin-top: auto; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.daifu .desc { font-size: 11px; color: #718096; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.daifu .bottom { display: flex; justify-content: space-between; align-items: flex-end; font-family: monospace; font-size: 11px; color: #718096; border-top: 1px solid #E2E8F0; padding-top: 6px; }
+
+/* ========================================== */
+/* 🌟 详情弹窗：高级奢侈品小票 (Receipt) 🌟 */
+/* ========================================== */
+.receipt-modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+    display: none; align-items: center; justify-content: center; z-index: 25000;
+    opacity: 0; transition: opacity 0.3s ease;
+}
+.receipt-modal-overlay.active { display: flex; opacity: 1; }
+
+.receipt-paper {
+    width: 280px; background: #FAFAFA; color: #111; padding: 30px 20px;
+    position: relative; box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+    transform: translateY(20px); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    font-family: 'Courier New', Courier, monospace;
+}
+.receipt-modal-overlay.active .receipt-paper { transform: translateY(0); }
+
+.receipt-paper::before {
+    content: ''; position: absolute; top: -6px; left: 0; width: 100%; height: 6px;
+    background-image: radial-gradient(circle at 5px 0, transparent 5px, #FAFAFA 6px);
+    background-size: 10px 6px; background-repeat: repeat-x;
+}
+.receipt-paper::after {
+    content: ''; position: absolute; bottom: -6px; left: 0; width: 100%; height: 6px;
+    background-image: radial-gradient(circle at 5px 6px, transparent 5px, #FAFAFA 6px);
+    background-size: 10px 6px; background-repeat: repeat-x;
+}
+
+.rcpt-header { text-align: center; margin-bottom: 20px; }
+.rcpt-logo { font-family: 'Georgia', serif; font-size: 20px; font-weight: bold; letter-spacing: 2px; margin-bottom: 4px; }
+.rcpt-sub { font-size: 10px; color: #888; }
+.rcpt-divider { border-top: 1px dashed #CCC; margin: 15px 0; }
+.rcpt-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px; line-height: 1.4; }
+.rcpt-row.bold { font-weight: bold; font-size: 14px; margin-top: 10px; }
+.rcpt-col-left { flex: 1; padding-right: 10px; }
+.rcpt-col-right { text-align: right; }
+.rcpt-message { background: #F0F0F0; padding: 10px; border-radius: 4px; font-size: 11px; font-family: -apple-system, sans-serif; color: #333; margin-top: 15px; font-style: italic; }
+.rcpt-barcode { height: 30px; width: 80%; margin: 20px auto 0 auto; background-image: repeating-linear-gradient(to right, #111 0, #111 2px, transparent 2px, transparent 4px, #111 4px, #111 5px, transparent 5px, transparent 8px, #111 8px, #111 12px, transparent 12px, transparent 14px); }
+.rcpt-order-no { text-align: center; font-size: 10px; margin-top: 4px; letter-spacing: 2px; }
+.rcpt-close { position: absolute; top: -40px; right: 0; color: #FFF; font-size: 28px; cursor: pointer; font-family: sans-serif; line-height: 1; opacity: 0.8; }
+.rcpt-close:active { opacity: 1; }
+
+/* 修复：食谱全屏页基础容器 (提高层级，遮挡底层) */
+#wc-view-recipe {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: #F9F9F9; z-index: 1400; display: none; flex-direction: column;
+}
+#wc-view-recipe.active { display: flex; animation: wcSlideInRight 0.3s ease; }
+
+/* 新增：高级编辑弹窗 */
+.recipe-edit-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    display: none; align-items: flex-end; justify-content: center; z-index: 21000;
+    opacity: 0; transition: opacity 0.3s ease;
+}
+.recipe-edit-overlay.active { display: flex; opacity: 1; }
+.recipe-edit-card {
+    width: 100%; background: #FFF; border-radius: 24px 24px 0 0;
+    padding: 24px; padding-bottom: calc(24px + env(safe-area-inset-bottom, 20px));
+    transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex; flex-direction: column; gap: 16px;
+}
+.recipe-edit-overlay.active .recipe-edit-card { transform: translateY(0); }
+
+.re-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.re-title { font-size: 18px; font-weight: 700; color: #111; }
+.re-close { font-size: 15px; color: #888; cursor: pointer; font-weight: 600; }
+
+.re-input-group { display: flex; flex-direction: column; gap: 8px; }
+.re-label { font-size: 12px; font-weight: 800; color: #CCC; text-transform: uppercase; letter-spacing: 1px; }
+.re-input {
+    width: 100%; background: #F5F5F5; border: 1px solid #EAEAEA; border-radius: 12px;
+    padding: 12px 16px; font-size: 14px; color: #111; outline: none; resize: none;
+    font-family: inherit;
+}
+.re-input:focus { border-color: #111; background: #FFF; }
+
+.re-save-btn {
+    width: 100%; background: #111; color: #FFF; border: none; border-radius: 16px;
+    padding: 16px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 10px;
+}
+.re-save-btn:active { transform: scale(0.98); }

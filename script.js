@@ -3586,7 +3586,106 @@ function wcRenderMessages(charId) {
             // 新增：渲染购物小票
             contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" style="background: transparent; padding: 0; border: none;">${msg.content}</div>`;
             
-        // 👇 新增的代码从这里开始 👇
+        } else if (msg.type === 'recipe') {
+            // 新增：渲染全新高级感食谱卡片
+            const isEdited = msg.isEdited;
+            const isMe = msg.sender === 'me';
+            
+            let topHtml = '';
+            if (isEdited) {
+                topHtml = `<div class="r-tag updated">UPDATED</div><div class="r-update-dot"></div>`;
+            } else {
+                topHtml = `<div class="r-tag">DAILY</div><div class="r-cross"></div>`;
+            }
+
+            const watermarkText = isMe ? 'RECIPE' : 'MENU';
+
+            contentHtml = `
+                <div class="wc-bubble recipe" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important;">
+                    ${quoteHtml}
+                    <div class="ins-recipe-bubble ${isMe ? '' : 'them'}" onclick="wcOpenRecipeDetail('${msg.id}')">
+                        <div class="r-watermark">${watermarkText}</div>
+                        <div class="r-top">${topHtml}</div>
+                        <div class="r-center">
+                            <div class="r-title">${msg.title}.</div>
+                            <div class="r-subtitle">${msg.desc}</div>
+                        </div>
+                        <div class="r-bottom">
+                            <div class="r-line"></div>
+                            <div class="r-action">
+                                ${isEdited ? 'VIEW' : 'TAP'} 
+                                <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+                
+        // 👇 新增：渲染高级感订单/外卖卡片 👇
+        } else if (msg.type === 'order') {
+            const data = msg.receiptData || {};
+            const orderType = msg.orderType; // 'delivery', 'gift', 'daifu'
+            
+            let cardInnerHtml = '';
+            let cardClass = '';
+
+            if (orderType === 'delivery') {
+                cardClass = 'delivery';
+                cardInnerHtml = `
+                    <div class="stub"><div class="stub-text">NO.${String(Math.floor(Math.random()*9000)+1000)}</div></div>
+                    <div class="main">
+                        <div class="stamp"></div>
+                        <div class="tag">FOOD DELIVERY</div>
+                        <div>
+                            <div class="title">Ta's Order.</div>
+                            <div class="desc">${data.items && data.items[0] ? data.items[0].name : '神秘外卖'}</div>
+                        </div>
+                        <div class="bottom">
+                            <span>${msg.deliveryText || 'ETA: 30 MINS'}</span>
+                            <span style="font-weight:bold; color:#111;">¥${data.total}</span>
+                        </div>
+                    </div>
+                `;
+            } else if (orderType === 'gift') {
+                cardClass = 'gift';
+                cardInnerHtml = `
+                    <div class="main">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div class="tag">SURPRISE GIFT</div>
+                            <span style="font-size: 10px; color: #555; font-family: monospace;">PAID</span>
+                        </div>
+                        <div>
+                            <div class="title">For You.</div>
+                            <div class="desc">${data.items && data.items[0] ? data.items[0].name : '神秘礼物'}</div>
+                        </div>
+                        <div class="barcode"></div>
+                    </div>
+                `;
+            } else if (orderType === 'daifu') {
+                cardClass = 'daifu';
+                cardInnerHtml = `
+                    <div class="main">
+                        <div class="tag">PAYMENT REQUEST</div>
+                        <div>
+                            <div class="title">Please Pay.</div>
+                            <div class="desc">${data.items && data.items[0] ? data.items[0].name : '代付请求'}</div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-end; font-family: monospace; font-size: 10px; color: #718096;">
+                            <span>${msg.deliveryText || '待支付'}</span>
+                            <span style="font-weight:bold; color:#2D3748; font-size: 14px;">¥${data.total}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            contentHtml = `
+                <div class="wc-bubble order" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important;">
+                    ${quoteHtml}
+                    <div class="ins-order-bubble ${cardClass}" onclick="wcOpenReceiptDetail('${msg.id}')">
+                        ${cardInnerHtml}
+                    </div>
+                </div>`;
+        // 👆 新增结束 👆
+
         } else if (msg.type === 'call_record') {
             const isRejected = msg.status === 'rejected';
             const iconColor = isRejected ? '#FF3B30' : '#111';
@@ -4254,7 +4353,20 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 7. **主动语音通话** (按需使用)
    如果你想念User 或者你觉得当前氛围极佳，又或者有非常重要/暧昧的话想对 User 说，你可以主动向 User 发起语音通话！
    {"type":"call_invite", "content":"(你的内心OS：我想听听你的声音了)"}
+8. **食谱互动** (按需使用)
+   如果你们聊到了吃饭、饿了，你可以发送你的今日食谱，或者修改User的食谱（比如觉得User吃得太少，强行加上肉）。
+   发送你的食谱：{"type":"recipe_send", "b":"早餐内容", "l":"午餐内容", "d":"晚餐内容", "content":"发给你的食谱"}
+   修改User的食谱：{"type":"recipe_edit", "meal":"b/l/d", "newText":"你修改后的内容", "content":"我帮你把食谱改了！"}
+9. **主动点外卖** (按需使用)
+   如果你觉得User饿了，或者想给User一个惊喜，你可以主动给User点外卖！
+   {"type":"order_delivery", "foodName":"招牌排骨汤面", "price":"38.50", "msg":"记得趁热吃，别饿着肚子工作。"}
 `;
+
+        // 注入 User 的食谱让 AI 感知
+        if (char.phoneData && char.phoneData.recipe && char.phoneData.recipe.my) {
+            const myR = char.phoneData.recipe.my;
+            systemPrompt += `\n【User的今日食谱】：早餐:${myR.b||'无'}，午餐:${myR.l||'无'}，晚餐:${myR.d||'无'}。你可以对这个食谱发表看法，甚至使用 recipe_edit 指令强行修改它。\n`;
+        }
 
         if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
             // 核心修复：将概率判断移到代码底层，防止 AI 幻觉导致 100% 触发
@@ -4959,6 +5071,65 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         } else if (action.type === 'call_invite') {
             wcShowIncomingCall(charId);
             wcAddMessage(charId, 'system', 'system', `[系统内部信息: 你主动向 User 发起了语音通话请求，等待对方接听...]`, { hidden: true });
+        
+        // 👇 新增：解析 AI 食谱互动 👇
+        } else if (action.type === 'recipe_send') {
+            wcAddMessage(charId, 'them', 'text', action.content || "这是我今天的食谱哦~", extra);
+            
+            if (!char.phoneData) char.phoneData = {};
+            if (!char.phoneData.recipe) char.phoneData.recipe = { my: {}, ta: {} };
+            char.phoneData.recipe.ta = { b: action.b, l: action.l, d: action.d };
+            
+            wcAddMessage(charId, 'them', 'recipe', '食谱', {
+                title: "Ta's Menu",
+                desc: "点击查看 Ta 的今日食谱",
+                isEdited: false,
+                recipeData: char.phoneData.recipe.ta
+            });
+            
+        } else if (action.type === 'recipe_edit') {
+            wcAddMessage(charId, 'them', 'text', action.content || "我帮你把食谱改了！", extra);
+            
+            if (!char.phoneData) char.phoneData = {};
+            if (!char.phoneData.recipe) char.phoneData.recipe = { my: {}, ta: {} };
+            
+            const mealKey = action.meal; // 'b', 'l', or 'd'
+            if (['b', 'l', 'd'].includes(mealKey)) {
+                const oldText = char.phoneData.recipe.my[mealKey] || '无';
+                if (!char.phoneData.recipe.my.edits) char.phoneData.recipe.my.edits = {};
+                
+                char.phoneData.recipe.my.edits[mealKey] = {
+                    old: oldText,
+                    new: action.newText,
+                    author: char.name
+                };
+                char.phoneData.recipe.my[mealKey] = action.newText; // 更新当前值
+                
+                wcAddMessage(charId, 'them', 'recipe', '食谱', {
+                    title: "My Menu (已修改)",
+                    desc: `${char.name} 修改了你的食谱`,
+                    isEdited: true,
+                    recipeData: char.phoneData.recipe.my
+                });
+            }
+            
+        // 👇 新增：解析 AI 主动点外卖 👇
+        } else if (action.type === 'order_delivery') {
+            wcAddMessage(charId, 'them', 'text', "给你点了个外卖，注意接电话哦~", extra);
+            
+            const receiptData = {
+                logo: "FOOD DELIVERY",
+                date: new Date().toLocaleString('zh-CN'),
+                items: [{ name: action.foodName || "神秘外卖", price: action.price || "0.00" }],
+                total: action.price || "0.00",
+                msg: action.msg || "好好吃饭！"
+            };
+            
+            wcAddMessage(charId, 'them', 'order', '外卖订单', {
+                orderType: 'delivery',
+                deliveryText: 'ETA: 30 MINS',
+                receiptData: receiptData
+            });
         // 👆 新增结束 👆
 
         } else if (action.type === 'invite_accept') {
@@ -9924,14 +10095,32 @@ function initProactiveSystem() {
 
 function checkProactiveMessages() {
     const now = Date.now();
+    const dateObj = new Date();
+    const currentHHMM = `${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
+    const todayStr = dateObj.toDateString();
+
     wcState.characters.forEach(char => {
+        // 1. 检查食谱定时发送逻辑
+        if (char.phoneData && char.phoneData.recipe && char.phoneData.recipe.ta) {
+            const taRecipe = char.phoneData.recipe.ta;
+            if (taRecipe.autoTime === currentHHMM && taRecipe.lastAutoSendDate !== todayStr) {
+                console.log(`触发 ${char.name} 定时发送食谱`);
+                // 标记为今天已发送，防止一分钟内重复触发
+                taRecipe.lastAutoSendDate = todayStr;
+                wcSaveData();
+                // 后台静默生成并发送
+                if (typeof wcGenerateTaRecipe === 'function') {
+                    wcGenerateTaRecipe(true, char.id);
+                }
+            }
+        }
+
+        // 2. 原有的主动发消息逻辑
         if (char.chatConfig && char.chatConfig.proactiveEnabled) {
-            // 将设定的分钟数转换为毫秒
             const interval = (char.chatConfig.proactiveInterval || 60) * 60 * 1000; 
             const msgs = wcState.chats[char.id] || [];
             let lastTime = 0;
             
-            // 准确找到最后一条非系统、非报错的实质性消息时间
             for (let i = msgs.length - 1; i >= 0; i--) {
                 if (!msgs[i].isError && msgs[i].type !== 'system') {
                     lastTime = msgs[i].time;
@@ -9939,14 +10128,11 @@ function checkProactiveMessages() {
                 }
             }
 
-            // 如果完全没有聊天记录，使用当前时间兜底，防止一上来就疯狂触发
             if (lastTime === 0) lastTime = now; 
 
-            // 判断时间间隔，并且确保当前没有正在生成回复
             if (now - lastTime > interval && !aiGeneratingLocks[char.id]) {
                 console.log(`触发 ${char.name} 主动消息`);
                 
-                // 👇 新增：精确计算时间差 👇
                 const gapMs = now - lastTime;
                 const gapMinutes = Math.floor(gapMs / 60000);
                 const gapHours = Math.floor(gapMinutes / 60);
@@ -9958,11 +10144,9 @@ function checkProactiveMessages() {
                 if (gapDays > 0) timeGapStr += `${gapDays}天`;
                 if (remainHours > 0) timeGapStr += `${remainHours}小时`;
                 if (remainMinutes > 0 || timeGapStr === "") timeGapStr += `${remainMinutes}分钟`;
-                // 👆 时间差计算结束 👆
 
                 const nowStr = new Date().toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                 
-                // 👇 融合你的精简提示词，并保留思维链与防OOC 👇
                 const proactivePrompt = `[系统通知：距离上次互动已过去 ${timeGapStr}。话题可能已中断。
 请以 ${char.name} 的身份主动发起新话题，或自然地延续之前的对话，对时间流逝做出反应。
 
@@ -9973,7 +10157,6 @@ function checkProactiveMessages() {
 考量完毕后，直接输出符合你人设的 JSON 消息数组！]`;
                 
                 wcAddMessage(char.id, 'system', 'system', proactivePrompt, { hidden: true });
-                
                 wcTriggerAI(char.id);
             }
         }
@@ -12874,7 +13057,8 @@ window.wcRenderTarotOrbit = function(tab) {
 };
 
 window.wcUpdateTarotTransforms = function() {
-    const cards = document.querySelectorAll('.tarot-card');
+    // 👈 增加父级限制，防止误伤恋人空间里的同名卡片导致索引错位
+    const cards = document.querySelectorAll('#wc-tarot-slider .tarot-card');
     cards.forEach((card, index) => {
         const offset = index - wcTarotCurrentIdx;
         if (offset === 0) {
@@ -13098,115 +13282,92 @@ function wcSetDeliveryTime(timeOption) {
     }
 }
 
-/**
- * 修改：wcPayAndSend 函数，使其能接收新的 deliveryText
- * @param {string} method - 'gift' 或 'daifu'
- * @param {string} deliveryText - '立即配送' 或 '预约: YYYY-MM-DD HH:mm'
- */
 function wcPayAndSend(method, deliveryText) {
     const cart = wcState.shopData.cart || [];
     if (cart.length === 0) return;
 
     let total = 0;
     let itemNames = [];
+    const receiptItems = [];
+    
     cart.forEach(item => {
         total += parseFloat(item.price);
         itemNames.push(item.name);
+        receiptItems.push({ name: item.name, price: parseFloat(item.price).toFixed(2) });
     });
 
     const itemsStr = itemNames.join('、');
-    
-    let cardHtml = '';
-    let aiSystemMessage = '';
+
+    // 构造基础小票数据
+    const receiptData = {
+        logo: method === 'gift' ? "LUXURY ORDER" : "PAYMENT REQUEST",
+        date: new Date().toLocaleString('zh-CN'),
+        items: receiptItems,
+        total: total.toFixed(2),
+        msg: "" // 稍后由用户输入填充
+    };
 
     if (method === 'gift') {
-        // 用户支付，生成粉色礼物卡片
-        cardHtml = `
-            <div class="shopping-card gift">
-                <div class="shopping-card-header">
-                    <div class="shopping-card-tag">GIFT</div>
-                    <div class="shopping-card-icon">
-                        <svg viewBox="0 0 24 24"><path d="M20 12v10H4V12M20 7H4V4h16v3M12 22V7m-4 0h8v0a4 4 0 0 1-8 0v0Z"></path></svg>
-                    </div>
-                </div>
-                <div class="shopping-card-body">
-                    <div class="shopping-card-title">For You</div>
-                    <div class="shopping-card-desc">一份包含 ${itemNames[0]} 等的礼物</div>
-                </div>
-                <div class="shopping-card-footer">
-                    <div class="shopping-card-price">¥${total.toFixed(2)}</div>
-                    <div class="shopping-card-status">已支付<br>${deliveryText}</div>
-                </div>
-            </div>
-        `;
-
-        aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚为你购买了以下物品：${itemsStr}。配送方式：${deliveryText}。]`;
-
-        // 支付流程
         wcOpenGeneralInput(`支付 ¥${total.toFixed(2)} (输入支付密码)`, (pass) => {
-            if (pass !== wcState.wallet.password) {
-                alert("密码错误！");
-                return;
-            }
-            if (wcState.wallet.balance < total) {
-                alert("余额不足！请先充值。");
-                return;
-            }
+            if (pass !== wcState.wallet.password) return alert("密码错误！");
+            if (wcState.wallet.balance < total) return alert("余额不足！请先充值。");
             
-            // 扣款
             wcState.wallet.balance -= total;
             wcState.wallet.transactions.push({
                 id: Date.now(), type: 'payment', amount: total,
                 note: `商城购物赠送`, time: Date.now()
             });
             
-            // 清空购物车并发送消息
             wcState.shopData.cart = [];
             wcSaveData();
             wcUpdateCartBadge();
             wcCloseModal('wc-modal-shop-cart');
             wcCloseShoppingPage();
-            
-            wcAddMessage(wcState.activeChatId, 'system', 'system', aiSystemMessage, { hidden: true });
+
+            // 支付成功后，弹出留言输入框
             setTimeout(() => {
-                wcAddMessage(wcState.activeChatId, 'me', 'receipt', cardHtml);
+                wcOpenGeneralInput("给 Ta 留个言吧 (选填)", (customMsg) => {
+                    receiptData.msg = customMsg || "“给你买了一点小礼物，希望你喜欢。”";
+                    
+                    const aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚为你购买了以下物品：${itemsStr}。配送方式：${deliveryText}。用户的留言是：“${receiptData.msg}”。请在回复中做出反应。]`;
+                    
+                    wcAddMessage(wcState.activeChatId, 'system', 'system', aiSystemMessage, { hidden: true });
+                    setTimeout(() => {
+                        wcAddMessage(wcState.activeChatId, 'me', 'order', '购物订单', {
+                            orderType: 'gift',
+                            deliveryText: deliveryText,
+                            receiptData: receiptData
+                        });
+                    }, 300);
+                });
             }, 300);
             
         }, true);
 
     } else if (method === 'daifu') {
-        // 代付，生成蓝色请求卡片
-        cardHtml = `
-            <div class="shopping-card daifu">
-                <div class="shopping-card-header">
-                    <div class="shopping-card-tag">REQUEST</div>
-                    <div class="shopping-card-icon">
-                        <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
-                    </div>
-                </div>
-                <div class="shopping-card-body">
-                    <div class="shopping-card-title">Payment</div>
-                    <div class="shopping-card-desc">包含 ${itemNames[0]} 等的订单</div>
-                </div>
-                <div class="shopping-card-footer">
-                    <div class="shopping-card-price">¥${total.toFixed(2)}</div>
-                    <div class="shopping-card-status">待支付<br>${deliveryText}</div>
-                </div>
-            </div>
-        `;
-
-        aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚向你发送了一个代付请求，希望你帮忙支付以下物品：${itemsStr}。总价：¥${total.toFixed(2)}。配送方式：${deliveryText}。请在回复中做出回应（同意付款或拒绝付款等）。]`;
-
-        // 清空购物车并发送消息
-        wcState.shopData.cart = [];
-        wcSaveData();
-        wcUpdateCartBadge();
         wcCloseModal('wc-modal-shop-cart');
         wcCloseShoppingPage();
-        
-        wcAddMessage(wcState.activeChatId, 'system', 'system', aiSystemMessage, { hidden: true });
+
+        // 直接弹出留言输入框
         setTimeout(() => {
-            wcAddMessage(wcState.activeChatId, 'me', 'receipt', cardHtml);
+            wcOpenGeneralInput("输入代付留言 (选填)", (customMsg) => {
+                receiptData.msg = customMsg || "“帮我付一下这个好不好~”";
+                
+                const aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚向你发送了一个代付请求，希望你帮忙支付以下物品：${itemsStr}。总价：¥${total.toFixed(2)}。配送方式：${deliveryText}。用户的留言是：“${receiptData.msg}”。请在回复中做出回应（同意付款或拒绝付款等）。]`;
+
+                wcState.shopData.cart = [];
+                wcSaveData();
+                wcUpdateCartBadge();
+                
+                wcAddMessage(wcState.activeChatId, 'system', 'system', aiSystemMessage, { hidden: true });
+                setTimeout(() => {
+                    wcAddMessage(wcState.activeChatId, 'me', 'order', '代付请求', {
+                        orderType: 'daifu',
+                        deliveryText: deliveryText,
+                        receiptData: receiptData
+                    });
+                }, 300);
+            });
         }, 300);
     }
 }
@@ -13435,35 +13596,31 @@ function wcBuyCharCartItem(index) {
         // 4. 刷新购物车页面 UI
         wcRenderPhoneCartContent();
 
-        // 5. 在聊天记录中生成一张高级感礼物卡片，并通知 AI
-        const cardHtml = `
-            <div class="shopping-card gift">
-                <div class="shopping-card-header">
-                    <div class="shopping-card-tag">SURPRISE</div>
-                    <div class="shopping-card-icon">
-                        <svg viewBox="0 0 24 24"><path d="M20 12v10H4V12M20 7H4V4h16v3M12 22V7m-4 0h8v0a4 4 0 0 1-8 0v0Z"></path></svg>
-                    </div>
-                </div>
-                <div class="shopping-card-body">
-                    <div class="shopping-card-title">Surprise Gift</div>
-                    <div class="shopping-card-desc">我偷偷清空了你的购物车：${item.name}</div>
-                </div>
-                <div class="shopping-card-footer">
-                    <div class="shopping-card-price">¥${price.toFixed(2)}</div>
-                    <div class="shopping-card-status">已支付<br>惊喜送达</div>
-                </div>
-            </div>
-        `;
+        // 5. 弹出留言输入框，并发送结构化的高级卡片
+        wcOpenGeneralInput("给 Ta 留个言吧 (选填)", (customMsg) => {
+            const finalMsg = customMsg || "“偷偷看了你的购物车，就当是给你的小惊喜吧。”";
+            
+            const receiptData = {
+                logo: "LUXURY ORDER",
+                date: new Date().toLocaleString('zh-CN'),
+                items: [{ name: item.name, price: price.toFixed(2) }],
+                total: price.toFixed(2),
+                msg: finalMsg
+            };
 
-        // 给 AI 发送隐藏的系统提示，强制让它做出反应
-        const aiSystemMessage = `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机购物车，并花钱帮你买下了你一直想买的物品："${item.name}" (价格: ¥${price.toFixed(2)})。]`;
+            const aiSystemMessage = `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机购物车，并花钱帮你买下了你一直想买的物品："${item.name}" (价格: ¥${price.toFixed(2)})。用户的留言是：“${finalMsg}”。请在回复中做出反应。]`;
 
-        wcAddMessage(char.id, 'system', 'system', aiSystemMessage, { hidden: true });
-        setTimeout(() => {
-            wcAddMessage(char.id, 'me', 'receipt', cardHtml);
-        }, 300);
+            wcAddMessage(char.id, 'system', 'system', aiSystemMessage, { hidden: true });
+            setTimeout(() => {
+                wcAddMessage(char.id, 'me', 'order', '购物订单', {
+                    orderType: 'gift',
+                    deliveryText: '惊喜送达',
+                    receiptData: receiptData
+                });
+            }, 300);
 
-        alert(`支付成功！已帮 Ta 买下 ${item.name}，快去聊天界面看看 Ta 的反应吧！`);
+            alert(`支付成功！已帮 Ta 买下 ${item.name}，快去聊天界面看看 Ta 的反应吧！`);
+        });
     }, true); // true 表示这是一个密码输入框
 }
 
@@ -21759,3 +21916,414 @@ async function wcGenerateCharStatus() {
         wcShowError("获取状态失败");
     }
 }
+// ==========================================
+// 新增：食谱系统 (Recipe) 核心逻辑
+// ==========================================
+
+// 初始化食谱数据
+function initRecipeData(char) {
+    if (!char.phoneData) char.phoneData = {};
+    if (!char.phoneData.recipe) {
+        char.phoneData.recipe = {
+            my: { b: '', l: '', d: '', edits: {} },
+            ta: { b: '', l: '', d: '', edits: {} }
+        };
+    }
+    return char.phoneData.recipe;
+}
+
+// 打开食谱主页
+function wcActionRecipe() {
+    wcCloseAllPanels();
+    document.getElementById('wc-view-chat-detail').classList.remove('active');
+    document.getElementById('wc-view-recipe').classList.add('active');
+    
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'none';
+
+    wcSwitchRecipeTab('my');
+}
+
+function wcCloseRecipePage() {
+    document.getElementById('wc-view-recipe').classList.remove('active');
+    document.getElementById('wc-view-chat-detail').classList.add('active');
+    
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'flex';
+}
+
+function wcSwitchRecipeTab(tab) {
+    // 切换钢琴键状态
+    document.querySelectorAll('.piano-key').forEach(el => el.classList.remove('active'));
+    document.getElementById(`recipe-tab-${tab}`).classList.add('active');
+    wcRenderRecipeContent(tab);
+}
+
+function wcRenderRecipeContent(tab) {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const recipeData = initRecipeData(char);
+    const data = tab === 'my' ? recipeData.my : recipeData.ta;
+    const container = document.getElementById('wc-recipe-content-area');
+    
+    const title = tab === 'my' ? "TODAY'S MENU" : "TA'S MENU";
+    
+    let html = `
+        <div class="recipe-card active">
+            <div class="recipe-card-header">
+                <div class="recipe-date">${title}</div>
+                <div class="recipe-edit-btn" onclick="wcEditRecipe('${tab}')">
+                    <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    编辑
+                </div>
+            </div>
+    `;
+
+    const meals = [
+        { key: 'b', icon: '🥐', name: 'Breakfast' },
+        { key: 'l', icon: '🍱', name: 'Lunch' },
+        { key: 'd', icon: '🍲', name: 'Dinner' }
+    ];
+
+    meals.forEach(m => {
+        let desc = data[m.key] || '暂无记录，点击右上角编辑';
+        if (data.edits && data.edits[m.key]) {
+            desc = `<span style="color:#FF9500; font-weight:bold;">[已修改]</span> ${desc}`;
+        }
+        html += `
+            <div class="meal-item">
+                <div class="meal-icon-box">${m.icon}</div>
+                <div class="meal-info">
+                    <div class="meal-name">${m.name}</div>
+                    <div class="meal-desc">${desc}</div>
+                </div>
+            </div>
+        `;
+    });
+
+    // 动态生成底部操作区
+    if (tab === 'ta') {
+        const autoTime = data.autoTime || '12:00';
+        html += `
+            <div style="background: #F9F9F9; border-radius: 16px; padding: 16px; margin-top: 20px; border: 1px solid #F0F0F0;">
+                <div style="font-size: 13px; font-weight: bold; color: #111; margin-bottom: 10px;">定时报备设置</div>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-size: 12px; color: #888;">到达设定时间自动发送食谱</span>
+                    <input type="time" value="${autoTime}" onchange="wcSaveRecipeAutoTime(this.value)" style="background: #FFF; border: 1px solid #EAEAEA; padding: 6px 10px; border-radius: 8px; font-family: monospace; outline: none; color: #111;">
+                </div>
+            </div>
+            <button class="recipe-action-btn btn-dark" onclick="wcGenerateTaRecipe(true)">
+                <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                让 Ta 立即生成并主动报备
+            </button>
+        `;
+    } else {
+        html += `
+            <button class="recipe-action-btn btn-dark" onclick="wcSendRecipe('my')">
+                <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                发送给 Ta
+            </button>
+        `;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+// 保存定时发送时间
+window.wcSaveRecipeAutoTime = function(timeVal) {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const recipeData = initRecipeData(char);
+    recipeData.ta.autoTime = timeVal;
+    wcSaveData();
+};
+
+// ==========================================
+// 新增：高级食谱编辑弹窗逻辑
+// ==========================================
+let currentRecipeEditTab = 'my';
+
+function wcEditRecipe(tab) {
+    currentRecipeEditTab = tab;
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const recipeData = initRecipeData(char);
+    const data = tab === 'my' ? recipeData.my : recipeData.ta;
+
+    // 填充当前数据到输入框
+    document.getElementById('re-input-b').value = data.b || '';
+    document.getElementById('re-input-l').value = data.l || '';
+    document.getElementById('re-input-d').value = data.d || '';
+
+    // 设置标题
+    const title = tab === 'my' ? "编辑我的食谱" : "修改 Ta 的食谱";
+    document.getElementById('re-modal-title').innerText = title;
+
+    // 打开弹窗
+    const modal = document.getElementById('wc-modal-recipe-edit');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function wcCloseRecipeEdit() {
+    const modal = document.getElementById('wc-modal-recipe-edit');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+function wcSaveRecipeEdit() {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const recipeData = initRecipeData(char);
+    const data = currentRecipeEditTab === 'my' ? recipeData.my : recipeData.ta;
+
+    // 获取新输入的数据
+    const newB = document.getElementById('re-input-b').value.trim();
+    const newL = document.getElementById('re-input-l').value.trim();
+    const newD = document.getElementById('re-input-d').value.trim();
+
+    let isModified = false;
+
+    // 辅助函数：检查并记录修改
+    const checkAndRecord = (key, newVal) => {
+        const oldVal = data[key] || '';
+        if (oldVal !== newVal) {
+            isModified = true;
+            // 如果是修改对方的食谱，记录修改痕迹
+            if (currentRecipeEditTab === 'ta') {
+                if (!data.edits) data.edits = {};
+                data.edits[key] = {
+                    old: oldVal || '无',
+                    new: newVal,
+                    author: wcState.user.name
+                };
+            }
+            data[key] = newVal; // 更新数据
+        }
+    };
+
+    checkAndRecord('b', newB);
+    checkAndRecord('l', newL);
+    checkAndRecord('d', newD);
+
+    if (isModified) {
+        wcSaveData();
+        wcRenderRecipeContent(currentRecipeEditTab);
+
+        // 如果修改了对方的食谱，发送卡片并通知 AI
+        if (currentRecipeEditTab === 'ta') {
+            wcAddMessage(char.id, 'me', 'recipe', '食谱', {
+                title: "Ta's Menu (已修改)",
+                desc: `我帮你把食谱改了`,
+                isEdited: true,
+                recipeData: JSON.parse(JSON.stringify(data)) // 深拷贝当前状态
+            });
+            
+            wcAddMessage(char.id, 'system', 'system', `[系统内部信息: User 刚刚强行修改了你的今日食谱。请在回复中对此做出反应（比如抗议、撒娇或顺从）。]`, { hidden: true });
+        }
+    }
+
+    wcCloseRecipeEdit();
+}
+
+// 发送我的食谱到聊天
+function wcSendRecipe(tab) {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const recipeData = initRecipeData(char);
+    const data = tab === 'my' ? recipeData.my : recipeData.ta;
+
+    wcAddMessage(char.id, 'me', 'recipe', '食谱', {
+        title: "My Menu",
+        desc: "这是我今天的食谱哦~",
+        isEdited: false,
+        recipeData: JSON.parse(JSON.stringify(data))
+    });
+    
+    wcAddMessage(char.id, 'system', 'system', `[系统内部信息: User 刚刚向你发送了Ta的今日食谱。早餐:${data.b||'无'}，午餐:${data.l||'无'}，晚餐:${data.d||'无'}。请在回复中对此做出反应。]`, { hidden: true });
+    
+    wcCloseRecipePage();
+    alert("已发送给 Ta！");
+}
+
+// AI 生成 Ta 的食谱 (支持主动发送到聊天)
+window.wcGenerateTaRecipe = async function(sendToChat = false, targetCharId = null) {
+    const charId = targetCharId || wcState.activeChatId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await getActiveApiConfig('chat');
+    if (!apiConfig || !apiConfig.key) {
+        if (!targetCharId) alert("请先配置 API");
+        return;
+    }
+
+    if (!targetCharId) wcShowLoading("正在感知 Ta 的饮食...");
+
+    try {
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
+        prompt += `请根据你的人设和当前的生活状态，生成你今天的【一日三餐食谱】。\n`;
+        prompt += `要求：\n1. 必须符合你的性格（比如：养生人吃沙拉，打工人吃外卖，发疯人吃泡面）。\n`;
+        prompt += `2. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{"b": "早餐内容", "l": "午餐内容", "d": "晚餐内容"}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        const recipeData = initRecipeData(char);
+        // 保留原有的 autoTime 设置
+        const currentAutoTime = recipeData.ta.autoTime || '12:00';
+        recipeData.ta = { b: result.b, l: result.l, d: result.d, edits: {}, autoTime: currentAutoTime };
+        
+        // 如果是定时触发，记录今天已经发送过
+        if (targetCharId) {
+            const todayStr = new Date().toDateString();
+            recipeData.ta.lastAutoSendDate = todayStr;
+        }
+        
+        wcSaveData();
+        
+        // 如果当前停留在食谱页，刷新 UI
+        if (!targetCharId && document.getElementById('wc-view-recipe').classList.contains('active')) {
+            wcRenderRecipeContent('ta');
+        }
+
+        // 如果要求发送到聊天界面
+        if (sendToChat) {
+            wcAddMessage(char.id, 'them', 'recipe', '食谱', {
+                title: "Ta's Menu",
+                desc: "这是我今天的食谱哦~",
+                isEdited: false,
+                recipeData: JSON.parse(JSON.stringify(recipeData.ta))
+            });
+            
+            // 发送一条配套的文本消息
+            wcAddMessage(char.id, 'them', 'text', "给你看看我今天吃了什么~");
+            
+            // 触发系统通知
+            if (typeof showMainSystemNotification === 'function') {
+                showMainSystemNotification("今日食谱", `${char.name} 向你报备了今日食谱`, char.avatar);
+            }
+        }
+
+        if (!targetCharId) wcShowSuccess("生成并发送成功！");
+
+    } catch (e) {
+        console.error(e);
+        if (!targetCharId) wcShowError("生成失败");
+    }
+};
+
+// 打开聊天记录中的食谱详情弹窗
+window.wcOpenRecipeDetail = function(msgId) {
+    const msgs = wcState.chats[wcState.activeChatId];
+    const msg = msgs.find(m => m.id.toString() === msgId.toString());
+    if (!msg || !msg.recipeData) return;
+
+    const data = msg.recipeData;
+    document.getElementById('recipe-detail-title').innerText = msg.title;
+    
+    const container = document.getElementById('recipe-detail-content');
+    let html = '';
+
+    const meals = [
+        { key: 'b', label: 'BRKF' },
+        { key: 'l', label: 'LNCH' },
+        { key: 'd', label: 'DINR' }
+    ];
+
+    meals.forEach(m => {
+        let detailHtml = '';
+        if (data.edits && data.edits[m.key]) {
+            // 有修改痕迹
+            const edit = data.edits[m.key];
+            detailHtml = `
+                <div class="rm-edit-group">
+                    <div class="rm-text-old">${edit.old}</div>
+                    <div class="rm-text-new">${edit.new}</div>
+                    <div class="rm-edit-author">${edit.author} 修改了此项</div>
+                </div>
+            `;
+        } else {
+            // 正常显示
+            detailHtml = `<div class="rm-text-normal">${data[m.key] || '无'}</div>`;
+        }
+
+        html += `
+            <div class="rm-meal-item">
+                <div class="rm-meal-label">${m.label}</div>
+                <div class="rm-meal-detail">${detailHtml}</div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+    
+    const modal = document.getElementById('wc-modal-recipe-detail');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.wcCloseRecipeDetail = function(e) {
+    if (e && e.target.id !== 'wc-modal-recipe-detail') return;
+    const modal = document.getElementById('wc-modal-recipe-detail');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+};
+// ==========================================
+// 新增：高级小票弹窗逻辑
+// ==========================================
+window.wcOpenReceiptDetail = function(msgId) {
+    const msgs = wcState.chats[wcState.activeChatId];
+    const msg = msgs.find(m => m.id.toString() === msgId.toString());
+    if (!msg || !msg.receiptData) return;
+
+    const data = msg.receiptData;
+    
+    document.getElementById('rcpt-logo').innerText = data.logo || 'RECEIPT';
+    document.getElementById('rcpt-date').innerText = data.date || new Date().toLocaleString();
+    
+    let itemsHtml = '';
+    if (data.items && data.items.length > 0) {
+        data.items.forEach(item => {
+            itemsHtml += `
+                <div class="rcpt-row">
+                    <div class="rcpt-col-left">1x ${item.name}</div>
+                    <div class="rcpt-col-right">¥${item.price}</div>
+                </div>
+            `;
+        });
+    }
+    document.getElementById('rcpt-items').innerHTML = itemsHtml;
+    
+    document.getElementById('rcpt-subtotal').innerText = `¥${data.total}`;
+    document.getElementById('rcpt-total').innerText = `¥${data.total}`;
+    document.getElementById('rcpt-msg').innerText = data.msg || '';
+    
+    // 随机生成一个订单号
+    document.getElementById('rcpt-order-no').innerText = `ORD-${Math.floor(Math.random() * 900000000) + 100000000}`;
+
+    const modal = document.getElementById('wc-modal-receipt');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.wcCloseReceiptDetail = function(e) {
+    if (e && e.target.id !== 'wc-modal-receipt' && !e.target.classList.contains('rcpt-close')) return;
+    const modal = document.getElementById('wc-modal-receipt');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+};
