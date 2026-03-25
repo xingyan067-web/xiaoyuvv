@@ -4356,6 +4356,9 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 9. **主动点外卖** (按需使用)
    如果你觉得User饿了，或者想给User一个惊喜，你可以主动给User点外卖！
    {"type":"order_delivery", "foodName":"招牌排骨汤面", "price":"38.50", "msg":"记得趁热吃，别饿着肚子工作。"}
+10. **发送照片/图片** (按需使用)
+   如果你想给User发照片，必须严格使用以下格式，并在后面写上具体的画面描述：
+   {"type":"text", "content":"[图片描述] 刚洗完澡，腹肌线条明显，左耳的银质耳钉在灯光下微微闪光。"}
 `;
 
         // 注入 User 的食谱让 AI 感知
@@ -4884,6 +4887,23 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         const action = actions[i];
         if (!action) continue;
 
+        // 👇【新增修复】：强制拦截并纠正 AI 掉格式产生的纯文本表情和图片
+        if (action.type === 'text') {
+            // 纠正表情包幻觉 (如 "[表情包: 开心]" 或 "表情包描述：开心")
+            let stickerMatch = action.content.match(/\[表情包?[：:]?\s*(.*?)\]/) || action.content.match(/^表情包描述[：:]\s*(.*)/) || action.content.match(/^\[表情[：:]\s*(.*?)\]/);
+            if (stickerMatch) {
+                action.type = 'sticker';
+                action.content = stickerMatch[1].trim();
+            }
+            // 纠正发送图片幻觉 (如 "[发送了一张图片，图片ID:xxx]" 或 "[图片描述: xxx]")
+            let imgMatch = action.content.match(/\[发送了一张图片[，,]?\s*图片ID[：:]\s*(.*?)\]/) || action.content.match(/\[图片[：:]\s*(.*?)\]/) || action.content.match(/^\[图片描述\][：:]?\s*(.*)/);
+            if (imgMatch) {
+                action.type = 'text';
+                action.content = `[图片描述] ${imgMatch[1].trim()}`;
+            }
+        }
+        // 👆 纠正结束 👆
+
         // 👇【核心修复】：第一条消息直接秒发！第二条及以后的消息才模拟打字延迟
         if (i > 0) {
             await wcDelay(1500 + Math.random() * 1000); 
@@ -5320,11 +5340,7 @@ async function wcTriggerAIMoment(charId) {
         prompt += `【你的人设】：${char.prompt}\n`;
         if (wbInfo) prompt += `${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
-        
-        const enableNpcComment = chatConfig.momentNpcCommentEnabled !== false;
-        if (enableNpcComment) {
-            prompt += `【你手机通讯录里的NPC朋友】：${npcListStr}\n`;
-        }
+        prompt += `【你手机通讯录里的NPC朋友】：${npcListStr}\n`;
         prompt += `【当前时间】：${timeString}。\n\n`;
         
         prompt += `【最近的聊天记录（作为发朋友圈的灵感/背景）】：\n`;
@@ -5335,11 +5351,9 @@ async function wcTriggerAIMoment(charId) {
         prompt += `1. 朋友圈的内容通常是对最近聊天中发生的事情的感慨、吐槽、分享，或者对User的暗示。\n`;
         prompt += `2. 文案要符合日常朋友圈风格，生活化，不要太长，拒绝AI味。\n`;
         prompt += `3. 【活人感排版】：你可以自由选择纯文本、纯图片或图文并茂。\n`;
-        
-        if (enableNpcComment) {
-            prompt += `4. 【互动感（核心）】：你可以在 comment 字段填写自己的抢沙发补充（也可以不填写）。同时，请根据【通讯录NPC朋友】列表，生成 1-3 条 NPC 对这条朋友圈的评论 (npcComments)。\n`;
-            prompt += `5. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
-            prompt += `{
+        prompt += `4. 【互动感（核心）】：你可以在 comment 字段填写自己的抢沙发补充（也可以不填写）。同时，请根据【通讯录NPC朋友】列表，生成 1-3 条 NPC 对这条朋友圈的评论 (npcComments)。\n`;
+        prompt += `5. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
+        prompt += `{
   "text": "朋友圈文案内容(可留空)", 
   "imageDesc": "配图的画面描述(可留空)", 
   "comment": "你自己在该条朋友圈下的评论/补充(可留空)",
@@ -5347,15 +5361,6 @@ async function wcTriggerAIMoment(charId) {
     {"name": "NPC名字(必须从通讯录选)", "text": "NPC的评论内容"}
   ]
 }\n`;
-        } else {
-            prompt += `4. 【互动感】：你可以在 comment 字段填写自己的抢沙发补充（也可以不填写）。\n`;
-            prompt += `5. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
-            prompt += `{
-  "text": "朋友圈文案内容(可留空)", 
-  "imageDesc": "配图的画面描述(可留空)", 
-  "comment": "你自己在该条朋友圈下的评论/补充(可留空)"
-}\n`;
-        }
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -9872,11 +9877,6 @@ async function wcSaveChatSettings() {
     char.chatConfig.proactiveEnabled = document.getElementById('wc-setting-proactive-toggle').checked;
     char.chatConfig.proactiveInterval = parseInt(document.getElementById('wc-setting-proactive-interval').value) || 60;
     char.chatConfig.momentFreq = parseInt(document.getElementById('wc-setting-moment-freq').value) || 0;
-    
-    const npcCommentToggle = document.getElementById('wc-setting-moment-npc-comment');
-    if (npcCommentToggle) {
-        char.chatConfig.momentNpcCommentEnabled = npcCommentToggle.checked;
-    }
     // 👇 新增：保存后台小动作概率 👇
     const bgUpdateFreqInput = document.getElementById('wc-setting-bg-update-freq');
     if (bgUpdateFreqInput) {
@@ -19522,20 +19522,11 @@ function forumHandleImageUpload(input) {
         reader.onload = function(e) {
             forumState.tempImage = e.target.result;
             document.getElementById('forum-post-image-preview').src = e.target.result;
-            document.getElementById('forum-post-image-preview-container').style.display = 'block';
-            document.getElementById('forum-image-upload-btn').style.display = 'none';
+            document.getElementById('forum-post-image-preview').style.display = 'block';
         };
         reader.readAsDataURL(file);
     }
 }
-
-window.forumRemoveImage = function() {
-    forumState.tempImage = null;
-    document.getElementById('forum-post-image-preview').src = '';
-    document.getElementById('forum-post-image-preview-container').style.display = 'none';
-    document.getElementById('forum-image-upload-btn').style.display = 'inline-flex';
-    document.getElementById('forum-image-input').value = '';
-};
 
 function forumSubmitPost() {
     const title = document.getElementById('forum-post-title-input').value.trim();
@@ -19594,12 +19585,7 @@ function forumSubmitPost() {
     document.getElementById('forum-post-title-input').value = '';
     document.getElementById('forum-post-input').value = '';
     document.getElementById('forum-post-img-desc-input').value = '';
-    if (document.getElementById('forum-post-image-preview-container')) {
-        document.getElementById('forum-post-image-preview-container').style.display = 'none';
-    }
-    if (document.getElementById('forum-image-upload-btn')) {
-        document.getElementById('forum-image-upload-btn').style.display = 'inline-flex';
-    }
+    document.getElementById('forum-post-image-preview').style.display = 'none';
     document.getElementById('forum-post-anonymous').checked = false; 
     forumState.tempImage = null;
     if (typeof forumTogglePostImageType === 'function') forumTogglePostImageType('local');
