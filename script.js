@@ -19314,6 +19314,10 @@ function forumSwitchTab(tab) {
     });
     document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
     
+    // 👇 新增：切换 Tab 时，确保底部导航栏始终显示（兜底保护）
+    const tabbar = document.querySelector('#forum-root .custom-tabbar');
+    if (tabbar) tabbar.style.display = 'flex';
+    
     // 2. 处理私信页面的特殊逻辑
     if (tab === 'messages') {
         forumOpenPrivateMessages();
@@ -19639,12 +19643,26 @@ function forumToggleSave(postId) {
 function forumOpenPostDetail(postId) {
     forumState.currentDetailPostId = postId;
     document.getElementById('forum-post-detail-view').classList.add('active');
+    
+    // 👇 新增：进入详情页时隐藏底部导航栏，防止遮挡输入框
+    const tabbar = document.querySelector('#forum-root .custom-tabbar');
+    if (tabbar) tabbar.style.display = 'none';
+    
     forumRenderPostDetailContent();
 }
 
 function forumClosePostDetail() {
     document.getElementById('forum-post-detail-view').classList.remove('active');
     forumState.currentDetailPostId = null;
+    
+    // 👇 新增：退出详情页时恢复显示底部导航栏
+    const tabbar = document.querySelector('#forum-root .custom-tabbar');
+    if (tabbar) tabbar.style.display = 'flex';
+    
+    // 关闭详情页时清理回复状态
+    if (typeof forumCancelReply === 'function') {
+        forumCancelReply();
+    }
     
     if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
     if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
@@ -19711,6 +19729,13 @@ function forumRenderPostDetailContent() {
     let commentsHtml = '';
     if (post.comments && post.comments.length > 0) {
         post.comments.forEach(c => {
+            // 👇 新增：处理回复文本的高亮显示 👇
+            let displayContent = c.content;
+            const replyMatch = displayContent.match(/^(回复\s+@[^:]+[:：])\s*(.*)/);
+            if (replyMatch) {
+                displayContent = `<span style="color: #007AFF; font-weight: 500;">${replyMatch[1]}</span> ${replyMatch[2]}`;
+            }
+
             // 👇 修改：给评论加上点击事件，触发回复 👇
             commentsHtml += `
                 <div class="ins-forum-comment-item" onclick="forumPrepareReplyComment('${c.name}')" style="cursor: pointer;">
@@ -19720,7 +19745,7 @@ function forumRenderPostDetailContent() {
                             <span class="ins-forum-comment-name">${c.name}</span>
                             <span class="ins-forum-post-handle">${c.handle || '@'+c.name}</span>
                         </div>
-                        <div class="ins-forum-comment-text">${c.content}</div>
+                        <div class="ins-forum-comment-text">${displayContent}</div>
                     </div>
                 </div>
             `;
@@ -19838,6 +19863,10 @@ function forumSubmitComment() {
     input.value = '';
     input.placeholder = "发布评论...";
     forumState.replyingToComment = null; 
+    
+    // 👇 新增：隐藏回复预览区 👇
+    const previewArea = document.getElementById('forum-reply-preview-area');
+    if (previewArea) previewArea.style.display = 'none';
     
     // 评论完后自动取消勾选匿名，防止下次忘记关掉
     if (document.getElementById('forum-comment-anonymous')) {
@@ -19961,9 +19990,32 @@ window.forumTriggerReactionToUser = async function(postId, userCommentText) {
 window.forumPrepareReplyComment = function(name) {
     forumState.replyingToComment = name;
     const input = document.getElementById('forum-comment-input');
+    const previewArea = document.getElementById('forum-reply-preview-area');
+    const previewText = document.getElementById('forum-reply-text-content');
+    
+    if (previewArea && previewText) {
+        previewText.innerText = `回复 @${name}`;
+        previewArea.style.display = 'flex';
+    }
+    
     if (input) {
         input.placeholder = `回复 @${name}...`;
         input.focus();
+    }
+};
+
+// 👇 新增：取消回复功能 👇
+window.forumCancelReply = function() {
+    forumState.replyingToComment = null;
+    const input = document.getElementById('forum-comment-input');
+    const previewArea = document.getElementById('forum-reply-preview-area');
+    
+    if (previewArea) {
+        previewArea.style.display = 'none';
+    }
+    
+    if (input) {
+        input.placeholder = "发布评论...";
     }
 };
 
