@@ -3266,6 +3266,20 @@ input::-webkit-inner-spin-button {
     background: radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 70%);
     pointer-events: none;
 }
+/* ========================================== */
+/* 修复：抹杀购物卡片代码换行产生的幽灵空白 */
+/* ========================================== */
+.wc-bubble.order {
+    font-size: 0 !important; 
+    line-height: 0 !important;
+    white-space: normal !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.ins-order-bubble {
+    line-height: normal !important; /* 恢复卡片内部的正常行高 */
+}
 
 /* ========================================== */
 /* 新增：购物流程高级卡片弹窗样式 */
