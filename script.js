@@ -5320,7 +5320,11 @@ async function wcTriggerAIMoment(charId) {
         prompt += `【你的人设】：${char.prompt}\n`;
         if (wbInfo) prompt += `${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
-        prompt += `【你手机通讯录里的NPC朋友】：${npcListStr}\n`;
+        
+        const enableNpcComment = chatConfig.momentNpcCommentEnabled !== false;
+        if (enableNpcComment) {
+            prompt += `【你手机通讯录里的NPC朋友】：${npcListStr}\n`;
+        }
         prompt += `【当前时间】：${timeString}。\n\n`;
         
         prompt += `【最近的聊天记录（作为发朋友圈的灵感/背景）】：\n`;
@@ -5331,9 +5335,11 @@ async function wcTriggerAIMoment(charId) {
         prompt += `1. 朋友圈的内容通常是对最近聊天中发生的事情的感慨、吐槽、分享，或者对User的暗示。\n`;
         prompt += `2. 文案要符合日常朋友圈风格，生活化，不要太长，拒绝AI味。\n`;
         prompt += `3. 【活人感排版】：你可以自由选择纯文本、纯图片或图文并茂。\n`;
-        prompt += `4. 【互动感（核心）】：你可以在 comment 字段填写自己的抢沙发补充（也可以不填写）。同时，请根据【通讯录NPC朋友】列表，生成 1-3 条 NPC 对这条朋友圈的评论 (npcComments)。\n`;
-        prompt += `5. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
-        prompt += `{
+        
+        if (enableNpcComment) {
+            prompt += `4. 【互动感（核心）】：你可以在 comment 字段填写自己的抢沙发补充（也可以不填写）。同时，请根据【通讯录NPC朋友】列表，生成 1-3 条 NPC 对这条朋友圈的评论 (npcComments)。\n`;
+            prompt += `5. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
+            prompt += `{
   "text": "朋友圈文案内容(可留空)", 
   "imageDesc": "配图的画面描述(可留空)", 
   "comment": "你自己在该条朋友圈下的评论/补充(可留空)",
@@ -5341,6 +5347,15 @@ async function wcTriggerAIMoment(charId) {
     {"name": "NPC名字(必须从通讯录选)", "text": "NPC的评论内容"}
   ]
 }\n`;
+        } else {
+            prompt += `4. 【互动感】：你可以在 comment 字段填写自己的抢沙发补充（也可以不填写）。\n`;
+            prompt += `5. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
+            prompt += `{
+  "text": "朋友圈文案内容(可留空)", 
+  "imageDesc": "配图的画面描述(可留空)", 
+  "comment": "你自己在该条朋友圈下的评论/补充(可留空)"
+}\n`;
+        }
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -9703,6 +9718,11 @@ function wcOpenChatSettings() {
     document.getElementById('wc-setting-proactive-toggle').checked = char.chatConfig.proactiveEnabled || false;
     document.getElementById('wc-setting-proactive-interval').value = char.chatConfig.proactiveInterval || 60;
     document.getElementById('wc-setting-moment-freq').value = char.chatConfig.momentFreq || 0;
+    
+    const npcCommentToggle = document.getElementById('wc-setting-moment-npc-comment');
+    if (npcCommentToggle) {
+        npcCommentToggle.checked = char.chatConfig.momentNpcCommentEnabled !== false; // 默认开启
+    }
     // 👇 新增：动态注入后台小动作概率滑块 👇
     let bgUpdateGroup = document.getElementById('wc-bg-update-group');
     if (!bgUpdateGroup) {
@@ -9852,6 +9872,11 @@ async function wcSaveChatSettings() {
     char.chatConfig.proactiveEnabled = document.getElementById('wc-setting-proactive-toggle').checked;
     char.chatConfig.proactiveInterval = parseInt(document.getElementById('wc-setting-proactive-interval').value) || 60;
     char.chatConfig.momentFreq = parseInt(document.getElementById('wc-setting-moment-freq').value) || 0;
+    
+    const npcCommentToggle = document.getElementById('wc-setting-moment-npc-comment');
+    if (npcCommentToggle) {
+        char.chatConfig.momentNpcCommentEnabled = npcCommentToggle.checked;
+    }
     // 👇 新增：保存后台小动作概率 👇
     const bgUpdateFreqInput = document.getElementById('wc-setting-bg-update-freq');
     if (bgUpdateFreqInput) {
@@ -19497,11 +19522,20 @@ function forumHandleImageUpload(input) {
         reader.onload = function(e) {
             forumState.tempImage = e.target.result;
             document.getElementById('forum-post-image-preview').src = e.target.result;
-            document.getElementById('forum-post-image-preview').style.display = 'block';
+            document.getElementById('forum-post-image-preview-container').style.display = 'block';
+            document.getElementById('forum-image-upload-btn').style.display = 'none';
         };
         reader.readAsDataURL(file);
     }
 }
+
+window.forumRemoveImage = function() {
+    forumState.tempImage = null;
+    document.getElementById('forum-post-image-preview').src = '';
+    document.getElementById('forum-post-image-preview-container').style.display = 'none';
+    document.getElementById('forum-image-upload-btn').style.display = 'inline-flex';
+    document.getElementById('forum-image-input').value = '';
+};
 
 function forumSubmitPost() {
     const title = document.getElementById('forum-post-title-input').value.trim();
@@ -19560,7 +19594,12 @@ function forumSubmitPost() {
     document.getElementById('forum-post-title-input').value = '';
     document.getElementById('forum-post-input').value = '';
     document.getElementById('forum-post-img-desc-input').value = '';
-    document.getElementById('forum-post-image-preview').style.display = 'none';
+    if (document.getElementById('forum-post-image-preview-container')) {
+        document.getElementById('forum-post-image-preview-container').style.display = 'none';
+    }
+    if (document.getElementById('forum-image-upload-btn')) {
+        document.getElementById('forum-image-upload-btn').style.display = 'inline-flex';
+    }
     document.getElementById('forum-post-anonymous').checked = false; 
     forumState.tempImage = null;
     if (typeof forumTogglePostImageType === 'function') forumTogglePostImageType('local');
