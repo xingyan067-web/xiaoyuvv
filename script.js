@@ -19844,12 +19844,13 @@ window.forumTriggerReactionToUser = async function(postId, userCommentText) {
         }
 
         let prompt = `你现在是一个社交论坛的后台引擎。用户（${forumState.profile.name}）刚刚在帖子里发表了一条评论。\n`;
+        prompt += `【原帖发帖人】：${post.author.name}\n`;
         prompt += `【原帖内容】：\n${post.content}\n\n`;
         prompt += `【用户的评论】：\n${userCommentText}\n\n`;
         prompt += `${contextInfo}`;
         prompt += `【要求】：\n`;
         prompt += `1. 请生成 5 到 10 条其他网友或 NPC 针对用户这条评论的【回复】。\n`;
-        prompt += `2. 语气要极度口语化、有网感（如：确实、笑死、抱抱楼主等）。\n`;
+        prompt += `2. 语气要极度口语化、有网感（如：确实、笑死、抱抱楼主等）。请注意【原帖发帖人】、评论人（User）和回复人之间的身份关系，绝对不要认错人！\n`;
         prompt += `3. 【私信掉落机制】：你有 35% 的概率生成一条发给用户的【私信】（比如有人想私下认识用户、或者 NPC 私下吐槽）。如果不生成私信，请将 privateMessage 设为 null。\n`;
         prompt += `4. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）发表评论！所有评论人和私信发送人只能是 NPC 或 虚构网友！\n`;
         prompt += `5. 返回纯 JSON 对象，格式如下：\n`;
@@ -19962,10 +19963,11 @@ window.forumGenerateInteractions = async function(postId) {
         }
 
         let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子生成 8 到 15 条极具“活人感”的评论。\n`;
+        prompt += `【原帖发帖人】：${post.author.name}\n`;
         prompt += `【帖子内容】：\n${post.content}\n\n`;
         prompt += `${contextInfo}`;
         prompt += `【要求】：\n`;
-        prompt += `1. 评论人可以是【你认识的熟人(NPC)】，也可以是虚构的网友。\n`;
+        prompt += `1. 评论人可以是【你认识的熟人(NPC)】，也可以是虚构的网友。请根据【原帖发帖人】的身份，生成符合逻辑的互动评论，绝对不要把发帖人当成 User（除非发帖人真的是 User）！\n`;
         prompt += `2. 语气要极度口语化、有网感。评论区要有互动感（网友互相回复、吐槽等）。\n`;
         prompt += `3. 【私信掉落机制】：你有 35% 的概率生成一条发给用户的【私信】。如果不生成私信，请将 privateMessage 设为 null。\n`;
         prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
@@ -20088,13 +20090,14 @@ window.forumGenerateMoreComments = async function(postId) {
         const existingComments = (post.comments || []).slice(-10).map(c => `${c.name}: ${c.content}`).join('\n');
 
         let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子继续生成 5 到 10 条后续评论。\n`;
+        prompt += `【原帖发帖人】：${post.author.name}\n`;
         prompt += `【帖子内容】：\n${post.content}\n\n`;
         if (existingComments) {
             prompt += `【已有评论上下文】：\n${existingComments}\n\n`;
         }
         prompt += `${contextInfo}`;
         prompt += `【要求】：\n`;
-        prompt += `1. 评论人可以是【你认识的熟人(NPC)】，也可以是虚构的网友。\n`;
+        prompt += `1. 评论人可以是【你认识的熟人(NPC)】，也可以是虚构的网友。请根据【原帖发帖人】和【已有评论上下文】的身份关系进行回复，绝对不要认错人！\n`;
         prompt += `2. 语气要极度口语化、有网感。可以针对【已有评论上下文】进行回复（如：回复 @某某）。\n`;
         prompt += `3. 【私信掉落机制】：你有 35% 的概率生成一条发给用户的【私信】。如果不生成私信，请将 privateMessage 设为 null。\n`;
         prompt += `4. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）发表评论！所有评论人和私信发送人只能是 NPC 或 虚构网友！\n`;
@@ -20509,8 +20512,9 @@ async function forumGenerateAIPosts(type) {
         prompt += `2. 角色穿插：发帖人和评论人中，必须穿插出现【你认识的熟人(NPC)】（如果有的话：${npcNames.join(', ')}），以及大量虚构的网友。\n`;
         prompt += `3. 活人感：语气要极度口语化、有网感（如：笑死、救命、谁懂啊、破防了）。评论区要有互动感（网友互相回复、楼主回复网友）。\n`;
         prompt += `4. 【绝对禁止扮演用户】：上面提供的【关于我(User)的设定/马甲】仅供你作为背景参考（NPC可以发关于User的帖子或吐槽User）。但是，你绝对不能以 User（${userNames.join('、')}）的身份发帖或评论！User 会自己操作，不需要你代劳！所有发帖人和评论人只能是 NPC 或 虚构网友！\n`;                
-        prompt += `5. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
-        prompt += `6. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `5. 【身份隔离警告】：在生成 comments 时，必须清楚认知该帖子的 authorName 是谁！不要让 NPC 误以为帖子是 User 发的，除非帖子内容明确提到了 User！\n`;
+        prompt += `6. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `7. 返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
   {
     "title": "帖子标题(必须有，吸引眼球)",
@@ -23136,6 +23140,7 @@ async function forumSubmitUrge() {
 
     try {
         let prompt = `你是一个同人文作者。你的读者正在催更你的小说。\n`;
+        prompt += `【小说作者（你现在的笔名）】：${post.author.name}\n`;
         prompt += `【前文内容】：\n${post.content}\n\n`;
         if (urgeText) {
             prompt += `【读者的剧情期望】：${urgeText}\n\n`;
