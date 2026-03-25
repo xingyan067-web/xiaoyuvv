@@ -20022,12 +20022,13 @@ window.forumGenerateInteractions = async function(postId) {
         if (result.privateMessage && result.privateMessage.senderName && result.privateMessage.content) {
             const pm = result.privateMessage;
             
-            // 查找是否已有该人的会话
-            let chat = forumState.privateChats.find(c => c.targetName === pm.senderName);
+            // 核心修复：查找是否已有该人在【当前窗口】的会话
+            let chat = forumState.privateChats.find(c => c.targetName === pm.senderName && c.windowId === forumState.activeWindowId);
             if (!chat) {
                 const npc = wcState.characters.find(c => c.name === pm.senderName);
                 chat = {
                     id: Date.now().toString(),
+                    windowId: forumState.activeWindowId, // 👈 绑定当前窗口
                     targetName: pm.senderName,
                     targetAvatar: npc ? npc.avatar : getRandomNpcAvatar(),
                     messages: [],
@@ -20145,12 +20146,13 @@ window.forumGenerateMoreComments = async function(postId) {
         if (result.privateMessage && result.privateMessage.senderName && result.privateMessage.content) {
             const pm = result.privateMessage;
             
-            // 查找是否已有该人的会话
-            let chat = forumState.privateChats.find(c => c.targetName === pm.senderName);
+            // 核心修复：查找是否已有该人在【当前窗口】的会话
+            let chat = forumState.privateChats.find(c => c.targetName === pm.senderName && c.windowId === forumState.activeWindowId);
             if (!chat) {
                 const npc = wcState.characters.find(c => c.name === pm.senderName);
                 chat = {
                     id: Date.now().toString(),
+                    windowId: forumState.activeWindowId, // 👈 绑定当前窗口
                     targetName: pm.senderName,
                     targetAvatar: npc ? npc.avatar : getRandomNpcAvatar(),
                     messages: [],
@@ -20270,18 +20272,19 @@ function forumRenderProfileList() {
     container.innerHTML = '';
     
     let list = [];
+    // 核心修复：增加 p.windowId === forumState.activeWindowId 的过滤条件，实现个人主页数据与窗口独立
     if (forumState.profileTab === 'posts') {
-        list = forumState.posts.filter(p => p.author.name === forumState.profile.name);
+        list = forumState.posts.filter(p => p.author.name === forumState.profile.name && p.windowId === forumState.activeWindowId);
     } else if (forumState.profileTab === 'likes') {
-        list = forumState.posts.filter(p => Array.isArray(p.likes) && p.likes.includes(forumState.profile.name));
+        list = forumState.posts.filter(p => Array.isArray(p.likes) && p.likes.includes(forumState.profile.name) && p.windowId === forumState.activeWindowId);
     } else if (forumState.profileTab === 'saves') {
-        list = forumState.posts.filter(p => Array.isArray(p.saves) && p.saves.includes(forumState.profile.name));
+        list = forumState.posts.filter(p => Array.isArray(p.saves) && p.saves.includes(forumState.profile.name) && p.windowId === forumState.activeWindowId);
     }
 
     list.sort((a, b) => b.time - a.time);
     
     if (list.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #888; padding: 60px 20px; font-size: 14px; font-style: italic;">空空如也</div>';
+        container.innerHTML = '<div style="text-align: center; color: #888; padding: 60px 20px; font-size: 14px; font-style: italic;">当前频道空空如也</div>';
         return;
     }
     
@@ -20879,13 +20882,16 @@ function forumRenderPMList() {
     const container = document.getElementById('forum-pm-list-container');
     container.innerHTML = '';
     
-    if (!forumState.privateChats || forumState.privateChats.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #888; padding: 50px 20px; font-size: 13px;">暂无私信</div>';
+    // 核心修复：只提取当前窗口的私信
+    const currentChats = (forumState.privateChats || []).filter(c => c.windowId === forumState.activeWindowId);
+    
+    if (currentChats.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #888; padding: 50px 20px; font-size: 13px;">当前频道暂无私信</div>';
         return;
     }
 
     // 按最后更新时间排序
-    const sortedChats = [...forumState.privateChats].sort((a, b) => b.lastUpdateTime - a.lastUpdateTime);
+    const sortedChats = [...currentChats].sort((a, b) => b.lastUpdateTime - a.lastUpdateTime);
     
     sortedChats.forEach(chat => {
         const lastMsg = chat.messages.length > 0 ? chat.messages[chat.messages.length - 1] : null;
@@ -20895,7 +20901,6 @@ function forumRenderPMList() {
         const div = document.createElement('div');
         div.className = 'forum-pm-swipe-wrapper';
         
-        // 👇 核心修改：加入底层删除按钮和顶层滑动内容 👇
         div.innerHTML = `
             <div class="forum-pm-swipe-action" onclick="forumDeletePMChat('${chat.id}')">删除</div>
             <div class="forum-pm-swipe-content" onclick="forumOpenPMChat('${chat.id}')" ontouchstart="forumPMTouchStart(event)" ontouchmove="forumPMTouchMove(event)" ontouchend="forumPMTouchEnd(event)">
@@ -20970,17 +20975,17 @@ function forumOpenPMChat(chatId) {
         view = document.createElement('div');
         view.id = 'forum-pm-chat-view';
         view.className = 'ins-forum-view';
-        view.style.zIndex = '3100'; // 层级高于列表页
+        view.style.zIndex = '3100'; 
         view.style.paddingBottom = '0'; 
         
-        // 核心修复：顶栏使用 flex 布局，确保名字居中，返回键在左侧
+        // 核心修复：增加 padding-top 避开刘海屏，整体下移
         view.innerHTML = `
-            <div class="ins-forum-header" style="background: #F9F9F9; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid #E5E5EA;">
+            <div class="ins-forum-header" style="background: #F9F9F9; display: flex; justify-content: space-between; align-items: center; padding: calc(env(safe-area-inset-top, 20px) + 15px) 20px 15px 20px; border-bottom: 1px solid #E5E5EA;">
                 <div class="ins-forum-header-left" onclick="forumClosePMChat()" style="cursor: pointer; display: flex; align-items: center; width: 40px;">
                     <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: none; stroke: #111; stroke-width: 2;"><polyline points="15 18 9 12 15 6"></polyline></svg>
                 </div>
                 <div class="ins-forum-title" id="forum-pm-chat-title" style="font-size: 16px; font-weight: bold; color: #111; text-align: center; flex: 1;">名字</div>
-                <div style="width: 40px;"></div> <!-- 占位保持绝对居中 -->
+                <div style="width: 40px;"></div> 
             </div>
             <div class="forum-pm-chat-history" id="forum-pm-chat-history"></div>
             <div class="forum-pm-chat-footer" style="display: flex; align-items: center; gap: 8px; padding: 10px; border-top: 1px solid #E5E5EA; background: #FFF;">
@@ -20992,7 +20997,6 @@ function forumOpenPMChat(chatId) {
             </div>
         `;
         document.getElementById('forumModal').appendChild(view);
-        // 绑定回车发送
         document.getElementById('forum-pm-chat-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') forumSendPM();
         });
