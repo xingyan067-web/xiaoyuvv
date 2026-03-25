@@ -20275,19 +20275,23 @@ function forumRenderProfileList() {
     container.innerHTML = '';
     
     let list = [];
-    // 核心修复：增加 p.windowId === forumState.activeWindowId 的过滤条件，实现个人主页数据与窗口独立
+    
     if (forumState.profileTab === 'posts') {
+        // 发布的帖子：与当前窗口独立
         list = forumState.posts.filter(p => p.author.name === forumState.profile.name && p.windowId === forumState.activeWindowId);
     } else if (forumState.profileTab === 'likes') {
+        // 点赞的帖子：与当前窗口独立
         list = forumState.posts.filter(p => Array.isArray(p.likes) && p.likes.includes(forumState.profile.name) && p.windowId === forumState.activeWindowId);
     } else if (forumState.profileTab === 'saves') {
-        list = forumState.posts.filter(p => Array.isArray(p.saves) && p.saves.includes(forumState.profile.name) && p.windowId === forumState.activeWindowId);
+        // 核心修改：收藏的帖子是全局的！去掉 windowId 的限制
+        list = forumState.posts.filter(p => Array.isArray(p.saves) && p.saves.includes(forumState.profile.name));
     }
 
     list.sort((a, b) => b.time - a.time);
     
     if (list.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #888; padding: 60px 20px; font-size: 14px; font-style: italic;">当前频道空空如也</div>';
+        const emptyText = forumState.profileTab === 'saves' ? '暂无收藏的帖子' : '当前频道空空如也';
+        container.innerHTML = `<div style="text-align: center; color: #888; padding: 60px 20px; font-size: 14px; font-style: italic;">${emptyText}</div>`;
         return;
     }
     
