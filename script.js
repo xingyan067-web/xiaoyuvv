@@ -418,6 +418,16 @@ updateAppViewportVars();
     if (typeof updateNotifUI === 'function') {
         updateNotifUI();
     }
+    
+    // 修复：世界书详细设定输入框被键盘遮挡的问题，聚焦时自动滚动到中间
+    const wbDescInput = document.getElementById('wbDescInput');
+    if (wbDescInput) {
+        wbDescInput.addEventListener('focus', function() {
+            setTimeout(() => {
+                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300); // 延迟等待键盘完全弹出
+        });
+    }
          
     // 延迟 1.5 秒检查并弹出系统更新日志
     setTimeout(checkSystemUpdate, 1500); 
@@ -2805,6 +2815,10 @@ const wcDb = {
 
 // --- WeChat State ---
 const wcState = {
+    chatGroups: [], // 新增：自定义分组列表
+    activeChatGroup: 'All', // 新增：当前选中的分组
+    selectedGroupName: null, // 新增：长按选中的分组名
+    groupLongPressTimer: null, // 新增：分组长按计时器
     myFavorites: [], 
     calendarEvents: [], // <--- 新增这一行：用于存储日历事件
     currentTab: 'chat',
@@ -2889,6 +2903,9 @@ async function wcLoadData() {
 
         const myFavs = await safeGet('kv_store', 'my_favorites');
         if (myFavs) wcState.myFavorites = myFavs;
+        
+        const chatGroups = await safeGet('kv_store', 'chat_groups');
+        if (chatGroups) wcState.chatGroups = chatGroups;
         
         const calEvents = await safeGet('kv_store', 'calendar_events');
         if (calEvents) wcState.calendarEvents = calEvents;
@@ -2977,6 +2994,7 @@ async function wcSaveData() {
         // 1. 保存 kv_store
         await saveStore('kv_store', (store) => {
             store.put(wcState.myFavorites || [], 'my_favorites');
+            store.put(wcState.chatGroups || [], 'chat_groups');
             store.put(wcState.calendarEvents || [], 'calendar_events');
             store.put(wcState.user || { name: 'User', avatar: '' }, 'user');
             store.put(wcState.wallet || { balance: 0, transactions: [] }, 'wallet');
@@ -3090,16 +3108,10 @@ function wcSwitchTab(tabId) {
     if (tabId === 'chat') {
         navbar.classList.add('custom-chat-nav-mode');
         navbar.classList.remove('custom-moments-nav-mode');
-        titleEl.innerHTML = `
-            <div class="chat-nav-card">
-                <div class="chat-nav-call" onclick="closeWechat()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                </div>
-                <img src="${wcState.user.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="chat-nav-avatar" onclick="wcOpenModal('wc-modal-create-choice')">
-            </div>
-        `;
+        titleEl.innerHTML = wcGenerateChatHeaderHTML();
         if (btnExit) btnExit.innerHTML = `<svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>退出`;
-    } else if (tabId === 'moments') {
+    }
+ else if (tabId === 'moments') {
         navbar.classList.remove('custom-chat-nav-mode');
         navbar.classList.add('custom-moments-nav-mode');
         
@@ -3129,10 +3141,28 @@ function wcSwitchTab(tabId) {
         wcRenderChats(); 
     } else if (tabId === 'moments') {
         document.getElementById('wc-main-tabbar').style.display = 'flex';
+
+        // 发朋友圈按钮 (恢复原样，去掉魔法棒)
         const btn = document.createElement('button');
         btn.className = 'wc-nav-btn';
         btn.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24" style="stroke: #111;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>';
-        btn.onclick = () => wcOpenModal('wc-modal-post-moment');
+        btn.onclick = () => {
+            const groupSelect = document.getElementById('wc-input-moment-group');
+            if (groupSelect) {
+                groupSelect.innerHTML = '<option value="All">所有人可见</option>';
+                if (wcState.chatGroups) {
+                    wcState.chatGroups.forEach(g => {
+                        if (g !== 'All') {
+                            const opt = document.createElement('option');
+                            opt.value = g;
+                            opt.innerText = g;
+                            groupSelect.appendChild(opt);
+                        }
+                    });
+                }
+            }
+            wcOpenModal('wc-modal-post-moment');
+        };
         rightContainer.appendChild(btn);
         
         // 默认选中今天
@@ -3205,14 +3235,7 @@ function wcHandleBack() {
         const titleEl = document.getElementById('wc-nav-title');
         const navbar = document.querySelector('.wc-navbar');
         navbar.classList.add('custom-chat-nav-mode');
-        titleEl.innerHTML = `
-            <div class="chat-nav-card">
-                <div class="chat-nav-call" onclick="closeWechat()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                </div>
-                <img src="${wcState.user.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="chat-nav-avatar" onclick="wcOpenModal('wc-modal-create-choice')">
-            </div>
-        `;
+        titleEl.innerHTML = wcGenerateChatHeaderHTML();
         titleEl.onclick = null;
         titleEl.style.cursor = 'default';
         
@@ -4463,17 +4486,24 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             }
         }
         
-        const recentMoments = wcState.moments.slice(0, 5); 
+        // 修改后：过滤朋友圈，只有 All 或者和当前 AI 同一个分组的朋友圈才能被看到
+        const charGroup = char.groupName || 'Default';
+        const visibleMoments = wcState.moments.filter(m => {
+            if (!m.visibleGroup || m.visibleGroup === 'All') return true;
+            return m.visibleGroup === charGroup;
+        });
+        const recentMoments = visibleMoments.slice(0, 5); 
         if (recentMoments.length > 0) {
             systemPrompt += `【朋友圈动态 (Moments) - 这是一个社交网络环境】\n`;
             systemPrompt += `你可以看到所有人（包括你自己、User和其他NPC）发布的朋友圈。\n`;
-            systemPrompt += `你可以对任何人的朋友圈进行点赞、评论。如果有人评论了你的朋友圈，或者你想在别人的朋友圈里回复某人的评论，你也可以进行回复。\n`;
             recentMoments.forEach(m => {
                 const commentsStr = m.comments ? m.comments.map(c => `${c.name}: ${c.text}`).join(' | ') : '无';
                 const likesStr = m.likes ? m.likes.join(', ') : '无';
                 systemPrompt += `[朋友圈ID:${m.id}] 发帖人:${m.name} | 内容:${m.text} | 图片:${m.imageDesc || '无'} | 点赞:${likesStr} | 评论:[${commentsStr}]\n`;
             });
-            systemPrompt += `\n`;
+            systemPrompt += `\n👉【边聊天边刷朋友圈 (最高优先级指令)】：如果你看到 User 刚刚发了朋友圈，或者在朋友圈回复了你，你**必须**在本次聊天的 JSON 数组中，同时包含聊天回复和朋友圈互动指令！\n`;
+            systemPrompt += `你可以一边在微信里回复 User 的消息，一边给 Ta 的朋友圈点赞/评论！\n`;
+            systemPrompt += `示例：\n[\n  {"type":"text", "content":"我看到你发的朋友圈啦~"}, \n  {"type":"moment_like", "content": 123456}, \n  {"type":"moment_comment", "momentId": 123456, "content":"拍得真好看！"}\n]\n\n`;
         }
 
         let limit = config.contextLimit > 0 ? config.contextLimit : 30;
@@ -5402,7 +5432,8 @@ function wcAIHandleMomentPost(charId, text, imageDesc, selfComment = null, npcCo
         imageDesc: imageDesc,
         time: Date.now(),
         likes: [],
-        comments: []
+        comments: [],
+        visibleGroup: char.groupName || 'Default' // 新增：AI发布的朋友圈仅同分组可见
     };
     
     // 1. 如果 AI 传了自我评论，加进评论列表里
@@ -5585,10 +5616,11 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
                 const boundChar = wcState.characters.find(c => c.id === lsState.boundCharId);
                 
                 if (boundChar) {
-                    const currentMask = (targetChar.chatConfig && targetChar.chatConfig.userAvatar) ? targetChar.chatConfig.userAvatar : wcState.user.avatar;
-                    const boundMask = (boundChar.chatConfig && boundChar.chatConfig.userAvatar) ? boundChar.chatConfig.userAvatar : wcState.user.avatar;
+                    // 修改为：只有同一个列表分组的ai角色才能知道同一个列表分组的ai角色的关联账号消息
+                    const currentGroup = targetChar.groupName || 'Default';
+                    const boundGroup = boundChar.groupName || 'Default';
                     
-                    if (currentMask === boundMask) {
+                    if (currentGroup === boundGroup) {
                         const isLoverInGroup = targetChar.isGroup && targetChar.members && targetChar.members.includes(lsState.boundCharId);
                         
                         if (!isLoverInGroup) {
@@ -6909,7 +6941,6 @@ function wcRenderContacts() {
 }
 
 function wcRenderChats() {
-    // 新增：渲染横向头像列表
     const avatarScroll = document.getElementById('wc-char-avatar-scroll');
     if (avatarScroll) {
         avatarScroll.innerHTML = '';
@@ -6917,7 +6948,6 @@ function wcRenderChats() {
             const img = document.createElement('img');
             img.className = 'wc-char-avatar-item';
             img.src = char.avatar;
-            // 修改：点击横向小卡片进入拉黑拦截记录全屏页
             img.onclick = () => wcOpenBlockedHistory(char.id); 
             avatarScroll.appendChild(img);
         });
@@ -6925,14 +6955,25 @@ function wcRenderChats() {
 
     const list = document.getElementById('wc-chat-list');
     list.innerHTML = '';
-    const pinnedChars = wcState.characters.filter(c => c.isPinned);
-    const otherChars = wcState.characters.filter(c => !c.isPinned).sort((a, b) => {
+    
+    // 过滤当前分组的角色
+    const filteredChars = wcState.characters.filter(c => {
+        if (wcState.activeChatGroup === 'All') return true;
+        return c.groupName === wcState.activeChatGroup;
+    });
+
+    const pinnedChars = filteredChars.filter(c => c.isPinned);
+    const otherChars = filteredChars.filter(c => !c.isPinned).sort((a, b) => {
         const msgsA = wcState.chats[a.id] || [];
         const msgsB = wcState.chats[b.id] || [];
         const timeA = msgsA.length > 0 ? msgsA[msgsA.length - 1].time : 0;
         const timeB = msgsB.length > 0 ? msgsB[msgsB.length - 1].time : 0;
         return timeB - timeA;
     });
+
+    // 创建无缝隙卡片的外层包裹
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chat-list-wrapper';
 
     const createChatItem = (char) => {
         const msgs = wcState.chats[char.id] || [];
@@ -6953,17 +6994,14 @@ function wcRenderChats() {
         
         const div = document.createElement('div');
         div.className = 'wc-chat-swipe-container';
-        const pinText = char.isPinned ? "取消置顶" : "置顶";
         const pinClass = char.isPinned ? "wc-pinned-chat" : "";
         
         const unreadCount = wcState.unreadCounts[char.id] || 0;
         const badgeHtml = unreadCount > 0 ? `<div class="wc-unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : '';
         
+        // 移除了 swipe-actions，加入了 ontouchstart 和 oncontextmenu 触发长按菜单
         div.innerHTML = `
-            <div class="wc-chat-swipe-actions">
-                <div class="wc-chat-action-btn wc-btn-pin" onclick="wcTogglePin(${char.id})">${pinText}</div>
-            </div>
-            <div class="wc-chat-swipe-content ${pinClass}" onclick="wcOpenChat(${char.id})" ontouchstart="wcHandleTouchStartSwipe(event)" ontouchmove="wcHandleTouchMoveSwipe(event)" ontouchend="wcHandleTouchEndSwipe(event)">
+            <div class="wc-chat-swipe-content ${pinClass}" onclick="wcOpenChat(${char.id})" ontouchstart="wcChatTouchStart(event, ${char.id})" ontouchend="wcChatTouchEnd()" oncontextmenu="wcShowChatContextMenu(event, ${char.id}); return false;">
                 <div style="position: relative;">
                     <img src="${char.avatar}" class="wc-avatar">
                     ${badgeHtml}
@@ -6978,14 +7016,14 @@ function wcRenderChats() {
         return div;
     };
 
-    pinnedChars.forEach(char => list.appendChild(createChatItem(char)));
-    if (pinnedChars.length > 0 && otherChars.length > 0) {
-        const sep = document.createElement('div');
-        sep.className = 'wc-list-separator';
-        sep.innerText = 'ovo';
-        list.appendChild(sep);
+    pinnedChars.forEach(char => wrapper.appendChild(createChatItem(char)));
+    otherChars.forEach(char => wrapper.appendChild(createChatItem(char)));
+    
+    if (pinnedChars.length > 0 || otherChars.length > 0) {
+        list.appendChild(wrapper);
+    } else {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0;">该分组下暂无会话</div>';
     }
-    otherChars.forEach(char => list.appendChild(createChatItem(char)));
 }
 
 // --- 替换 wcRenderMoments 和 wcFilterMoments ---
@@ -7097,12 +7135,32 @@ function wcRenderMoments() {
             textHtml = `<div class="wc-moment-text">${moment.text}</div>`;
         }
         
+        // 新增：显示可见分组标签
+        let groupTagHtml = '';
+        if (moment.visibleGroup && moment.visibleGroup !== 'All') {
+            groupTagHtml = `<span style="font-size: 10px; color: #007AFF; background: rgba(0,122,255,0.1); padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle;">${moment.visibleGroup}</span>`;
+        }
+
         const div = document.createElement('div');
         div.className = 'wc-moment-card';
+        // 确保卡片是 relative 定位，以便右上角按钮绝对定位
+        div.style.position = 'relative'; 
         div.innerHTML = `
+            <!-- 👇 新增：绝对定位在右上角的三个点按钮 👇 -->
+            <div class="wc-moment-more-btn" onclick="wcToggleMomentMenu(event, ${moment.id})">
+                <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg>
+            </div>
+            <!-- 👇 新增：向左弹出的高级深色菜单 👇 -->
+            <div class="wc-moment-popover" id="moment-popover-${moment.id}">
+                <div class="wc-moment-popover-item" onclick="wcOpenMomentAISelectForSingle(event, ${moment.id})" title="召唤 AI 互动">
+                    <!-- 高级闪耀星星 SVG 图标 -->
+                    <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                </div>
+            </div>
+
             <div class="wc-moment-header-row">
                 <img src="${moment.avatar || wcState.user.avatar}" class="wc-avatar" style="width: 40px; height: 40px; border-radius: 50%;">
-                <div class="wc-moment-name">${moment.name || wcState.user.name}</div>
+                <div class="wc-moment-name">${moment.name || wcState.user.name}${groupTagHtml}</div>
             </div>
             <div class="wc-moment-content">
                 ${textHtml}
@@ -10065,6 +10123,163 @@ function wcToggleMomentType(type) {
     document.getElementById('wc-area-local-img').style.display = type === 'local' ? 'block' : 'none';
     document.getElementById('wc-area-desc-img').style.display = type === 'desc' ? 'block' : 'none';
 }
+
+// ==========================================
+// 新增：朋友圈 AI 互动逻辑 (单条触发版)
+// ==========================================
+let currentActionMomentId = null;
+
+// 控制弹出菜单的显示与隐藏
+window.wcToggleMomentMenu = function(e, id) {
+    e.stopPropagation();
+    // 先关闭其他所有打开的菜单
+    document.querySelectorAll('.wc-moment-popover').forEach(el => {
+        if (el.id !== `moment-popover-${id}`) el.classList.remove('active');
+    });
+    // 切换当前菜单
+    const popover = document.getElementById(`moment-popover-${id}`);
+    if (popover) popover.classList.toggle('active');
+};
+
+// 全局点击事件：点击空白处隐藏所有弹出菜单
+document.addEventListener('click', () => {
+    document.querySelectorAll('.wc-moment-popover').forEach(el => el.classList.remove('active'));
+});
+
+window.wcOpenMomentAISelectForSingle = function(e, momentId) {
+    e.stopPropagation();
+    // 隐藏菜单
+    document.querySelectorAll('.wc-moment-popover').forEach(el => el.classList.remove('active'));
+    
+    currentActionMomentId = momentId;
+    const list = document.getElementById('wc-moment-ai-char-list');
+    list.innerHTML = '';
+    
+    const chars = wcState.characters.filter(c => !c.isGroup);
+    if (chars.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">暂无联系人</div>';
+    } else {
+        chars.forEach(char => {
+            const div = document.createElement('div');
+            div.className = 'wc-list-item';
+            div.style.background = 'white';
+            div.style.borderBottom = '1px solid #F0F0F0';
+            div.innerHTML = `
+                <img src="${char.avatar}" class="wc-avatar" style="width:36px;height:36px;">
+                <div class="wc-item-content"><div class="wc-item-title">${char.name}</div></div>
+                <button class="wc-btn-mini" style="background:#AF52DE; color:white; border:none; padding:6px 16px; border-radius:16px; font-weight:bold;" onclick="wcExecuteSingleMomentAI(${char.id})">召唤</button>
+            `;
+            list.appendChild(div);
+        });
+    }
+    setTimeout(() => wcOpenModal('wc-modal-moment-ai-select'), 300); // 延迟等待上一个弹窗收起
+};
+
+window.wcExecuteSingleMomentAI = async function(charId) {
+    const char = wcState.characters.find(c => c.id === charId);
+    const targetMoment = wcState.moments.find(m => m.id === currentActionMomentId);
+    if (!char || !targetMoment) return;
+
+    const apiConfig = await getActiveApiConfig('chat');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcCloseModal('wc-modal-moment-ai-select');
+    wcShowLoading(`正在召唤 ${char.name} 来看这条朋友圈...`);
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 只提取当前这条朋友圈的信息
+        const commentsStr = targetMoment.comments ? targetMoment.comments.map(c => `${c.name}: ${c.text}`).join(' | ') : '无';
+        const likesStr = targetMoment.likes ? targetMoment.likes.join(', ') : '无';
+        const momentText = `[朋友圈ID:${targetMoment.id}] 发帖人:${targetMoment.name} | 内容:${targetMoment.text} | 图片:${targetMoment.imageDesc || '无'} | 点赞:[${likesStr}] | 评论:[${commentsStr}]`;
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n\n`;
+        prompt += `【当前你正在看的一条朋友圈】：\n${momentText}\n\n`;
+        prompt += `请根据你的人设，对这条朋友圈进行互动（点赞、评论、或回复别人的评论）。\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 互动必须符合你的人设和你们之间的关系。\n`;
+        prompt += `2. 如果是回复某人的评论，请使用 reply 类型，并指定 targetName。\n`;
+        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "actions": [
+    {"type": "like", "momentId": ${targetMoment.id}},
+    {"type": "comment", "momentId": ${targetMoment.id}, "content": "你的评论内容"}
+  ]
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        let actionLogs = [];
+
+        if (result.actions && result.actions.length > 0) {
+            result.actions.forEach(action => {
+                const momentId = parseInt(action.momentId);
+                if (!momentId) return;
+                
+                const moment = wcState.moments.find(m => m.id === momentId);
+                if (!moment) return;
+
+                if (action.type === 'like') {
+                    if (!moment.likes) moment.likes = [];
+                    if (!moment.likes.includes(char.name)) {
+                        moment.likes.push(char.name);
+                        actionLogs.push(`点赞了 ${moment.name} 的朋友圈("${moment.text.substring(0,10)}...")`);
+                    }
+                } else if (action.type === 'comment') {
+                    if (!moment.comments) moment.comments = [];
+                    moment.comments.push({ name: char.name, text: action.content });
+                    actionLogs.push(`评论了 ${moment.name} 的朋友圈: "${action.content}"`);
+                } else if (action.type === 'reply') {
+                    if (!moment.comments) moment.comments = [];
+                    moment.comments.push({ name: char.name, text: `回复 ${action.targetName}: ${action.content}` });
+                    actionLogs.push(`在 ${moment.name} 的朋友圈回复了 ${action.targetName}: "${action.content}"`);
+                }
+            });
+
+            wcSaveData();
+            wcRenderMoments();
+
+            if (actionLogs.length > 0) {
+                const logText = `[系统内部信息(仅AI可见): 你刚刚在朋友圈进行了以下互动：\n- ${actionLogs.join('\n- ')}\n请在接下来的聊天中记住这些事。]`;
+                wcAddMessage(char.id, 'system', 'system', logText, { hidden: true });
+            }
+
+            wcShowSuccess("互动成功！");
+        } else {
+            wcShowSuccess("Ta 看了看，什么都没说");
+        }
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("召唤失败");
+    }
+};
 
 function wcSaveMoment() {
     const text = document.getElementById('wc-input-moment-text').value;
@@ -23534,3 +23749,382 @@ function forumTriggerUrgeFromBook(postId) {
     document.getElementById('forum-urge-prompt').value = '';
     wcOpenModal('forum-urge-modal');
 }
+// ==========================================
+// 新增：自定义分组逻辑与长按菜单
+// ==========================================
+
+// 动态生成 Header HTML
+function wcGenerateChatHeaderHTML() {
+    let tabsHtml = `<div class="new-tab ${wcState.activeChatGroup === 'All' ? 'active' : ''}" onclick="wcSwitchChatGroup('All')">All</div>`;
+    
+    (wcState.chatGroups || []).forEach(g => {
+        tabsHtml += `<div class="new-tab ${wcState.activeChatGroup === g ? 'active' : ''}" onclick="wcSwitchChatGroup('${g}')" ontouchstart="wcGroupTouchStart(event, '${g}')" ontouchend="wcGroupTouchEnd()">${g}</div>`;
+    });
+    
+    return `
+        <div class="new-chat-header">
+            <div class="new-top-bar">
+                <div class="new-title" onclick="closeWechat()">
+                    <div class="new-title-icon"></div>
+                    Message
+                </div>
+                <div class="new-add-btn" onclick="wcOpenModal('wc-modal-create-choice')">+</div>
+            </div>
+            <div class="tabs-container">
+                <div class="tabs-scroll">
+                    ${tabsHtml}
+                </div>
+                <div class="tab-add-star" onclick="wcAddChatGroup()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// 切换分组
+function wcSwitchChatGroup(groupName) {
+    wcState.activeChatGroup = groupName;
+    const titleEl = document.getElementById('wc-nav-title');
+    if (titleEl) titleEl.innerHTML = wcGenerateChatHeaderHTML();
+    wcRenderChats();
+}
+
+// 添加新分组
+function wcAddChatGroup() {
+    wcOpenGeneralInput("创建新分组", (name) => {
+        if (name && name.trim() !== "") {
+            const trimmedName = name.trim();
+            if (!wcState.chatGroups) wcState.chatGroups = [];
+            if (!wcState.chatGroups.includes(trimmedName) && trimmedName !== 'All') {
+                wcState.chatGroups.push(trimmedName);
+                wcSaveData();
+                wcSwitchChatGroup(trimmedName);
+            } else {
+                alert("分组名称已存在或无效！");
+            }
+        }
+    });
+}
+
+// 长按分组触发菜单
+function wcGroupTouchStart(e, groupName) {
+    wcState.groupLongPressTimer = setTimeout(() => {
+        const touch = e.touches[0];
+        wcShowGroupContextMenu(touch.clientX, touch.clientY, groupName);
+    }, 500);
+}
+
+function wcGroupTouchEnd() {
+    if (wcState.groupLongPressTimer) {
+        clearTimeout(wcState.groupLongPressTimer);
+        wcState.groupLongPressTimer = null;
+    }
+}
+
+// 显示分组菜单
+function wcShowGroupContextMenu(x, y, groupName) {
+    wcState.selectedGroupName = groupName;
+    let menu = document.getElementById('wc-group-context-menu');
+    
+    const editSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+    const deleteSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+
+    // 如果菜单不存在，动态创建
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'wc-group-context-menu';
+        menu.style.cssText = 'position: absolute; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); z-index: 3000; display: none; flex-direction: column; min-width: 140px; overflow: hidden;';
+        document.body.appendChild(menu);
+    }
+    
+    menu.innerHTML = `
+        <div style="padding: 12px 16px; font-size: 15px; color: #000; border-bottom: 0.5px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center;" onclick="wcEditChatGroup()">
+            ${editSvg} 编辑分组
+        </div>
+        <div style="padding: 12px 16px; font-size: 15px; color: #FF3B30; cursor: pointer; display: flex; align-items: center;" onclick="wcDeleteChatGroup()">
+            ${deleteSvg} 删除分组
+        </div>
+    `;
+
+    const menuWidth = 130;
+    const menuHeight = 90;
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    if (x + menuWidth > screenW) x = screenW - menuWidth - 10;
+    if (y + menuHeight > screenH) y = screenH - menuHeight - 10;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'flex';
+}
+
+// 隐藏分组菜单
+document.addEventListener('click', (e) => {
+    const menu = document.getElementById('wc-group-context-menu');
+    if (menu && !e.target.closest('.new-tab')) {
+        menu.style.display = 'none';
+    }
+});
+
+
+// 编辑分组
+function wcEditChatGroup() {
+    const oldName = wcState.selectedGroupName;
+    if (!oldName) return;
+    
+    document.getElementById('wc-group-context-menu').style.display = 'none';
+    
+    wcOpenGeneralInput("重命名分组", (newName) => {
+        if (newName && newName.trim() !== "" && newName !== oldName) {
+            const trimmedName = newName.trim();
+            if (wcState.chatGroups.includes(trimmedName) || trimmedName === 'All') {
+                return alert("分组名已存在或无效");
+            }
+            const idx = wcState.chatGroups.indexOf(oldName);
+            if (idx !== -1) wcState.chatGroups[idx] = trimmedName;
+            
+            // 更新角色所属分组
+            wcState.characters.forEach(c => {
+                if (c.groupName === oldName) c.groupName = trimmedName;
+            });
+            
+            if (wcState.activeChatGroup === oldName) wcState.activeChatGroup = trimmedName;
+            
+            wcSaveData();
+            const titleEl = document.getElementById('wc-nav-title');
+            if (titleEl) titleEl.innerHTML = wcGenerateChatHeaderHTML();
+            wcRenderChats();
+        }
+    });
+}
+
+// 删除分组
+function wcDeleteChatGroup() {
+    const groupName = wcState.selectedGroupName;
+    if (!groupName) return;
+    
+    document.getElementById('wc-group-context-menu').style.display = 'none';
+    
+    if (confirm(`确定要删除分组 "${groupName}" 吗？\n该分组下的角色将回到 All 列表。`)) {
+        wcState.chatGroups = wcState.chatGroups.filter(g => g !== groupName);
+        
+        // 将角色移回 All
+        wcState.characters.forEach(c => {
+            if (c.groupName === groupName) c.groupName = 'All';
+        });
+        
+        if (wcState.activeChatGroup === groupName) wcState.activeChatGroup = 'All';
+        
+        wcSaveData();
+        const titleEl = document.getElementById('wc-nav-title');
+        if (titleEl) titleEl.innerHTML = wcGenerateChatHeaderHTML();
+        wcRenderChats();
+    }
+}
+
+// 打开分配分组弹窗
+function wcOpenAssignGroupModal(charId) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+    
+    let modal = document.getElementById('wc-modal-assign-group');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'wc-modal-assign-group';
+        // 🔪 核心修复：将 z-index 提升到 100000，绝对保证在最顶层！
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 100000; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;';
+        document.body.appendChild(modal);
+    }
+    
+    let optionsHtml = `<div style="padding: 16px; font-size: 16px; color: #007AFF; cursor: pointer; border-bottom: 1px solid #ddd;" onclick="wcAssignGroup(${charId}, 'All')">All (默认)</div>`;
+    (wcState.chatGroups || []).forEach(g => {
+        optionsHtml += `<div style="padding: 16px; font-size: 16px; color: #007AFF; cursor: pointer; border-bottom: 1px solid #ddd;" onclick="wcAssignGroup(${charId}, '${g}')">${g}</div>`;
+    });
+    
+    modal.innerHTML = `
+        <div style="background: rgba(245, 245, 245, 0.95); backdrop-filter: blur(20px); width: 270px; border-radius: 14px; overflow: hidden; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1);" onclick="event.stopPropagation();">
+            <div style="padding: 20px 16px 15px 16px; font-weight: 600; font-size: 16px; color: #000; border-bottom: 1px solid #ddd;">移动到分组</div>
+            <div style="display: flex; flex-direction: column; max-height: 250px; overflow-y: auto;">
+                ${optionsHtml}
+            </div>
+            <div style="padding: 16px; font-size: 16px; font-weight: 600; color: #FF3B30; cursor: pointer;" onclick="closeAssignGroupModal()">取消</div>
+        </div>
+    `;
+    
+    // 点击半透明黑色背景也可以关闭弹窗
+    modal.onclick = closeAssignGroupModal;
+    
+    modal.style.display = 'flex';
+    // 延迟改变透明度，触发淡入动画
+    setTimeout(() => modal.style.opacity = '1', 10);
+}
+
+// 独立的关闭弹窗函数
+window.closeAssignGroupModal = function() {
+    const modal = document.getElementById('wc-modal-assign-group');
+    if (modal) {
+        modal.style.opacity = '0';
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 200);
+    }
+};
+
+// 执行分配分组
+window.wcAssignGroup = function(charId, groupName) {
+    try {
+        const char = wcState.characters.find(c => c.id === charId);
+        if (char) {
+            char.groupName = groupName;
+            wcSaveData();
+            wcRenderChats();
+        }
+    } catch (e) {
+        console.error("分组保存失败:", e);
+    } finally {
+        // 🔪 核心修复：无论前面执行是否卡顿，最后一步绝对强制关闭弹窗！
+        window.closeAssignGroupModal();
+    }
+};
+
+
+
+// 执行分配分组
+function wcAssignGroup(charId, groupName) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (char) {
+        char.groupName = groupName;
+        wcSaveData();
+        wcRenderChats();
+    }
+    document.getElementById('wc-modal-assign-group').classList.remove('active');
+}
+// ==========================================
+// 新增：角色会话长按菜单 (置顶 / 分组)
+// ==========================================
+let wcChatLongPressTimer = null;
+
+function wcChatTouchStart(e, charId) {
+    wcChatLongPressTimer = setTimeout(() => {
+        const touch = e.touches[0];
+        wcShowChatContextMenu(touch.clientX, touch.clientY, charId);
+    }, 500);
+}
+
+function wcChatTouchEnd() {
+    if (wcChatLongPressTimer) {
+        clearTimeout(wcChatLongPressTimer);
+        wcChatLongPressTimer = null;
+    }
+}
+
+function wcShowChatContextMenu(eOrX, yOrCharId, charIdIfTouch) {
+    let x, y, charId;
+    if (typeof eOrX === 'object') {
+        eOrX.preventDefault(); // 阻止电脑端默认右键菜单
+        x = eOrX.pageX;
+        y = eOrX.pageY;
+        charId = yOrCharId;
+    } else {
+        x = eOrX;
+        y = yOrCharId;
+        charId = charIdIfTouch;
+    }
+
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    let menu = document.getElementById('wc-chat-context-menu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'wc-chat-context-menu';
+        menu.style.cssText = 'position: absolute; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); z-index: 3000; display: none; flex-direction: column; min-width: 140px; overflow: hidden;';
+        document.body.appendChild(menu);
+    }
+
+    const pinText = char.isPinned ? "取消置顶" : "置顶会话";
+    const pinSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 11.2V6a3 3 0 0 0-6 0v5.2a2 2 0 0 1-1.11 1.35l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>`;
+    const groupSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+    // 🔪 新增：删除角色的垃圾桶图标
+    const deleteSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+
+    menu.innerHTML = `
+        <div style="padding: 12px 16px; font-size: 15px; color: #000; border-bottom: 0.5px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center;" onclick="wcTogglePin(${charId}); document.getElementById('wc-chat-context-menu').style.display='none';">
+            ${pinSvg} ${pinText}
+        </div>
+        <div style="padding: 12px 16px; font-size: 15px; color: #000; border-bottom: 0.5px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center;" onclick="wcOpenAssignGroupModal(${charId}); document.getElementById('wc-chat-context-menu').style.display='none';">
+            ${groupSvg} 移动分组
+        </div>
+        <div style="padding: 12px 16px; font-size: 15px; color: #FF3B30; cursor: pointer; display: flex; align-items: center;" onclick="wcDeleteCharacter(${charId}); document.getElementById('wc-chat-context-menu').style.display='none';">
+            ${deleteSvg} 删除角色
+        </div>
+    `;
+
+    const menuWidth = 140;
+    const menuHeight = 140; // 增加了菜单项，高度稍微调大一点
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    if (x + menuWidth > screenW) x = screenW - menuWidth - 10;
+    if (y + menuHeight > screenH) y = screenH - menuHeight - 10;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'flex';
+}
+
+// 全局点击隐藏所有菜单
+document.addEventListener('click', (e) => {
+    const groupMenu = document.getElementById('wc-group-context-menu');
+    if (groupMenu && !e.target.closest('.new-tab')) {
+        groupMenu.style.display = 'none';
+    }
+    
+    const chatMenu = document.getElementById('wc-chat-context-menu');
+    if (chatMenu && !e.target.closest('.wc-chat-swipe-content')) {
+        chatMenu.style.display = 'none';
+    }
+});
+// 覆盖 wcPostMoment 函数以支持分组
+window.wcPostMoment = function() {
+    const text = document.getElementById('wc-input-moment-text').value.trim();
+    const imageDesc = document.getElementById('wc-input-moment-image-desc').value.trim();
+    const groupSelect = document.getElementById('wc-input-moment-group');
+    const visibleGroup = groupSelect ? groupSelect.value : 'All';
+
+    if (!text && !wcState.tempImage && !imageDesc) {
+        alert("请填写内容或上传图片");
+        return;
+    }
+
+    const newMoment = {
+        id: Date.now(),
+        name: wcState.user.name,
+        avatar: wcState.user.avatar,
+        text: text,
+        image: wcState.tempImage || null,
+        imageDesc: imageDesc || null,
+        time: Date.now(),
+        likes: [],
+        comments: [],
+        visibleGroup: visibleGroup // 新增可见分组字段
+    };
+
+    wcState.moments.unshift(newMoment);
+    wcSaveData();
+    wcRenderMoments();
+    
+    document.getElementById('wc-input-moment-text').value = '';
+    document.getElementById('wc-input-moment-image-desc').value = '';
+    const previewImg = document.getElementById('wc-preview-moment-img');
+    if(previewImg) previewImg.style.display = 'none';
+    const uploadIcon = document.getElementById('wc-icon-moment-upload');
+    if(uploadIcon) uploadIcon.style.display = 'flex';
+    wcState.tempImage = '';
+    
+    wcCloseModal('wc-modal-post-moment');
+};

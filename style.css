@@ -592,7 +592,7 @@ input::-webkit-inner-spin-button {
 /* --- 模态框通用 --- */
 .settings-modal {
     position: absolute; 
-    top: 0; left: 0; width: 100%; height: var(--app-height, 100dvh); min-height: var(--app-height, 100dvh); height: 100dvh;
+    top: 0; left: 0; width: 100%; height: var(--app-height, 100vh); min-height: var(--app-height, 100vh);
     background-color: var(--bg-color); z-index: 1000;
     display: none; 
     opacity: 0;
@@ -1983,13 +1983,30 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-phone-tab-item { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #8E8E93; cursor: pointer; }
 .wc-phone-tab-item.active { color: #007AFF; }
 
-.wc-chat-swipe-container { position: relative; overflow: hidden; background: var(--wc-card-color); margin: 8px 16px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+/* 聊天列表外层包裹，实现无缝隙卡片效果 */
+.chat-list-wrapper {
+    background: #FFFFFF;
+    border-radius: 12px;
+    border: 1px solid #E5E5EA;
+    margin: 10px 16px 20px 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+}
+/* 移除单项的外边距和圆角，只保留底部分割线 */
+.wc-chat-swipe-container { 
+    position: relative; overflow: hidden; background: var(--wc-card-color); 
+    margin: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+    border-bottom: 1px solid #F0F0F0 !important;
+}
+.wc-chat-swipe-container:last-child { border-bottom: none !important; }
 .wc-chat-swipe-actions { position: absolute; right: 0; top: 0; bottom: 0; display: flex; z-index: 1; }
 .wc-chat-action-btn { width: 80px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; }
 .wc-btn-pin { background-color: var(--wc-pin-gray); }
-.wc-chat-swipe-content { position: relative; z-index: 2; background: var(--wc-card-color); width: 100%; height: 100%; display: flex; align-items: center; padding: 12px 16px; transition: transform 0.2s ease-out; }
-.wc-pinned-chat { background-color: #FFFFFF !important; }
-.wc-list-separator { text-align: center; color: #C7C7CC; font-size: 12px; padding: 5px 0; background: var(--wc-bg-color); }
+.wc-btn-group { background-color: #FF9500; } /* 分组按钮颜色 */
+/* 增加上下 padding，拉长会话高度 */
+.wc-chat-swipe-content { position: relative; z-index: 2; background: var(--wc-card-color); width: 100%; height: 100%; display: flex; align-items: center; padding: 18px 16px !important; transition: transform 0.2s ease-out; }
+.wc-pinned-chat { background: linear-gradient(135deg, #FFFFFF 0%, #F8F8F8 100%) !important; }
+.wc-list-separator { display: none !important; }
 
 .wc-tabbar-container { 
     position: absolute; 
@@ -4590,110 +4607,105 @@ input::-webkit-inner-spin-button {
 .update-log-list li::before { content: '-'; position: absolute; left: 0; color: #888; }
 
 /* ========================================== */
-/* 新增：Chat 页面定制化 UI (高级黑白灰卡片) */
+/* 新增：Chat 页面定制化 UI (白色顶栏 + Message + 分组) */
 /* ========================================== */
-/* 顶栏卡片化模式 */
 .wc-navbar.custom-chat-nav-mode {
-    background: transparent !important;
+    background: #FFFFFF !important;
     border-bottom: none !important;
     box-shadow: none !important;
     justify-content: center;
+    height: auto !important; 
+    padding-bottom: 10px;
 }
 .wc-navbar.custom-chat-nav-mode .wc-nav-left,
 .wc-navbar.custom-chat-nav-mode .wc-nav-right {
     display: none !important;
 }
 .wc-navbar.custom-chat-nav-mode .wc-nav-title {
-    flex: none;
-    overflow: visible;
+    flex: 1; width: 100%; overflow: visible;
 }
-/* 300x60px 的圆角长方形卡片 */
-.chat-nav-card {
-    width: 300px;
-    height: 60px;
-    background: #FFFFFF;
-    border-radius: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 12px;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.06);
-    border: 1px solid #F5F5F5;
-}
-/* 左侧接通键 (黑白灰风格) */
-.chat-nav-call {
-    width: 40px;
-    height: 40px;
-    background: #111111; /* 改为高级黑 */
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-.chat-nav-call:active { transform: scale(0.9); }
-.chat-nav-call svg {
-    width: 20px;
-    height: 20px;
-    stroke: #FFFFFF;
-}
-/* 右侧用户头像 */
-.chat-nav-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    object-fit: cover;
-    cursor: pointer;
-    border: 2px solid #FFFFFF;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    transition: transform 0.2s;
-}
-.chat-nav-avatar:active { transform: scale(0.9); }
 
-/* 搜索栏：250x35px，距顶栏10px，居中 */
+.new-chat-header { width: 100%; display: flex; flex-direction: column; padding: 0 10px; }
+.new-top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; margin-top: 10px; }
+.new-title { display: flex; align-items: center; font-size: 28px; font-weight: bold; letter-spacing: 0.5px; color: #000; cursor: pointer; }
+.new-title:active { opacity: 0.6; }
+.new-title-icon { width: 26px; height: 26px; background-color: #000; border-radius: 50%; margin-right: 12px; display: flex; align-items: center; justify-content: center; }
+.new-title-icon::after { content: ''; width: 12px; height: 12px; background-color: #fff; border-radius: 50%; }
+.new-add-btn { font-size: 32px; font-weight: 300; color: #000; cursor: pointer; }
+
+/* 隐藏滚动条的 tabs，增加五角星布局 */
+.tabs-container { 
+    display: flex; align-items: center; justify-content: space-between; /* 确保两端对齐 */
+    padding: 0 15px; margin-bottom: 10px;
+}
+.tabs-scroll { 
+    flex: 1; display: flex; align-items: center; gap: 20px; 
+    overflow-x: auto; scrollbar-width: none; 
+    padding-right: 15px; /* 给右侧留点空间，防止文字贴着分割线 */
+}
+.tabs-scroll::-webkit-scrollbar { display: none; }
+.new-tab { color: #888; font-size: 16px; cursor: pointer; white-space: nowrap; transition: all 0.2s; user-select: none; }
+.new-tab.active { color: #fff; background-color: #000; padding: 6px 18px; border-radius: 20px; font-weight: 600; }
+.tab-add-star { 
+    margin-left: 10px; padding-left: 15px; 
+    border-left: 1px solid #eee; 
+    display: flex; align-items: center; justify-content: center; 
+    cursor: pointer; color: #000; 
+    flex-shrink: 0; /* 核心：防止五角星被左侧挤压变形 */
+}
+.tab-add-star:active { opacity: 0.5; }
+
+#wc-view-chat { padding-top: calc(120px + env(safe-area-inset-top, 20px)) !important; }
+
 .wc-search-bar-placeholder {
-    width: 250px;
-    height: 35px;
-    background: #F5F5F5;
-    border-radius: 12px;
-    margin: 10px auto 12px auto; /* 上距10px，左右居中，下距12px */
-    display: flex;
-    align-items: center;
-    justify-content: center; /* 内容居中 */
-    color: #8E8E93;
-    font-size: 13px;
-    border: 1px solid #EEEEEE;
+    width: auto; margin: 10px 20px 15px 20px; background-color: #f5f5f5; border-radius: 12px;
+    padding: 10px 16px; display: flex; align-items: center; justify-content: flex-start;
+    color: #888; font-size: 15px; border: none;
 }
-.wc-search-bar-placeholder svg {
-    width: 14px;
-    height: 14px;
-    margin-right: 6px;
-}
+.wc-search-bar-placeholder svg { width: 18px; height: 18px; margin-right: 10px; stroke: #888; }
 
-/* 横向头像列表 */
-.wc-char-avatar-scroll {
-    display: flex;
-    overflow-x: auto;
-    padding: 0 16px 8px 16px; /* 减小底部的 padding，拉近与列表的距离 */
-    gap: 12px;
-}
-.wc-char-avatar-scroll::-webkit-scrollbar {
-    display: none;
-}
-.wc-char-avatar-item {
-    width: 50px;
-    height: 50px;
-    border-radius: 16px;
-    object-fit: cover;
-    flex-shrink: 0;
-    background: #eee;
-    border: 2px solid #FFFFFF; /* 增加一圈白色边框 */
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08); /* 配合白边增加柔和阴影 */
-    cursor: pointer;
-    transition: transform 0.2s;
-}
+.wc-char-avatar-scroll { display: flex; overflow-x: auto; padding: 5px 20px 25px 20px; gap: 22px; border-bottom: 1px solid #f5f5f5; }
+.wc-char-avatar-scroll::-webkit-scrollbar { display: none; }
+.wc-char-avatar-item { width: 50px; height: 50px; border-radius: 16px; object-fit: cover; flex-shrink: 0; background: #eee; border: 2px solid #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.2s; }
 .wc-char-avatar-item:active { transform: scale(0.92); }
+
+/* 聊天列表外层包裹：去除边框、圆角、左右间距，让其完全扁平化贴合屏幕边缘 */
+.chat-list-wrapper {
+    margin: 0 0 90px 0 !important; /* 左右 margin 设为 0，贴边 */
+    border: none !important; /* 彻底去除外边框 */
+    border-radius: 0 !important; /* 去除圆角 */
+    background: #fff;
+    overflow: hidden;
+    box-shadow: none !important;
+}
+/* 单个会话容器：无缝隙，仅保留极细的底部分割线 */
+.wc-chat-swipe-container { 
+    position: relative; overflow: hidden; background: #FF9500 !important; 
+    margin: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+    border-bottom: 0.5px solid #E5E5EA !important; /* 极细的底部分割线，符合图1 */
+}
+.wc-chat-swipe-container:last-child { border-bottom: none !important; }
+.wc-chat-swipe-actions { position: absolute; right: 0; top: 0; bottom: 0; display: flex; z-index: 1; }
+.wc-chat-action-btn { width: 80px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 15px; }
+.wc-btn-pin { background-color: var(--wc-pin-gray); }
+.wc-btn-group { background-color: #FF9500; }
+/* 增加上下 padding 到 20px，拉长会话高度，匹配图1的宽松感 */
+.wc-chat-swipe-content { 
+    position: relative; z-index: 2; background: #fff !important; 
+    width: 100%; height: 100%; display: flex; align-items: center; 
+    padding: 7px 15px !important; /* 增加高度 */
+    transition: transform 0.2s ease-out; 
+}
+/* 确保头像是正圆形 (图1样式)，去除图2的圆角矩形 */
+.wc-chat-swipe-content .wc-avatar {
+    width: 45px !important;
+    height: 45px !important;
+    border-radius: 50% !important; /* 强制正圆 */
+    border: none !important; /* 去除多余边框 */
+}
+.wc-pinned-chat { background: linear-gradient(135deg, #FFFFFF 0%, #F8F8F8 100%) !important; }
+.wc-list-separator { display: none !important; }
+
 /* ========================================== */
 /* 🖤 WeChat 全局 极简黑白灰 INS 高级风 UI 覆盖 🖤 */
 /* ========================================== */
@@ -4739,8 +4751,8 @@ input::-webkit-inner-spin-button {
     transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1) !important;
 }
 
-/* 4. 聊天列表 & 通讯录列表 (Chat & Contacts) - 干净的留白卡片 */
-.wc-chat-swipe-container, .wc-swipe-container {
+/* 4. 通讯录列表 (Contacts) - 干净的留白卡片 (聊天列表已在上方单独定义为全屏无缝样式) */
+.wc-swipe-container {
     background: #FFFFFF !important;
     margin: 12px 16px !important;
     border-radius: 20px !important;
@@ -4749,10 +4761,10 @@ input::-webkit-inner-spin-button {
     overflow: hidden;
     transition: transform 0.2s ease;
 }
-.wc-chat-swipe-container:active, .wc-swipe-container:active {
+.wc-swipe-container:active {
     transform: scale(0.98);
 }
-.wc-chat-swipe-content, .wc-swipe-content {
+.wc-swipe-content {
     border-bottom: none !important;
     padding: 16px !important;
 }
@@ -5582,6 +5594,78 @@ input::-webkit-inner-spin-button {
     margin-top: 12px; text-align: right; font-size: 13px; color: #FF3B30; font-weight: 600; cursor: pointer;
 }
 /* ========================================== */
+/* 朋友圈右上角更多按钮与弹出菜单 (仿 iOS/微信) */
+/* ========================================== */
+.wc-moment-more-btn {
+    position: absolute;
+    top: 24px;
+    right: 20px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #8E8E93;
+    transition: color 0.2s, background 0.2s;
+    z-index: 10;
+    border-radius: 4px;
+}
+.wc-moment-more-btn:active { 
+    color: #111; 
+    background: #F5F5F5;
+}
+.wc-moment-more-btn svg { 
+    width: 20px; 
+    height: 20px; 
+    fill: currentColor; 
+}
+
+/* 向左弹出的深色高级菜单 */
+.wc-moment-popover {
+    position: absolute;
+    top: 20px;
+    right: 56px; /* 停靠在更多按钮的左侧 */
+    background: #2C2C2E; /* iOS 经典深灰黑 */
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    height: 36px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    opacity: 0;
+    transform: translateX(15px) scale(0.95);
+    pointer-events: none;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 11;
+}
+.wc-moment-popover.active {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    pointer-events: auto;
+}
+.wc-moment-popover-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFF;
+    cursor: pointer;
+    height: 100%;
+    transition: opacity 0.2s, transform 0.2s;
+}
+.wc-moment-popover-item:active { 
+    opacity: 0.6; 
+    transform: scale(0.9);
+}
+.wc-moment-popover-item svg { 
+    width: 18px; 
+    height: 18px; 
+    stroke: #FFF; 
+    fill: none; 
+    stroke-width: 2; 
+}
+
+/* ========================================== */
 /* 🌟 朋友圈 (Moments) 韩系 INS 极简杂志风 🌟 */
 /* ========================================== */
 
@@ -5727,6 +5811,7 @@ input::-webkit-inner-spin-button {
     display: flex !important;
     flex-direction: column !important;
 }
+
 .wc-moment-header-row {
     display: flex;
     align-items: center;
