@@ -2783,37 +2783,45 @@ input::-webkit-inner-spin-button {
         pointer-events: auto;
     }
     .ins-shop-scroll-container::-webkit-scrollbar { display: none; }
-
+/* 修改后的代码 */
     /* 80x310px 竖向卡片 (严格锁定尺寸) */
     .ins-shop-card {
         width: 80px !important; 
         height: 310px !important; 
         flex-shrink: 0; position: relative;
-        background: linear-gradient(to bottom, rgba(17, 17, 17, 0.95) 0%, rgba(17, 17, 17, 0) 100%);
+        background: #FFFFFF; /* 纯白背景 */
+        border: 1px solid #E5E5EA; /* 浅灰边框 */
+        box-shadow: 0 4px 15px rgba(0,0,0,0.03); /* 柔和阴影 */
+        border-radius: 12px; /* 增加圆角 */
         cursor: pointer; display: flex; flex-direction: column; align-items: center;
         padding: 15px 5px; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         box-sizing: border-box;
-        z-index: 110; /* 确保卡片本身层级极高 */
+        z-index: 110;
     }
     .ins-shop-card:active { transform: translateY(-10px); }
     
-    /* 顶部几何设计感边框 */
+    /* 顶部几何设计感边框 (颜色调浅) */
     .ins-shop-card::before {
         content: ''; position: absolute; top: 0; left: 0; right: 0; height: 100px;
-        border: 1px solid rgba(255, 255, 255, 0.2); border-bottom: none; pointer-events: none;
+        border: 1px solid #F0F0F0; border-bottom: none; pointer-events: none;
+        border-radius: 12px 12px 0 0;
     }
     .ins-shop-card::after {
         content: ''; position: absolute; top: 5px; left: 5px; right: 5px; height: 40px;
-        border: 1px dashed rgba(255, 255, 255, 0.3); border-bottom: none; pointer-events: none;
+        border: 1px dashed #EAEAEA; border-bottom: none; pointer-events: none;
+        border-radius: 8px 8px 0 0;
     }
 
-    .ins-shop-card-icon { font-size: 20px; margin-bottom: 20px; margin-top: 5px; filter: grayscale(100%) contrast(200%); }
+    .ins-shop-card-icon { 
+        color: #111; /* SVG 颜色 */
+        margin-bottom: 20px; margin-top: 5px; 
+    }
     .ins-shop-card-name {
-        writing-mode: vertical-rl; color: #FFF; font-size: 14px; letter-spacing: 4px;
-        font-family: 'Kaiti', 'STKaiti', serif; text-shadow: 0 2px 10px rgba(0,0,0,0.8); flex: 1;
+        writing-mode: vertical-rl; color: #111; font-size: 14px; letter-spacing: 4px;
+        font-family: 'Kaiti', 'STKaiti', serif; flex: 1; text-shadow: none; /* 去掉发光，改为深色 */
     }
     .ins-shop-card-price {
-        color: rgba(255, 255, 255, 0.5); font-size: 10px; font-family: 'Courier New', monospace;
+        color: #8E8E93; font-size: 10px; font-family: 'Courier New', monospace;
         writing-mode: vertical-rl; margin-top: 10px; letter-spacing: 1px;
     }
 
@@ -2886,31 +2894,32 @@ input::-webkit-inner-spin-button {
         position: relative; width: 100%; height: 450px; margin-top: -50px;
         display: flex; align-items: center; justify-content: center; perspective: 1000px;
     }
-
+/* 修改后的代码 */
     /* 👈 增加父级限制，防止被恋人空间的同名样式污染变短 */
     .tarot-slider-container .tarot-card {
         position: absolute; width: 200px; height: 450px;
-        background: #0B0C10; color: #FFF; display: flex; flex-direction: column;
-        padding: 24px; box-shadow: 0 30px 60px rgba(0,0,0,0.4); box-sizing: border-box;
+        background: #FFFFFF; color: #111; display: flex; flex-direction: column;
+        padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.08); box-sizing: border-box;
         transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease;
         opacity: 0; pointer-events: none;
-        border-radius: 0;
+        border-radius: 16px; /* 增加圆角 */
+        border: 1px solid #F0F0F0;
         transform-style: flat;
     }
     
     .tarot-card::before {
         content: ''; position: absolute; top: 8px; left: 8px; right: 8px; bottom: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.2); pointer-events: none;
+        border: 1px solid #E5E5EA; pointer-events: none; border-radius: 10px;
     }
     .tarot-card::after {
         content: ''; position: absolute; top: 14px; left: 14px; right: 14px; bottom: 14px;
-        border: 1px dashed rgba(255, 255, 255, 0.1); pointer-events: none;
+        border: 1px dashed #F0F0F0; pointer-events: none; border-radius: 6px;
     }
 
     .tarot-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 2; }
     .tarot-tag { font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 3px; color: #888; }
     .tarot-close { font-size: 24px; cursor: pointer; line-height: 1; color: #888; transition: color 0.2s; }
-    .tarot-close:active { color: #FFF; }
+    .tarot-close:active { color: #111; }
     
     /* 👇 新增：塔罗牌内部的高级感编辑/删除按钮 👇 */
     .tarot-manage-actions {
@@ -2918,26 +2927,26 @@ input::-webkit-inner-spin-button {
     }
     .tarot-action-btn {
         width: 32px; height: 32px; border-radius: 50%;
-        background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+        background: #F5F5F5; border: 1px solid #EAEAEA;
         display: flex; align-items: center; justify-content: center;
-        cursor: pointer; transition: all 0.2s ease; backdrop-filter: blur(4px);
+        cursor: pointer; transition: all 0.2s ease;
     }
     .tarot-action-btn svg {
-        width: 14px; height: 14px; fill: none; stroke: #CCC; stroke-width: 1.5; transition: stroke 0.2s;
+        width: 14px; height: 14px; fill: none; stroke: #888; stroke-width: 1.5; transition: stroke 0.2s;
     }
-    .tarot-action-btn:active { transform: scale(0.9); background: rgba(255, 255, 255, 0.2); }
-    .tarot-action-btn.edit:active svg { stroke: #FFF; }
+    .tarot-action-btn:active { transform: scale(0.9); background: #EAEAEA; }
+    .tarot-action-btn.edit:active svg { stroke: #111; }
     .tarot-action-btn.delete:active svg { stroke: #FF3B30; }
     /* 👆 新增结束 👆 */
 
-    .tarot-icon { font-size: 45px; text-align: center; margin-bottom: 20px; filter: grayscale(100%) contrast(200%); }
-    .tarot-title { font-size: 22px; font-weight: bold; text-align: center; margin-bottom: 15px; letter-spacing: 4px; font-family: 'Kaiti', serif; }
-    .tarot-desc { font-size: 12px; color: #AAA; text-align: justify; line-height: 1.8; flex: 1; font-family: 'Kaiti', serif; letter-spacing: 1px; }
-    .tarot-price { font-family: 'Georgia', serif; font-size: 18px; text-align: center; margin-bottom: 24px; font-style: italic; color: #D4C4B7; }
+    .tarot-icon { color: #111; text-align: center; margin-bottom: 20px; display: flex; justify-content: center; }
+    .tarot-title { font-size: 22px; font-weight: bold; text-align: center; margin-bottom: 15px; letter-spacing: 4px; font-family: 'Kaiti', serif; color: #111; }
+    .tarot-desc { font-size: 12px; color: #666; text-align: justify; line-height: 1.8; flex: 1; font-family: 'Kaiti', serif; letter-spacing: 1px; }
+    .tarot-price { font-family: 'Georgia', serif; font-size: 18px; text-align: center; margin-bottom: 24px; font-style: italic; color: #8E8E93; }
     .tarot-btn {
-        background: #FFF; color: #111; border: none; padding: 14px; font-size: 11px;
+        background: #111; color: #FFF; border: none; padding: 14px; font-size: 11px;
         font-weight: 900; letter-spacing: 3px; cursor: pointer; position: relative; z-index: 2;
-        font-family: -apple-system, sans-serif; transition: transform 0.2s;
+        font-family: -apple-system, sans-serif; transition: transform 0.2s; border-radius: 12px;
     }
     .tarot-btn:active { transform: scale(0.95); }
 

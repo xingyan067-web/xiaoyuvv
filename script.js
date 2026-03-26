@@ -12905,7 +12905,9 @@ function wcRenderShopItems(tab, isAddMode = false) {
     if (isAddMode) {
         // 渲染手动添加的商品（去除了卡片表面的编辑删除按钮，保持极简）
         items.forEach((item, idx) => {
-            const icon = tab === 'mall' ? '🔮' : '🍱';
+            const icon = tab === 'mall' 
+                ? '<svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>' 
+                : '<svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>';
             const card = document.createElement('div');
             card.className = 'ins-shop-card manual-card';
             card.innerHTML = `
@@ -12916,6 +12918,7 @@ function wcRenderShopItems(tab, isAddMode = false) {
             card.onclick = () => wcOpenTarotModal(tab, idx);
             container.appendChild(card);
         });
+
 
         // 渲染添加按钮卡片 (换成了高级的 SVG 加号)
         const addCard = document.createElement('div');
@@ -12942,9 +12945,11 @@ function wcRenderShopItems(tab, isAddMode = false) {
         container.innerHTML = '<div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">空空如也</div>';
         return;
     }
-
+// 修改后的代码
     items.forEach((item, idx) => {
-        const icon = tab === 'mall' ? '🔮' : '🍱';
+        const icon = tab === 'mall' 
+            ? '<svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>' 
+            : '<svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>';
         const card = document.createElement('div');
         card.className = 'ins-shop-card';
         card.onclick = () => wcOpenTarotModal(tab, idx);
@@ -13037,14 +13042,16 @@ window.wcCloseTarotModal = function() {
     modal.classList.remove('active');
     setTimeout(() => modal.style.display = 'none', 400); // 👈 核心修复：动画结束后彻底隐藏容器
 };
-
+// 修改后的代码
 window.wcRenderTarotCards = function(tab) {
     const slider = document.getElementById('wc-tarot-slider');
     slider.innerHTML = '';
     const items = tab === 'mall' ? wcShopCurrentItems : (wcState.shopData[tab] || []);
     
     items.forEach((item, index) => {
-        const icon = tab === 'mall' ? '🔮' : '🌙';
+        const icon = tab === 'mall' 
+            ? '<svg viewBox="0 0 24 24" style="width:40px;height:40px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>' 
+            : '<svg viewBox="0 0 24 24" style="width:40px;height:40px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>';
         const card = document.createElement('div');
         card.className = 'tarot-card';
         card.id = `tarot-card-${index}`;
