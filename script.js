@@ -335,23 +335,24 @@ window.onload = async function() {
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
     
-    // 【核心修复】：默认高度必须使用 window.innerHeight，它包含了底部安全区，能完美铺满全屏
-    let targetHeight = window.innerHeight;
-    
     if (window.visualViewport) {
-        // 只有当高度差大于 100px 时，才认为是真正的“键盘弹起”，此时才缩小容器高度
-        if (window.innerHeight - window.visualViewport.height > 100) {
-            targetHeight = window.visualViewport.height;
-        }
+        // 【核心修复】：判断键盘是否弹起。如果高度差大于 150，说明键盘弹起了
+        const isKeyboardOpen = (window.innerHeight - window.visualViewport.height) > 150;
         
-        docStyle.setProperty('--app-height', `${targetHeight}px`);
+        if (isKeyboardOpen) {
+            // 键盘弹起时，严格使用 visualViewport.height，防止输入框被遮挡
+            docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
+        } else {
+            // 键盘收起时，强制使用 100dvh，彻底抹杀 visualViewport 带来的底部白边误差！
+            docStyle.setProperty('--app-height', `100dvh`);
+        }
         
         // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
         window.scrollTo(0, 0);
         document.body.scrollTop = 0;
     } else {
         // 降级方案
-        docStyle.setProperty('--app-height', `${targetHeight}px`);
+        docStyle.setProperty('--app-height', `100dvh`);
     }
     
     // 统一输入栏高度变量，给微信聊天滚动区预留空间
@@ -363,7 +364,7 @@ function updateAppViewportVars() {
 if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
         updateAppViewportVars();
-        // 键盘弹起导致高度变化时，稍微延迟一下让各个聊天列表自动滚动到底部，防止最新消息被挡住
+        // 键盘弹起导致高度变化时，稍微延迟一下让各个聊天列表自动滚动到底部
         setTimeout(() => {
             if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
             const simHistory = document.getElementById('wc-sim-chat-history');
@@ -382,6 +383,16 @@ if (window.visualViewport) {
 } else {
     window.addEventListener('resize', updateAppViewportVars);
 }
+
+// 【新增杀招】：监听输入框失去焦点（键盘收起），强制重置页面位置，防止页面卡在半空中漏出白边
+document.addEventListener('focusout', () => {
+    setTimeout(() => {
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+        updateAppViewportVars();
+    }, 50);
+});
+
 // 初始化调用一次
 updateAppViewportVars();
 
