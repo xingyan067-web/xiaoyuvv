@@ -331,33 +331,39 @@ window.onload = async function() {
         }
     });
 
-// iOS / PWA 全屏与键盘自适应最终版
+// iOS / PWA 全屏与键盘自适应最终版 (完美解决白边与遮挡)
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
     
     if (window.visualViewport) {
-        // 【核心修复】：判断键盘是否弹起。如果高度差大于 150，说明键盘弹起了
-        const isKeyboardOpen = (window.innerHeight - window.visualViewport.height) > 150;
+        const viewportHeight = window.visualViewport.height;
+        const windowHeight = window.innerHeight;
         
-        if (isKeyboardOpen) {
-            // 键盘弹起时，严格使用 visualViewport.height，防止输入框被遮挡
-            docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
+        // 计算键盘真实高度
+        let keyboardHeight = windowHeight - viewportHeight;
+        if (keyboardHeight < 50) keyboardHeight = 0; // 忽略微小变化
+        
+        // 核心1：外层容器永远保持 100% 物理高度，绝不缩水，彻底消灭白边！
+        docStyle.setProperty('--app-height', '100%');
+        
+        // 核心2：将键盘高度传递给 CSS，用于把输入框顶上来
+        docStyle.setProperty('--keyboard-height', `${keyboardHeight}px`);
+        
+        // 核心3：添加标志位，用于取消键盘弹起时的底部安全区
+        if (keyboardHeight > 0) {
+            document.body.classList.add('keyboard-open');
         } else {
-            // 键盘收起时，强制使用 100dvh，彻底抹杀 visualViewport 带来的底部白边误差！
-            docStyle.setProperty('--app-height', `100dvh`);
+            document.body.classList.remove('keyboard-open');
         }
         
-        // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
+        // 强制阻止 iOS 默认的页面整体上推，保持背景不动
         window.scrollTo(0, 0);
         document.body.scrollTop = 0;
     } else {
-        // 降级方案
-        docStyle.setProperty('--app-height', `100dvh`);
+        docStyle.setProperty('--app-height', '100%');
+        docStyle.setProperty('--keyboard-height', '0px');
+        document.body.classList.remove('keyboard-open');
     }
-    
-    // 统一输入栏高度变量，给微信聊天滚动区预留空间
-    docStyle.setProperty('--wc-input-height', '64px');
-    docStyle.setProperty('--keyboard-offset', '0px');
 }
 
 // 监听可视区域变化（键盘弹出/收起）
@@ -384,7 +390,7 @@ if (window.visualViewport) {
     window.addEventListener('resize', updateAppViewportVars);
 }
 
-// 【新增杀招】：监听输入框失去焦点（键盘收起），强制重置页面位置，防止页面卡在半空中漏出白边
+// 监听输入框失去焦点（键盘收起），强制重置页面位置
 document.addEventListener('focusout', () => {
     setTimeout(() => {
         window.scrollTo(0, 0);
