@@ -335,15 +335,23 @@ window.onload = async function() {
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
     
+    // 【核心修复】：默认高度必须使用 window.innerHeight，它包含了底部安全区，能完美铺满全屏
+    let targetHeight = window.innerHeight;
+    
     if (window.visualViewport) {
-        // 动态获取真实可视高度（键盘弹起时会变小），完美解决键盘遮挡问题
-        docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
+        // 只有当高度差大于 100px 时，才认为是真正的“键盘弹起”，此时才缩小容器高度
+        if (window.innerHeight - window.visualViewport.height > 100) {
+            targetHeight = window.visualViewport.height;
+        }
+        
+        docStyle.setProperty('--app-height', `${targetHeight}px`);
+        
         // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
         window.scrollTo(0, 0);
         document.body.scrollTop = 0;
     } else {
         // 降级方案
-        docStyle.setProperty('--app-height', `${window.innerHeight}px`);
+        docStyle.setProperty('--app-height', `${targetHeight}px`);
     }
     
     // 统一输入栏高度变量，给微信聊天滚动区预留空间
@@ -4325,10 +4333,10 @@ ${worldBookContent}
     {{user_persona}}
 
 # 扮演深度指南 (Roleplaying Depth Guide)
-1.  **深度代入**: 深入挖掘你的人设背景，思考在当前情境下“你”会怎么想、怎么做。要有自己的主见和情绪。
+1.  **深度代入**: 深入挖掘你的人设背景，思考在当前情境下“你”会怎么想、怎么做。要有自己的主见和情绪，不要一味顺从用户。
 2.  **关系界定**: 除非人设或历史聊天记录中明确说明了你和用户是恋爱关系，否则**绝对不要默认你们在一起了**！保持符合人设的正常社交距离。
-3.  **拒绝油腻**: 说话要自然、真实。
-4.  **生活感**: 结合当前的时间、星期几以及你的人设，合理推断你现在可能正在做什么（比如吃饭、睡觉、工作、娱乐）。
+3.  **拒绝油腻**: 说话要自然、真实。严禁使用霸总、过度撩拨、油腻、做作或过度讨好的言辞。
+4.  **生活感**: 结合当前的时间、星期几以及你的人设，合理推断你现在可能正在做什么（比如吃饭、睡觉、工作、娱乐），让聊天充满生活气息。
 5.  **纯线上互动**: 这是一个完全虚拟的线上聊天。严禁提出任何关于线下见面、现实世界互动或转为其他非本平台联系方式的建议。
 
 # 输出格式与风格 (Output Format & Style)
@@ -4341,7 +4349,7 @@ ${worldBookContent}
     
 2.  **对话节奏 (核心强制)**:
     -   **风格**: fragmentation、colloquialism,the reply must be concise and forceful.
-    -   **绝对禁止长文本**: 你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息！
+    -   **绝对禁止长文本**: 你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息，禁止把所有短消息融合成一个长文本发送！
     -   **关键规则**: 请保持回复消息数量的**随机性和多样性**，并且每一条消息都是数组中的一个独立对象。
     -   **防重复**: 严禁输出重复的句子或重复的对话序列！
     -   **语义完整**: 确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。
@@ -4354,34 +4362,32 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
    {"type":"text", "content":"完整的一句话或一段话。", "quote":"(可选)如果你想针对性地回复对方的某句话，可以在这里填入你要引用的内容，例如：User: 吃饭了吗"}
 2. **表情包**
    {"type":"sticker", "content":"表情包名称"}
-3. **转账/发红包** (按需使用)
-   如果你想给User转账、发红包、给零花钱时，
-   {"type":"transfer", "amount": 金额, "note": "转账备注"}
-4. **更换头像 (情头互动)**
+3. **更换头像 (情头互动)**
    如果你收到了用户发的图片，且用户明确表示这是“情头”、“头像”或者语境非常甜蜜合适，你可以决定更换自己的头像。
    {"type":"change_avatar", "content":"图片ID"} 
    (注意：如果你决定换头像，必须在content中填写你想使用的那张图片的【图片ID】。图片ID会在聊天记录的[发送了一张图片, 图片ID: xxx]中提供。请根据画面内容精准选择对应的ID！)
-5. **发送照片/图片** (按需使用)
+4. **发送照片/图片** (按需使用)
    如果你想给User发照片，必须严格使用以下格式，并在后面写上具体的画面描述：
    {"type":"text", "content":"[图片描述] (这里写具体的画面描述，必须根据当前聊天情境和你的状态现编，绝对不要照抄本示例！)"}
-6. **其他指令** (按需使用)
+5. **转账与语音** (按需使用)
+   {"type":"transfer", "amount":金额, "note":"转账备注"}
    {"type":"voice", "content":"语音内容"}
    如果收到【恋人空间邀请】，同意请回复：{"type":"invite_accept", "content":"符合你人设的同意话语"}；拒绝请回复：{"type":"invite_reject", "content":"符合你人设的拒绝话语"}
-7. **朋友圈互动** (如果你在【朋友圈动态】中看到了感兴趣的内容，或者有人评论了你，你可以进行互动)
+6. **朋友圈互动** (如果你在【朋友圈动态】中看到了感兴趣的内容，或者有人评论了你，你可以进行互动)
    {"type":"moment_like", "content": 朋友圈ID数字}
    {"type":"moment_comment", "momentId": 朋友圈ID数字, "content":"你的评论内容(如果是回复某人，请写'回复 xxx: 内容')"}
-8. **音乐邀请互动** (核心强制)
+7. **音乐邀请互动** (核心强制)
    如果用户向你发送了 [邀请听歌] 的卡片，你必须根据当前人设和心情决定是否同意。
    - 如果同意，请回复：{"type":"music_accept", "content":"符合你人设的同意话语"}
    - 如果拒绝，请回复：{"type":"music_reject", "content":"符合你人设的拒绝话语"}
-9. **主动语音通话** (按需使用)
+8. **主动语音通话** (按需使用)
    如果你想念User 或者你觉得当前氛围极佳，又或者有非常重要/暧昧的话想对 User 说，你可以主动向 User 发起语音通话！
    {"type":"call_invite", "content":"(这里写你发起通话时的内心OS，必须根据当前情境现编)"}
-10. **食谱互动** (按需使用)
+9. **食谱互动** (按需使用)
    如果你们聊到了吃饭、饿了，你可以发送你的今日食谱，或者修改User的食谱（比如觉得User吃得太少，强行加上肉）。
    发送你的食谱：{"type":"recipe_send", "b":"(具体的早餐)", "l":"(具体的午餐)", "d":"(具体的晚餐)", "content":"(发给User的话)"}
    修改User的食谱：{"type":"recipe_edit", "meal":"b/l/d", "newText":"(你修改后的内容)", "content":"(发给User的话)"}
-11. **主动点外卖** (按需使用)
+10. **主动点外卖** (按需使用)
    如果你觉得User饿了，或者想给User一个惊喜，你可以主动给User点外卖！
    {"type":"order_delivery", "foodName":"(这里写具体的外卖名称，必须根据当前情境现编，绝对不要照抄示例)", "price":"(合理的价格)", "msg":"(这里写你的外卖备注留言，必须根据当前情境现编，绝对不要照抄示例)"}
 `;
@@ -4404,8 +4410,7 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         systemPrompt += `\n示例输出：
 [
   {"type":"text", "content":"刚才去便利店了。"},
-  {"type":"text", "content":"[图片描述] 刚买的草莓冰淇淋，表面还有水珠"},
-  {"type":"transfer", "amount": 50, "note": "给你也买一个"},
+  {"type":"text", "content":"买了个冰淇淋，你要吃吗？"},
   {"type":"sticker", "content":"开心"}
 ]
 \n\n`;
@@ -4570,11 +4575,7 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             } else if (m.type === 'voice') {
                 content = `[语音] ${m.content}`;
             } else if (m.type === 'transfer') {
-                if (m.sender === 'me') {
-                    content = `[系统提示: User 向你发起了一笔转账。金额: ${m.amount}元, 备注: ${m.note}, 状态: ${m.status}]`;
-                } else {
-                    content = `[系统提示: 你向 User 发起了一笔转账。金额: ${m.amount}元, 备注: ${m.note}, 状态: ${m.status}。 (注意：下次你想转账时，必须使用 {"type":"transfer"} 的 JSON 指令，绝对不能直接输出这段文字！)]`;
-                }
+                content = `[转账: ${m.amount}元, 备注: ${m.note}, 状态: ${m.status}]`;
             } else if (m.type === 'invite') {
                 content = `[系统提示: 用户向你发送了“恋人空间”开启邀请。请根据你的人设和当前对User的情感状态决定是否同意。在回复中自然地表达你的决定，展现出符合你性格的反应（例如傲娇、害羞、开心等），不要像机器人一样死板。]`;
             } else if (m.type === 'music_invite') {
@@ -4915,7 +4916,10 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             });
         }
     }
-    actions = finalActions;    // 👆 去重逻辑结束 👆
+    // 👆 兜底逻辑结束 👆
+
+    actions = finalActions;
+    // 👆 去重逻辑结束 👆
 
     for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
@@ -4931,35 +4935,10 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             }
             // 纠正发送图片幻觉 (如 "[发送了一张图片，图片ID:xxx]" 或 "[图片描述: xxx]")
             let imgMatch = action.content.match(/\[发送了一张图片[，,]?\s*图片ID[：:]\s*(.*?)\]/) || action.content.match(/\[图片[：:]\s*(.*?)\]/) || action.content.match(/^\[图片描述\][：:]?\s*(.*)/);
-            
-            // 增强拦截：如果 AI 直接输出了 [一张xxx的照片] 这种格式，强行纠正
-            if (!imgMatch) {
-                let looseImgMatch = action.content.match(/^\[(.*?(照片|图片|截图).*?)\]$/);
-                if (looseImgMatch) {
-                    imgMatch = looseImgMatch;
-                }
-            }
-
             if (imgMatch) {
                 action.type = 'text';
-                // 确保前缀正确，以便渲染器能识别
-                let descText = imgMatch[1].trim();
-                if (descText.startsWith('图片描述')) descText = descText.replace(/^图片描述[：:]?\s*/, '');
-                action.content = `[图片描述] ${descText}`;
+                action.content = `[图片描述] ${imgMatch[1].trim()}`;
             }
-            
-            // 👇 新增：纠正转账幻觉 👇
-            let transferMatch = action.content.match(/\[转账[：:]?\s*(\d+(\.\d+)?)元?[，,]\s*备注[：:]?\s*(.*?)\]/);
-            if (!transferMatch) {
-                transferMatch = action.content.match(/\[转账[：:]?\s*(\d+(\.\d+)?)元?[，,]\s*备注[：:]?\s*(.*?)[，,]\s*状态/);
-            }
-            if (transferMatch) {
-                action.type = 'transfer';
-                action.amount = parseFloat(transferMatch[1]);
-                action.note = transferMatch[3].trim();
-                action.content = '转账';
-            }
-            // 👆 纠正结束 👆
         }
         // 👆 纠正结束 👆
 
