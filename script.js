@@ -331,39 +331,33 @@ window.onload = async function() {
         }
     });
 
-// iOS / PWA 全屏与键盘自适应最终版 (完美解决白边与遮挡)
+// iOS / PWA 全屏与键盘自适应最终版
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
     
     if (window.visualViewport) {
-        const viewportHeight = window.visualViewport.height;
-        const windowHeight = window.innerHeight;
+        // 【核心修复】：判断键盘是否弹起。如果高度差大于 150，说明键盘弹起了
+        const isKeyboardOpen = (window.innerHeight - window.visualViewport.height) > 150;
         
-        // 计算键盘真实高度
-        let keyboardHeight = windowHeight - viewportHeight;
-        if (keyboardHeight < 50) keyboardHeight = 0; // 忽略微小变化
-        
-        // 核心1：外层容器永远保持 100% 物理高度，绝不缩水，彻底消灭白边！
-        docStyle.setProperty('--app-height', '100%');
-        
-        // 核心2：将键盘高度传递给 CSS，用于把输入框顶上来
-        docStyle.setProperty('--keyboard-height', `${keyboardHeight}px`);
-        
-        // 核心3：添加标志位，用于取消键盘弹起时的底部安全区
-        if (keyboardHeight > 0) {
-            document.body.classList.add('keyboard-open');
+        if (isKeyboardOpen) {
+            // 键盘弹起时，严格使用 visualViewport.height，防止输入框被遮挡
+            docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
         } else {
-            document.body.classList.remove('keyboard-open');
+            // 键盘收起时，强制使用 100dvh，彻底抹杀 visualViewport 带来的底部白边误差！
+            docStyle.setProperty('--app-height', `100dvh`);
         }
         
-        // 强制阻止 iOS 默认的页面整体上推，保持背景不动
+        // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
         window.scrollTo(0, 0);
         document.body.scrollTop = 0;
     } else {
-        docStyle.setProperty('--app-height', '100%');
-        docStyle.setProperty('--keyboard-height', '0px');
-        document.body.classList.remove('keyboard-open');
+        // 降级方案
+        docStyle.setProperty('--app-height', `100dvh`);
     }
+    
+    // 统一输入栏高度变量，给微信聊天滚动区预留空间
+    docStyle.setProperty('--wc-input-height', '64px');
+    docStyle.setProperty('--keyboard-offset', '0px');
 }
 
 // 监听可视区域变化（键盘弹出/收起）
@@ -390,7 +384,7 @@ if (window.visualViewport) {
     window.addEventListener('resize', updateAppViewportVars);
 }
 
-// 监听输入框失去焦点（键盘收起），强制重置页面位置
+// 【新增杀招】：监听输入框失去焦点（键盘收起），强制重置页面位置，防止页面卡在半空中漏出白边
 document.addEventListener('focusout', () => {
     setTimeout(() => {
         window.scrollTo(0, 0);
@@ -2849,6 +2843,7 @@ const wcState = {
     currentTab: 'chat',
     characters: [],
     chats: {}, 
+    chatDisplayCount: 100, // 新增：控制聊天页面显示的消息条数
     moments: [],
     user: { name: 'User', avatar: '', cover: '', persona: '' },
     wallet: { balance: 0.00, transactions: [], password: '123456' },
@@ -3305,6 +3300,7 @@ function updateChatTopBarStatus(char) {
 // --- WeChat Chat Logic ---
 function wcOpenChat(charId) {
     wcState.activeChatId = charId;
+    wcState.chatDisplayCount = 100; // 新增：每次打开聊天重置显示条数
     sessionApiCallCount = 0; 
     
     if (wcState.unreadCounts[charId]) {
@@ -3433,16 +3429,42 @@ function wcGenerateTimeGapPrompt(msgs, referenceTime = Date.now()) {
     return prompt;
 }
 
-function wcRenderMessages(charId) {
+function wcRenderMessages(charId, preserveScroll = false) {
     const container = document.getElementById('wc-chat-messages');
     const anchor = document.getElementById('wc-chat-scroll-anchor');
+    
+    // 记录旧的滚动高度，用于加载更多后保持位置
+    const oldScrollHeight = container.scrollHeight;
+    const oldScrollTop = container.scrollTop;
+
     container.innerHTML = '';
     container.appendChild(anchor);
 
-    const msgs = wcState.chats[charId] || [];
+    const allMsgs = wcState.chats[charId] || [];
     const char = wcState.characters.find(c => c.id === charId);
     
     if (!char) return;
+
+    // 分页逻辑：只截取最后 N 条消息
+    if (!wcState.chatDisplayCount) wcState.chatDisplayCount = 100;
+    const displayCount = wcState.chatDisplayCount;
+    const msgs = allMsgs.slice(-displayCount);
+
+    // 如果总消息数大于当前显示数，在顶部添加“加载更多”按钮
+    if (allMsgs.length > displayCount) {
+        const loadMoreDiv = document.createElement('div');
+        loadMoreDiv.style.textAlign = 'center';
+        loadMoreDiv.style.padding = '15px 0';
+        loadMoreDiv.style.color = '#007AFF';
+        loadMoreDiv.style.fontSize = '13px';
+        loadMoreDiv.style.cursor = 'pointer';
+        loadMoreDiv.innerText = '点击加载更多消息';
+        loadMoreDiv.onclick = () => {
+            wcState.chatDisplayCount += 100;
+            wcRenderMessages(charId, true); // 传入 true 保持滚动位置
+        };
+        container.insertBefore(loadMoreDiv, anchor);
+    }
 
     let userAvatar = wcState.user.avatar;
     if (char.chatConfig && char.chatConfig.userAvatar) {
@@ -3801,6 +3823,13 @@ function wcRenderMessages(charId) {
 
         container.insertBefore(row, anchor);
     });
+
+    // 恢复滚动位置 (仅在点击加载更多时触发)
+    if (preserveScroll) {
+        requestAnimationFrame(() => {
+            container.scrollTop = container.scrollHeight - oldScrollHeight + oldScrollTop;
+        });
+    }
 }
 // ==========================================
 // 新增：高级文字图片描述卡片逻辑
