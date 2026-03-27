@@ -4354,16 +4354,16 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
    {"type":"text", "content":"完整的一句话或一段话。", "quote":"(可选)如果你想针对性地回复对方的某句话，可以在这里填入你要引用的内容，例如：User: 吃饭了吗"}
 2. **表情包**
    {"type":"sticker", "content":"表情包名称"}
-3. **更换头像 (情头互动)**
+3. **转账/发红包** (按需使用)
+   如果你想给User转账、发红包、给零花钱时，
+   {"type":"transfer", "amount": 金额, "note": "转账备注"}
+4. **更换头像 (情头互动)**
    如果你收到了用户发的图片，且用户明确表示这是“情头”、“头像”或者语境非常甜蜜合适，你可以决定更换自己的头像。
    {"type":"change_avatar", "content":"图片ID"} 
    (注意：如果你决定换头像，必须在content中填写你想使用的那张图片的【图片ID】。图片ID会在聊天记录的[发送了一张图片, 图片ID: xxx]中提供。请根据画面内容精准选择对应的ID！)
-4. **发送照片/图片** (按需使用)
+5. **发送照片/图片** (按需使用)
    如果你想给User发照片，必须严格使用以下格式，并在后面写上具体的画面描述：
    {"type":"text", "content":"[图片描述] (这里写具体的画面描述，必须根据当前聊天情境和你的状态现编，绝对不要照抄本示例！)"}
-5. **主动转账/发红包** (按需使用)
-   如果你想给User转账、发红包、给零花钱时，**绝对禁止**在文本里写“[转账: xxx元]”或仅仅口头说“转给你了”！你**必须且只能**在 JSON 数组中添加一个独立的 transfer 对象！
-   {"type":"transfer", "amount": 520, "note": "转账备注"}
 6. **其他指令** (按需使用)
    {"type":"voice", "content":"语音内容"}
    如果收到【恋人空间邀请】，同意请回复：{"type":"invite_accept", "content":"符合你人设的同意话语"}；拒绝请回复：{"type":"invite_reject", "content":"符合你人设的拒绝话语"}
@@ -4857,10 +4857,10 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
     let finalActions = [];
     for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
-        if (!action || !action.content) continue;
+        if (!action) continue; // 🚨 修复：去掉了 !action.content 的粗暴拦截
         
         // 相邻去重 (防止 A, A)
-        if (finalActions.length > 0) {
+        if (finalActions.length > 0 && action.content !== undefined) {
             const lastAction = finalActions[finalActions.length - 1];
             if (lastAction.type === action.type && lastAction.content === action.content) {
                 continue;
@@ -4875,7 +4875,7 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         const half = len / 2;
         let isRepeat = true;
         for (let i = 0; i < half; i++) {
-            if (finalActions[i].content !== finalActions[i + half].content) {
+            if (finalActions[i].content === undefined || finalActions[i].content !== finalActions[i + half].content || finalActions[i].type !== finalActions[i + half].type) {
                 isRepeat = false;
                 break;
             }
@@ -4891,7 +4891,7 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         const third = len3 / 3;
         let isRepeat = true;
         for (let i = 0; i < third; i++) {
-            if (finalActions[i].content !== finalActions[i + third].content || finalActions[i].content !== finalActions[i + 2 * third].content) {
+            if (finalActions[i].content === undefined || finalActions[i].content !== finalActions[i + third].content || finalActions[i].content !== finalActions[i + 2 * third].content || finalActions[i].type !== finalActions[i + third].type) {
                 isRepeat = false;
                 break;
             }
