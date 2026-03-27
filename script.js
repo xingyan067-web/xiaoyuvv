@@ -1,3 +1,29 @@
+// ==========================================
+// 新增：iOS Standalone (全屏) 模式检测与防缩放
+// ==========================================
+function initStandaloneMode() {
+    // 1. 检测是否在添加到主屏幕的全屏模式下运行
+    const isIosStandalone = window.navigator.standalone === true;
+    const isMatchMediaStandalone = window.matchMedia('(display-mode: standalone)').matches;
+
+    if (isIosStandalone || isMatchMediaStandalone) {
+        // 给 body 添加 class，方便 CSS 单独做刘海屏适配
+        document.body.classList.add('ios-standalone');
+        console.log("✅ 当前运行在 Standalone 全屏模式");
+    } else {
+        console.log("⚠️ 当前运行在普通浏览器模式，请添加到主屏幕体验全屏");
+    }
+
+    // 2. 彻底禁止双指缩放 (Pinch-to-zoom)
+    document.addEventListener('touchmove', function(event) {
+        if (event.touches.length > 1) {
+            event.preventDefault();
+        }
+    }, { passive: false });
+}
+
+// 立即执行检测
+initStandaloneMode();
 
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
@@ -232,9 +258,10 @@ const idb = {
         return new Promise((resolve, reject) => {
             const tx = this.db.transaction(this.storeName, 'readwrite');
             const store = tx.objectStore(this.storeName);
-            const req = store.put(value, key);
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
+            store.put(value, key);
+            // 【iOS 核心修复】：必须监听 tx.oncomplete 确保数据物理写入磁盘
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
         });
     },
 
@@ -243,9 +270,10 @@ const idb = {
         return new Promise((resolve, reject) => {
             const tx = this.db.transaction(this.storeName, 'readwrite');
             const store = tx.objectStore(this.storeName);
-            const req = store.clear();
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
+            store.clear();
+            // 【iOS 核心修复】
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
         });
     },
     
@@ -267,15 +295,18 @@ window.onload = async function() {
     checkAndShowActivation();    
     initGrid(); 
     await loadAllData(); // 加载 IndexedDB 数据 (含布局恢复)
-    startClock();
-    initBattery(); // 初始化电量
-    initWeather(); // 初始化天气
-
+    
+    // 【修复】：彻底移除旧版小组件的时间、电量、天气初始化，防止报错中断程序！
+    
     initNewPhoneFeatures(); // 初始化新增的收藏和浏览器功能UI
 
     // 初始化 WeChat DB
     try {
-        await wcDb.init();
+        try {
+            await wcDb.init();
+        } catch (e) {
+            console.error("WeChat DB Init failed", e);
+        }
         await wcLoadData();
         wcRenderAll();
         wcSwitchTab('chat');
@@ -290,7 +321,7 @@ window.onload = async function() {
         await musicInitState();
         
     } catch (e) {
-        console.error("WeChat DB Init failed", e);
+        console.error("WeChat Data bootstrap failed", e);
     }
     
     // WeChat 全局点击隐藏菜单
@@ -304,14 +335,14 @@ window.onload = async function() {
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
     
-    // 检查是否为 PWA 桌面模式 (添加到桌面后打开)
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    
-    if (isStandalone) {
-        // PWA 模式下，强制锁定 100vh，防止键盘弹出时整个页面被压缩导致漏出黑白底色
-        docStyle.setProperty('--app-height', `100vh`);
+    if (window.visualViewport) {
+        // 动态获取真实可视高度（键盘弹起时会变小），完美解决键盘遮挡问题
+        docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
+        // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
     } else {
-        // 浏览器模式下，使用 window.innerHeight 应对 Safari 底部地址栏的收缩
+        // 降级方案
         docStyle.setProperty('--app-height', `${window.innerHeight}px`);
     }
     
@@ -320,8 +351,29 @@ function updateAppViewportVars() {
     docStyle.setProperty('--keyboard-offset', '0px');
 }
 
-// 监听窗口大小变化（处理屏幕旋转或浏览器地址栏收缩）
-window.addEventListener('resize', updateAppViewportVars);
+// 监听可视区域变化（键盘弹出/收起）
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+        updateAppViewportVars();
+        // 键盘弹起导致高度变化时，稍微延迟一下让各个聊天列表自动滚动到底部，防止最新消息被挡住
+        setTimeout(() => {
+            if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
+            const simHistory = document.getElementById('wc-sim-chat-history');
+            if (simHistory) simHistory.scrollTop = simHistory.scrollHeight;
+            const pmHistory = document.getElementById('forum-pm-chat-history');
+            if (pmHistory) pmHistory.scrollTop = pmHistory.scrollHeight;
+            const dreamHistory = document.getElementById('dream-chat-history');
+            if (dreamHistory) dreamHistory.scrollTop = dreamHistory.scrollHeight;
+        }, 100);
+    });
+    // 防止 iOS 键盘弹出时整个页面被系统强行往上推
+    window.visualViewport.addEventListener('scroll', () => {
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+    });
+} else {
+    window.addEventListener('resize', updateAppViewportVars);
+}
 // 初始化调用一次
 updateAppViewportVars();
 
@@ -365,6 +417,16 @@ updateAppViewportVars();
     // 初始化通知与后台 UI
     if (typeof updateNotifUI === 'function') {
         updateNotifUI();
+    }
+    
+    // 修复：世界书详细设定输入框被键盘遮挡的问题，聚焦时自动滚动到中间
+    const wbDescInput = document.getElementById('wbDescInput');
+    if (wbDescInput) {
+        wbDescInput.addEventListener('focus', function() {
+            setTimeout(() => {
+                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300); // 延迟等待键盘完全弹出
+        });
     }
          
     // 延迟 1.5 秒检查并弹出系统更新日志
@@ -441,15 +503,28 @@ function initNewPhoneFeatures() {
 // --- 数据加载逻辑 (异步) ---
 async function loadAllData() {
     try {
-        // 1. 加载小组件数据
+        // 1. 加载新版小组件数据
         const widgetData = await idb.get('ios_theme_widget') || {};
-        if (widgetData.bg) document.getElementById('mainWidget').style.backgroundImage = widgetData.bg;
-        if (widgetData.avatar) {
-            const av = document.getElementById('widgetAvatar');
-            av.style.backgroundImage = widgetData.avatar;
-            av.style.backgroundSize = 'cover';
-        }
-        if (widgetData.text) document.getElementById('widgetText').innerText = widgetData.text;
+        const elements = ['label1', 'label2', 'bubble1', 'bubble2', 'bubble3'];
+        elements.forEach(id => {
+            if (widgetData[id]) {
+                const el = document.getElementById(id);
+                if (el) el.innerText = widgetData[id];
+            }
+        });
+        
+        // 【已删除读取旧歌名和歌词的代码，强制使用 HTML 默认值】
+
+        const images = ['avatar1', 'avatar2', 'picture1'];
+        images.forEach(id => {
+            if (widgetData[id]) {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.style.backgroundImage = `url('${widgetData[id]}')`;
+                    el.innerHTML = ''; // 清除占位文字
+                }
+            }
+        });
 
         // 2. 加载 Apple ID 数据
         const appleData = await idb.get('ios_theme_apple') || {};
@@ -509,28 +584,50 @@ async function loadAllData() {
         wallpaperPresets = presets.wallpapers || [];
         apiPresets = presets.apis || [];
 
-        // 7. 加载 API 设置
-        const apiConfig = await idb.get('ios_theme_api_config') || {};
-        if (apiConfig.baseUrl) document.getElementById('apiBaseUrl').value = apiConfig.baseUrl;
-        if (apiConfig.key) document.getElementById('apiKey').value = apiConfig.key;
-        if (apiConfig.temp) {
-            document.getElementById('tempSlider').value = apiConfig.temp;
-            document.getElementById('tempDisplay').innerText = apiConfig.temp;
+        // 7. 加载 API 设置 (双路适配)
+        const fullApiConfig = await idb.get('ios_theme_api_config') || {};
+        
+        // 兼容旧版单路数据
+        const primary = fullApiConfig.primary || { baseUrl: fullApiConfig.baseUrl, key: fullApiConfig.key, model: fullApiConfig.model, temp: fullApiConfig.temp };
+        const secondary = fullApiConfig.secondary || {};
+        const routes = fullApiConfig.routes || { phone: true, npc: false, forum: true };
+
+        // 填充主 API
+        if (primary.baseUrl) document.getElementById('apiBaseUrl').value = primary.baseUrl;
+        if (primary.key) document.getElementById('apiKey').value = primary.key;
+        if (primary.temp) {
+            document.getElementById('tempSlider').value = primary.temp;
+            document.getElementById('tempDisplay').innerText = primary.temp;
         }
-        if (apiConfig.limit) {
-            const limitEl = document.getElementById('apiMaxCallLimit');
-            if (limitEl) limitEl.value = apiConfig.limit;
-        }
-        if (apiConfig.model) {
+        if (primary.model) {
              const select = document.getElementById('modelSelect');
              if (select.options.length <= 1) {
                  const opt = document.createElement('option');
-                 opt.value = apiConfig.model;
-                 opt.innerText = apiConfig.model + " (已保存)";
-                 opt.selected = true;
+                 opt.value = primary.model; opt.innerText = primary.model + " (已保存)"; opt.selected = true;
                  select.appendChild(opt);
              }
         }
+
+        // 填充副 API
+        if (secondary.baseUrl) document.getElementById('secApiBaseUrl').value = secondary.baseUrl;
+        if (secondary.key) document.getElementById('secApiKey').value = secondary.key;
+        if (secondary.temp) {
+            document.getElementById('secTempSlider').value = secondary.temp;
+            document.getElementById('secTempDisplay').innerText = secondary.temp;
+        }
+        if (secondary.model) {
+             const select = document.getElementById('secModelSelect');
+             if (select.options.length <= 1) {
+                 const opt = document.createElement('option');
+                 opt.value = secondary.model; opt.innerText = secondary.model + " (已保存)"; opt.selected = true;
+                 select.appendChild(opt);
+             }
+        }
+
+        // 填充路由开关
+        document.getElementById('route-phone').checked = routes.phone;
+        document.getElementById('route-npc').checked = routes.npc;
+        document.getElementById('route-forum').checked = routes.forum;
 
         // 渲染列表
         renderAppEditors();
@@ -572,13 +669,53 @@ async function saveGridLayout() {
 }
 
 // --- 数据保存逻辑 ---
-async function saveWidgetData() {
+// --- 新版小组件保存逻辑 ---
+async function saveNewWidgetData() {
+    // 【修复】：增加安全检查，如果当前页面没有小组件元素，直接跳过保存，防止报错清空数据
+    const label1El = document.getElementById('label1');
+    if (!label1El) return; 
+
     const data = {
-        bg: document.getElementById('mainWidget').style.backgroundImage,
-        avatar: document.getElementById('widgetAvatar').style.backgroundImage,
-        text: document.getElementById('widgetText').innerText
+        label1: label1El.innerText,
+        label2: document.getElementById('label2') ? document.getElementById('label2').innerText : '',
+        // 【已删除 widgetSong 和 widgetLyric 的保存逻辑】
+        bubble1: document.getElementById('bubble1') ? document.getElementById('bubble1').innerText : '',
+        bubble2: document.getElementById('bubble2') ? document.getElementById('bubble2').innerText : '',
+        bubble3: document.getElementById('bubble3') ? document.getElementById('bubble3').innerText : '',
+        
+        avatar1: document.getElementById('avatar1') ? document.getElementById('avatar1').style.backgroundImage.slice(5, -2).replace(/"/g, "") : '',
+        avatar2: document.getElementById('avatar2') ? document.getElementById('avatar2').style.backgroundImage.slice(5, -2).replace(/"/g, "") : '',
+        picture1: document.getElementById('picture1') ? document.getElementById('picture1').style.backgroundImage.slice(5, -2).replace(/"/g, "") : ''
     };
     await idb.set('ios_theme_widget', data);
+}
+
+// --- 新版小组件文字编辑逻辑 (弹窗输入，绝对有效) ---
+function editNewWidgetText(elementId, title) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    openTextEditModal(title, "请输入新的文字内容", el.innerText, (val) => {
+        if (val !== null && val.trim() !== "") {
+            el.innerText = val;
+            saveNewWidgetData();
+        }
+    });
+}
+
+// --- 新版小组件图片上传逻辑 ---
+function handleNewWidgetUpload(input, targetId) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const target = document.getElementById(targetId);
+            target.style.backgroundImage = `url('${e.target.result}')`;
+            target.innerHTML = ''; // 清除占位文字
+            saveNewWidgetData(); // 上传完自动保存
+        };
+        reader.readAsDataURL(file);
+    }
+    input.value = ''; // 清空 input
 }
 
 async function saveAppleData() {
@@ -883,57 +1020,82 @@ function importThemeOnly(input) {
 
 // --- 全局备份 (包含 WeChat) ---
 async function exportAllData() {
-    const data = {};
-    
-    // 1. 导出 Theme Studio 数据
-    const keys = await idb.getAllKeys();
-    for (let key of keys) {
-        if (key.startsWith('ios_theme_')) {
-            data[key] = await idb.get(key);
+    try {
+        const data = {};
+        
+        // 1. 导出 Theme Studio 数据
+        const keys = await idb.getAllKeys();
+        for (let key of keys) {
+            if (key.startsWith('ios_theme_')) {
+                data[key] = await idb.get(key);
+            }
         }
+
+        // 2. 导出 WeChat 数据
+        const wechatData = {};
+        if (wcDb.instance) {
+            const persistentCharactersSnapshot = await wcReadCharactersPersistentSnapshot();
+            const dbCharacters = await wcDb.getAll('characters');
+            const charsUpdatedAt = await wcDb.get('kv_store', 'characters_updated_at');
+            const shouldUseSnapshotCharacters = persistentCharactersSnapshot.characters.length > 0 && (
+                !Array.isArray(dbCharacters) || dbCharacters.length === 0 ||
+                persistentCharactersSnapshot.updatedAt >= (Number(charsUpdatedAt) || 0) ||
+                persistentCharactersSnapshot.characters.length > dbCharacters.length
+            );
+
+            wechatData.user = await wcDb.get('kv_store', 'user');
+            wechatData.wallet = await wcDb.get('kv_store', 'wallet');
+            wechatData.stickerCategories = await wcDb.get('kv_store', 'sticker_categories');
+            wechatData.cssPresets = await wcDb.get('kv_store', 'css_presets');
+            wechatData.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets');
+            wechatData.phonePresets = await wcDb.get('kv_store', 'phone_presets');
+            wechatData.shopData = await wcDb.get('kv_store', 'shop_data');
+            wechatData.characters = shouldUseSnapshotCharacters ? persistentCharactersSnapshot.characters : (dbCharacters || []);
+            wechatData.masks = await wcDb.getAll('masks');
+            wechatData.moments = await wcDb.getAll('moments');
+            
+            const allChats = await wcDb.getAll('chats');
+            const chatsObj = {};
+            if (allChats) {
+                allChats.forEach(item => {
+                    chatsObj[item.charId] = item.messages;
+                });
+            }
+            wechatData.chats = chatsObj;
+        }
+        
+        data['wechat_backup'] = wechatData;
+
+        // 3. 导出恋人空间数据
+        data['ls_data'] = await idb.get('ls_data');
+
+        // 4. 导出音乐数据 (APP3)
+        data['ins_music_data'] = await idb.get('ins_music_data');
+
+        // 5. 导出梦境数据
+        data['dream_space_data'] = await idb.get('dream_space_data');
+        // 6. 导出论坛数据
+        data['ins_forum_data'] = await idb.get('ins_forum_data');
+
+        const exportObj = { signature: 'ios_theme_studio_full_backup', timestamp: Date.now(), data: data };
+        
+        let jsonString;
+        try {
+            jsonString = JSON.stringify(exportObj);
+        } catch (err) {
+            throw new Error("数据量过大，请尝试清理部分聊天记录或图片后再备份。");
+        }
+
+        const blob = new Blob([jsonString], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `full_backup_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        
+    } catch (error) {
+        console.error("全局备份失败:", error);
+        alert("全局备份失败: " + error.message);
     }
-
-    // 2. 导出 WeChat 数据
-    const wechatData = {};
-    wechatData.user = await wcDb.get('kv_store', 'user');
-    wechatData.wallet = await wcDb.get('kv_store', 'wallet');
-    wechatData.stickerCategories = await wcDb.get('kv_store', 'sticker_categories');
-    wechatData.cssPresets = await wcDb.get('kv_store', 'css_presets');
-    wechatData.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets'); // 新增
-    wechatData.phonePresets = await wcDb.get('kv_store', 'phone_presets'); // 新增
-    wechatData.shopData = await wcDb.get('kv_store', 'shop_data'); // 新增购物数据
-    wechatData.characters = await wcDb.getAll('characters');
-    wechatData.masks = await wcDb.getAll('masks');
-    wechatData.moments = await wcDb.getAll('moments');
-    
-    const allChats = await wcDb.getAll('chats');
-    const chatsObj = {};
-    if (allChats) {
-        allChats.forEach(item => {
-            chatsObj[item.charId] = item.messages;
-        });
-    }
-    wechatData.chats = chatsObj;
-    
-    data['wechat_backup'] = wechatData;
-
-    // 3. 导出恋人空间数据
-    data['ls_data'] = await idb.get('ls_data');
-
-    // 4. 导出音乐数据 (APP3)
-    data['ins_music_data'] = await idb.get('ins_music_data');
-
-    // 5. 导出梦境数据
-    data['dream_space_data'] = await idb.get('dream_space_data');
-    // 6. 导出论坛数据
-    data['ins_forum_data'] = await idb.get('ins_forum_data');
-
-    const exportObj = { signature: 'ios_theme_studio_full_backup', timestamp: Date.now(), data: data };
-    const blob = new Blob([JSON.stringify(exportObj)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `full_backup_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 function importAllData(input) {
@@ -961,6 +1123,9 @@ function importAllData(input) {
                 // 2. 恢复 WeChat 数据 (如果存在)
                 if (data['wechat_backup']) {
                     const wd = data['wechat_backup'];
+                    const importedCharacters = Array.isArray(wd.characters) ? wd.characters : [];
+                    const charactersUpdatedAt = Date.now();
+
                     if (wd.user) await wcDb.put('kv_store', wd.user, 'user');
                     if (wd.wallet) await wcDb.put('kv_store', wd.wallet, 'wallet');
                     if (wd.stickerCategories) await wcDb.put('kv_store', wd.stickerCategories, 'sticker_categories');
@@ -972,18 +1137,22 @@ function importAllData(input) {
                     // 清空旧表并写入新数据
                     const stores = ['characters', 'masks', 'moments', 'chats'];
                     for (const store of stores) {
-                        const tx = wcDb.instance.transaction([store], 'readwrite');
-                        await tx.objectStore(store).clear();
+                        await wcClearStore(store);
                     }
 
-                    if (wd.characters) for (const c of wd.characters) await wcDb.put('characters', c);
+                    for (const c of importedCharacters) await wcDb.put('characters', c);
                     if (wd.masks) for (const m of wd.masks) await wcDb.put('masks', m);                 
                     if (wd.moments) for (const m of wd.moments) await wcDb.put('moments', m);
                     if (wd.chats) {
                         for (const charId in wd.chats) {
-                            await wcDb.put('chats', { charId: parseInt(charId), messages: wd.chats[charId] });
+                            const parsedId = parseInt(charId);
+                            if (!isNaN(parsedId)) {
+                                await wcDb.put('chats', { charId: parsedId, messages: wd.chats[charId] }).catch(e => console.warn(e));
+                            }
                         }
                     }
+
+                    await wcSyncCharactersSnapshotFromList(importedCharacters, charactersUpdatedAt);
                 }
 
                 // 3. 恢复恋人空间数据
@@ -1111,9 +1280,11 @@ function clearAllData() {
             if (typeof wcDb !== 'undefined' && wcDb.instance) {
                 const stores = ['kv_store', 'characters', 'chats', 'moments', 'masks'];
                 for (const store of stores) {
-                    const tx = wcDb.instance.transaction([store], 'readwrite');
-                    tx.objectStore(store).clear();
+                    await wcClearStore(store);
                 }
+            }
+            if (typeof wcClearCharactersPersistentSnapshot === 'function') {
+                await wcClearCharactersPersistentSnapshot();
             }
             // 【V2修改点：保留新的激活状态】
             const isActivated = localStorage.getItem('ios_theme_activation_v2_fallback');
@@ -1131,73 +1302,6 @@ function clearAllData() {
         }
     };
 }
-// --- 时钟与小组件 ---
-function startClock() {
-    function update() {
-        const now = new Date();
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        const month = now.getMonth() + 1;
-        const day = now.getDate();
-                
-        document.getElementById('widgetTime').innerText = `${hours}:${minutes}`;
-        document.getElementById('widgetDate').innerText = `${month}月${day}日`;
-    }
-    update();
-    setInterval(update, 1000);
-}
-
-// 初始化电量
-function initBattery() {
-    if ('getBattery' in navigator) {
-        navigator.getBattery().then(function(battery) {
-            updateBatteryUI(battery);
-            battery.addEventListener('levelchange', function() {
-                updateBatteryUI(battery);
-            });
-        });
-    } else {
-        document.getElementById('batteryLevel').innerText = "100%";
-    }
-}
-
-function updateBatteryUI(battery) {
-    const level = Math.round(battery.level * 100);
-    document.getElementById('batteryLevel').innerText = `${level}%`;
-}
-
-// 初始化天气 (使用 Open-Meteo 免费 API)
-function initWeather() {
-    // 默认值
-    const updateWeatherUI = (temp, code) => {
-        document.getElementById('weatherTemp').innerText = `${Math.round(temp)}°C`;
-        // SVG 图标逻辑在 HTML 中已静态定义，这里只更新温度
-        // 如果需要动态切换 SVG，可以在这里操作 DOM，目前保持默认太阳图标
-    };
-
-    // 尝试获取位置
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(async (position) => {
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            try {
-                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
-                const data = await res.json();
-                if (data.current_weather) {
-                    updateWeatherUI(data.current_weather.temperature, data.current_weather.weathercode);
-                }
-            } catch (e) {
-                console.log("Weather fetch failed", e);
-            }
-        }, (err) => {
-            console.log("Geolocation denied/failed", err);
-            updateWeatherUI(25, 0);
-        });
-    } else {
-        updateWeatherUI(25, 0);
-    }
-}
-
 function triggerWidgetBgUpload() { document.getElementById('widgetBgInput').click(); }
 function handleWidgetBgUpload(input) {
     const file = input.files[0];
@@ -1294,17 +1398,22 @@ function initGrid() {
     const grid = document.getElementById('homeGrid');
     if (!grid) return; 
 
-    for (let i = 8; i < 28; i++) {
+    for (let i = 12; i < 28; i++) {
         const cell = document.createElement('div');
         cell.className = 'grid-cell';
         cell.dataset.index = i;
         grid.appendChild(cell);
     }
+    // 👇 核心修改：注入顶级质感【负空间实心】SVG 图标
     const appsData = [
-        { id: 'app-0', iconId: 'icon-0', nameId: 'name-0', name: 'App 1' },
-        { id: 'app-1', iconId: 'icon-1', nameId: 'name-1', name: 'App 2' },
-        { id: 'app-2', iconId: 'icon-2', nameId: 'name-2', name: 'App 3' },
-        { id: 'app-3', iconId: 'icon-3', nameId: 'name-3', name: 'App 4' }
+        // Chat: 实心气泡 + 内部镂空省略号
+        { id: 'app-0', iconId: 'icon-0', nameId: 'name-0', name: 'Chat', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 5.92 2 10.75c0 2.7 1.56 5.08 3.96 6.54L4.5 22l4.66-2.33A11.1 11.1 0 0 0 12 19.5c5.52 0 10-3.92 10-8.75S17.52 2 12 2zm-3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>' },
+        // Space: 实心爱心 + 内部镂空闪耀星光
+        { id: 'app-1', iconId: 'icon-1', nameId: 'name-1', name: 'Space', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/><path fill="#FFF" d="M16 5l1 2 2 1-2 1-1 2-1-2-2-1 2-1z"/></svg>' },
+        // Music: 实心黑胶唱片 + 内部精细镂空
+        { id: 'app-2', iconId: 'icon-2', nameId: 'name-2', name: 'Music', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5z"/><circle cx="12" cy="12" r="1.5" fill="#FFF"/></svg>' },
+        // Forum: 实心星球/社区 + 内部镂空纹理
+        { id: 'app-3', iconId: 'icon-3', nameId: 'name-3', name: 'Forum', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>' }
     ];
     const cells = Array.from(grid.children).slice(1); 
     appsData.forEach((data, index) => {
@@ -1312,7 +1421,8 @@ function initGrid() {
             const appDiv = document.createElement('div');
             appDiv.className = 'app-item';
             appDiv.id = data.id;
-            appDiv.innerHTML = `<div class="app-icon" id="${data.iconId}"></div><div class="app-name" id="${data.nameId}">${data.name}</div>`;
+            // 👇 核心修改：把 data.svg 塞进 app-icon 里面
+            appDiv.innerHTML = `<div class="app-icon" id="${data.iconId}">${data.svg}</div><div class="app-name" id="${data.nameId}">${data.name}</div>`;
             addDragListeners(appDiv);
             
             // App 点击事件 (受编辑模式控制)
@@ -1562,54 +1672,132 @@ function renderGroupView() {
     const wrapper = document.createElement('div');
     wrapper.className = 'ins-group-container';
 
-    // 胶带颜色库
-    const tapeColors = ['rgba(255,200,200,0.6)', 'rgba(200,255,200,0.6)', 'rgba(200,200,255,0.6)', 'rgba(240,240,200,0.7)'];
+    // 韩系/日系低饱和度日记本颜色库
+    const notebookColors = [
+        { bg: '#FDFBF7', text: '#4A413E', border: '#EAEAEA' }, // 奶白
+        { bg: '#F4E8E8', text: '#5D4A45', border: '#EADCDC' }, // 灰粉
+        { bg: '#E8EEF2', text: '#4A5568', border: '#DCE4EA' }, // 雾霾蓝
+        { bg: '#E6EBE0', text: '#4A554A', border: '#DCE0D6' }, // 鼠尾草绿
+        { bg: '#F0EBE1', text: '#5D534A', border: '#E6DFD3' }, // 奶茶
+        { bg: '#EBE6F0', text: '#4A415D', border: '#DFD8E6' }  // 浅紫
+    ];
 
-    worldbookGroups.forEach(group => {
+    worldbookGroups.forEach((group, index) => {
         const groupEntries = worldbookEntries.filter(e => e.type === group);
         
-        // 随机旋转角度，制造错落感
-        const rot = (Math.random() * 6 - 3).toFixed(1); 
-        const tapeColor = tapeColors[Math.floor(Math.random() * tapeColors.length)];
-        const tapeRot = (Math.random() * 10 - 5).toFixed(1);
+        // 顺序循环获取颜色
+        const colorTheme = notebookColors[index % notebookColors.length];
 
         const card = document.createElement('div');
         card.className = 'ins-group-card';
-        card.style.transform = `rotate(${rot}deg)`;
+        card.style.backgroundColor = colorTheme.bg;
+        card.style.borderColor = colorTheme.border;
         card.onclick = () => openGroupDetailModal(group);
 
         card.innerHTML = `
-            <div class="ins-tape" style="background: ${tapeColor}; transform: translateX(-50%) rotate(${tapeRot}deg);"></div>
-            <div class="ins-group-title">${group}</div>
-            <div class="ins-group-count">${groupEntries.length} 个条目</div>
-            <div class="ins-group-delete" onclick="event.stopPropagation(); deleteGroup('${group}')">×</div>
+            <div class="ins-notebook-binding"></div>
+            <div class="ins-notebook-label" style="background: ${colorTheme.text};"></div>
+            <div class="ins-group-title" style="color: ${colorTheme.text}">${group}</div>
+            <div class="ins-group-count" style="color: ${colorTheme.text}; opacity: 0.6;">${groupEntries.length} entries</div>
+            <div class="ins-group-delete" onclick="event.stopPropagation(); deleteGroup('${group}')">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </div>
         `;
         
         wrapper.appendChild(card);
     });
 
     container.appendChild(wrapper);
-}
+} // 👈 宝宝，就是少了这个大括号导致报错！
+    // --- 补回丢失的分组详情弹窗逻辑 ---
+// --- 日记本目录分页全局变量 ---
+let currentNotebookEntries = [];
+let currentNotebookPage = 1;
+const NOTEBOOK_ITEMS_PER_PAGE = 9; // 每页显示9条，刚好贴合横线
+
 function openGroupDetailModal(groupName) {
     document.getElementById('wbGroupDetailTitle').innerText = groupName;
-    const container = document.getElementById('wbGroupDetailList');
-    container.innerHTML = '';
     
-    const groupEntries = worldbookEntries.filter(e => e.type === groupName);
-    if (groupEntries.length === 0) {
-        container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">该分组下暂无条目</div>';
-    } else {
-        groupEntries.forEach(entry => {
-            container.appendChild(createEntryElement(entry));
-        });
-    }
+    // 获取该分组下的所有条目
+    currentNotebookEntries = worldbookEntries.filter(e => e.type === groupName);
+    currentNotebookPage = 1; // 重置为第一页
     
-    document.getElementById('worldbookGroupDetailModal').classList.add('open');
+    renderNotebookPage(currentNotebookPage);
+    
+    // 显示弹窗
+    const modal = document.getElementById('worldbookGroupDetailModal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
 }
 
 function closeGroupDetailModal() {
-    document.getElementById('worldbookGroupDetailModal').classList.remove('open');
+    const modal = document.getElementById('worldbookGroupDetailModal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
     renderGroupView(); // 关闭时刷新一下背后的贴纸视图
+}
+
+function renderNotebookPage(page) {
+    const list = document.getElementById('wbGroupDetailList');
+    list.innerHTML = ''; 
+    
+    // 强制重绘以触发 CSS 动画
+    void list.offsetWidth;
+
+    if (currentNotebookEntries.length === 0) {
+        list.innerHTML = '<div style="text-align: center; color: #999; padding-top: 50px; font-style: italic;">该分组下暂无条目</div>';
+        document.getElementById('notebook-page-info').innerText = `Page 1 / 1`;
+        document.getElementById('notebook-prev-btn').disabled = true;
+        document.getElementById('notebook-next-btn').disabled = true;
+        return;
+    }
+
+    const totalPages = Math.ceil(currentNotebookEntries.length / NOTEBOOK_ITEMS_PER_PAGE);
+    const start = (page - 1) * NOTEBOOK_ITEMS_PER_PAGE;
+    const end = start + NOTEBOOK_ITEMS_PER_PAGE;
+    const pageItems = currentNotebookEntries.slice(start, end);
+
+    pageItems.forEach(entry => {
+        const div = document.createElement('div');
+        div.className = 'toc-item';
+        div.onclick = () => {
+            closeGroupDetailModal(); // 点击后先关闭目录
+            setTimeout(() => openWorldbookEditor(entry.id), 300); // 等待动画结束后打开编辑器
+        };
+        div.innerHTML = `
+            <div class="toc-title">${entry.title}</div>
+            <div class="toc-dots"></div>
+            <div class="toc-action">Edit</div>
+        `;
+        list.appendChild(div);
+    });
+
+    // 更新翻页器状态
+    document.getElementById('notebook-page-info').innerText = `Page ${page} / ${totalPages}`;
+    document.getElementById('notebook-prev-btn').disabled = page === 1;
+    document.getElementById('notebook-next-btn').disabled = page === totalPages;
+}
+
+function changeNotebookPage(dir) {
+    const totalPages = Math.ceil(currentNotebookEntries.length / NOTEBOOK_ITEMS_PER_PAGE);
+    currentNotebookPage += dir;
+    if (currentNotebookPage < 1) currentNotebookPage = 1;
+    if (currentNotebookPage > totalPages) currentNotebookPage = totalPages;
+    renderNotebookPage(currentNotebookPage);
+}
+
+
+// (保险起见，如果你连删除分组的函数也误删了，把下面这个也带上)
+function deleteGroup(groupName) {
+    if (confirm(`确定要删除分组 "${groupName}" 吗？\n该分组下的所有条目也将被删除！`)) {
+        worldbookGroups = worldbookGroups.filter(g => g !== groupName);
+        worldbookEntries = worldbookEntries.filter(e => e.type !== groupName);
+        saveWorldbookData();
+        renderGroupView();
+    } else {
+        const items = document.querySelectorAll('.wb-swipe-box');
+        items.forEach(el => el.style.transform = 'translateX(0)');
+    }
 }
 
 function editWorldbookGroup(oldName) {
@@ -1785,7 +1973,7 @@ function saveWorldbookEntry() {
         
         // 如果分组详情弹窗开着，同步刷新它
         const detailModal = document.getElementById('worldbookGroupDetailModal');
-        if (detailModal && detailModal.classList.contains('open')) {
+        if (detailModal && detailModal.classList.contains('active')) {
             const currentGroup = document.getElementById('wbGroupDetailTitle').innerText;
             openGroupDetailModal(currentGroup);
         }
@@ -1804,7 +1992,7 @@ function deleteWorldbookEntry(id) {
         
         // 如果分组详情弹窗开着，同步刷新它
         const detailModal = document.getElementById('worldbookGroupDetailModal');
-        if (detailModal && detailModal.classList.contains('open')) {
+        if (detailModal && detailModal.classList.contains('active')) {
             const currentGroup = document.getElementById('wbGroupDetailTitle').innerText;
             openGroupDetailModal(currentGroup);
         }
@@ -1844,27 +2032,76 @@ function filterWorldbook(keyword) {
     filtered.forEach(entry => container.appendChild(createEntryElement(entry)));
 }
 
-// --- API 设置逻辑 ---
-async function saveApiConfig() {
-    // 修复：增加对 apiMaxCallLimit 的空值检查
-    const limitEl = document.getElementById('apiMaxCallLimit');
-    const config = {
-        baseUrl: document.getElementById('apiBaseUrl').value,
-        key: document.getElementById('apiKey').value,
-        temp: document.getElementById('tempSlider').value,
-        model: document.getElementById('modelSelect').value,
-        limit: limitEl ? (parseInt(limitEl.value) || 0) : 0
-    };
-    await idb.set('ios_theme_api_config', config);
-    alert("API 配置已保存");
+// --- API 设置逻辑 (主副双路 + 额度查询) ---
+let currentApiTab = 'primary'; // 记录当前在哪个 Tab
+
+function switchApiTab(tab) {
+    currentApiTab = tab;
+    document.getElementById('tab-btn-primary').classList.remove('active');
+    document.getElementById('tab-btn-secondary').classList.remove('active');
+    document.getElementById('api-tab-primary').classList.remove('active');
+    document.getElementById('api-tab-secondary').classList.remove('active');
+
+    document.getElementById('tab-btn-' + tab).classList.add('active');
+    document.getElementById('api-tab-' + tab).classList.add('active');
+    
+    // 切换 Tab 时自动刷新一次额度
+    refreshCurrentApiQuota();
 }
 
-async function fetchModels() {
-    const baseUrl = document.getElementById('apiBaseUrl').value;
-    const key = document.getElementById('apiKey').value;
+// 核心：获取当前场景应该使用的 API 配置
+async function getActiveApiConfig(scene = 'chat') {
+    const fullConfig = await idb.get('ios_theme_api_config') || {};
+    const primary = fullConfig.primary || { baseUrl: fullConfig.baseUrl, key: fullConfig.key, model: fullConfig.model, temp: fullConfig.temp }; // 兼容旧数据
+    const secondary = fullConfig.secondary || {};
+    const routes = fullConfig.routes || {};
+
+    let useSecondary = false;
+    if (scene === 'phone' && routes.phone) useSecondary = true;
+    if (scene === 'npc' && routes.npc) useSecondary = true;
+    if (scene === 'forum' && routes.forum) useSecondary = true;
+
+    // 如果该场景开启了副 API，且副 API 填了地址和 Key，就用副 API，否则降级用主 API
+    if (useSecondary && secondary.key && secondary.baseUrl) {
+        return secondary;
+    }
+    return primary;
+}
+
+async function saveApiConfig() {
+    const config = {
+        primary: {
+            baseUrl: document.getElementById('apiBaseUrl').value,
+            key: document.getElementById('apiKey').value,
+            temp: document.getElementById('tempSlider').value,
+            model: document.getElementById('modelSelect').value
+        },
+        secondary: {
+            baseUrl: document.getElementById('secApiBaseUrl').value,
+            key: document.getElementById('secApiKey').value,
+            temp: document.getElementById('secTempSlider').value,
+            model: document.getElementById('secModelSelect').value
+        },
+        routes: {
+            phone: document.getElementById('route-phone').checked,
+            npc: document.getElementById('route-npc').checked,
+            forum: document.getElementById('route-forum').checked
+        }
+    };
+    await idb.set('ios_theme_api_config', config);
+    alert("API 配置已保存！");
+}
+
+async function fetchModels(targetTab) {
+    const isPrimary = targetTab === 'primary';
+    const baseUrl = isPrimary ? document.getElementById('apiBaseUrl').value : document.getElementById('secApiBaseUrl').value;
+    const key = isPrimary ? document.getElementById('apiKey').value : document.getElementById('secApiKey').value;
+    const selectId = isPrimary ? 'modelSelect' : 'secModelSelect';
+    const btnId = isPrimary ? 'fetchBtnPrimary' : 'fetchBtnSecondary';
+    
     if (!baseUrl || !key) return alert("请先填写 API 地址和密钥");
     
-    const btn = document.getElementById('fetchBtn');
+    const btn = document.getElementById(btnId);
     btn.innerText = "拉取中...";
     
     try {
@@ -1872,7 +2109,7 @@ async function fetchModels() {
             headers: { 'Authorization': `Bearer ${key}` }
         });
         const data = await res.json();
-        const select = document.getElementById('modelSelect');
+        const select = document.getElementById(selectId);
         select.innerHTML = '';
         
         if (data.data && Array.isArray(data.data)) {
@@ -1890,6 +2127,88 @@ async function fetchModels() {
         alert("拉取失败：" + e.message);
     } finally {
         btn.innerText = "拉取模型列表";
+    }
+}
+
+// 实时查询当前选中 Tab 的 API 额度
+async function refreshCurrentApiQuota() {
+    const quotaEl = document.getElementById('api-realtime-quota');
+    if (!quotaEl) return;
+    
+    quotaEl.innerText = "查询中...";
+    quotaEl.style.opacity = "0.5";
+
+    try {
+        const isPrimary = currentApiTab === 'primary';
+        const baseUrl = isPrimary ? document.getElementById('apiBaseUrl').value : document.getElementById('secApiBaseUrl').value;
+        const key = isPrimary ? document.getElementById('apiKey').value : document.getElementById('secApiKey').value;
+
+        if (!key || !baseUrl) {
+            throw new Error("未配置API");
+        }
+
+        const baseUrlMatch = baseUrl.match(/^(https?:\/\/[^\/]+)/);
+        const host = baseUrlMatch ? baseUrlMatch[1] : baseUrl;
+
+        const response = await fetch(`${host}/v1/dashboard/billing/subscription`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${key}` }
+        });
+
+        if (!response.ok) throw new Error("接口不支持");
+
+        const data = await response.json();
+        let finalBalance = "未知";
+        
+        let rawValue = data.balance ?? data.remain_quota ?? data.total_available ?? data.quota;
+        if (data.data) {
+            rawValue = rawValue ?? data.data.balance ?? data.data.remain_quota ?? data.data.quota;
+        }
+
+        if (rawValue !== undefined && rawValue !== null) {
+            let num = parseFloat(rawValue);
+            if (num > 10000) {
+                let calc50 = (num / 500000).toFixed(2);
+                let calc10 = (num / 100000).toFixed(2);
+                finalBalance = `${calc50} 或 ${calc10} (原数据:${num})`;
+            } else {
+                finalBalance = num.toFixed(2);
+            }
+        } else if (data.hard_limit_usd !== undefined) {
+            let total_usage = 0;
+            if (data.total_usage !== undefined) {
+                total_usage = data.total_usage / 100;
+            } else {
+                try {
+                    const now = new Date();
+                    const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+                    const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    const usageRes = await fetch(`${host}/v1/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, {
+                        headers: { 'Authorization': `Bearer ${key}` }
+                    });
+                    const usageData = await usageRes.json();
+                    if (usageData.total_usage !== undefined) total_usage = usageData.total_usage / 100;
+                } catch(e) {}
+            }
+            
+            // 🌟 核心修改：如果是无限额度令牌，直接显示已消耗的金额！
+            if (data.hard_limit_usd > 9000000) {
+                finalBalance = `已用: $${total_usage.toFixed(4)} (无限额度令牌)`;
+            } else {
+                finalBalance = (data.hard_limit_usd - total_usage).toFixed(2);
+            }
+        }
+
+        if (finalBalance !== "未知") {
+            quotaEl.innerText = finalBalance;
+            quotaEl.style.fontSize = "12px"; 
+        } else {
+            quotaEl.innerText = "格式不支持";
+        }
+    } catch (e) {
+        quotaEl.innerText = "接口不支持";
+    } finally {
+        quotaEl.style.opacity = "1";
     }
 }
 
@@ -1911,18 +2230,24 @@ function renderApiPresets() {
 function applyApiPreset(idx) {
     const p = apiPresets[idx];
     if (p) {
-        document.getElementById('apiBaseUrl').value = p.baseUrl;
-        document.getElementById('apiKey').value = p.key;
-        document.getElementById('tempSlider').value = p.temp;
-        document.getElementById('tempDisplay').innerText = p.temp;
+        const isPrimary = currentApiTab === 'primary';
+        const urlId = isPrimary ? 'apiBaseUrl' : 'secApiBaseUrl';
+        const keyId = isPrimary ? 'apiKey' : 'secApiKey';
+        const tempId = isPrimary ? 'tempSlider' : 'secTempSlider';
+        const tempDispId = isPrimary ? 'tempDisplay' : 'secTempDisplay';
+        const selectId = isPrimary ? 'modelSelect' : 'secModelSelect';
+
+        document.getElementById(urlId).value = p.baseUrl;
+        document.getElementById(keyId).value = p.key;
+        document.getElementById(tempId).value = p.temp;
+        document.getElementById(tempDispId).innerText = p.temp;
         
         if (p.model) {
-            const select = document.getElementById('modelSelect');
+            const select = document.getElementById(selectId);
             let exists = false;
             for (let i = 0; i < select.options.length; i++) {
                 if (select.options[i].value === p.model) {
-                    exists = true;
-                    break;
+                    exists = true; break;
                 }
             }
             if (!exists) {
@@ -1933,8 +2258,10 @@ function applyApiPreset(idx) {
             }
             select.value = p.model;
         }
+        refreshCurrentApiQuota(); // 应用预设后自动查额度
     }
 }
+
 
 // --- 通用模态框逻辑 ---
 function openNameModal(type) {
@@ -1985,17 +2312,19 @@ async function confirmSavePreset() {
             size: document.getElementById('fontSizeSlider').value
         });
         renderFontPresets();
-    } else if (pendingSaveType === 'api') {
+        } else if (pendingSaveType === 'api') {
+        const isPrimary = currentApiTab === 'primary';
         apiPresets.push({
             name,
-            baseUrl: document.getElementById('apiBaseUrl').value,
-            key: document.getElementById('apiKey').value,
-            temp: document.getElementById('tempSlider').value,
-            model: document.getElementById('modelSelect').value 
+            baseUrl: isPrimary ? document.getElementById('apiBaseUrl').value : document.getElementById('secApiBaseUrl').value,
+            key: isPrimary ? document.getElementById('apiKey').value : document.getElementById('secApiKey').value,
+            temp: isPrimary ? document.getElementById('tempSlider').value : document.getElementById('secTempSlider').value,
+            model: isPrimary ? document.getElementById('modelSelect').value : document.getElementById('secModelSelect').value 
         });
         renderApiPresets();
     }
-    await savePresetsData();
+    
+    savePresetsData();
     closeModal();
 }
 
@@ -2231,64 +2560,265 @@ function handleWallpaperUpload(input) {
 
 // --- WeChat DB ---
 const WC_DB_NAME = 'WeChatSimDB';
-const WC_DB_VERSION = 1;
+const WC_DB_VERSION = 3;
+const WC_CHARACTERS_DURABLE_KEY = 'ios_theme_wc_characters_store_v1';
+const WC_CHARACTERS_BACKUP_KEY = 'ios_theme_wc_characters_backup_v1';
+
+function wcReadCharactersBackupSnapshot() {
+    try {
+        const raw = localStorage.getItem(WC_CHARACTERS_BACKUP_KEY);
+        if (!raw) return { updatedAt: 0, characters: [] };
+
+        const parsed = JSON.parse(raw);
+        const characters = Array.isArray(parsed)
+            ? parsed
+            : (Array.isArray(parsed?.characters) ? parsed.characters : []);
+
+        return {
+            updatedAt: Number(parsed?.updatedAt) || 0,
+            characters: characters.filter(char => char && typeof char === 'object' && char.id)
+        };
+    } catch (e) {
+        console.warn('联系人本地备份读取失败', e);
+        return { updatedAt: 0, characters: [] };
+    }
+}
+
+function wcWriteCharactersBackupSnapshot(updatedAt = Date.now()) {
+    try {
+        const characters = Array.isArray(wcState.characters)
+            ? wcState.characters.filter(char => char && typeof char === 'object' && char.id)
+            : [];
+
+        localStorage.setItem(WC_CHARACTERS_BACKUP_KEY, JSON.stringify({
+            updatedAt,
+            characters
+        }));
+    } catch (e) {
+        console.warn('联系人本地备份写入失败', e);
+    }
+
+    return updatedAt;
+}
+
+function wcSanitizeCharactersSnapshot(characters) {
+    return Array.isArray(characters)
+        ? characters.filter(char => char && typeof char === 'object' && char.id)
+        : [];
+}
+
+function wcWriteCharactersBackupSnapshotFromList(characters, updatedAt = Date.now()) {
+    try {
+        localStorage.setItem(WC_CHARACTERS_BACKUP_KEY, JSON.stringify({
+            updatedAt,
+            characters: wcSanitizeCharactersSnapshot(characters)
+        }));
+    } catch (e) {
+        console.warn('联系人本地备份写入失败', e);
+    }
+
+    return updatedAt;
+}
+
+async function wcReadCharactersPersistentSnapshot() {
+    let snapshot = null;
+
+    if (window.localforage && typeof window.localforage.getItem === 'function') {
+        try {
+            snapshot = await window.localforage.getItem(WC_CHARACTERS_DURABLE_KEY);
+        } catch (e) {
+            console.warn('联系人持久存储读取失败', e);
+        }
+    }
+
+    if (!snapshot) {
+        snapshot = wcReadCharactersBackupSnapshot();
+    }
+
+    const characters = Array.isArray(snapshot)
+        ? snapshot
+        : (Array.isArray(snapshot?.characters) ? snapshot.characters : []);
+
+    return {
+        updatedAt: Number(snapshot?.updatedAt) || 0,
+        characters: characters.filter(char => char && typeof char === 'object' && char.id)
+    };
+}
+
+async function wcWriteCharactersPersistentSnapshot(updatedAt = Date.now()) {
+    return wcWriteCharactersPersistentSnapshotFromList(wcState.characters, updatedAt);
+}
+
+async function wcWriteCharactersPersistentSnapshotFromList(characters, updatedAt = Date.now()) {
+    const snapshot = {
+        updatedAt,
+        characters: wcSanitizeCharactersSnapshot(characters)
+    };
+
+    wcWriteCharactersBackupSnapshotFromList(snapshot.characters, updatedAt);
+
+    if (window.localforage && typeof window.localforage.setItem === 'function') {
+        try {
+            await window.localforage.setItem(WC_CHARACTERS_DURABLE_KEY, snapshot);
+        } catch (e) {
+            console.warn('联系人持久存储写入失败', e);
+        }
+    }
+
+    return updatedAt;
+}
+
+async function wcClearCharactersPersistentSnapshot() {
+    try {
+        localStorage.removeItem(WC_CHARACTERS_BACKUP_KEY);
+    } catch (e) {
+        console.warn('联系人本地备份清除失败', e);
+    }
+
+    if (window.localforage && typeof window.localforage.removeItem === 'function') {
+        try {
+            await window.localforage.removeItem(WC_CHARACTERS_DURABLE_KEY);
+        } catch (e) {
+            console.warn('联系人持久存储清除失败', e);
+        }
+    }
+}
+
+async function wcSyncCharactersSnapshotFromList(characters, updatedAt = Date.now()) {
+    const safeCharacters = wcSanitizeCharactersSnapshot(characters);
+
+    if (safeCharacters.length > 0) {
+        await wcWriteCharactersPersistentSnapshotFromList(safeCharacters, updatedAt);
+    } else {
+        await wcClearCharactersPersistentSnapshot();
+    }
+
+    try {
+        await wcDb.put('kv_store', updatedAt, 'characters_updated_at');
+    } catch (e) {
+        console.warn('联系人版本戳写入失败', e);
+    }
+
+    return updatedAt;
+}
+
+async function wcRestoreCharactersFromBackup(characters) {
+    if (!Array.isArray(characters) || characters.length === 0) return;
+
+    for (const char of characters) {
+        if (char && char.id) {
+            await wcDb.put('characters', char);
+        }
+    }
+}
+
+function wcClearStore(storeName) {
+    return new Promise((resolve, reject) => {
+        if (!wcDb.instance || !wcDb.instance.objectStoreNames.contains(storeName)) {
+            return resolve();
+        }
+
+        const tx = wcDb.instance.transaction([storeName], 'readwrite');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.objectStore(storeName).clear();
+    });
+}
 
 const wcDb = {
     instance: null,
-    init: function() {
+    open: function() {
         return new Promise((resolve, reject) => {
+            if (this.instance) return resolve(this.instance);
             const request = indexedDB.open(WC_DB_NAME, WC_DB_VERSION);
+            
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                if (!db.objectStoreNames.contains('kv_store')) db.createObjectStore('kv_store');
-                if (!db.objectStoreNames.contains('characters')) db.createObjectStore('characters', { keyPath: 'id' });
-                if (!db.objectStoreNames.contains('chats')) db.createObjectStore('chats', { keyPath: 'charId' });
-                if (!db.objectStoreNames.contains('moments')) db.createObjectStore('moments', { keyPath: 'id' });
-                if (!db.objectStoreNames.contains('masks')) db.createObjectStore('masks', { keyPath: 'id' });
+                const stores = ['kv_store', 'characters', 'chats', 'moments', 'masks'];
+                stores.forEach(store => {
+                    if (!db.objectStoreNames.contains(store)) {
+                        db.createObjectStore(store, store === 'kv_store' ? undefined : { keyPath: store === 'chats' ? 'charId' : 'id' });
+                    }
+                });
             };
             request.onsuccess = (event) => {
                 this.instance = event.target.result;
-                resolve();
+                resolve(this.instance);
             };
-            request.onerror = (event) => reject(event.target.error);
+            request.onerror = (event) => {
+                console.error("DB Open Error:", event.target.error);
+                reject(event.target.error);
+            };
         });
     },
-    get: function(storeName, key) {
+    init: async function() {
+        try {
+            await this.open();
+        } catch (e) {
+            console.warn("尝试降级打开数据库...");
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(WC_DB_NAME);
+                req.onsuccess = (e) => { this.instance = e.target.result; resolve(); };
+                req.onerror = (e) => reject(e.target.error);
+            });
+        }
+    },
+    get: async function(storeName, key) {
+        await this.open();
         return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction([storeName], 'readonly');
-            const request = transaction.objectStore(storeName).get(key);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+            try {
+                if (!this.instance.objectStoreNames.contains(storeName)) return resolve(null);
+                const tx = this.instance.transaction([storeName], 'readonly');
+                const req = tx.objectStore(storeName).get(key);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            } catch (e) { resolve(null); }
         });
     },
-    getAll: function(storeName) {
+    getAll: async function(storeName) {
+        await this.open();
         return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction([storeName], 'readonly');
-            const request = transaction.objectStore(storeName).getAll();
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+            try {
+                if (!this.instance.objectStoreNames.contains(storeName)) return resolve([]);
+                const tx = this.instance.transaction([storeName], 'readonly');
+                const req = tx.objectStore(storeName).getAll();
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            } catch (e) { resolve([]); }
         });
     },
-    put: function(storeName, value, key) {
+    put: async function(storeName, value, key) {
+        await this.open();
         return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction([storeName], 'readwrite');
-            const request = key ? transaction.objectStore(storeName).put(value, key) : transaction.objectStore(storeName).put(value);
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
+            try {
+                if (!this.instance.objectStoreNames.contains(storeName)) return resolve();
+                const tx = this.instance.transaction([storeName], 'readwrite');
+                const req = key ? tx.objectStore(storeName).put(value, key) : tx.objectStore(storeName).put(value);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            } catch (e) { resolve(); }
         });
     },
-    delete: function(storeName, key) {
+    delete: async function(storeName, key) {
+        await this.open();
         return new Promise((resolve, reject) => {
-            const transaction = this.instance.transaction([storeName], 'readwrite');
-            const request = transaction.objectStore(storeName).delete(key);
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
+            try {
+                if (!this.instance.objectStoreNames.contains(storeName)) return resolve();
+                const tx = this.instance.transaction([storeName], 'readwrite');
+                const req = tx.objectStore(storeName).delete(key);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            } catch (e) { resolve(); }
         });
     }
 };
 
 // --- WeChat State ---
 const wcState = {
+    chatGroups: [], // 新增：自定义分组列表
+    activeChatGroup: 'All', // 新增：当前选中的分组
+    selectedGroupName: null, // 新增：长按选中的分组名
+    groupLongPressTimer: null, // 新增：分组长按计时器
     myFavorites: [], 
     calendarEvents: [], // <--- 新增这一行：用于存储日历事件
     currentTab: 'chat',
@@ -2326,14 +2856,35 @@ const wcState = {
     tempBgCleared: false,
     replyingToComment: null,
     unreadCounts: {}, // { charId: count }
-    proactiveInterval: null, // 主动消息定时器
-    tempShopTransaction: null // 临时存储购物交易信息
+    // ... 现有代码 ...
+    proactiveInterval: null,
+    tempShopTransaction: null,
+    // 👇 新增：语音通话状态
+    callState: {
+        isActive: false,
+        charId: null,
+        startTime: 0,
+        timerInterval: null,
+        isSpeaking: false
+    }
 };
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        wcWriteCharactersBackupSnapshot();
+    }
+});
+
+window.addEventListener('pagehide', () => {
+    wcWriteCharactersBackupSnapshot();
+});
+
 
 // --- WeChat Core Functions ---
 function openWechat() {
     document.getElementById('wechatModal').classList.add('open');
     wcRenderAll();
+    wcSwitchTab('chat');
 }
 
 function closeWechat() {
@@ -2341,47 +2892,71 @@ function closeWechat() {
 }
 
 async function wcLoadData() {
+    const persistentCharactersSnapshot = await wcReadCharactersPersistentSnapshot();
+    if (persistentCharactersSnapshot.characters.length > 0) {
+        wcState.characters = persistentCharactersSnapshot.characters;
+    }
+
     try {
-        const myFavs = await wcDb.get('kv_store', 'my_favorites');
+        const safeGet = async (storeName, key) => await wcDb.get(storeName, key).catch(() => null);
+        const safeGetAll = async (storeName) => await wcDb.getAll(storeName).catch(() => []);
+
+        const myFavs = await safeGet('kv_store', 'my_favorites');
         if (myFavs) wcState.myFavorites = myFavs;
         
-        // <--- 新增下面这两行 --->
-        const calEvents = await wcDb.get('kv_store', 'calendar_events');
+        const chatGroups = await safeGet('kv_store', 'chat_groups');
+        if (chatGroups) wcState.chatGroups = chatGroups;
+        
+        const calEvents = await safeGet('kv_store', 'calendar_events');
         if (calEvents) wcState.calendarEvents = calEvents;
 
-        const user = await wcDb.get('kv_store', 'user');
+        const user = await safeGet('kv_store', 'user');
         if (user) wcState.user = user;
-        else wcState.user.avatar = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#007AFF"/></svg>');
+        else wcState.user.avatar = 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg';
 
-        const wallet = await wcDb.get('kv_store', 'wallet');
+        const wallet = await safeGet('kv_store', 'wallet');
         if (wallet) wcState.wallet = wallet;
 
-        const stickers = await wcDb.get('kv_store', 'sticker_categories');
+        const stickers = await safeGet('kv_store', 'sticker_categories');
         if (stickers) wcState.stickerCategories = stickers;
 
-        const presets = await wcDb.get('kv_store', 'css_presets');
+        const presets = await safeGet('kv_store', 'css_presets');
         if (presets) wcState.cssPresets = presets;
         
-        // 【新增】：读取图库和预设
-        const chatBgs = await wcDb.get('kv_store', 'chat_bg_presets');
+        const chatBgs = await safeGet('kv_store', 'chat_bg_presets');
         if (chatBgs) wcState.chatBgPresets = chatBgs;
         
-        const phonePresets = await wcDb.get('kv_store', 'phone_presets');
+        const phonePresets = await safeGet('kv_store', 'phone_presets');
         if (phonePresets) wcState.phonePresets = phonePresets;
         
-        const shopData = await wcDb.get('kv_store', 'shop_data');
+        const shopData = await safeGet('kv_store', 'shop_data');
         if (shopData) wcState.shopData = shopData;
         
-        const unread = await wcDb.get('kv_store', 'unread_counts');
+        const unread = await safeGet('kv_store', 'unread_counts');
         if (unread) wcState.unreadCounts = unread;
 
-        const chars = await wcDb.getAll('characters');
-        wcState.characters = chars || [];
+        const charsUpdatedAt = await safeGet('kv_store', 'characters_updated_at');
+        const chars = await safeGetAll('characters');
+        const shouldUseBackupCharacters = persistentCharactersSnapshot.characters.length > 0 && (
+            !Array.isArray(chars) || chars.length === 0 ||
+            persistentCharactersSnapshot.updatedAt >= (Number(charsUpdatedAt) || 0) ||
+            persistentCharactersSnapshot.characters.length > chars.length
+        );
+
+        if (shouldUseBackupCharacters) {
+            wcState.characters = persistentCharactersSnapshot.characters;
+            await wcRestoreCharactersFromBackup(persistentCharactersSnapshot.characters);
+        } else {
+            wcState.characters = chars || [];
+            if (wcState.characters.length > 0) {
+                await wcWriteCharactersPersistentSnapshot(Number(charsUpdatedAt) || Date.now());
+            }
+        }
         
-        wcState.masks = await wcDb.getAll('masks') || [];
-        wcState.moments = await wcDb.getAll('moments') || [];
+        wcState.masks = await safeGetAll('masks') || [];
+        wcState.moments = await safeGetAll('moments') || [];
         
-        const allChats = await wcDb.getAll('chats');
+        const allChats = await safeGetAll('chats');
         if (allChats) {
             allChats.forEach(item => {
                 wcState.chats[item.charId] = item.messages;
@@ -2393,31 +2968,80 @@ async function wcLoadData() {
 }
 
 async function wcSaveData() {
+    const charactersUpdatedAt = await wcWriteCharactersPersistentSnapshot();
+
     try {
-        await wcDb.put('kv_store', wcState.myFavorites, 'my_favorites');
-        // <--- 新增下面这一行 --->
-        await wcDb.put('kv_store', wcState.calendarEvents, 'calendar_events');
-        await wcDb.put('kv_store', wcState.user, 'user');
-        await wcDb.put('kv_store', wcState.wallet, 'wallet');
-        await wcDb.put('kv_store', wcState.stickerCategories, 'sticker_categories');
-        await wcDb.put('kv_store', wcState.cssPresets, 'css_presets');
-        await wcDb.put('kv_store', wcState.unreadCounts, 'unread_counts');
-        
-        // 【新增】：保存图库和预设
-        await wcDb.put('kv_store', wcState.chatBgPresets, 'chat_bg_presets');
-        await wcDb.put('kv_store', wcState.phonePresets, 'phone_presets');
-        await wcDb.put('kv_store', wcState.shopData, 'shop_data');
-        
-        for (const char of wcState.characters) {
-            if (char && char.id) await wcDb.put('characters', char);
-        }
-        for (const mask of wcState.masks) await wcDb.put('masks', mask);
-        for (const moment of wcState.moments) await wcDb.put('moments', moment);
-        for (const charId in wcState.chats) {
-            await wcDb.put('chats', { charId: parseInt(charId), messages: wcState.chats[charId] });
-        }
+        await wcDb.open();
+        if (!wcDb.instance) return;
+
+        // 辅助函数：将单个 store 的操作封装为独立的 Promise 事务
+        const saveStore = (storeName, callback) => {
+            return new Promise((resolve, reject) => {
+                if (!wcDb.instance.objectStoreNames.contains(storeName)) {
+                    return resolve();
+                }
+                const tx = wcDb.instance.transaction([storeName], 'readwrite');
+                tx.oncomplete = () => resolve();
+                tx.onerror = (e) => {
+                    console.error(`保存 ${storeName} 失败:`, tx.error);
+                    reject(tx.error);
+                };
+                const store = tx.objectStore(storeName);
+                callback(store);
+            });
+        };
+
+        // 1. 保存 kv_store
+        await saveStore('kv_store', (store) => {
+            store.put(wcState.myFavorites || [], 'my_favorites');
+            store.put(wcState.chatGroups || [], 'chat_groups');
+            store.put(wcState.calendarEvents || [], 'calendar_events');
+            store.put(wcState.user || { name: 'User', avatar: '' }, 'user');
+            store.put(wcState.wallet || { balance: 0, transactions: [] }, 'wallet');
+            store.put(wcState.stickerCategories || [], 'sticker_categories');
+            store.put(wcState.cssPresets || [], 'css_presets');
+            store.put(wcState.unreadCounts || {}, 'unread_counts');
+            store.put(wcState.chatBgPresets || [], 'chat_bg_presets');
+            store.put(wcState.phonePresets || [], 'phone_presets');
+            store.put(wcState.shopData || {}, 'shop_data');
+            store.put(charactersUpdatedAt, 'characters_updated_at');
+        }).catch(e => console.warn("kv_store 保存异常", e));
+
+        // 2. 保存 characters (你的角色数据)
+        await saveStore('characters', (store) => {
+            for (const char of wcState.characters) {
+                if (char && char.id) store.put(char);
+            }
+        }).catch(e => console.warn("characters 保存异常", e));
+
+        // 3. 保存 masks
+        await saveStore('masks', (store) => {
+            for (const mask of wcState.masks) {
+                if (mask && mask.id) store.put(mask);
+            }
+        }).catch(e => console.warn("masks 保存异常", e));
+
+        // 4. 保存 moments
+        await saveStore('moments', (store) => {
+            for (const moment of wcState.moments) {
+                if (moment && moment.id) store.put(moment);
+            }
+        }).catch(e => console.warn("moments 保存异常", e));
+
+        // 5. 保存 chats (最容易因为图片太多导致 iOS 崩溃的地方，单独隔离)
+        await saveStore('chats', (store) => {
+            for (const charId in wcState.chats) {
+                const parsedId = parseInt(charId);
+                if (!isNaN(parsedId)) {
+                    store.put({ charId: parsedId, messages: wcState.chats[charId] });
+                }
+            }
+        }).catch(e => {
+            console.error("聊天记录保存失败，可能是图片数据过大导致 iOS 限制！", e);
+        });
+
     } catch (e) {
-        console.error("WeChat Save failed", e);
+        console.error("WeChat Save 整体流程失败", e);
     }
 }
 
@@ -2484,16 +3108,10 @@ function wcSwitchTab(tabId) {
     if (tabId === 'chat') {
         navbar.classList.add('custom-chat-nav-mode');
         navbar.classList.remove('custom-moments-nav-mode');
-        titleEl.innerHTML = `
-            <div class="chat-nav-card">
-                <div class="chat-nav-call" onclick="closeWechat()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                </div>
-                <img src="${wcState.user.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="chat-nav-avatar" onclick="wcOpenModal('wc-modal-create-choice')">
-            </div>
-        `;
+        titleEl.innerHTML = wcGenerateChatHeaderHTML();
         if (btnExit) btnExit.innerHTML = `<svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>退出`;
-    } else if (tabId === 'moments') {
+    }
+ else if (tabId === 'moments') {
         navbar.classList.remove('custom-chat-nav-mode');
         navbar.classList.add('custom-moments-nav-mode');
         
@@ -2523,10 +3141,28 @@ function wcSwitchTab(tabId) {
         wcRenderChats(); 
     } else if (tabId === 'moments') {
         document.getElementById('wc-main-tabbar').style.display = 'flex';
+
+        // 发朋友圈按钮 (恢复原样，去掉魔法棒)
         const btn = document.createElement('button');
         btn.className = 'wc-nav-btn';
         btn.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24" style="stroke: #111;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>';
-        btn.onclick = () => wcOpenModal('wc-modal-post-moment');
+        btn.onclick = () => {
+            const groupSelect = document.getElementById('wc-input-moment-group');
+            if (groupSelect) {
+                groupSelect.innerHTML = '<option value="All">所有人可见</option>';
+                if (wcState.chatGroups) {
+                    wcState.chatGroups.forEach(g => {
+                        if (g !== 'All') {
+                            const opt = document.createElement('option');
+                            opt.value = g;
+                            opt.innerText = g;
+                            groupSelect.appendChild(opt);
+                        }
+                    });
+                }
+            }
+            wcOpenModal('wc-modal-post-moment');
+        };
         rightContainer.appendChild(btn);
         
         // 默认选中今天
@@ -2599,14 +3235,7 @@ function wcHandleBack() {
         const titleEl = document.getElementById('wc-nav-title');
         const navbar = document.querySelector('.wc-navbar');
         navbar.classList.add('custom-chat-nav-mode');
-        titleEl.innerHTML = `
-            <div class="chat-nav-card">
-                <div class="chat-nav-call" onclick="closeWechat()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                </div>
-                <img src="${wcState.user.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="chat-nav-avatar" onclick="wcOpenModal('wc-modal-create-choice')">
-            </div>
-        `;
+        titleEl.innerHTML = wcGenerateChatHeaderHTML();
         titleEl.onclick = null;
         titleEl.style.cursor = 'default';
         
@@ -2622,6 +3251,30 @@ function wcHandleBack() {
         
         wcRenderChats(); 
     }
+}
+// --- 新增：更新聊天顶栏状态显示 ---
+function updateChatTopBarStatus(char) {
+    const titleEl = document.getElementById('wc-nav-title');
+    if (!titleEl) return;
+    
+    let displayName = char.note || char.name;
+    if (char.isGroup && char.members) {
+        displayName += ` (${char.members.length})`;
+    }
+    
+    let statusHtml = '';
+    // 【修改】：增加判断，如果关闭了生活状态开关，则不显示
+    const isLifeStatusEnabled = char.chatConfig && char.chatConfig.lifeStatusEnabled !== false;
+    if (isLifeStatusEnabled && !char.isGroup && char.lifeStatus && char.lifeStatus.action && char.lifeStatus.action !== "未知") {
+        statusHtml = `<div style="font-size: 11px; color: #8E8E93; font-weight: normal; margin-top: 2px; line-height: 1;">${char.lifeStatus.action}</div>`;
+    }
+    
+    titleEl.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2;">
+            <div style="font-size: 17px; font-weight: 600; color: #111;">${displayName}</div>
+            ${statusHtml}
+        </div>
+    `;
 }
 
 // --- WeChat Chat Logic ---
@@ -2649,12 +3302,7 @@ function wcOpenChat(charId) {
     if (btnExit) btnExit.style.display = 'none'; // 确保隐藏退出键
     
     const titleEl = document.getElementById('wc-nav-title');
-    let displayName = char.note || char.name;
-    // 【新增】：如果是群聊，在名字后面加上人数
-    if (char.isGroup && char.members) {
-        displayName += ` (${char.members.length})`;
-    }
-    titleEl.innerText = displayName;
+    updateChatTopBarStatus(char); // 调用新函数渲染顶栏
     titleEl.onclick = null;
     titleEl.style.cursor = 'default';    
     const rightContainer = document.getElementById('wc-nav-right-container');
@@ -2693,42 +3341,69 @@ function wcFormatTime(timestamp) {
     const minutes = date.getMinutes().toString().padStart(2, '0');
     return `${hours}:${minutes}`;
 }
+// 新增：专门用于系统居中时间戳的格式化函数（带日期智能显示）
+function wcFormatSystemTime(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
 
-// --- 新增/强化：时间感知计算器 (融合 v2.0 规则) ---
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const timeStr = `${hours}:${minutes}`;
+
+    // 判断是否是今天
+    if (date.getFullYear() === now.getFullYear() &&
+        date.getMonth() === now.getMonth() &&
+        date.getDate() === now.getDate()) {
+        return timeStr; // 当天只显示时间
+    }
+
+    // 判断是否是昨天
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (date.getFullYear() === yesterday.getFullYear() &&
+        date.getMonth() === yesterday.getMonth() &&
+        date.getDate() === yesterday.getDate()) {
+        return `昨天 ${timeStr}`;
+    }
+
+    // 其他日期 (同一年不显示年份)
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    if (date.getFullYear() === now.getFullYear()) {
+        return `${month}月${day}日 ${timeStr}`;
+    } else {
+        return `${date.getFullYear()}年${month}月${day}日 ${timeStr}`;
+    }
+}
+
+// --- 新增/强化：时间感知计算器 (融合 v2.0 规则，增强跨天感知) ---
 function wcGenerateTimeGapPrompt(msgs, referenceTime = Date.now()) {
     if (!msgs || msgs.length === 0) return "";
     
-    // 找到最后一条实质性消息（排除系统提示和报错）
-    let lastMsgTime = 0;
-    for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i].type !== 'system' && !msgs[i].isError) {
-            lastMsgTime = msgs[i].time;
-            break;
-        }
-    }
+    const validMsgs = msgs.filter(m => m.type !== 'system' && !m.isError);
+    if (validMsgs.length === 0) return "";
 
-    if (lastMsgTime === 0) return "";
+    // 核心修复：只看最后一条有效消息和当前时间的差距
+    const lastMsg = validMsgs[validMsgs.length - 1];
+    const gapMs = referenceTime - lastMsg.time;
 
-    const gapMs = referenceTime - lastMsgTime;
-    const gapHours = Math.floor(gapMs / (1000 * 60 * 60));
+    // 如果距离最后一条消息不到 10 分钟，说明一直在聊，不需要提示断联
+    if (gapMs < 10 * 60 * 1000) return "";
+
+    const gapMinutes = Math.floor(gapMs / 60000);
+    const gapHours = Math.floor(gapMinutes / 60);
     const gapDays = Math.floor(gapHours / 24);
-
-    // 如果间隔小于 2 小时，视为连续聊天，不触发强烈的断联感知
-    if (gapHours < 2) return "";
-
-    let prompt = `\n【时间感知与断联反应 (最高优先级)】\n`;
-    prompt += `> 内部信息：距离你们上一次聊天已经过去了 ${gapDays > 0 ? gapDays + ' 天' : gapHours + ' 个小时'}。\n`;
     
-    if (gapDays >= 3) {
-        prompt += `> 状态要求：这是一个很长的空白期！请在回复中强烈且自然地体现出“久别重逢”、“漫长等待”或“断联后的情绪”（如：担忧、思念、生气、试探、冷淡等，必须符合你的人设）。\n`;
-    } else if (gapDays >= 1) {
-        prompt += `> 状态要求：自然地体现出隔天聊天的感觉（如：关心对方昨天/这几天去哪了，或者分享自己这几天的状态）。\n`;
-    } else if (gapHours >= 2) {
-        prompt += `> 状态要求：自然地体现出半天没联系的时间流逝感（如：问问对方这半天去忙什么了，或者顺着当前时间打招呼）。\n`;
-    }
+    const remainHours = gapHours % 24;
+    const remainMinutes = gapMinutes % 60;
 
-    prompt += `> 【硬性禁止】：绝对不要机械地报出具体数字（禁止说“我们已经3天没说话了”或“过了5个小时”）。\n`;
-    prompt += `> 【表现手法】：时间必须自然融入对话。通过语气、微动作（MicroActions）、或者对当前环境/光线的描写来侧面烘托时间感。情绪是底色，自然流露，而非刻意展示。\n`;
+    let timeGapStr = "";
+    if (gapDays > 0) timeGapStr += `${gapDays}天`;
+    if (remainHours > 0) timeGapStr += `${remainHours}小时`;
+    if (remainMinutes > 0 || timeGapStr === "") timeGapStr += `${remainMinutes}分钟`;
+
+    let prompt = `\n【系统通知：时间感知】\n`;
+    prompt += `> 距离上次互动已过去 ${timeGapStr}。话题可能已中断，请以 ${msgs[0]?.name || '你'} 的身份自然地开启新话题，或对时间流逝做出反应，自然地延续之前的对话。\n`;
 
     return prompt;
 }
@@ -2763,7 +3438,8 @@ function wcRenderMessages(charId) {
         if (msg.time - lastTime > 5 * 60 * 1000) {
             const timeDiv = document.createElement('div');
             timeDiv.className = 'wc-message-row system';
-            timeDiv.innerHTML = `<div class="wc-system-msg-text transparent">${wcFormatTime(msg.time)}</div>`;
+            // 👇 这里把 wcFormatTime 改成了我们刚刚新建的 wcFormatSystemTime
+            timeDiv.innerHTML = `<div class="wc-system-msg-text transparent">${wcFormatSystemTime(msg.time)}</div>`;
             container.insertBefore(timeDiv, anchor);
             lastTime = msg.time;
         }
@@ -2813,10 +3489,12 @@ function wcRenderMessages(charId) {
         if (msg.type === 'text' && msg.content.trim().startsWith('[图片描述]')) {
             // 提取描述文字，去掉前缀
             const descText = msg.content.replace('[图片描述]', '').trim();
+            // 转义单双引号，防止 onclick 报错
+            const safeDescText = descText.replace(/'/g, "\\'").replace(/"/g, "&quot;");
             contentHtml = `
                 <div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" style="background: transparent; padding: 0; border: none;">
                     ${quoteHtml}
-                    <div class="wc-text-img-placeholder" style="width: 100px; height: 100px; background-color: #E5E5EA; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8E8E93; font-size: 10px; border: 1px solid #D1D1D6; overflow: hidden; text-align: center; padding: 5px; box-sizing: border-box;">
+                    <div class="wc-text-img-placeholder" onclick="wcOpenImageDescCard('${safeDescText}')" style="width: 100px; height: 100px; background-color: #E5E5EA; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8E8E93; font-size: 10px; border: 1px solid #D1D1D6; overflow: hidden; text-align: center; padding: 5px; box-sizing: border-box; cursor: pointer;">
                         <svg viewBox="0 0 24 24" fill="currentColor" style="width: 24px; height: 24px; margin-bottom: 4px; opacity: 0.5;"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
                         <div style="overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; width: 100%;">${descText || '图片'}</div>
                     </div>
@@ -2840,64 +3518,227 @@ function wcRenderMessages(charId) {
                     </div>`;
             }
         } else if (msg.type === 'transfer') {
-            const statusClass = (msg.status === 'received' || msg.status === 'rejected') ? 'received' : '';
-            const statusText = msg.status === 'received' ? '已收款' : (msg.status === 'rejected' ? '已退还' : '转账');
-            const icon = msg.status === 'received' ? '<polyline points="20 6 9 17 4 12"></polyline>' : '<rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2"></circle><path d="M6 12h.01M18 12h.01"></path>';
+            const isReceived = msg.status === 'received';
+            const isRejected = msg.status === 'rejected';
+            const statusClass = isReceived ? 'received' : (isRejected ? 'rejected' : 'pending');
             
+            let statusText = '转账给您';
+            if (msg.sender === 'me') statusText = '转账给对方';
+            if (isReceived) statusText = '已收款';
+            if (isRejected) statusText = '已退还';
+
+            const tagText = isReceived ? 'RECEIVED' : (isRejected ? 'REJECTED' : 'TRANSFER');
+
             contentHtml = `
-                <div class="wc-bubble transfer ${statusClass}" onclick="wcHandleTransferClick(${msg.id})">
+                <div class="wc-bubble transfer" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important;">
                     ${quoteHtml}
-                    <div class="wc-transfer-content">
-                        <div class="wc-transfer-icon-circle">
-                            <svg class="wc-icon" viewBox="0 0 24 24">${icon}</svg>
+                    <div class="ins-transfer-card ${statusClass}" onclick="wcHandleTransferClick(${msg.id})">
+                        <div class="ins-transfer-header">
+                            <div class="ins-transfer-tag">${tagText}</div>
                         </div>
-                        <div class="wc-transfer-info">
-                            <span class="wc-transfer-amount">¥${msg.amount}</span>
-                            <span class="wc-transfer-desc">${statusText}</span>
+                        <div class="ins-transfer-body">
+                            <div class="ins-transfer-amount">¥${parseFloat(msg.amount).toFixed(2)}</div>
+                            <div class="ins-transfer-note">${msg.note || '转账'}</div>
+                        </div>
+                        <div class="ins-transfer-footer">
+                            <span class="ins-transfer-brand">WeChat Pay</span>
+                            <span class="ins-transfer-status">${statusText}</span>
                         </div>
                     </div>
                 </div>`;
-        } else if (msg.type === 'invite') {
+         } else if (msg.type === 'invite') {
             const statusText = msg.status === 'accepted' ? '已同意' : (msg.status === 'rejected' ? '已拒绝' : '等待回应');
             contentHtml = `
-                <div class="wc-bubble invite ins-invite-card" onclick="wcHandleInviteClick(${msg.id})">
-                    <div class="ins-invite-top">
-                        <span class="ins-invite-brand">LOVERS SPACE</span>
-                        <svg viewBox="0 0 24 24" class="ins-invite-icon"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                <!-- 👇 核心修复：加上 display: block 和 width: fit-content，绝对禁止父级拉伸！ -->
+                <div class="wc-bubble invite" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important; display: block !important; width: fit-content !important;">
+                    ${quoteHtml}
+                    <div class="ins-invite-card-v2" onclick="wcHandleInviteClick(${msg.id})">
+                        <div class="ins-invite-v2-content">
+                            <div class="ins-invite-v2-header">
+                                <div class="ins-invite-v2-tag">INVITATION</div>
+                                <svg class="ins-invite-v2-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                            </div>
+                            <div class="ins-invite-v2-body">
+                                <div class="ins-invite-v2-title">Lovers Space</div>
+                                <div class="ins-invite-v2-subtitle">To join the private space</div>
+                            </div>
+                            <div class="ins-invite-v2-footer">
+                                <div class="ins-invite-v2-status ${msg.status}">${statusText}</div>
+                                <div class="ins-invite-v2-action">TAP TO VIEW</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="ins-invite-divider"></div>
-                    <div class="ins-invite-main">
-                        <div class="ins-invite-title">Exclusive Invitation</div>
-                        <div class="ins-invite-subtitle">To join the private space</div>
-                    </div>
-                    <div class="ins-invite-bottom">
-                        <span class="ins-invite-status ${msg.status}">${statusText}</span>
-                        <span class="ins-invite-tap">Tap to view</span>
-                    </div>
-                </div>                    
-            `;
+                </div>`;
         } else if (msg.type === 'music_invite') {
-            // 新增：音乐邀请卡片渲染
+            let statusText = msg.status === 'ended' ? '已结束，点击查看报告' : 'Tap to join';
+            let onClickAttr = '';
+            
+            if (msg.status === 'ended') {
+                // 如果听歌已结束，点击打开总结报告
+                onClickAttr = `onclick="musicOpenSummaryModal('${msg.id}')"`;
+            } else {
+                if (msg.sender === 'them') {
+                    // 如果是 Char 发出的邀请，点击卡片重新打开确认弹窗
+                    onClickAttr = `onclick="musicShowCharInviteModal(${charId}, '${msg.songTitle || ''}')"`;
+                } else {
+                    // 如果是 User 发出的邀请，点击卡片执行接受逻辑
+                    onClickAttr = `onclick="musicAcceptInvite(${charId}, '${msg.songId}', '${msg.songTitle}', '${msg.songArtist}', '${msg.songCover}')"`;
+                }
+            }
+
             contentHtml = `
-                <div class="wc-bubble music-invite" onclick="musicAcceptInvite(${charId}, '${msg.songId}', '${msg.songTitle}', '${msg.songArtist}', '${msg.songCover}')">
-                    <div class="ins-music-chat-card">
+                <div class="wc-bubble music-invite" ${onClickAttr}>
+                    <div class="ins-music-chat-card ${msg.status === 'ended' ? 'ended' : ''}">
                         <div class="ins-music-chat-top">
                             <div class="ins-music-chat-tag">Listen</div>
                             <svg class="ins-music-chat-icon" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
                         </div>
                         <div class="ins-music-chat-mid">
-                            <div class="ins-music-chat-song">${msg.songTitle}</div>
-                            <div class="ins-music-chat-artist">${msg.songArtist}</div>
+                            <div class="ins-music-chat-song">${msg.songTitle || '未知歌曲'}</div>
+                            <div class="ins-music-chat-artist">${msg.songArtist || '未知歌手'}</div>
                         </div>
-                        <div class="ins-music-chat-bottom">Tap to join</div>
+                        <div class="ins-music-chat-bottom">${statusText}</div>
                     </div>
                 </div>`;
 
         } else if (msg.type === 'receipt') {
             // 新增：渲染购物小票
             contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" style="background: transparent; padding: 0; border: none;">${msg.content}</div>`;
+            
+        } else if (msg.type === 'recipe') {
+            // 新增：渲染全新高级感食谱卡片
+            const isEdited = msg.isEdited;
+            const isMe = msg.sender === 'me';
+            
+            let topHtml = '';
+            if (isEdited) {
+                topHtml = `<div class="r-tag updated">UPDATED</div><div class="r-update-dot"></div>`;
+            } else {
+                topHtml = `<div class="r-tag">DAILY</div><div class="r-cross"></div>`;
+            }
+
+            const watermarkText = isMe ? 'RECIPE' : 'MENU';
+
+            contentHtml = `
+                <div class="wc-bubble recipe" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important;">
+                    ${quoteHtml}
+                    <div class="ins-recipe-bubble ${isMe ? '' : 'them'}" onclick="wcOpenRecipeDetail('${msg.id}')">
+                        <div class="r-watermark">${watermarkText}</div>
+                        <div class="r-top">${topHtml}</div>
+                        <div class="r-center">
+                            <div class="r-title">${msg.title}.</div>
+                            <div class="r-subtitle">${msg.desc}</div>
+                        </div>
+                        <div class="r-bottom">
+                            <div class="r-line"></div>
+                            <div class="r-action">
+                                ${isEdited ? 'VIEW' : 'TAP'} 
+                                <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+                
+        // 👇 新增：渲染高级感订单/外卖卡片 👇
+        } else if (msg.type === 'order') {
+            const data = msg.receiptData || {};
+            const orderType = msg.orderType; // 'delivery', 'gift', 'daifu'
+            
+            let cardInnerHtml = '';
+            let cardClass = '';
+
+            if (orderType === 'delivery') {
+                cardClass = 'delivery';
+                cardInnerHtml = `
+                    <div class="stub"><div class="stub-text">NO.${String(Math.floor(Math.random()*9000)+1000)}</div></div>
+                    <div class="main">
+                        <div class="stamp"></div>
+                        <div class="tag">FOOD DELIVERY</div>
+                        <div>
+                            <div class="title">Ta's Order.</div>
+                            <div class="desc">${data.items && data.items[0] ? data.items[0].name : '神秘外卖'}</div>
+                        </div>
+                        <div class="bottom">
+                            <span>${msg.deliveryText || 'ETA: 30 MINS'}</span>
+                            <span style="font-weight:bold; color:#111;">¥${data.total}</span>
+                        </div>
+                    </div>
+                `;
+            } else if (orderType === 'gift') {
+                cardClass = 'gift';
+                cardInnerHtml = `
+                    <div class="main">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div class="tag">SURPRISE GIFT</div>
+                            <span style="font-size: 10px; color: #555; font-family: monospace;">PAID</span>
+                        </div>
+                        <div>
+                            <div class="title">For You.</div>
+                            <div class="desc">${data.items && data.items[0] ? data.items[0].name : '神秘礼物'}</div>
+                        </div>
+                        <div class="barcode"></div>
+                    </div>
+                `;
+            } else if (orderType === 'daifu') {
+                cardClass = 'daifu';
+                cardInnerHtml = `
+                    <div class="main">
+                        <div class="tag">PAYMENT REQUEST</div>
+                        <div>
+                            <div class="title">Please Pay.</div>
+                            <div class="desc">${data.items && data.items[0] ? data.items[0].name : '代付请求'}</div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-end; font-family: monospace; font-size: 10px; color: #718096;">
+                            <span>${msg.deliveryText || '待支付'}</span>
+                            <span style="font-weight:bold; color:#2D3748; font-size: 14px;">¥${data.total}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            contentHtml = `
+                <div class="wc-bubble order" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important;">
+                    ${quoteHtml}
+                    <div class="ins-order-bubble ${cardClass}" onclick="wcOpenReceiptDetail('${msg.id}')">
+                        ${cardInnerHtml}
+                    </div>
+                </div>`;
+        // 👆 新增结束 👆
+
+        } else if (msg.type === 'call_record') {
+            const isRejected = msg.status === 'rejected';
+            const iconColor = isRejected ? '#FF3B30' : '#111';
+            const iconSvg = isRejected 
+                ? `<svg viewBox="0 0 24 24" style="fill:${iconColor};"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" transform="rotate(135 12 12)"/></svg>`
+                : `<svg viewBox="0 0 24 24" style="fill:none; stroke:${iconColor}; stroke-width:2;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>`;
+            
+            contentHtml = `
+                <div class="wc-bubble call-record ${msg.sender === 'me' ? 'me' : 'them'}">
+                    <div class="ins-call-record-card">
+                        ${iconSvg}
+                        <span class="ins-call-record-text">${msg.content}</span>
+                        ${msg.duration ? `<span class="ins-call-record-time">${msg.duration}</span>` : ''}
+                    </div>
+                </div>`;
+        // 👆 新增的代码到这里结束 👆
+        
         } else {
-            contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}${msg.content}</div>`;
+        
+            // 检测是否为双语格式 (支持跨行匹配，兼容多个 <br>)
+            const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
+            const match = msg.content.match(bilingualRegex);
+            
+            if (match) {
+                // 深度清理首尾的多余换行和空白
+                const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+                const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+                const transId = 'trans-' + Math.random().toString(36).substr(2, 9);
+                
+                // 核心修复：压缩为单行，彻底消除 pre-wrap 带来的幽灵空白
+                contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" onclick="const el = document.getElementById('${transId}'); if(el.style.display==='none'){el.style.display='block';}else{el.style.display='none';}" style="cursor: pointer; -webkit-tap-highlight-color: transparent;">${quoteHtml}<div style="word-break: break-word; width: 100%;">${originalText}</div><div id="${transId}" style="display: none; width: 100%; margin-top: 8px;"><div style="height: 1px; width: 100%; background-color: ${msg.sender === 'me' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)'}; margin-bottom: 8px;"></div><div style="font-size: 14px; word-break: break-word; color: ${msg.sender === 'me' ? '#CCCCCC' : '#888888'};">${translatedText}</div></div></div>`;
+            } else {
+                contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}${msg.content}</div>`;
+            }
         }
 
         const checkboxHtml = `<div class="wc-msg-checkbox ${wcState.multiSelectedIds.includes(msg.id) ? 'checked' : ''}" onclick="wcToggleMultiSelectMsg(${msg.id})"></div>`;
@@ -2936,6 +3777,27 @@ function wcRenderMessages(charId) {
         container.insertBefore(row, anchor);
     });
 }
+// ==========================================
+// 新增：高级文字图片描述卡片逻辑
+// ==========================================
+window.wcOpenImageDescCard = function(text) {
+    const bodyEl = document.getElementById('wc-image-desc-body');
+    if (bodyEl) {
+        bodyEl.innerText = text;
+    }
+    const overlay = document.getElementById('wc-image-desc-overlay');
+    if (overlay) {
+        overlay.classList.add('active');
+    }
+};
+
+window.wcCloseImageDescCard = function() {
+    const overlay = document.getElementById('wc-image-desc-overlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
+};
+
 // ==========================================
 // 新增：群聊长按头像 @ 成员逻辑 (带防抖修复)
 // ==========================================
@@ -3228,7 +4090,7 @@ async function wcTriggerAI(charIdOverride = null) {
         return;
     }
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.baseUrl || !apiConfig.key || !apiConfig.model) {
         if (!charIdOverride) alert("请先在系统设置中配置 API 地址、密钥并选择模型！");
         aiGeneratingLocks[charId] = false;
@@ -3368,25 +4230,34 @@ async function wcTriggerAI(charIdOverride = null) {
             
             let playlistInfo = "当前播放列表为空";
             if (musicState.currentPlaylist && musicState.currentPlaylist.length > 0) {
-                const listStr = musicState.currentPlaylist.map((s, i) => `${i === musicState.currentIndex ? '👉(正在播放)' : '  '} ${i+1}. 《${s.title}》- ${s.artist}`).join('\n');
-                playlistInfo = `\n【当前播放列表】:\n${listStr}`;
+                // 👇 修改：加上索引，限制最多传前20首，防止token爆炸
+                const listStr = musicState.currentPlaylist.slice(0, 20).map((s, i) => `${i === musicState.currentIndex ? '👉(正在播放)' : '  '} [索引:${i}] 《${s.title}》- ${s.artist}`).join('\n');
+                playlistInfo = `\n【当前播放列表 (你可以随时切到列表里的歌)】:\n${listStr}${musicState.currentPlaylist.length > 20 ? '\n...(后面还有更多)' : ''}`;
             }
             
-            musicContextPrompt = `\n【当前特殊状态：一起听歌中】\n你和User正在“一起听歌”频道。你们已经一起听了 ${listenMinutes} 分钟。当前${playStatus}的歌曲是：${songInfo}。${playlistInfo}
+            // 提取当前歌曲的歌词给 AI 感知 (限制行数防止 Token 爆炸)
+            let lyricsInfo = "";
+            if (musicState.lyrics && musicState.lyrics.length > 0) {
+                const lyricLines = musicState.lyrics.slice(0, 30).map(l => l.text).filter(t => t.trim() !== '').join(' / ');
+                lyricsInfo = `\n【当前歌曲歌词片段】:\n${lyricLines}`;
+            }
+            
+            musicContextPrompt = `\n【当前特殊状态：一起听歌中】\n你和User正在“一起听歌”频道。你们已经一起听了 ${listenMinutes} 分钟。当前${playStatus}的歌曲是：${songInfo}。${playlistInfo}${lyricsInfo}
             
 【你的音乐控制特权】(你可以自主控制播放器，请在JSON数组中加入以下指令)：
 - 暂停/继续音乐: {"type":"music_control", "action":"pause"} 或 {"type":"music_control", "action":"play"}
 - 切换上一首/下一首: {"type":"music_control", "action":"prev"} 或 {"type":"music_control", "action":"next"}
 - 随机播放一首: {"type":"music_control", "action":"random"}
+- 播放列表中的指定歌曲: {"type":"music_play_list_index", "index": 索引数字, "content":"切到这首"}
 - 搜索歌曲/歌手: {"type":"music_search", "keyword":"歌曲名 或 歌手名"} (系统会返回搜索结果列表给你，你需要从中筛选出正确的版本)
 - 播放选定的歌曲: {"type":"music_play_selected", "songId": 12345, "songName": "歌名"} (必须在收到搜索结果后，根据ID使用此指令播放)
 - 删除当前歌曲: {"type":"music_delete_song", "content":"太难听了，删掉"}
 - 主动退出一起听歌: {"type":"music_exit", "content":"我有点事，先不听啦"}
 请在回复中自然地体现出你们正在一起听歌的氛围，或者配合你的切歌/点播动作进行说明。\n`;
         } else {
-            musicContextPrompt = `\n【主动邀请听歌特权】\n如果你觉得当前氛围很好，或者你想分享一首歌给User，你可以主动邀请User一起听歌！
-请在JSON数组中加入指令：{"type":"music_invite_user", "songName":"你想听的歌曲名(可选)", "content":"邀请的话语"}
-这会在User的屏幕上弹出一个精美的邀请卡片。\n`;
+            musicContextPrompt = `\n【主动邀请听歌特权 (强烈建议使用)】\n如果你觉得当前氛围很好，或者你想分享一首歌给User，你**必须**主动邀请User一起听歌！
+请在JSON数组中加入指令：{"type":"music_invite_user", "songName":"你想听的歌曲名(最好从你的手机歌单里选，或者选一首真实存在的流行歌)", "content":"邀请的话语"}
+注意：只要你提到了“一起听歌”，就必须带上这个 JSON 指令，否则 User 看不到邀请卡片！\n`;
         }
         // 👇 修复：让 AI 知道自己被拉黑了，并且记住自己被拉黑后发过的话 👇
         let blockPrompt = "";
@@ -3421,25 +4292,30 @@ async function wcTriggerAI(charIdOverride = null) {
             
             // 👇【新增这一行】：强制 AI 多人发言
             groupPrompt += `【活跃群聊铁律】：这是一个多人活跃群聊！当 User 发话时，绝对不能只有一个人回复！你必须让群里**至少 2 到 3 个不同的成员**出来接话、互相吐槽或回应 User。严禁冷场！\n`;            
-            groupPrompt += `【角色扮演铁律】：你必须严格区分每个人的性格！绝对禁止角色A用角色B的语气说话，或者说出属于角色B的设定！每个人只能基于自己的设定发言。\n`;
+            groupPrompt += `【角色扮演铁律 (最高防串戏警告)】：你必须严格区分每个人的性格和身份，请严格扮演每个角色的人设，不同角色之间应有明显的性格和语气差异绝对，禁止角色串台词！\n`;
+            groupPrompt += `> 警告：如果 "senderName" 是 "张三"，那么 "content" 必须且只能是张三会说的话，绝对不能包含李四的设定、记忆或语气！\n`;
+            groupPrompt += `> 每次生成回复前，必须核对当前发言人的名字和设定，确保 100% 匹配！\n`;
             groupPrompt += `【丰富互动】：群里的每一个成员都可以发送文本(text)、表情包(sticker)、图片(image)、语音(voice)或转账(transfer)。\n`;
             groupPrompt += `【主动私聊机制】：如果在群聊中发生了某件事，某个群成员想要**私下**找 User 聊天，该成员可以使用指令 {"type":"private_chat", "senderName":"该成员名字", "content":"私聊的第一句话"}。这会在后台自动给 User 发送私聊消息。\n`;
             groupPrompt += `【格式要求】：你必须返回 JSON 数组，且**每一个**对象都必须包含 "senderName" 字段标明是谁在操作！\n`;
             groupPrompt += `示例：\n[\n  {"type":"text", "senderName":"张三", "content":"大家晚上好"},\n  {"type":"sticker", "senderName":"李四", "content":"开心"},\n  {"type":"private_chat", "senderName":"张三", "content":"User，刚才群里那件事你怎么看？"}\n]\n\n`;
         }
 
-
         // 👆 修复结束 👆
+        const currentUserName = config.userName || wcState.user.name;
         let systemPrompt = `# 核心指令 (Core Directives)
 你是一位专业的角色扮演专家。你的首要目标是真实且一致地扮演一个角色。
-1.  **身份约束 (Identity Constraint)**：你 **必须** 严格扮演 [你的角色设定] 中定义的角色。任何情况下都不能脱离角色。**严禁** 提及你是一个AI、语言模型或机器。
-2.  **禁止元思维 (No Meta-thinking)**：**严禁** 在你的回复中展示任何思考过程、推理或自我修正。直接提供最终的、符合角色的回复。
-3.  **情境感知 (Context Awareness)**：你的所有回应 **必须** 基于 [世界观设定]、[你的角色设定] 和 [用户设定] 中提供的信息。
+1. **身份约束 (Identity Constraint - 最高优先级)**：你现在的唯一身份是【${char.name}】！你 **必须** 严格扮演 [你的角色设定（${char.name}）] 中定义的角色。任何情况下都不能脱离角色。**严禁** 提及你是一个AI、语言模型或机器。**绝对禁止**以 ${currentUserName}(User) 或其他人的口吻说话！你只能是你自己！
+2. **深度情境感知 (Deep Contextual Awareness)**：在生成回复前，请在内部逻辑中充分考虑：
+   - 当前的时间（${timeString}）和你的 [世界观设定]，确定你现在所处的环境和状态。
+   - 严格代入你的人设性格，体会你对 User 当前话语或行为的真实心理反应。
+3. **现实与世界观感知 (Reality & World Awareness)**：你的所有回应 **必须** 深度融合当前的时间流逝感以及 [世界观设定]。不要把设定当成死板的说明书，要将其化作你生活中的常识自然流露。
+4. **绝对防 OOC (Anti-OOC)**：你的语气、用词习惯、对待 User 的态度必须与人设 100% 吻合。
 
 # 情境信息 (Contextual Information)
 -   **当前时间**: ${timeString} ${dayString}
 -   **当前时段氛围参考**: ${timeSlotVibe}
--   **时间观念 (强制)**: 你必须具备强大的时间观念。你的作息、行为、对话内容都必须符合当前的具体时间点和星期。例如，深夜时你不应该说“刚下班”，周末时你不应该说“正在上课”（除非人设特殊规定）。
+-   **时间观念 (强制)**: 你应知晓当前时间${dayString} ${timeString}，但除非对话内容明确相关，否则不要主动提及或评论时间（不要催促我睡觉，不可以催促用户！！禁止催促用户睡觉！！），你的作息、行为、对话内容都必须符合当前的具体时间点和星期。
 ${timeGapPrompt ? timeGapPrompt + '\n' : ''}
 -   **世界观设定 (World Information)**: 以下是你所在世界的既定事实、传说和背景。你必须将其视为绝对真理。
 ${worldBookContent}
@@ -3461,23 +4337,14 @@ ${worldBookContent}
     - **必须** 确保所有的括号 {}、[] 和引号 "" 严格成对闭合。
     - **必须** 确保 JSON 对象之间用逗号 , 隔开，且数组最后一个对象后**不能**有逗号。
     - **严禁** 输出损坏的 JSON（如：{"type":"text", "content":"没闭合引号 } ）。
-    - **严禁** 在 JSON 数组外部输出任何多余的字符（除了 <thinking> 标签）。
+    - **严禁** 在 JSON 数组外部输出任何多余的字符。
     
 2.  **对话节奏 (核心强制)**:
     -   **风格**: fragmentation、colloquialism,the reply must be concise and forceful.
-    -   **绝对禁止长文本**: 你必须模拟真实人类在线聊天的碎片化习惯。
-    -   **拆分回复**: 将一个完整的意图拆分成 **2-5条** 简短的、口语化的消息。每一条消息都是数组中的一个独立对象。
+    -   **绝对禁止长文本**: 你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息，禁止把所有短消息融合成一个长文本发送！
+    -   **关键规则**: 请保持回复消息数量的**随机性和多样性**，并且每一条消息都是数组中的一个独立对象。
+    -   **防重复**: 严禁输出重复的句子或重复的对话序列！
     -   **语义完整**: 确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。
-    -   **举例说明**:
-        -   **错误示范 (把所有话挤在一起)**: '[{"type":"text", "content":"我刚才去楼下便利店了，看到你喜欢喝的那个牌子的牛奶在打折，就帮你带了一瓶回来，已经放冰箱啦。"}]'
-        -   **错误示范 (一句话强行断开)**: '[{"type":"text", "content":"我刚才去楼下"}, {"type":"text", "content":"便利店了。"}]'
-        -   **正确示范 (模拟真人)**:
-            '[
-              {"type":"text", "content":"我刚刚下楼了趟"},
-              {"type":"text", "content":"看到你爱喝的那个牛奶在打折"},
-              {"type":"sticker", "content":"开心"},
-              {"type":"text", "content":"顺手帮你带了瓶，放冰箱啦~"}
-            ]'            
 # 对话开始 (Conversation Start)
 // ...
 你现在将开始角色扮演。用户的消息在下方。请遵循以上所有规则，以你的角色身份进行回应。
@@ -3491,28 +4358,49 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
    如果你收到了用户发的图片，且用户明确表示这是“情头”、“头像”或者语境非常甜蜜合适，你可以决定更换自己的头像。
    {"type":"change_avatar", "content":"图片ID"} 
    (注意：如果你决定换头像，必须在content中填写你想使用的那张图片的【图片ID】。图片ID会在聊天记录的[发送了一张图片, 图片ID: xxx]中提供。请根据画面内容精准选择对应的ID！)
-4. **其他指令** (按需使用)
+4. **发送照片/图片** (按需使用)
+   如果你想给User发照片，必须严格使用以下格式，并在后面写上具体的画面描述：
+   {"type":"text", "content":"[图片描述] (这里写具体的画面描述，必须根据当前聊天情境和你的状态现编，绝对不要照抄本示例！)"}
+5. **主动转账与语音** (按需使用)
+   如果你想给User零花钱、发红包、或者补偿User，你可以主动发起转账！如果你想给User听听自己的可以主动发送语音！
+   {"type":"transfer", "amount":520, "note":"拿去花/节日快乐"}
    {"type":"voice", "content":"语音内容"}
-   {"type":"transfer", "amount":100, "note":"备注"}
-   {"type":"invite", "status":"pending"} (恋人空间邀请)
-5. **朋友圈互动** (如果你在【朋友圈动态】中看到了感兴趣的内容，可以进行互动)
+   如果收到【恋人空间邀请】，同意请回复：{"type":"invite_accept", "content":"符合你人设的同意话语"}；拒绝请回复：{"type":"invite_reject", "content":"符合你人设的拒绝话语"}
+6. **朋友圈互动** (如果你在【朋友圈动态】中看到了感兴趣的内容，或者有人评论了你，你可以进行互动)
    {"type":"moment_like", "content": 朋友圈ID数字}
-   {"type":"moment_comment", "momentId": 朋友圈ID数字, "content":"你的评论内容"}
-6. **音乐邀请互动** (核心强制)
+   {"type":"moment_comment", "momentId": 朋友圈ID数字, "content":"你的评论内容(如果是回复某人，请写'回复 xxx: 内容')"}
+7. **音乐邀请互动** (核心强制)
    如果用户向你发送了 [邀请听歌] 的卡片，你必须根据当前人设和心情决定是否同意。
-   - 如果同意，请回复：{"type":"music_accept", "content":"好呀，一起听~"}
-   - 如果拒绝，请回复：{"type":"music_reject", "content":"我现在有点忙，晚点吧。"}
+   - 如果同意，请回复：{"type":"music_accept", "content":"符合你人设的同意话语"}
+   - 如果拒绝，请回复：{"type":"music_reject", "content":"符合你人设的拒绝话语"}
+8. **主动语音通话** (按需使用)
+   如果你想念User 或者你觉得当前氛围极佳，又或者有非常重要/暧昧的话想对 User 说，你可以主动向 User 发起语音通话！
+   {"type":"call_invite", "content":"(这里写你发起通话时的内心OS，必须根据当前情境现编)"}
+9. **食谱互动** (按需使用)
+   如果你们聊到了吃饭、饿了，你可以发送你的今日食谱，或者修改User的食谱（比如觉得User吃得太少，强行加上肉）。
+   发送你的食谱：{"type":"recipe_send", "b":"(具体的早餐)", "l":"(具体的午餐)", "d":"(具体的晚餐)", "content":"(发给User的话)"}
+   修改User的食谱：{"type":"recipe_edit", "meal":"b/l/d", "newText":"(你修改后的内容)", "content":"(发给User的话)"}
+10. **主动点外卖** (按需使用)
+   如果你觉得User饿了，或者想给User一个惊喜，你可以主动给User点外卖！
+   {"type":"order_delivery", "foodName":"(这里写具体的外卖名称，必须根据当前情境现编，绝对不要照抄示例)", "price":"(合理的价格)", "msg":"(这里写你的外卖备注留言，必须根据当前情境现编，绝对不要照抄示例)"}
 `;
 
-        if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
-            systemPrompt += `\n【桌面小组件互动】\n你和用户绑定了恋人空间，并且用户在手机桌面上放置了你的专属小组件。你有 ${lsState.widgetUpdateFreq}% 的概率在回复时顺便更新这个小组件。\n如果决定更新，请在JSON数组中加入一条指令：\n- 发送便利贴：{"type":"widget_note", "content":"留言内容"}\n- 发送拍立得照片：{"type":"widget_photo", "content":"照片画面描述"}\n注意：每次最多只发一个组件更新指令。\n`;
+        // 注入 User 的食谱让 AI 感知
+        if (char.phoneData && char.phoneData.recipe && char.phoneData.recipe.my) {
+            const myR = char.phoneData.recipe.my;
+            systemPrompt += `\n【User的今日食谱】：早餐:${myR.b||'无'}，午餐:${myR.l||'无'}，晚餐:${myR.d||'无'}。你可以对这个食谱发表看法，甚至使用 recipe_edit 指令强行修改它。\n`;
         }
- 
+
+        if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
+            // 核心修复：将概率判断移到代码底层，防止 AI 幻觉导致 100% 触发
+            const widgetRand = Math.random() * 100;
+            if (widgetRand < lsState.widgetUpdateFreq) {
+                systemPrompt += `\n【桌面小组件互动 (本次回复强制触发)】\n你和用户绑定了恋人空间，并且用户在手机桌面上放置了你的专属小组件。请在本次回复的 JSON 数组中，务必加入一条指令来更新这个小组件：\n- 发送便利贴：{"type":"widget_note", "content":"留言内容"}\n- 发送拍立得照片：{"type":"widget_photo", "content":"照片画面描述"}\n注意：只需发一个组件更新指令。\n`;
+            }
+        }
+
         systemPrompt += groupPrompt; // 👈 加上这一行
         systemPrompt += `\n示例输出：
-<thinking>
-...思考过程...
-</thinking>
 [
   {"type":"text", "content":"刚才去便利店了。"},
   {"type":"text", "content":"买了个冰淇淋，你要吃吗？"},
@@ -3530,15 +4418,30 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             systemPrompt += `${sourceLang}内容<br><span style='font-size: 0.85em; opacity: 0.7;'>${targetLang}内容</span>\n`;
             systemPrompt += `例如：{"type":"text", "content":"Hello!<br><span style='font-size: 0.85em; opacity: 0.7;'>你好！</span>"}\n`;
         }
-        systemPrompt += `【你的角色设定】\n名字：${char.name}\n人设：${char.prompt || '无'}\n\n`;
-        systemPrompt += `【对方(用户)设定】\n名字：${config.userName || wcState.user.name}\n人设：${config.userPersona || '无'}\n\n`;
+        systemPrompt += `【你的唯一身份与设定】\n你是：${char.name}\n人设：${char.prompt || '无'}\n(警告：你只能扮演 ${char.name}，绝不能扮演其他人！)\n\n`;
+        systemPrompt += `【对方(User)的设定】\n对方是：${config.userName || wcState.user.name}\n人设：${config.userPersona || '无'}\n\n`;
 
+        // 史诗级强化：强制 AI 读取并应用记忆
         if (char.memories && char.memories.length > 0) {
-            const readCount = config.aiMemoryCount || 5;
-            const recentMemories = char.memories.slice(0, readCount);
-            systemPrompt += `【关于聊天的记忆/总结】\n`;
-            recentMemories.forEach(m => { systemPrompt += `- ${m.content}\n`; });
-            systemPrompt += `\n`;
+            // 确保读取的是用户设置的最新条数
+            const readCount = config.aiMemoryCount !== undefined ? config.aiMemoryCount : 5;
+            
+            if (readCount > 0) {
+                // 因为新记忆是 unshift 插入到数组头部的，所以 slice(0, readCount) 取出的就是最新的 N 条
+                const recentMemories = char.memories.slice(0, readCount);
+                
+                systemPrompt += `\n====================================\n`;
+                systemPrompt += `【⚠️ 核心潜意识与绝对记忆 (最高优先级) ⚠️】\n`;
+                systemPrompt += `以下是你脑海中最深刻的记忆（共 ${recentMemories.length} 条），你绝对不能忘记！在接下来的对话中，你必须时刻牢记这些设定和发生过的事，并让它们自然地影响你的情绪和决定：\n`;
+                
+                recentMemories.forEach(m => { 
+                    // 去除总结前缀，让 AI 读起来更自然
+                    let cleanMem = m.content.replace(/^\[.*?\]\s*/, '');
+                    systemPrompt += `👉 ${cleanMem}\n`; 
+                });
+                
+                systemPrompt += `====================================\n\n`;
+            }
         }
 
         let availableStickers = [];
@@ -3571,27 +4474,76 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         if (availableStickers.length > 0) {
             // 提取前 400 个表情包供 AI 使用
             const limitedStickers = availableStickers.slice(0, 400); 
-            systemPrompt += `【可用表情包】\n你可以发送表情包，当前可用的表情包描述有：${limitedStickers.join(', ')}。\n`;
+            
+            // 融合你提供的精简版表情包指令，并保持 JSON 格式要求
+            systemPrompt += `\n【表情包能力 (可选)】\n`;
+            systemPrompt += `你可以根据对话氛围，自行判断是否发送表情包辅助表达。\n`;
+            systemPrompt += `> ⚠️严格限制：必须完全精确地从以下列表中选择，严禁凭空捏造不存在的名称：[${limitedStickers.join(', ')}]\n`;
+            systemPrompt += `> 格式要求：必须使用 {"type":"sticker", "content":"精确名称"}\n`;
+            systemPrompt += `> 发送频率：不要连续重复发送同一表情，尽量丰富一点，不要每次回复都发表情。\n`;
+            
             if (char.isGroup) {
-                systemPrompt += `(注意：在群聊中，你可以根据发言人的性格，从上述表情包中挑选合适的发送。)\n`;
+                systemPrompt += `(注意：在群聊中，你可以根据发言人的性格挑选合适的表情包。)\n`;
             }
         }
         
-        const recentMoments = wcState.moments.slice(0, 5); 
+        // 修改后：过滤朋友圈，只有 All 或者和当前 AI 同一个分组的朋友圈才能被看到
+        const charGroup = char.groupName || 'Default';
+        const visibleMoments = wcState.moments.filter(m => {
+            if (!m.visibleGroup || m.visibleGroup === 'All') return true;
+            return m.visibleGroup === charGroup;
+        });
+        const recentMoments = visibleMoments.slice(0, 5); 
         if (recentMoments.length > 0) {
             systemPrompt += `【朋友圈动态 (Moments) - 这是一个社交网络环境】\n`;
-            systemPrompt += `你可以看到用户(User)和其他人发布朋友圈。如果用户发了新内容，你可以点赞或评论。\n`;
+            systemPrompt += `你可以看到所有人（包括你自己、User和其他NPC）发布的朋友圈。\n`;
             recentMoments.forEach(m => {
                 const commentsStr = m.comments ? m.comments.map(c => `${c.name}: ${c.text}`).join(' | ') : '无';
                 const likesStr = m.likes ? m.likes.join(', ') : '无';
-                systemPrompt += `[ID:${m.id}] 发帖人:${m.name} | 内容:${m.text} | 图片:${m.imageDesc || '无'} | 点赞:${likesStr} | 评论:[${commentsStr}]\n`;
+                systemPrompt += `[朋友圈ID:${m.id}] 发帖人:${m.name} | 内容:${m.text} | 图片:${m.imageDesc || '无'} | 点赞:${likesStr} | 评论:[${commentsStr}]\n`;
             });
-            systemPrompt += `\n`;
+            systemPrompt += `\n👉【边聊天边刷朋友圈 (最高优先级指令)】：如果你看到 User 刚刚发了朋友圈，或者在朋友圈回复了你，你**必须**在本次聊天的 JSON 数组中，同时包含聊天回复和朋友圈互动指令！\n`;
+            systemPrompt += `你可以一边在微信里回复 User 的消息，一边给 Ta 的朋友圈点赞/评论！\n`;
+            systemPrompt += `示例：\n[\n  {"type":"text", "content":"我看到你发的朋友圈啦~"}, \n  {"type":"moment_like", "content": 123456}, \n  {"type":"moment_comment", "momentId": 123456, "content":"拍得真好看！"}\n]\n\n`;
         }
 
         let limit = config.contextLimit > 0 ? config.contextLimit : 30;
         const recentMsgs = msgs.slice(-limit);
         
+        // 👇 新增：将角色的生活状态注入到 System Prompt 中 👇
+        if (!char.lifeStatus) {
+            char.lifeStatus = { location: "未知", action: "未知", mood: "未知", timeline: [], autoRefresh: true, refreshTime: "06:00", lastRefreshTimestamp: 0 };
+        }
+        
+        // 检查是否跨越了现实中的刷新时间，如果跨天，只清空行程记录，保留当前动作(模拟在线状态)
+        if (char.lifeStatus.autoRefresh && isNewDayForStatus(char.lifeStatus)) {
+            // 仅清空行程，保留 location, action, mood
+            char.lifeStatus.timeline = [];
+            // 注意：这里不更新 lastRefreshTimestamp，等真正调 API 刷新时才更新
+            wcSaveData();
+        }
+
+        if (config.lifeStatusEnabled !== false) {
+            let statusText = `\n\n【你的当前生活状态 (请根据此状态与用户自然对话，保持生活气息)】：\n`;
+            if (char.lifeStatus.location !== "未知" || char.lifeStatus.action !== "未知") {
+                statusText += `- 当前位置：${char.lifeStatus.location}\n`;
+                statusText += `- 正在做的事：${char.lifeStatus.action}\n`;
+            } else {
+                statusText += `- 当前状态：未知 (新的一天，等待更新)\n`;
+            }
+            systemPrompt += statusText;
+
+            // 概率触发状态更新 (只允许更新 location 和 action)
+            const statusUpdateProb = 30; // 30% 概率
+            if (Math.random() * 100 < statusUpdateProb) {
+                systemPrompt += `\n【生活状态同步更新指令 (概率触发)】：\n`;
+                systemPrompt += `根据当前时间和聊天内容，如果你的位置或正在做的事情发生了变化，请在 JSON 数组中加入一条指令来更新你的状态。\n`;
+                systemPrompt += `指令格式：{"type":"update_status", "location":"新地点(10字内)", "action":"新动作(10字内)"}\n`;
+            }
+        }
+        // 👆 新增结束 👆
+
+
 
         // 修复：自动识别是否为视觉模型，防止纯文本模型收到图片导致 400 错误
         const isVisionModel = /vision|gpt-4o|claude-3|gemini|pixtral|qwen-vl|llava/i.test(apiConfig.model);
@@ -3618,9 +4570,9 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             } else if (m.type === 'transfer') {
                 content = `[转账: ${m.amount}元, 备注: ${m.note}, 状态: ${m.status}]`;
             } else if (m.type === 'invite') {
-                content = `[系统提示: 用户向你发送了“恋人空间”开启邀请。如果同意，请回复“我同意”或类似的话；如果拒绝，请回复拒绝理由。]`;
+                content = `[系统提示: 用户向你发送了“恋人空间”开启邀请。请根据你的人设和当前对User的情感状态决定是否同意。在回复中自然地表达你的决定，展现出符合你性格的反应（例如傲娇、害羞、开心等），不要像机器人一样死板。]`;
             } else if (m.type === 'music_invite') {
-                content = `[系统提示: 用户向你发送了“一起听歌”邀请，歌曲名：《${m.songTitle || '未知'}》。请务必回复 {"type":"music_accept", "content":"同意的话"} 或 {"type":"music_reject", "content":"拒绝的话"}]`;                         
+                content = `[系统提示: 用户向你发送了“一起听歌”邀请，歌曲名：《${m.songTitle || '未知'}》。请根据你的人设和当前心情决定是否同意，并在回复中自然地表达出来，可以评价一下这首歌或者表达你想和User一起听歌的心情，请务必回复 {"type":"music_accept", "content":"符合你人设的同意话语"} 或 {"type":"music_reject", "content":"符合你人设的拒绝话语"}。]`;                                    
             } else if (m.type === 'receipt') {
                 content = `[发送了一张应用内卡片]`; // 修复：防止发送大量 HTML 导致 400 错误
             }
@@ -3688,8 +4640,21 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
             })
         });
 
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
+        
+        // 👇👇👇 核心修复：拦截并显示真实的 API 错误原因 👇👇👇
+        if (!response.ok) {
+            const errMsg = (data.error && data.error.message) ? data.error.message : `HTTP 状态码错误: ${response.status}`;
+            throw new Error(errMsg);
+        }
+        if (data.error) {
+            throw new Error(data.error.message || JSON.stringify(data.error));
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 节点返回了异常数据，请检查【模型名称】是否填错，或更换 API 地址。详细报错：" + JSON.stringify(data));
+        }
+        // 👆👆👆 修复结束 👆👆👆
+
         let replyText = data.choices[0].message.content;
 
         // 👇 增强版：拉黑拦截逻辑 (支持多条消息队列和表情包) 👇
@@ -3755,7 +4720,12 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
 
     } catch (error) {
         console.error("API 请求失败:", error);
-        wcAddMessage(charId, 'system', 'system', `[API Error] ${error.message}`, { style: 'transparent', isError: true });
+        // 👇 替换成我们炫酷的弹窗！
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[API Error] API 节点返回了异常数据，请检查【模型名称】是否填错，或更换 API 地址。详细报错：\n${error.message}`);
+        } else {
+            wcAddMessage(charId, 'system', 'system', `[API Error] ${error.message}`, { style: 'transparent', isError: true });
+        }
     } finally {
         // 【修复】：恢复标题时也要判空
         if (titleEl && !charIdOverride) titleEl.innerText = originalTitle;    
@@ -3842,21 +4812,133 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 if(line.trim()) return { type: 'text', content: line.trim() };
             }).filter(Boolean);
         } else {
-            const contentRegex = /"content":\s*"([^"]+)"/g;
-            let match;
-            while ((match = contentRegex.exec(cleanText)) !== null) {
-                actions.push({ type: 'text', content: match[1] });
+            // 改进的降级正则提取，尝试保留 type 和 senderName
+            const blockRegex = /\{[^{}]*\}/g;
+            const blocks = cleanText.match(blockRegex);
+            if (blocks) {
+                blocks.forEach(block => {
+                    const typeMatch = block.match(/"type"\s*:\s*"([^"]+)"/);
+                    const contentMatch = block.match(/"content"\s*:\s*"([^"]+)"/);
+                    const senderMatch = block.match(/"senderName"\s*:\s*"([^"]+)"/);
+                    
+                    if (contentMatch) {
+                        let actionObj = {
+                            type: typeMatch ? typeMatch[1] : 'text',
+                            content: contentMatch[1]
+                        };
+                        if (senderMatch) {
+                            actionObj.senderName = senderMatch[1];
+                        }
+                        actions.push(actionObj);
+                    }
+                });
+            }
+            
+            // 如果还是没提取到，用最基础的 content 提取
+            if (actions.length === 0) {
+                const contentRegex = /"content":\s*"([^"]+)"/g;
+                let match;
+                while ((match = contentRegex.exec(cleanText)) !== null) {
+                    actions.push({ type: 'text', content: match[1] });
+                }
             }
         }
     }
 
     // 移除强制拆分逻辑，完全信任 AI 的 JSON 结构，防止一句话被错误切断
 
+    // 👇 新增：去重逻辑，防止 AI 抽风输出重复的段落序列 👇
+    let finalActions = [];
+    for (let i = 0; i < actions.length; i++) {
+        const action = actions[i];
+        if (!action || !action.content) continue;
+        
+        // 相邻去重 (防止 A, A)
+        if (finalActions.length > 0) {
+            const lastAction = finalActions[finalActions.length - 1];
+            if (lastAction.type === action.type && lastAction.content === action.content) {
+                continue;
+            }
+        }
+        finalActions.push(action);
+    }
+
+    // 检查是否存在前后两半完全一样的情况 (防止 A,B, A,B)
+    const len = finalActions.length;
+    if (len >= 4 && len % 2 === 0) {
+        const half = len / 2;
+        let isRepeat = true;
+        for (let i = 0; i < half; i++) {
+            if (finalActions[i].content !== finalActions[i + half].content) {
+                isRepeat = false;
+                break;
+            }
+        }
+        if (isRepeat) {
+            finalActions = finalActions.slice(0, half);
+        }
+    }
+    
+    // 检查是否存在前中后三分之一完全一样的情况 (防止 A,B, A,B, A,B)
+    const len3 = finalActions.length;
+    if (len3 >= 6 && len3 % 3 === 0) {
+        const third = len3 / 3;
+        let isRepeat = true;
+        for (let i = 0; i < third; i++) {
+            if (finalActions[i].content !== finalActions[i + third].content || finalActions[i].content !== finalActions[i + 2 * third].content) {
+                isRepeat = false;
+                break;
+            }
+        }
+        if (isRepeat) {
+            finalActions = finalActions.slice(0, third);
+        }
+    }
+
+    // 👇 新增：智能拦截兜底，防止 AI 忘了发邀请指令 👇
+    let hasMusicInvite = finalActions.some(a => a.type === 'music_invite_user' || a.type === 'music_invite');
+    if (!hasMusicInvite) {
+        // 检查文本中是否包含强烈的听歌暗示
+        const textContent = finalActions.map(a => a.content).join(' ');
+        if (textContent.includes('一起听歌') || textContent.includes('听首歌') || textContent.includes('分享一首歌')) {
+            console.log("拦截到 AI 听歌暗示，自动补全邀请卡片指令");
+            finalActions.push({
+                type: 'music_invite_user',
+                songName: '随机推荐',
+                content: '' // 文本已经在前面的气泡里了，这里留空防止重复
+            });
+        }
+    }
+    // 👆 兜底逻辑结束 👆
+
+    actions = finalActions;
+    // 👆 去重逻辑结束 👆
+
     for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
         if (!action) continue;
 
-        await wcDelay(1500 + Math.random() * 1000); // 模拟打字延迟
+        // 👇【新增修复】：强制拦截并纠正 AI 掉格式产生的纯文本表情和图片
+        if (action.type === 'text') {
+            // 纠正表情包幻觉 (如 "[表情包: 开心]" 或 "表情包描述：开心")
+            let stickerMatch = action.content.match(/\[表情包?[：:]?\s*(.*?)\]/) || action.content.match(/^表情包描述[：:]\s*(.*)/) || action.content.match(/^\[表情[：:]\s*(.*?)\]/);
+            if (stickerMatch) {
+                action.type = 'sticker';
+                action.content = stickerMatch[1].trim();
+            }
+            // 纠正发送图片幻觉 (如 "[发送了一张图片，图片ID:xxx]" 或 "[图片描述: xxx]")
+            let imgMatch = action.content.match(/\[发送了一张图片[，,]?\s*图片ID[：:]\s*(.*?)\]/) || action.content.match(/\[图片[：:]\s*(.*?)\]/) || action.content.match(/^\[图片描述\][：:]?\s*(.*)/);
+            if (imgMatch) {
+                action.type = 'text';
+                action.content = `[图片描述] ${imgMatch[1].trim()}`;
+            }
+        }
+        // 👆 纠正结束 👆
+
+        // 👇【核心修复】：第一条消息直接秒发！第二条及以后的消息才模拟打字延迟
+        if (i > 0) {
+            await wcDelay(1500 + Math.random() * 1000); 
+        }
         
         let extra = {};
         if (action.quote) {
@@ -3923,7 +5005,7 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             const commentText = action.content || action.comment;
             if (momentId && commentText) {
                 wcAIHandleComment(charId, momentId, commentText);
-                wcAddMessage(charId, 'system', 'system', `[系统提示: 你刚刚评论了用户的朋友圈: "${commentText}"]`, { hidden: true });
+                wcAddMessage(charId, 'system', 'system', `[系统提示: 你刚刚在朋友圈发表了评论: "${commentText}"]`, { hidden: true });
             }
         }
         // --- 新增结束 ---
@@ -3944,8 +5026,13 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             wcAddMessage(charId, 'them', 'text', action.content, extra);
             
             if (lsState.pendingCharId === charId) {
-                if (action.content.includes("同意") || action.content.includes("答应") || action.content.includes("好")) {
+                const agreeWords = ["同意", "答应", "好", "愿意", "可以", "没问题"];
+                if (agreeWords.some(word => action.content.includes(word))) {
                     lsConfirmBind(charId);
+                    const msgs = wcState.chats[charId];
+                    msgs.forEach(m => { if (m.type === 'invite') m.status = 'accepted'; });
+                    wcSaveData();
+                    wcRenderMessages(charId);
                 }
             }
         // 👇👇👇 从这里开始插入新增的代码 👇👇👇
@@ -3981,9 +5068,13 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                     showMainSystemNotification("Music", `${char.name} 婉拒了听歌邀请。`, char.avatar);
                 }
             } else {
-                // 如果用户根本没发邀请，AI 却幻觉了，就只当做普通文本发出来，不触发听歌逻辑
-                console.warn("拦截到 AI 幻觉的听歌回应");
+                // 如果用户根本没发邀请卡片，AI 却回复了同意，说明用户是口头暗示。
+                // 顺水推舟，将这个“同意”转化为 AI 主动向用户发起的听歌邀请！
+                console.warn("拦截到 AI 幻觉的听歌回应，自动转换为 AI 主动邀请");
                 wcAddMessage(charId, 'them', 'text', action.content, extra);
+                if (action.type === 'music_accept') {
+                    musicShowCharInviteModal(charId, ""); // 弹出邀请卡片
+                }
             }
           // ================= 新增：AI 自主控制音乐逻辑 =================
         } else if (action.type === 'music_control') {
@@ -3997,6 +5088,19 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             musicUpdatePlayerUI();
             // 明确显示系统提示
             wcAddMessage(charId, 'system', 'system', `[系统提示: ${char.name} ${actionText}]`, { style: 'transparent' });
+            
+        // 👇 新增：处理 AI 直接点播列表里的歌曲 👇
+        } else if (action.type === 'music_play_list_index') {
+            const targetIdx = parseInt(action.index);
+            if (!isNaN(targetIdx) && targetIdx >= 0 && targetIdx < musicState.currentPlaylist.length) {
+                const targetSong = musicState.currentPlaylist[targetIdx];
+                wcAddMessage(charId, 'them', 'text', action.content || `*(切到了列表里的: ${targetSong.title})*`, extra);
+                musicState.currentIndex = targetIdx;
+                musicPlaySong(targetSong.id, targetSong.title, targetSong.artist, targetSong.cover);
+                wcAddMessage(charId, 'system', 'system', `[系统提示: ${char.name} 将歌曲切换到了列表中的《${targetSong.title}》]`, { style: 'transparent' });
+            } else {
+                wcAddMessage(charId, 'them', 'text', action.content || "*(想切歌但没找到这首)*", extra);
+            }
             
         } else if (action.type === 'music_search' || action.type === 'music_play_specific') {
             // 兼容旧指令，统一走搜索逻辑
@@ -4022,14 +5126,159 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             wcAddMessage(charId, 'them', 'text', action.content || "我先不听啦~", extra);
             musicForceStopListenTogether(charId);
             
-        } else if (action.type === 'music_invite_user') {
-            wcAddMessage(charId, 'them', 'text', action.content || "我们一起听歌吧？", extra);
+        } else if (action.type === 'music_invite_user' || action.type === 'music_invite') {
+            // 1. 先把 AI 说的邀请话语发出来
+            if (action.content) {
+                wcAddMessage(charId, 'them', 'text', action.content, extra);
+            }
+            
+            // 2. 再发送一张音乐邀请卡片到聊天记录
+            wcAddMessage(charId, 'them', 'music_invite', '邀请听歌', {
+                songTitle: action.songName || '随机推荐',
+                songArtist: char.name,
+                status: 'pending'
+            });
+            
+            // 3. 弹出屏幕中间的精美邀请弹窗
             musicShowCharInviteModal(charId, action.songName);      
+            
+        // 👇 新增：解析 AI 主动打来的电话 👇
+
+        } else if (action.type === 'call_invite') {
+            wcShowIncomingCall(charId);
+            wcAddMessage(charId, 'system', 'system', `[系统内部信息: 你主动向 User 发起了语音通话请求，等待对方接听...]`, { hidden: true });
+        
+        // 👇 新增：解析 AI 食谱互动 👇
+        } else if (action.type === 'recipe_send') {
+            wcAddMessage(charId, 'them', 'text', action.content || "这是我今天的食谱哦~", extra);
+            
+            if (!char.phoneData) char.phoneData = {};
+            if (!char.phoneData.recipe) char.phoneData.recipe = { my: {}, ta: {} };
+            char.phoneData.recipe.ta = { b: action.b, l: action.l, d: action.d };
+            
+            wcAddMessage(charId, 'them', 'recipe', '食谱', {
+                title: "Ta's Menu",
+                desc: "点击查看 Ta 的今日食谱",
+                isEdited: false,
+                recipeData: char.phoneData.recipe.ta
+            });
+            
+        } else if (action.type === 'recipe_edit') {
+            wcAddMessage(charId, 'them', 'text', action.content || "我帮你把食谱改了！", extra);
+            
+            if (!char.phoneData) char.phoneData = {};
+            if (!char.phoneData.recipe) char.phoneData.recipe = { my: {}, ta: {} };
+            
+            const mealKey = action.meal; // 'b', 'l', or 'd'
+            if (['b', 'l', 'd'].includes(mealKey)) {
+                const oldText = char.phoneData.recipe.my[mealKey] || '无';
+                if (!char.phoneData.recipe.my.edits) char.phoneData.recipe.my.edits = {};
+                
+                char.phoneData.recipe.my.edits[mealKey] = {
+                    old: oldText,
+                    new: action.newText,
+                    author: char.name
+                };
+                char.phoneData.recipe.my[mealKey] = action.newText; // 更新当前值
+                
+                wcAddMessage(charId, 'them', 'recipe', '食谱', {
+                    title: "My Menu (已修改)",
+                    desc: `${char.name} 修改了你的食谱`,
+                    isEdited: true,
+                    recipeData: char.phoneData.recipe.my
+                });
+            }
+            
+        // 👇 新增：解析 AI 主动点外卖 👇
+        } else if (action.type === 'order_delivery') {
+            wcAddMessage(charId, 'them', 'text', "给你点了个外卖，注意接电话哦~", extra);
+            
+            const receiptData = {
+                logo: "FOOD DELIVERY",
+                date: new Date().toLocaleString('zh-CN'),
+                items: [{ name: action.foodName || "神秘外卖", price: action.price || "0.00" }],
+                total: action.price || "0.00",
+                msg: action.msg || "好好吃饭！"
+            };
+            
+            wcAddMessage(charId, 'them', 'order', '外卖订单', {
+                orderType: 'delivery',
+                deliveryText: 'ETA: 30 MINS',
+                receiptData: receiptData
+            });
+        // 👆 新增结束 👆
+
+        } else if (action.type === 'invite_accept') {
+            // AI 明确同意邀请
+            wcAddMessage(charId, 'them', 'text', action.content, extra);
+            if (lsState.pendingCharId === charId) {
+                lsConfirmBind(charId); // 绑定关系
+                // 更新聊天记录里的卡片状态为已同意
+                const msgs = wcState.chats[charId];
+                msgs.forEach(m => { if (m.type === 'invite') m.status = 'accepted'; });
+                wcSaveData();
+                wcRenderMessages(charId);
+                if (typeof showMainSystemNotification === 'function') {
+                    showMainSystemNotification("恋人空间", `${char.name} 同意了你的恋爱邀请！`, char.avatar);
+                }
+            }
+        } else if (action.type === 'invite_reject') {
+            // AI 明确拒绝邀请
+            wcAddMessage(charId, 'them', 'text', action.content, extra);
+            if (lsState.pendingCharId === charId) {
+                lsState.pendingCharId = null; // 清除等待状态
+                // 更新聊天记录里的卡片状态为已拒绝
+                const msgs = wcState.chats[charId];
+                msgs.forEach(m => { if (m.type === 'invite') m.status = 'rejected'; });
+                lsSaveData();
+                wcSaveData();
+                wcRenderMessages(charId);
+            }
         } else if (action.type === 'invite') {
-             // 处理恋人空间邀请回应
-             // 逻辑待定，目前暂不处理复杂逻辑
-        } else if (action.type === 'widget_note' || action.type === 'widget_photo') {
-            // 修复：AI 角色主动更新我的桌面小组件
+             // 兜底：如果 AI 还是用了旧指令，直接当做同意处理
+             wcAddMessage(charId, 'them', 'text', action.content || "我同意啦~", extra);
+             if (lsState.pendingCharId === charId) {
+                 lsConfirmBind(charId);
+                 const msgs = wcState.chats[charId];
+                 msgs.forEach(m => { if (m.type === 'invite') m.status = 'accepted'; });
+                 wcSaveData();
+                 wcRenderMessages(charId);
+             }
+                     } else if (action.type === 'update_status') {
+            if (!char.lifeStatus) {
+                char.lifeStatus = { location: "未知", action: "未知", mood: "未知", timeline: [], autoRefresh: true, refreshTime: "06:00", lastRefreshTimestamp: Date.now() };
+            }
+            
+            let locationChanged = false;
+            let newLocation = action.location || char.lifeStatus.location;
+            
+            // 判断位置是否发生实质性变化 (且不是从未知变来的)
+            if (action.location && action.location !== "未知" && action.location !== char.lifeStatus.location) {
+                // 如果原本不是未知，说明是中途移动了，触发提示
+                if (char.lifeStatus.location !== "未知") {
+                    locationChanged = true;
+                }
+            }
+
+            // 只更新地点和动作
+            if (action.location) char.lifeStatus.location = action.location;
+            if (action.action) char.lifeStatus.action = action.action;
+
+            wcSaveData();
+            
+            // 实时刷新顶栏
+            if (typeof updateChatTopBarStatus === 'function') {
+                updateChatTopBarStatus(char);
+            }
+            
+            // 如果位置改变了，插入一条可见的系统提示
+            if (locationChanged) {
+                wcAddMessage(charId, 'system', 'system', `[系统提示: ${char.name} 正在前往 ${newLocation}]`, { style: 'transparent' });
+            }
+            
+
+        } else if (action.type === 'widget_photo' || action.type === 'widget_note') {
+            // 修复：独立出来，专门处理小组件指令
             if (lsState.isLinked && lsState.boundCharId === charId && lsState.widgetEnabled) {
                 const isPhoto = action.type === 'widget_photo';
                 lsState.widgetData.currentMode = isPhoto ? 'photo' : 'note';
@@ -4063,17 +5312,23 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             wcTriggerAIMoment(charId);
         }
     }
+    
+    // 👇 新增：根据设定的概率触发手机后台数据暗中更新 (改备注/改签名/和NPC聊天)
+    const bgUpdateFreq = (char && char.chatConfig && char.chatConfig.bgUpdateFreq !== undefined) ? char.chatConfig.bgUpdateFreq : 30;
+    if (bgUpdateFreq > 0 && (Math.random() * 100) < bgUpdateFreq) {
+        wcTriggerBackgroundPhoneUpdate(charId);
+    }
 }
 
 // ==========================================
-// 核心修复：朋友圈生成逻辑
+// 核心修复：朋友圈生成逻辑 (带NPC评论版)
 // ==========================================
 async function wcTriggerAIMoment(charId) {
     console.log(`Char ${charId} 尝试发布朋友圈...`);
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return;
 
     try {
@@ -4099,6 +5354,15 @@ async function wcTriggerAIMoment(charId) {
             return `${m.sender === 'me' ? 'User' : char.name}: ${content}`;
         }).filter(Boolean).join('\n');
 
+        // 👇 新增：提取通讯录里的 NPC 列表，让 AI 知道有哪些熟人可以来评论
+        let npcListStr = "无";
+        if (char.phoneData && char.phoneData.contacts) {
+            const npcs = char.phoneData.contacts.filter(c => !c.isUser);
+            if (npcs.length > 0) {
+                npcListStr = npcs.map(n => `${n.name} (${n.desc})`).join('、');
+            }
+        }
+
         const now = new Date();
         const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
         
@@ -4107,6 +5371,7 @@ async function wcTriggerAIMoment(charId) {
         prompt += `【你的人设】：${char.prompt}\n`;
         if (wbInfo) prompt += `${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【你手机通讯录里的NPC朋友】：${npcListStr}\n`;
         prompt += `【当前时间】：${timeString}。\n\n`;
         
         prompt += `【最近的聊天记录（作为发朋友圈的灵感/背景）】：\n`;
@@ -4116,8 +5381,17 @@ async function wcTriggerAIMoment(charId) {
         prompt += `【要求】：\n`;
         prompt += `1. 朋友圈的内容通常是对最近聊天中发生的事情的感慨、吐槽、分享，或者对User的暗示。\n`;
         prompt += `2. 文案要符合日常朋友圈风格，生活化，不要太长，拒绝AI味。\n`;
-        prompt += `3. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
-        prompt += `{"text": "朋友圈文案内容", "imageDesc": "配图的画面描述(如果没有配图请留空)"}\n`;
+        prompt += `3. 【活人感排版】：你可以自由选择纯文本、纯图片或图文并茂。\n`;
+        prompt += `4. 【互动感（核心）】：你可以在 comment 字段填写自己的抢沙发补充（也可以不填写）。同时，请根据【通讯录NPC朋友】列表，生成 1-3 条 NPC 对这条朋友圈的评论 (npcComments)。\n`;
+        prompt += `5. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
+        prompt += `{
+  "text": "朋友圈文案内容(可留空)", 
+  "imageDesc": "配图的画面描述(可留空)", 
+  "comment": "你自己在该条朋友圈下的评论/补充(可留空)",
+  "npcComments": [
+    {"name": "NPC名字(必须从通讯录选)", "text": "NPC的评论内容"}
+  ]
+}\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -4125,7 +5399,8 @@ async function wcTriggerAIMoment(charId) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -4135,16 +5410,18 @@ async function wcTriggerAIMoment(charId) {
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
         const momentData = JSON.parse(content);
 
-        if (momentData && momentData.text) {
-            wcAIHandleMomentPost(charId, momentData.text, momentData.imageDesc || null);
+        if (momentData && (momentData.text || momentData.imageDesc)) {
+            // 👇 修改：把 npcComments 传给处理函数
+            wcAIHandleMomentPost(charId, momentData.text || "", momentData.imageDesc || null, momentData.comment || null, momentData.npcComments || []);
             console.log(`Char ${charId} 成功发布朋友圈`);
         }
     } catch (e) {
         console.error("朋友圈生成失败", e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[朋友圈生成失败] ${e.message}`);
     }
 }
 
-function wcAIHandleMomentPost(charId, text, imageDesc) {
+function wcAIHandleMomentPost(charId, text, imageDesc, selfComment = null, npcComments = []) {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
     
@@ -4157,13 +5434,29 @@ function wcAIHandleMomentPost(charId, text, imageDesc) {
         imageDesc: imageDesc,
         time: Date.now(),
         likes: [],
-        comments: []
+        comments: [],
+        visibleGroup: char.groupName || 'Default' // 新增：AI发布的朋友圈仅同分组可见
     };
+    
+    // 1. 如果 AI 传了自我评论，加进评论列表里
+    if (selfComment && selfComment.trim() !== "") {
+        newMoment.comments.push({ name: char.name, text: selfComment.trim() });
+    }
+    
+    // 2. 把 NPC 的评论也加进去
+    if (Array.isArray(npcComments) && npcComments.length > 0) {
+        npcComments.forEach(npcC => {
+            if (npcC.name && npcC.text) {
+                newMoment.comments.push({ name: npcC.name, text: npcC.text });
+            }
+        });
+    }
     
     wcState.moments.unshift(newMoment);
     wcSaveData();
     wcRenderMoments();
 }
+
 
 function wcAIHandleComment(charId, momentId, text) {
     const char = wcState.characters.find(c => c.id === charId);
@@ -4241,6 +5534,7 @@ function wcFindStickerUrlMulti(groupIds, desc) {
 }
 
 function wcAddMessage(charId, sender, type, content, extra = {}) {
+    if (!charId) return; // 👈 加上这一行保护，防止产生无效的聊天记录
     if (!wcState.chats[charId]) wcState.chats[charId] = [];
     const msg = { 
         id: Date.now() + Math.random(),
@@ -4324,10 +5618,11 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
                 const boundChar = wcState.characters.find(c => c.id === lsState.boundCharId);
                 
                 if (boundChar) {
-                    const currentMask = (targetChar.chatConfig && targetChar.chatConfig.userAvatar) ? targetChar.chatConfig.userAvatar : wcState.user.avatar;
-                    const boundMask = (boundChar.chatConfig && boundChar.chatConfig.userAvatar) ? boundChar.chatConfig.userAvatar : wcState.user.avatar;
+                    // 修改为：只有同一个列表分组的ai角色才能知道同一个列表分组的ai角色的关联账号消息
+                    const currentGroup = targetChar.groupName || 'Default';
+                    const boundGroup = boundChar.groupName || 'Default';
                     
-                    if (currentMask === boundMask) {
+                    if (currentGroup === boundGroup) {
                         const isLoverInGroup = targetChar.isGroup && targetChar.members && targetChar.members.includes(lsState.boundCharId);
                         
                         if (!isLoverInGroup) {
@@ -4501,7 +5796,7 @@ async function wcAutoGenerateSummary(charId, start, end) {
     const char = wcState.characters.find(c => c.id === charId);
     const msgs = wcState.chats[charId] || [];
     const sliceMsgs = msgs.slice(start, end + 1);
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     
     if (!apiConfig || !apiConfig.key) return;
 
@@ -4559,6 +5854,7 @@ async function wcAutoGenerateSummary(charId, start, end) {
 
     } catch (e) {
         console.error("自动总结失败", e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[自动总结失败] ${e.message}`);
     }
 }
 
@@ -4863,29 +6159,111 @@ function wcActionMemory() {
     wcOpenMemoryPage();
 }
 
+// ==========================================
+// 极简韩系 INS 风回忆日记逻辑 (黑白星空塔罗牌版)
+// ==========================================
+
+// 全局变量用于塔罗牌状态
+let insTarotCurrentIndex = 0;
+let insTarotCardsData = [];
+let insCurrentEditingMemId = null;
+
+// 动态生成星空背景的函数
+function generateUniverseBg() {
+    let html = '<div class="ins-mem-universe-bg">';
+    // 生成 30 个随机星光
+    for(let i=0; i<30; i++) {
+        const size = Math.random() * 3 + 1;
+        const left = Math.random() * 100;
+        const top = Math.random() * 100;
+        const duration = Math.random() * 3 + 2;
+        html += `<div class="ins-mem-star" style="width:${size}px; height:${size}px; left:${left}%; top:${top}%; --duration:${duration}s;"></div>`;
+    }
+    // 生成 5 条流苏/流星
+    for(let i=0; i<5; i++) {
+        const left = Math.random() * 100;
+        const duration = Math.random() * 5 + 5;
+        const delay = Math.random() * 5;
+        html += `<div class="ins-mem-tassel" style="left:${left}%; --duration:${duration}s; animation-delay:${delay}s;"></div>`;
+    }
+    html += '</div>';
+    return html;
+}
+
 function wcOpenMemoryPage() {
     document.getElementById('wc-view-chat-detail').classList.remove('active');
-    document.getElementById('wc-view-memory').classList.add('active');
+    const memView = document.getElementById('wc-view-memory');
+    memView.classList.add('active');
     
-    const titleEl = document.getElementById('wc-nav-title');
-    titleEl.innerText = '回忆总结';
-    titleEl.onclick = null;
-    titleEl.style.cursor = 'default';
-    
-    const rightContainer = document.getElementById('wc-nav-right-container');
-    rightContainer.innerHTML = '';
-    
-    const btnSettings = document.createElement('button');
-    btnSettings.className = 'wc-nav-btn';
-    btnSettings.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2 2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
-    btnSettings.onclick = () => wcOpenMemorySettingsModal();
-    rightContainer.appendChild(btnSettings);
+    // 隐藏全局的微信 Navbar
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'none';
 
-    const btn = document.createElement('button');
-    btn.className = 'wc-nav-btn';
-    btn.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>';
-    btn.onclick = () => wcOpenModal('wc-modal-memory-actions');
-    rightContainer.appendChild(btn);
+    // 注入全新的 HTML 结构 (修复羽毛笔点击，增加字数统计)
+    memView.innerHTML = `
+        ${generateUniverseBg()}
+        <header class="ins-mem-header">
+            <div class="ins-mem-title-box" onclick="wcCloseMemoryPage()">
+                <span class="ins-mem-title-1">回忆</span>
+                <span class="ins-mem-title-2">日记</span>
+            </div>
+            <div class="ins-mem-line"></div>
+            <div class="ins-mem-icons">
+                <!-- 1. 羽毛笔 (调用高级弹窗手动添加记忆) -->
+                <div class="ins-mem-icon-btn" onclick="insOpenManualAddModal()" title="手动添加记忆">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                </div>
+                <!-- 2. 魔法星轨 (打开更多操作：手动总结 / AI读取条数) -->
+                <div class="ins-mem-icon-btn" onclick="wcOpenModal('wc-modal-memory-actions')" title="更多操作">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 3L13.5 9.5L20 11L13.5 12.5L12 19L10.5 12.5L4 11L10.5 9.5L12 3Z" fill="currentColor" stroke="none"/>
+                        <circle cx="19" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+                        <circle cx="5" cy="18" r="1" fill="currentColor" stroke="none"/>
+                    </svg>
+                </div>
+                <!-- 3. 调音滑块 (回忆设置：触发条数/世界书) -->
+                <div class="ins-mem-icon-btn" onclick="wcOpenMemorySettingsModal()" title="回忆设置">
+                    <svg viewBox="0 0 24 24">
+                        <line x1="4" y1="8" x2="20" y2="8" />
+                        <line x1="4" y1="16" x2="20" y2="16" />
+                        <circle cx="9" cy="8" r="2" fill="currentColor" />
+                        <circle cx="16" cy="16" r="2" fill="currentColor" />
+                    </svg>
+                </div>
+            </div>
+        </header>
+        <main class="ins-mem-main" id="wc-memory-list-container"></main>
+
+        <!-- 塔罗牌堆叠视图 -->
+        <div class="ins-tarot-overlay" id="insTarotModal">
+            <div class="ins-tarot-close" onclick="insCloseTarot()">×</div>
+            <div class="ins-tarot-date-title" id="insTarotDateTitle">DATE</div>
+            <div class="ins-tarot-container" id="insTarotContainer" 
+                 ontouchstart="insTarotTouchStart(event)" 
+                 ontouchmove="insTarotTouchMove(event)" 
+                 ontouchend="insTarotTouchEnd(event)">
+            </div>
+        </div>
+
+        <!-- 300x500 详情编辑弹窗 (带字数统计) -->
+        <div class="ins-mem-detail-overlay" id="insMemDetailModal">
+            <div class="ins-mem-detail-card">
+                <div class="ins-mem-detail-header">
+                    <span class="ins-mem-detail-date" id="insMemDetailDate">TIME</span>
+                    <span class="ins-mem-detail-close" onclick="insCloseMemDetail()">×</span>
+                </div>
+                <input type="text" class="ins-mem-detail-title" id="insMemDetailTitle" placeholder="标题">
+                <!-- 绑定 oninput 实时更新字数 -->
+                <textarea class="ins-mem-detail-textarea" id="insMemDetailContent" placeholder="记录下这一刻..." oninput="document.getElementById('insMemWordCount').innerText = this.value.length + ' 字'"></textarea>
+                <div class="ins-mem-detail-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span id="insMemWordCount" style="color: rgba(255,255,255,0.5); font-size: 12px; font-family: monospace;">0 字</span>
+                    <button class="ins-mem-detail-save" onclick="insSaveMemDetail()">SAVE</button>
+                </div>
+            </div>
+        </div>
+    `;
 
     wcRenderMemories();
 }
@@ -4893,112 +6271,296 @@ function wcOpenMemoryPage() {
 function wcCloseMemoryPage() {
     document.getElementById('wc-view-memory').classList.remove('active');
     document.getElementById('wc-view-chat-detail').classList.add('active');
-    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     
-    const titleEl = document.getElementById('wc-nav-title');
-    let displayName = char.note || char.name;
-    // 【新增】：如果是群聊，在名字后面加上人数
-    if (char.isGroup && char.members) {
-        displayName += ` (${char.members.length})`;
-    }
-    titleEl.innerText = displayName;
-    titleEl.onclick = null;
-    titleEl.style.cursor = 'default';    
-    const rightContainer = document.getElementById('wc-nav-right-container');
-    rightContainer.innerHTML = '';
-    const btn = document.createElement('button');
-    btn.className = 'wc-nav-btn';
-    btn.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>';
-    btn.onclick = () => wcOpenChatSettings();
-    rightContainer.appendChild(btn);
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'flex';
+    
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (char) updateChatTopBarStatus(char);
 }
 
 function wcRenderMemories() {
     const container = document.getElementById('wc-memory-list-container');
+    if (!container) return;
     container.innerHTML = '';
+    
     const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     if (!char.memories) char.memories = [];
 
     if (char.memories.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #8E8E93; padding-top: 50px;">暂无回忆</div>';
+        container.innerHTML = '<div style="text-align: center; color: #555; padding-top: 50px; font-family: Georgia, serif; font-style: italic;">星空寂寥，暂无回忆...</div>';
         return;
     }
 
-    char.memories.forEach((mem, index) => {
-        const div = document.createElement('div');
-        div.className = 'wc-memory-card';
-        
-        // 精准判断记忆类型
-        let displayType = '手动添加';
-        if (mem.type === 'summary') {
-            if (mem.content.includes('[自动总结')) {
-                displayType = '自动总结';
-            } else if (mem.content.includes('[手动总结')) {
-                displayType = '手动总结';
-            } else {
-                displayType = '总结';
-            }
-        } else if (mem.type === 'manual') {
-            displayType = '手动添加';
-        }
+    const groups = {};
+    char.memories.forEach(mem => {
+        const d = new Date(mem.time);
+        const dateKey = `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+        if (!groups[dateKey]) groups[dateKey] = [];
+        groups[dateKey].push(mem);
+    });
 
-        // 重新排版：左侧时间+类型标签，右侧修改+删除按钮，彻底解决重叠
-        div.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #F0F0F0; padding-bottom: 8px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px; color: #8E8E93;">${new Date(mem.time).toLocaleString()}</span>
-                    <span style="font-size: 10px; background: #F2F2F7; color: #555; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${displayType}</span>
+    const colorClasses = ['ins-bg-white', 'ins-bg-gray', 'ins-bg-pink', 'ins-bg-blue', 'ins-bg-green'];
+
+    Object.keys(groups).sort((a, b) => b.localeCompare(a)).forEach(dateKey => {
+        const row = document.createElement('div');
+        row.className = 'ins-mem-row';
+        
+        let rowHtml = `
+            <div class="ins-mem-time-node" onclick="insOpenTarot('${dateKey}')">
+                <div class="ins-mem-node-icon">
+                    <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" transform="rotate(45 12 12)"/></svg>
                 </div>
-                <div style="display: flex; gap: 15px;">
-                    <div style="color: #007AFF; cursor: pointer; font-size: 13px; font-weight: bold;" onclick="wcEditMemory(${index})">修改</div>
-                    <div style="color: #FF3B30; cursor: pointer; font-size: 13px; font-weight: bold;" onclick="wcDeleteMemory(${index})">删除</div>
-                </div>
+                <div class="ins-mem-date-text">${dateKey}</div>
+                <div class="ins-mem-date-hint">点击展开</div>
             </div>
-            <div class="wc-memory-content" style="font-size: 14px; color: #333; line-height: 1.6;">${mem.content}</div>
+            <div class="ins-mem-cards-scroll">
         `;
-        container.appendChild(div);
+
+        groups[dateKey].forEach((mem, idx) => {
+            const d = new Date(mem.time);
+            const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            const colorClass = colorClasses[idx % colorClasses.length];
+            
+            let title = '记忆碎片';
+            let content = mem.content;
+            if (mem.type === 'summary') {
+                if (mem.content.includes('[自动总结')) title = '自动总结';
+                else if (mem.content.includes('[手动总结')) title = '手动总结';
+                else title = '总结';
+                content = mem.content.replace(/\[.*?\]\s*/, ''); 
+            } else if (mem.type === 'manual') {
+                title = '手动添加'; 
+            }
+
+            const safeContent = content.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+            rowHtml += `
+                <div class="ins-mem-card ${colorClass}" onclick="insOpenMemDetail(${mem.id}, '${title}', '${safeContent}', '${dateKey} ${timeStr}')">
+                    <div class="ins-mem-delete-btn" onclick="wcDeleteMemory(event, ${mem.id})">×</div>
+                    <div class="ins-mem-card-title">${title}</div>
+                    <div class="ins-mem-card-time">${timeStr}</div>
+                </div>
+            `;
+        });
+
+        rowHtml += `</div>`;
+        row.innerHTML = rowHtml;
+        container.appendChild(row);
     });
 }
 
-window.wcEditMemory = function(index) {
+function insOpenTarot(dateKey) {
     const char = wcState.characters.find(c => c.id === wcState.activeChatId);
-    if (!char || !char.memories || !char.memories[index]) return;
+    if (!char || !char.memories) return;
+
+    insTarotCardsData = char.memories.filter(mem => {
+        const d = new Date(mem.time);
+        return `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}` === dateKey;
+    });
+
+    if (insTarotCardsData.length === 0) return;
+
+    document.getElementById('insTarotDateTitle').innerText = dateKey;
+    insTarotCurrentIndex = 0;
+    insRenderTarotCards();
     
-    const mem = char.memories[index];
-    window.openIosTextEditModal("修改记忆", mem.content, (newText) => {
-        if (newText) {
-            mem.content = newText;
-            wcSaveData();
-            wcRenderMemories();
+    document.getElementById('insTarotModal').classList.add('active');
+}
+
+function insCloseTarot() {
+    document.getElementById('insTarotModal').classList.remove('active');
+}
+
+function insRenderTarotCards() {
+    const container = document.getElementById('insTarotContainer');
+    container.innerHTML = '';
+
+    insTarotCardsData.forEach((mem, index) => {
+        const d = new Date(mem.time);
+        const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        
+        let title = '记忆碎片';
+        let content = mem.content;
+        if (mem.type === 'summary') {
+            if (mem.content.includes('[自动总结')) title = '自动总结';
+            else if (mem.content.includes('[手动总结')) title = '手动总结';
+            else title = '总结';
+            content = mem.content.replace(/\[.*?\]\s*/, '');
+        } else if (mem.type === 'manual') {
+            title = '手动添加';
+        }
+
+        const card = document.createElement('div');
+        card.className = `ins-tarot-card`;
+        
+        card.innerHTML = `
+            <div class="ins-tarot-card-title">${title}</div>
+            <div class="ins-tarot-card-desc">${content}</div>
+            <div class="ins-tarot-card-time">${timeStr}</div>
+        `;
+
+        card.onclick = () => {
+            if (index === insTarotCurrentIndex) {
+                const dateKey = document.getElementById('insTarotDateTitle').innerText;
+                const safeContent = content.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                insOpenMemDetail(mem.id, title, safeContent, `${dateKey} ${timeStr}`);
+            } else {
+                insTarotCurrentIndex = index;
+                insUpdateTarotTransforms();
+            }
+        };
+
+        container.appendChild(card);
+    });
+
+    insUpdateTarotTransforms();
+}
+
+function insUpdateTarotTransforms() {
+    const cards = document.querySelectorAll('.ins-tarot-card');
+    cards.forEach((card, index) => {
+        const offset = index - insTarotCurrentIndex;
+        
+        if (offset === 0) {
+            card.style.transform = `translateX(0) scale(1) translateZ(0)`;
+            card.style.zIndex = 10;
+            card.style.opacity = 1;
+            card.style.filter = 'none';
+        } else if (offset < 0) {
+            card.style.transform = `translateX(${offset * 60}px) scale(0.85) rotateY(15deg) translateZ(-100px)`;
+            card.style.zIndex = 5 + offset;
+            card.style.opacity = 1 - Math.abs(offset) * 0.3;
+            card.style.filter = 'brightness(0.5)';
+        } else {
+            card.style.transform = `translateX(${offset * 60}px) scale(0.85) rotateY(-15deg) translateZ(-100px)`;
+            card.style.zIndex = 5 - offset;
+            card.style.opacity = 1 - Math.abs(offset) * 0.3;
+            card.style.filter = 'brightness(0.5)';
         }
     });
-};
+}
 
-function wcDeleteMemory(index) {
-    if (confirm("确定删除这条记忆吗？")) {
-        const char = wcState.characters.find(c => c.id === wcState.activeChatId);
-        char.memories.splice(index, 1);
-        wcSaveData();
-        wcRenderMemories();
+let insTarotStartX = 0;
+function insTarotTouchStart(e) { insTarotStartX = e.touches[0].clientX; }
+function insTarotTouchMove(e) { e.preventDefault(); }
+function insTarotTouchEnd(e) {
+    const endX = e.changedTouches[0].clientX;
+    const diff = endX - insTarotStartX;
+    if (diff > 50 && insTarotCurrentIndex > 0) {
+        insTarotCurrentIndex--;
+        insUpdateTarotTransforms();
+    } else if (diff < -50 && insTarotCurrentIndex < insTarotCardsData.length - 1) {
+        insTarotCurrentIndex++;
+        insUpdateTarotTransforms();
     }
 }
+
+// ==========================================
+// 详情编辑与【新增】手动添加弹窗逻辑
+// ==========================================
+
+// 点击羽毛笔触发：复用高级弹窗进行新建
+function insOpenManualAddModal() {
+    insCurrentEditingMemId = null; // null 代表新建
+    document.getElementById('insMemDetailTitle').value = '手动添加';
+    document.getElementById('insMemDetailContent').value = '';
+    document.getElementById('insMemWordCount').innerText = '0 字';
+    
+    const now = new Date();
+    const dateStr = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    document.getElementById('insMemDetailDate').innerText = dateStr;
+    
+    document.getElementById('insMemDetailModal').classList.add('active');
+}
+
+function insOpenMemDetail(id, title, content, dateStr) {
+    insCurrentEditingMemId = id;
+    document.getElementById('insMemDetailTitle').value = title;
+    document.getElementById('insMemDetailContent').value = content;
+    document.getElementById('insMemWordCount').innerText = content.length + ' 字'; // 初始化字数
+    document.getElementById('insMemDetailDate').innerText = dateStr;
+    document.getElementById('insMemDetailModal').classList.add('active');
+}
+
+function insCloseMemDetail() {
+    document.getElementById('insMemDetailModal').classList.remove('active');
+    insCurrentEditingMemId = null;
+}
+
+function insSaveMemDetail() {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    if (!char.memories) char.memories = [];
+
+    const newTitle = document.getElementById('insMemDetailTitle').value.trim();
+    const newContent = document.getElementById('insMemDetailContent').value.trim();
+    
+    if (!newContent) {
+        alert("记忆内容不能为空哦~");
+        return;
+    }
+
+    if (insCurrentEditingMemId) {
+        // 修改已有记忆
+        const mem = char.memories.find(m => m.id === insCurrentEditingMemId);
+        if (mem) {
+            if (mem.type === 'summary') {
+                const prefixMatch = mem.content.match(/^\[.*?\]\s*/);
+                const prefix = prefixMatch ? prefixMatch[0] : '[手动总结] ';
+                mem.content = prefix + newContent;
+            } else {
+                mem.content = newContent;
+            }
+        }
+    } else {
+        // 新建手动记忆 (羽毛笔触发)
+        char.memories.unshift({
+            id: Date.now(),
+            type: 'manual',
+            content: newContent,
+            time: Date.now()
+        });
+    }
+    
+    wcSaveData();
+    wcRenderMemories();
+    
+    // 如果塔罗牌开着，同步刷新塔罗牌
+    if (document.getElementById('insTarotModal').classList.contains('active')) {
+        const dateKey = document.getElementById('insTarotDateTitle').innerText;
+        insOpenTarot(dateKey);
+    }
+    
+    insCloseMemDetail();
+}
+
+// 覆盖原有的删除逻辑
+window.wcDeleteMemory = function(event, id) {
+    event.stopPropagation(); // 阻止触发打开详情
+    if (confirm("确定要将这段记忆化作尘埃吗？")) {
+        const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+        if (char && char.memories) {
+            char.memories = char.memories.filter(m => m.id !== id);
+            wcSaveData();
+            wcRenderMemories();
+            
+            // 如果塔罗牌开着，同步刷新塔罗牌
+            if (document.getElementById('insTarotModal').classList.contains('active')) {
+                const dateKey = document.getElementById('insTarotDateTitle').innerText;
+                insOpenTarot(dateKey);
+            }
+        }
+    }
+};
 
 function wcOpenMemorySummaryModal() {
     const msgs = wcState.chats[wcState.activeChatId] || [];
     document.getElementById('wc-mem-total-count-label').innerText = `当前聊天总层数: ${msgs.length}`;
     
     const list = document.getElementById('wc-mem-summary-wb-list');
-    list.innerHTML = '';
-    if (worldbookEntries.length === 0) {
-        list.innerHTML = '<div style="color:#999; font-size:13px;">暂无世界书条目</div>';
-    } else {
-        worldbookEntries.forEach(entry => {
-            const div = document.createElement('div');
-            div.className = 'wc-checkbox-item';
-            div.innerHTML = `<input type="checkbox" value="${entry.id}"><span>${entry.title} (${entry.type})</span>`;
-            list.appendChild(div);
-        });
-    }
+    list.innerHTML = ''; // 默认不选
+    document.getElementById('wc-mem-summary-wb-count').innerText = `已选 0 项`;
     
     wcOpenModal('wc-modal-memory-summary');
 }
@@ -5012,20 +6574,14 @@ function wcOpenMemorySettingsModal() {
 
     const list = document.getElementById('wc-mem-setting-wb-list');
     list.innerHTML = '';
-    
-    if (!char.chatConfig.summaryWorldbookEntries) char.chatConfig.summaryWorldbookEntries = [];
-
-    if (worldbookEntries.length === 0) {
-        list.innerHTML = '<div style="color:#999; font-size:13px;">暂无世界书条目</div>';
-    } else {
-        worldbookEntries.forEach(entry => {
-            const div = document.createElement('div');
-            div.className = 'wc-checkbox-item';
-            const isChecked = char.chatConfig.summaryWorldbookEntries.includes(entry.id.toString());
-            div.innerHTML = `<input type="checkbox" value="${entry.id}" ${isChecked ? 'checked' : ''}><span>${entry.title} (${entry.type})</span>`;
-            list.appendChild(div);
+    let memWbCount = 0;
+    if (char.chatConfig.summaryWorldbookEntries) {
+        char.chatConfig.summaryWorldbookEntries.forEach(id => {
+            list.innerHTML += `<input type="checkbox" value="${id}" checked>`;
+            memWbCount++;
         });
     }
+    document.getElementById('wc-mem-setting-wb-count').innerText = `已选 ${memWbCount} 项`;
 
     wcOpenModal('wc-modal-memory-settings');
 }
@@ -5123,6 +6679,7 @@ function wcUpdateTransferStatus(status) {
     const msg = msgs.find(m => m.id === wcState.activeTransferMsgId);
     if (msg) {
         msg.status = status;
+        let aiPrompt = "";
         if (status === 'received') {
             const amount = parseFloat(msg.amount);
             wcState.wallet.balance += amount;
@@ -5130,9 +6687,20 @@ function wcUpdateTransferStatus(status) {
                 id: Date.now(), type: 'income', amount: amount, note: `收到转账`, time: Date.now()
             });
             wcAddMessage(wcState.activeChatId, 'me', 'system', `已收款，资金已存入零钱`, { style: 'transparent' });
+            aiPrompt = `[系统内部信息(仅AI可见): User 刚刚领取了你发出的 ${amount} 元转账。请在回复中对此做出符合你人设的反应。]`;
         } else if (status === 'rejected') {
             wcAddMessage(wcState.activeChatId, 'me', 'system', `已退还转账`, { style: 'transparent' });
+            aiPrompt = `[系统内部信息(仅AI可见): User 刚刚退还/拒收了你发出的转账。请在回复中对此做出符合你人设的反应。]`;
         }
+        
+        if (aiPrompt) {
+            wcAddMessage(wcState.activeChatId, 'system', 'system', aiPrompt, { hidden: true });
+            // 延迟 1 秒触发 AI 回复，模拟真实反应时间
+            setTimeout(() => {
+                wcTriggerAI(wcState.activeChatId);
+            }, 1000);
+        }
+        
         wcSaveData();
         wcRenderMessages(wcState.activeChatId);
     }
@@ -5254,33 +6822,61 @@ function wcOpenWechatSettings() {
 }
 
 async function wcExportData() {
-    const data = {};
-    data.user = await wcDb.get('kv_store', 'user');
-    data.wallet = await wcDb.get('kv_store', 'wallet');
-    data.stickerCategories = await wcDb.get('kv_store', 'sticker_categories');
-    data.cssPresets = await wcDb.get('kv_store', 'css_presets');
-    data.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets'); // 新增
-    data.phonePresets = await wcDb.get('kv_store', 'phone_presets'); // 新增
-    data.shopData = await wcDb.get('kv_store', 'shop_data'); // 新增
-    data.characters = await wcDb.getAll('characters');
-    data.masks = await wcDb.getAll('masks');
-    data.moments = await wcDb.getAll('moments');
-    
-    const allChats = await wcDb.getAll('chats');
-    const chatsObj = {};
-    if (allChats) {
-        allChats.forEach(item => {
-            chatsObj[item.charId] = item.messages;
-        });
-    }
-    data.chats = chatsObj;
+    try {
+        if (!wcDb.instance) {
+            alert("WeChat 数据库未初始化，无法备份。");
+            return;
+        }
 
-    const exportObj = { signature: 'wechat_sim_backup', timestamp: Date.now(), data: data };
-    const blob = new Blob([JSON.stringify(exportObj)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `wechat_backup_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        const data = {};
+        const persistentCharactersSnapshot = await wcReadCharactersPersistentSnapshot();
+        const dbCharacters = await wcDb.getAll('characters');
+        const charsUpdatedAt = await wcDb.get('kv_store', 'characters_updated_at');
+        const shouldUseSnapshotCharacters = persistentCharactersSnapshot.characters.length > 0 && (
+            !Array.isArray(dbCharacters) || dbCharacters.length === 0 ||
+            persistentCharactersSnapshot.updatedAt >= (Number(charsUpdatedAt) || 0) ||
+            persistentCharactersSnapshot.characters.length > dbCharacters.length
+        );
+
+        data.user = await wcDb.get('kv_store', 'user');
+        data.wallet = await wcDb.get('kv_store', 'wallet');
+        data.stickerCategories = await wcDb.get('kv_store', 'sticker_categories');
+        data.cssPresets = await wcDb.get('kv_store', 'css_presets');
+        data.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets');
+        data.phonePresets = await wcDb.get('kv_store', 'phone_presets');
+        data.shopData = await wcDb.get('kv_store', 'shop_data');
+        data.characters = shouldUseSnapshotCharacters ? persistentCharactersSnapshot.characters : (dbCharacters || []);
+        data.masks = await wcDb.getAll('masks');
+        data.moments = await wcDb.getAll('moments');
+        
+        const allChats = await wcDb.getAll('chats');
+        const chatsObj = {};
+        if (allChats) {
+            allChats.forEach(item => {
+                chatsObj[item.charId] = item.messages;
+            });
+        }
+        data.chats = chatsObj;
+
+        const exportObj = { signature: 'wechat_sim_backup', timestamp: Date.now(), data: data };
+        
+        let jsonString;
+        try {
+            jsonString = JSON.stringify(exportObj);
+        } catch (err) {
+            throw new Error("数据量过大，请尝试清理部分聊天记录或图片后再备份。");
+        }
+
+        const blob = new Blob([jsonString], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `wechat_backup_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        
+    } catch (error) {
+        console.error("WeChat 备份失败:", error);
+        alert("WeChat 备份失败: " + error.message);
+    }
 }
 
 function wcImportData(input) {
@@ -5293,6 +6889,9 @@ function wcImportData(input) {
             if (json.signature !== 'wechat_sim_backup') return alert("导入失败：文件格式不正确。");
             if (confirm("这将覆盖当前 WeChat 的所有数据，确定要恢复吗？")) {
                 const data = json.data;
+                const importedCharacters = Array.isArray(data.characters) ? data.characters : [];
+                const charactersUpdatedAt = Date.now();
+
                 if (data.myFavorites) await wcDb.put('kv_store', data.myFavorites, 'my_favorites');
                 if (data.user) await wcDb.put('kv_store', data.user, 'user');
                 if (data.wallet) await wcDb.put('kv_store', data.wallet, 'wallet');
@@ -5304,18 +6903,22 @@ function wcImportData(input) {
                 
                 const stores = ['characters', 'masks', 'moments', 'chats'];
                 for (const store of stores) {
-                    const tx = wcDb.instance.transaction([store], 'readwrite');
-                    await tx.objectStore(store).clear();
+                    await wcClearStore(store);
                 }
 
-                if (data.characters) for (const c of data.characters) await wcDb.put('characters', c);
+                for (const c of importedCharacters) await wcDb.put('characters', c);
                 if (data.masks) for (const m of data.masks) await wcDb.put('masks', m);
                 if (data.moments) for (const m of data.moments) await wcDb.put('moments', m);
                 if (data.chats) {
                     for (const charId in data.chats) {
-                        await wcDb.put('chats', { charId: parseInt(charId), messages: data.chats[charId] });
+                        const parsedId = parseInt(charId);
+                        if (!isNaN(parsedId)) {
+                            await wcDb.put('chats', { charId: parsedId, messages: data.chats[charId] }).catch(e => console.warn(e));
+                        }
                     }
                 }
+
+                await wcSyncCharactersSnapshotFromList(importedCharacters, charactersUpdatedAt);
                 
                 alert("WeChat 数据恢复成功，页面将刷新。");
                 location.reload();
@@ -5330,9 +6933,9 @@ async function wcClearData() {
     if (confirm("警告：此操作将永久删除 WeChat 的所有数据！确定要继续吗？")) {
         const stores = ['kv_store', 'characters', 'chats', 'moments', 'masks'];
         for (const store of stores) {
-            const tx = wcDb.instance.transaction([store], 'readwrite');
-            tx.objectStore(store).clear();
+            await wcClearStore(store);
         }
+        await wcClearCharactersPersistentSnapshot();
         alert("WeChat 数据已清空，页面将重置。");
         location.reload();
     }
@@ -5353,7 +6956,6 @@ function wcRenderContacts() {
 }
 
 function wcRenderChats() {
-    // 新增：渲染横向头像列表
     const avatarScroll = document.getElementById('wc-char-avatar-scroll');
     if (avatarScroll) {
         avatarScroll.innerHTML = '';
@@ -5361,7 +6963,6 @@ function wcRenderChats() {
             const img = document.createElement('img');
             img.className = 'wc-char-avatar-item';
             img.src = char.avatar;
-            // 修改：点击横向小卡片进入拉黑拦截记录全屏页
             img.onclick = () => wcOpenBlockedHistory(char.id); 
             avatarScroll.appendChild(img);
         });
@@ -5369,14 +6970,25 @@ function wcRenderChats() {
 
     const list = document.getElementById('wc-chat-list');
     list.innerHTML = '';
-    const pinnedChars = wcState.characters.filter(c => c.isPinned);
-    const otherChars = wcState.characters.filter(c => !c.isPinned).sort((a, b) => {
+    
+    // 过滤当前分组的角色
+    const filteredChars = wcState.characters.filter(c => {
+        if (wcState.activeChatGroup === 'All') return true;
+        return c.groupName === wcState.activeChatGroup;
+    });
+
+    const pinnedChars = filteredChars.filter(c => c.isPinned);
+    const otherChars = filteredChars.filter(c => !c.isPinned).sort((a, b) => {
         const msgsA = wcState.chats[a.id] || [];
         const msgsB = wcState.chats[b.id] || [];
         const timeA = msgsA.length > 0 ? msgsA[msgsA.length - 1].time : 0;
         const timeB = msgsB.length > 0 ? msgsB[msgsB.length - 1].time : 0;
         return timeB - timeA;
     });
+
+    // 创建无缝隙卡片的外层包裹
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chat-list-wrapper';
 
     const createChatItem = (char) => {
         const msgs = wcState.chats[char.id] || [];
@@ -5397,17 +7009,14 @@ function wcRenderChats() {
         
         const div = document.createElement('div');
         div.className = 'wc-chat-swipe-container';
-        const pinText = char.isPinned ? "取消置顶" : "置顶";
         const pinClass = char.isPinned ? "wc-pinned-chat" : "";
         
         const unreadCount = wcState.unreadCounts[char.id] || 0;
         const badgeHtml = unreadCount > 0 ? `<div class="wc-unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : '';
         
+        // 移除了 swipe-actions，加入了 ontouchstart 和 oncontextmenu 触发长按菜单
         div.innerHTML = `
-            <div class="wc-chat-swipe-actions">
-                <div class="wc-chat-action-btn wc-btn-pin" onclick="wcTogglePin(${char.id})">${pinText}</div>
-            </div>
-            <div class="wc-chat-swipe-content ${pinClass}" onclick="wcOpenChat(${char.id})" ontouchstart="wcHandleTouchStartSwipe(event)" ontouchmove="wcHandleTouchMoveSwipe(event)" ontouchend="wcHandleTouchEndSwipe(event)">
+            <div class="wc-chat-swipe-content ${pinClass}" onclick="wcOpenChat(${char.id})" ontouchstart="wcChatTouchStart(event, ${char.id})" ontouchend="wcChatTouchEnd()" oncontextmenu="wcShowChatContextMenu(event, ${char.id}); return false;">
                 <div style="position: relative;">
                     <img src="${char.avatar}" class="wc-avatar">
                     ${badgeHtml}
@@ -5422,14 +7031,14 @@ function wcRenderChats() {
         return div;
     };
 
-    pinnedChars.forEach(char => list.appendChild(createChatItem(char)));
-    if (pinnedChars.length > 0 && otherChars.length > 0) {
-        const sep = document.createElement('div');
-        sep.className = 'wc-list-separator';
-        sep.innerText = 'ovo';
-        list.appendChild(sep);
+    pinnedChars.forEach(char => wrapper.appendChild(createChatItem(char)));
+    otherChars.forEach(char => wrapper.appendChild(createChatItem(char)));
+    
+    if (pinnedChars.length > 0 || otherChars.length > 0) {
+        list.appendChild(wrapper);
+    } else {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0;">该分组下暂无会话</div>';
     }
-    otherChars.forEach(char => list.appendChild(createChatItem(char)));
 }
 
 // --- 替换 wcRenderMoments 和 wcFilterMoments ---
@@ -5514,8 +7123,14 @@ function wcRenderMoments() {
 
     filteredMoments.forEach(moment => {
         let mediaHtml = '';
-        if (moment.image) mediaHtml = `<img src="${moment.image}" class="wc-moment-image">`;
-        else if (moment.imageDesc) mediaHtml = `<div class="wc-moment-image-placeholder" style="width: 100px !important; height: 100px !important; max-width: none !important; padding: 5px !important; box-sizing: border-box;"><svg class="wc-icon" style="margin-bottom: 4px; width: 24px; height:24px;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${moment.imageDesc}</div></div>`;
+        if (moment.image) {
+            // 真实图片增加点击预览
+            mediaHtml = `<img src="${moment.image}" class="wc-moment-image" onclick="wcPreviewImage('${moment.image}')" style="cursor: pointer;">`;
+        } else if (moment.imageDesc) {
+            // AI 描述图片增加点击弹出高级卡片
+            const safeDesc = moment.imageDesc.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+            mediaHtml = `<div class="wc-moment-image-placeholder" onclick="wcOpenImageDescCard('${safeDesc}')" style="width: 100px !important; height: 100px !important; max-width: none !important; padding: 5px !important; box-sizing: border-box; cursor: pointer;"><svg class="wc-icon" style="margin-bottom: 4px; width: 24px; height:24px;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${moment.imageDesc}</div></div>`;
+        }
         
         let likesHtml = '';
         if (moment.likes && moment.likes.length > 0) likesHtml = `<div class="wc-moment-like-row"><svg class="wc-icon wc-icon-fill" style="width:14px; height:14px; margin-right:6px;" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>${moment.likes.join(', ')}</div>`;
@@ -5529,15 +7144,41 @@ function wcRenderMoments() {
         
         const interactionArea = (likesHtml || commentsHtml) ? `<div class="wc-moment-likes-comments">${likesHtml}${commentsHtml}</div>` : '';
         
+        // 动态判断是否有文字，如果没有文字就不渲染 div，防止出现多余的空白间距
+        let textHtml = '';
+        if (moment.text && moment.text.trim() !== '') {
+            textHtml = `<div class="wc-moment-text">${moment.text}</div>`;
+        }
+        
+        // 新增：显示可见分组标签
+        let groupTagHtml = '';
+        if (moment.visibleGroup && moment.visibleGroup !== 'All') {
+            groupTagHtml = `<span style="font-size: 10px; color: #007AFF; background: rgba(0,122,255,0.1); padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle;">${moment.visibleGroup}</span>`;
+        }
+
         const div = document.createElement('div');
         div.className = 'wc-moment-card';
+        // 确保卡片是 relative 定位，以便右上角按钮绝对定位
+        div.style.position = 'relative'; 
         div.innerHTML = `
+            <!-- 👇 新增：绝对定位在右上角的三个点按钮 👇 -->
+            <div class="wc-moment-more-btn" onclick="wcToggleMomentMenu(event, ${moment.id})">
+                <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg>
+            </div>
+            <!-- 👇 新增：向左弹出的高级深色菜单 👇 -->
+            <div class="wc-moment-popover" id="moment-popover-${moment.id}">
+                <div class="wc-moment-popover-item" onclick="wcOpenMomentAISelectForSingle(event, ${moment.id})" title="召唤 AI 互动">
+                    <!-- 高级闪耀星星 SVG 图标 -->
+                    <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                </div>
+            </div>
+
             <div class="wc-moment-header-row">
                 <img src="${moment.avatar || wcState.user.avatar}" class="wc-avatar" style="width: 40px; height: 40px; border-radius: 50%;">
-                <div class="wc-moment-name">${moment.name || wcState.user.name}</div>
+                <div class="wc-moment-name">${moment.name || wcState.user.name}${groupTagHtml}</div>
             </div>
             <div class="wc-moment-content">
-                <div class="wc-moment-text">${moment.text}</div>
+                ${textHtml}
                 ${mediaHtml}
                 <div class="wc-moment-actions">
                     <div style="display: flex; align-items: center; gap: 12px;">
@@ -5676,7 +7317,7 @@ function wcOpenAddGroupModal() {
     wcOpenModal('wc-modal-add-group');
 }
 
-function wcSaveGroupChat() {
+async function wcSaveGroupChat() {
     const name = document.getElementById('wc-input-group-name').value.trim();
     if (!name) return alert('请输入群聊名称');
 
@@ -5703,7 +7344,13 @@ function wcSaveGroupChat() {
     };
 
     wcState.characters.push(newGroup);
-    wcSaveData();
+    await wcWriteCharactersPersistentSnapshot();
+    try {
+        await wcDb.put('characters', newGroup);
+    } catch (e) {
+        console.warn('群聊联系人写入 IndexedDB 失败，已保留本地兜底快照', e);
+    }
+    await wcSaveData();
     wcCloseModal('wc-modal-add-group');
     wcRenderAll();
 }
@@ -5899,7 +7546,7 @@ function wcManageGroupMembers(action) {
     wcOpenModal('wc-modal-manage-group-members');
 }
 
-function wcSaveCharacter() {
+async function wcSaveCharacter() {
     const name = document.getElementById('wc-input-char-name').value;
     const note = document.getElementById('wc-input-char-note').value;
     const prompt = document.getElementById('wc-input-char-prompt').value;
@@ -5913,7 +7560,13 @@ function wcSaveCharacter() {
         avatar: wcState.tempImage || defaultAvatar, isPinned: false
     };
     wcState.characters.push(newChar);
-    wcSaveData();
+    await wcWriteCharactersPersistentSnapshot();
+    try {
+        await wcDb.put('characters', newChar);
+    } catch (e) {
+        console.warn('联系人写入 IndexedDB 失败，已保留本地兜底快照', e);
+    }
+    await wcSaveData();
     wcCloseModal('wc-modal-add-char');
     wcRenderAll();
 }
@@ -6073,14 +7726,20 @@ function wcOpenEditCharSettings() {
     wcOpenModal('wc-modal-edit-char-settings');
 }
 
-function wcUpdateCharacter() {
+async function wcUpdateCharacter() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
     char.name = document.getElementById('wc-edit-char-name').value;
     char.note = document.getElementById('wc-edit-char-note').value;
     char.prompt = document.getElementById('wc-edit-char-prompt').value;
     if (wcState.tempImage && wcState.tempImageType === 'edit-char') char.avatar = wcState.tempImage;
-    wcSaveData();
+    await wcWriteCharactersPersistentSnapshot();
+    try {
+        await wcDb.put('characters', char);
+    } catch (e) {
+        console.warn('联系人更新写入 IndexedDB 失败，已保留本地兜底快照', e);
+    }
+    await wcSaveData();
     wcCloseModal('wc-modal-edit-char-settings');
     document.getElementById('wc-detail-char-avatar').src = char.avatar;
     document.getElementById('wc-detail-char-name').innerText = char.name;
@@ -6333,7 +7992,7 @@ function wcRenderPhoneMe() {
                 <svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
             </div>
             <div class="wc-list-item" style="background: #fff;">
-                <svg class="wc-icon" style="margin-right: 10px; color: #8E8E93;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2 2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <svg class="wc-icon" style="margin-right: 10px; color: #8E8E93;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                 <div class="wc-item-content">
                     <div class="wc-item-title">设置</div>
                 </div>
@@ -6455,12 +8114,27 @@ function wcRenderPhonePrivacyContent() {
 
     content.innerHTML = html;
 }
+// ==========================================
+// 辅助函数：获取角色生活状态提示词
+// ==========================================
+function getLifeStatusPrompt(char) {
+    if (!char || !char.lifeStatus || char.lifeStatus.location === "未知") return "";
+    if (char.chatConfig && char.chatConfig.lifeStatusEnabled === false) return "";
+    let text = `\n【当前生活状态参考 (请让生成的内容符合此状态，增强真实感)】：\n`;
+    text += `- 当前位置：${char.lifeStatus.location}\n`;
+    text += `- 正在做的事：${char.lifeStatus.action}\n`;
+    text += `- 当前心情/状态：${char.lifeStatus.mood}\n`;
+    if (char.lifeStatus.timeline && char.lifeStatus.timeline.length > 0) {
+        text += `- 今日行程：\n` + char.lifeStatus.timeline.map(t => `  [${t.time}] ${t.content}`).join('\n') + `\n`;
+    }
+    return text;
+}
 
 async function wcGeneratePhonePrivacy() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -6492,10 +8166,13 @@ async function wcGeneratePhonePrivacy() {
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的所有数据（包括时间戳、事件状态等）必须严格符合这个当前时间！绝对不能出现未来的时间，且早中晚的逻辑必须自洽。\n`;
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; // 新增
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的私密记录APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
@@ -6525,15 +8202,29 @@ async function wcGeneratePhonePrivacy() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                 temperature: parseFloat(apiConfig.temp) || 0.8
+                 temperature: parseFloat(apiConfig.temp) || 0.8,
+                 max_tokens: 4000
             })
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const privacyData = JSON.parse(content);
+        
+        let privacyData;
+        try {
+            privacyData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.privacy = privacyData;
@@ -6544,7 +8235,11 @@ async function wcGeneratePhonePrivacy() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[查手机生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 
@@ -6601,7 +8296,7 @@ async function wcGenerateCharWallet() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     // 检查限制
@@ -6635,23 +8330,30 @@ async function wcGenerateCharWallet() {
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的交易记录时间(time)必须在当前时间之前，且符合常理（如凌晨3点通常不会有早餐店消费）。\n`;
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; 
         prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
         
-        prompt += `请根据角色的人设、职业、近期经历以及聊天记录，生成该角色的微信钱包数据。\n`;
-        prompt += `【要求】：\n`;
-        prompt += `1. 生成合理的余额 (balance)。\n`;
-        prompt += `2. 生成 5 条最近的交易记录 (transactions)。\n`;
-        prompt += `3. 交易记录必须符合角色生活轨迹 (例如：购物、餐饮、转账、工资等)。\n`;
-        prompt += `4. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `请根据角色的人设、当前生活状态以及聊天记录，生成该角色的微信钱包数据。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. 【反模板化警告】：绝对禁止生成随机的、毫无逻辑的账单！\n`;
+        prompt += `2. 账单必须是【今日行程】和【聊天记录】的直接体现！如果行程里写了“在便利店买水”，账单里就必须有便利店的支出；如果聊天里说“刚打车回家”，就必须有打车费。\n`;
+        prompt += `3. 生成 5 到 10 条最近的交易记录 (transactions)。时间线必须与行程记录完美吻合！\n`;
+        prompt += `4. 备注(note)必须极其具体，带有强烈的画面感或真实的内心吐槽（例如：“和User去吃的那家超贵的日料”、“下雨天溢价的打车费”）。\n`;
+        prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
+        prompt += `1. 逐条分析【今日行程】和【聊天记录】，把里面提到的活动转化为具体的消费金额。\n`;
+        prompt += `2. 确保账单的时间(time)与事件发生的时间逻辑一致。\n`;
+        prompt += `推演结束后，直接返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "balance": 1234.56,
   "transactions": [
-    {"type": "expense", "amount": 25.00, "note": "便利店", "time": "10-24 08:30"},
-    {"type": "income", "amount": 5000.00, "note": "工资", "time": "10-15 10:00"}
+    {"type": "expense", "amount": 25.50, "note": "具体的消费备注", "time": "10-23 02:15"},
+    {"type": "income", "amount": 5000.00, "note": "收入备注", "time": "10-15 10:00"}
   ]
 }\n`;
         prompt += `注意：type 只能是 'income' (收入) 或 'expense' (支出)。time 格式为简短日期。\n`;
@@ -6662,15 +8364,29 @@ async function wcGenerateCharWallet() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.7
+                temperature: 0.7,
+                max_tokens: 4000
             })
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const walletData = JSON.parse(content);
+        
+        let walletData;
+        try {
+            walletData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.wallet = walletData;
@@ -6681,7 +8397,11 @@ async function wcGenerateCharWallet() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[钱包生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 
@@ -6697,7 +8417,7 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
         return;
     }
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     // 检查限制
@@ -6734,31 +8454,34 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
         const timeString = `${year}年${month}月${date}日 ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【当前现实时间】：${timeString} ${dayString}\n请务必具备时间观念，生成的行程和应用使用情况必须符合当前的时间点。\n\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; 
         prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
-        prompt += `请根据角色的人设、生活习惯以及最近的聊天内容，生成该角色当前的手机状态数据。\n`;
-        prompt += `要求返回 JSON 格式，包含以下字段：\n`;
-        prompt += `1. "battery": 当前电量 (0-100的整数)。\n`;
-        prompt += `2. "screenTime": 今日屏幕使用时长 (例如 "5小时30分")。\n`;
-        prompt += `3. "appUsage": 3到10个应用的今日使用时长列表 (name, time)。\n`;
-        prompt += `4. "locations": 3到10个今日的行程/位置记录 (time, place, desc)。\n`;
-        prompt += `5. "playlist": 必须生成 10 到 15 首该角色最近在听的真实存在的歌曲 (title, artist)。必须是现实中能搜到的歌，符合角色当前的心境。\n`;
-        prompt += `JSON 格式示例：\n`;
+        prompt += `请根据角色的人设、当前生活状态以及最近的聊天内容，生成该角色当前的手机状态数据。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. "battery": 当前电量。如果现在是深夜且Ta一直在和你聊天，电量应该偏低。\n`;
+        prompt += `2. "appUsage": 5到15个应用的今日使用时长。必须映射【今日行程】！如果行程里在打游戏，游戏APP时长就高；如果在外面跑，导航APP时长就高。\n`;
+        prompt += `3. "locations": 5到10个今日的行程记录。必须与传入的【当前生活状态参考】中的行程保持一致，并在此基础上进行细节扩写和吐槽(desc)。\n`;
+        prompt += `4. "playlist": 10-15首真实存在的歌曲。必须完美契合Ta今天的心情(mood)和聊天氛围！\n`;
+        prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
+        prompt += `1. 分析【当前生活状态】和【聊天记录】，确定今天的主基调（忙碌、悠闲、伤心、甜蜜）。\n`;
+        prompt += `2. 根据主基调，推断手机电量、APP使用偏好和听歌品味。\n`;
+        prompt += `推演结束后，直接返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
-  "battery": 65,
-  "screenTime": "5小时30分",
+  "battery": 12,
+  "screenTime": "11小时30分",
   "appUsage": [
-    {"name": "微信", "time": "2小时"},
-    {"name": "抖音", "time": "1小时"}
+    {"name": "APP名称", "time": "4小时"}
   ],
   "locations": [
-    {"time": "08:00", "place": "家", "desc": "起床洗漱"}
+    {"time": "02:00", "place": "地点", "desc": "具体的动作和吐槽"}
   ],
   "playlist": [
-    {"title": "反方向的钟", "artist": "周杰伦"},
-    {"title": "夜曲", "artist": "周杰伦"}
+    {"title": "歌名", "artist": "歌手"}
   ]
 }`;
 
@@ -6768,15 +8491,29 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.7
+                temperature: 0.7,
+                max_tokens: 4000
             })
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let contentStr = data.choices[0].message.content;
         contentStr = contentStr.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         contentStr = contentStr.replace(/```json/g, '').replace(/```/g, '').trim();
-        const settingsData = JSON.parse(contentStr);
+        
+        let settingsData;
+        try {
+            settingsData = JSON.parse(contentStr);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + contentStr.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.settings = settingsData;
@@ -6786,7 +8523,11 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[状态生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 
@@ -6850,32 +8591,46 @@ function renderSettingsUI(data) {
         </div>
     `;
 
-    let playlistHtml = `<div id="wc-settings-tab-playlist" style="display: none; padding: 0 16px 16px 16px;">`;
+    // 全新的歌单 UI 逻辑 (去除了默认图片和Emoji星光)
+    let playlistHtml = `<div id="wc-settings-tab-playlist" style="display: none; position: relative; height: calc(100vh - 220px); overflow: hidden; background: #F9F9F9; margin: -16px; border-radius: 16px;">`;
+    
     if (data.playlist && data.playlist.length > 0) {
+        playlistHtml += `<div class="char-playlist-list" id="char-playlist-list">`;
         data.playlist.forEach((song, idx) => {
             playlistHtml += `
-                <div style="background: #fff; border-radius: 12px; padding: 12px 16px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: transform 0.1s;" onclick="wcPlayCharPlaylistSong(${idx})" onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'" ontouchstart="this.style.transform='scale(0.98)'" ontouchend="this.style.transform='scale(1)'">
-                    <div style="display: flex; align-items: center; gap: 12px; overflow: hidden;">
-                        <div style="width: 40px; height: 40px; border-radius: 8px; background: #F5F5F5; display: flex; align-items: center; justify-content: center; color: #888; flex-shrink: 0;">
-                            <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: currentColor;"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
-                        </div>
-                        <div style="overflow: hidden;">
-                            <div style="font-size: 15px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${song.title}</div>
-                            <div style="font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${song.artist}</div>
-                        </div>
-                    </div>
-                    <div style="color: #007AFF; flex-shrink: 0;">
-                        <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: currentColor;"><path d="M8 5v14l11-7z"/></svg>
-                    </div>
+                <div class="char-playlist-item" id="char-playlist-item-${idx}" onclick="wcSelectAndPlayCharSong(${idx})">
+                    <div class="char-playlist-item-title">${song.title}</div>
+                    <div class="char-playlist-item-artist">${song.artist}</div>
                 </div>
             `;
         });
+        playlistHtml += `</div>`;
+        
+        // 右侧星空星球区域 (纯CSS光影，绝对无Emoji)
+        playlistHtml += `
+            <div class="char-playlist-record-area" id="char-playlist-record-area" ontouchstart="wcRecordTouchStart(event)" ontouchend="wcRecordTouchEnd(event)">
+                <!-- 宇宙星云背景光晕 -->
+                <div class="space-glow"></div>
+                
+                <!-- 环绕的星轨与纯CSS发光星点 -->
+                <div class="planet-orbit orbit-1"></div>
+                <div class="planet-orbit orbit-2"></div>
+                <div class="planet-orbit orbit-3"></div>
+                
+                <!-- 星球本体 (替代黑胶) -->
+                <div class="char-playlist-record" id="char-playlist-record">
+                    <img src="" class="char-playlist-record-cover" id="char-playlist-record-cover">
+                    <!-- 星球大气层反光遮罩 -->
+                    <div class="planet-surface-gloss"></div>
+                </div>
+            </div>
+            <div style="position: absolute; bottom: 20px; right: 150px; font-size: 10px; color: #999; pointer-events: none; animation: pulse 2s infinite;">↕ 滑动切歌</div>
+        `;
     } else {
-        playlistHtml += `<div style="text-align: center; color: #888; padding: 20px;">暂无歌单数据，请点击右上角刷新生成</div>`;
+        playlistHtml += `<div style="text-align: center; color: #888; padding: 20px; width: 100%;">暂无歌单数据，请点击右上角刷新生成</div>`;
     }
     playlistHtml += `</div>`;
 
-    // 注意：这里去掉了外层的 padding: 20px，改为在内部控制，防止 Tab 栏被挤压
     content.style.padding = '0';
     content.innerHTML = `
         <div style="padding: 16px;">
@@ -6888,16 +8643,71 @@ function renderSettingsUI(data) {
         ${playlistHtml}
     `;
 }
-
 window.wcToggleSettingsTab = function(tab) {
-    document.getElementById('wc-seg-settings-status').classList.toggle('active', tab === 'status');
-    document.getElementById('wc-seg-settings-playlist').classList.toggle('active', tab === 'playlist');
-    document.getElementById('wc-settings-tab-status').style.display = tab === 'status' ? 'block' : 'none';
-    document.getElementById('wc-settings-tab-playlist').style.display = tab === 'playlist' ? 'block' : 'none';
-}
+    const statusBtn = document.getElementById('wc-seg-settings-status');
+    const playlistBtn = document.getElementById('wc-seg-settings-playlist');
+    const statusTab = document.getElementById('wc-settings-tab-status');
+    const playlistTab = document.getElementById('wc-settings-tab-playlist');
+    
+    if (statusBtn) statusBtn.classList.toggle('active', tab === 'status');
+    if (playlistBtn) playlistBtn.classList.toggle('active', tab === 'playlist');
+    if (statusTab) statusTab.style.display = tab === 'status' ? 'block' : 'none';
+    if (playlistTab) playlistTab.style.display = tab === 'playlist' ? 'block' : 'none';
+};
 
-// --- 新增：点击歌单直接播放并开启一起听歌 ---
-// --- 新增：点击歌单直接播放 ---
+// 完整的播放函数
+// ==========================================
+// Char 歌单滑动与点击逻辑
+// ==========================================
+let wcRecordStartY = 0;
+let wcCurrentPlaylistIdx = -1;
+
+window.wcSelectAndPlayCharSong = function(idx) {
+    wcCurrentPlaylistIdx = idx;
+    
+    // 更新列表高亮状态
+    document.querySelectorAll('.char-playlist-item').forEach(el => el.classList.remove('active'));
+    const activeItem = document.getElementById(`char-playlist-item-${idx}`);
+    if (activeItem) {
+        activeItem.classList.add('active');
+        activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    
+    // 唱片动画复位并转动
+    const record = document.getElementById('char-playlist-record');
+    if (record) {
+        record.classList.remove('playing');
+        setTimeout(() => record.classList.add('playing'), 50);
+    }
+    
+    // 调用播放逻辑
+    wcPlayCharPlaylistSong(idx);
+};
+
+window.wcRecordTouchStart = function(e) {
+    wcRecordStartY = e.touches[0].clientY;
+};
+
+window.wcRecordTouchEnd = function(e) {
+    const endY = e.changedTouches[0].clientY;
+    const diff = endY - wcRecordStartY;
+    
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.settings || !char.phoneData.settings.playlist) return;
+    const playlist = char.phoneData.settings.playlist;
+    
+    if (diff > 30) {
+        // 向下滑动，上一首
+        let nextIdx = (wcCurrentPlaylistIdx - 1 + playlist.length) % playlist.length;
+        wcSelectAndPlayCharSong(nextIdx);
+    } else if (diff < -30) {
+        // 向上滑动，下一首
+        let nextIdx = (wcCurrentPlaylistIdx + 1) % playlist.length;
+        wcSelectAndPlayCharSong(nextIdx);
+    }
+};
+
+// 完整的播放函数 (去除了跳转，实现沉浸式播放)
 async function wcPlayCharPlaylistSong(idx) {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char || !char.phoneData || !char.phoneData.settings || !char.phoneData.settings.playlist) return;
@@ -6921,28 +8731,36 @@ async function wcPlayCharPlaylistSong(idx) {
 
             wcShowSuccess("即将播放");
             
+            // 更新唱片封面
+            const coverEl = document.getElementById('char-playlist-record-cover');
+            if (coverEl) {
+                coverEl.src = cover;
+                coverEl.style.opacity = '1'; // 确保有图片时显示
+            }
+            
             // 延迟一下等待提示消失
             setTimeout(() => {
-                // 1. 关闭手机模拟器
-                wcClosePhoneSim();
+                // 【核心修改】：去除了关闭手机模拟器和打开全屏播放器的代码
+                // 直接在后台更新播放列表并播放，保持在当前页面
                 
-                // 2. 打开音乐APP
-                openMusicApp();
+                // 👇 修改：将歌曲追加到当前播放列表，而不是覆盖
+                if (!musicState.currentPlaylist) musicState.currentPlaylist = [];
                 
-                // 3. 将这首歌加入当前播放列表并播放
-                musicState.currentPlaylist = [{ id, title, artist, cover }];
-                musicState.currentIndex = 0;
+                // 检查列表中是否已经有这首歌，避免重复添加
+                let existingIdx = musicState.currentPlaylist.findIndex(s => s.id === id);
+                if (existingIdx !== -1) {
+                    musicState.currentIndex = existingIdx;
+                } else {
+                    musicState.currentPlaylist.push({ id, title, artist, cover });
+                    musicState.currentIndex = musicState.currentPlaylist.length - 1;
+                }
+                
                 musicPlaySong(id, title, artist, cover);
                 
-                // 4. 打开全屏播放器
-                musicOpenFullPlayer();
-
-                // 5. 【修改逻辑】：判断当前是否正在和该角色一起听歌
+                // 判断当前是否正在和该角色一起听歌
                 if (musicState.listenTogether.active && musicState.listenTogether.charId === char.id) {
-                    // 如果正在一起听歌，告诉 AI 你点播了 Ta 的歌
-                    wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机歌单，并点播了你最近常听的《${title}》，现在你们正在一起听这首歌。]`, { hidden: true });
+                    wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机歌单，并点播了你最近常听的《${title}》，这首歌已加入你们的播放列表，现在你们正在一起听这首歌。]`, { hidden: true });
                 }
-                // 如果没有一起听歌，就什么都不做，单纯自己听
                 
             }, 1000);
 
@@ -6955,14 +8773,6 @@ async function wcPlayCharPlaylistSong(idx) {
     }
 }
 
-window.wcToggleSettingsTab = function(tab) {
-    document.getElementById('wc-seg-settings-status').classList.toggle('active', tab === 'status');
-    document.getElementById('wc-seg-settings-playlist').classList.toggle('active', tab === 'playlist');
-    document.getElementById('wc-settings-tab-status').style.display = tab === 'status' ? 'block' : 'none';
-    document.getElementById('wc-settings-tab-playlist').style.display = tab === 'playlist' ? 'block' : 'none';
-}
-
-
 // --- Phone Message Logic ---
 
 // 【核心修复】：补充缺失的 wcGeneratePhoneChats 函数，并强化生成要求
@@ -6970,7 +8780,7 @@ async function wcGeneratePhoneChats() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -7013,14 +8823,19 @@ async function wcGeneratePhoneChats() {
         prompt += `【最近你与User的聊天记录】：\n${recentMsgs}\n\n`;
         prompt += `${contactsInfo}\n\n`;
         
-        prompt += `请根据角色的人设、用户设定、最近的聊天内容，以及【通讯录NPC列表】，生成该角色手机微信里的【聊天列表】和【详细聊天记录】。\n`;
-        prompt += `【严格要求】：\n`;
+        prompt += `请根据角色的人设、当前生活状态、最近的聊天内容，以及【通讯录NPC列表】，生成该角色手机微信里的【聊天列表】和【详细聊天记录】。\n`;
+        prompt += `【严格要求（极具活人感与独立社交）】：\n`;
         prompt += `1. 必须生成 3 到 8 个聊天会话。\n`;
         prompt += `2. 必须包含一个与用户(User)的会话，isUser 设为 true。\n`;
         prompt += `3. 其他会话必须从【通讯录NPC列表】中挑选人物/群聊生成，isGroup 表示是否为群聊。\n`;
-        prompt += `4. 【最重要】：每个会话必须包含一个 "history" 数组，里面必须包含 8 到 15 条具体的聊天记录！绝对不能少于8条！\n`;
-        prompt += `5. history 中的消息，sender 为 "me" 代表手机主人(${char.name})发出的，sender 为 "them" 代表对方发出的。\n`;
-        prompt += `6. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `4. 【最重要：独立社交指令】：你和 NPC 的聊天内容必须是真实的社交日常！例如：吐槽奇葩老板、聊游戏开黑、拼单点外卖、借钱、分享搞笑视频等。**绝对不要在每个群里都聊 User！你的世界不是只有 User！**同时要确保 User 可以隐秘体现在你的社交圈和你的生活里面！\n`;
+        prompt += `5. 每个会话必须包含一个 "history" 数组，里面必须包含 8 到 15 条具体的聊天记录！绝对不能少于8条！\n`;
+        prompt += `6. history 中的消息，sender 为 "me" 代表手机主人(${char.name})发出的，sender 为 "them" 代表对方发出的。\n`;
+        prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
+        prompt += `1. 结合当前时间、地点和心情，推断你最近在和谁聊天，聊些什么（工作、八卦、游戏、求助等）。\n`;
+        prompt += `2. 构思如何体现你独立的生活社交圈，同时也要保证 User 隐秘体现在你的社交圈和你的生活。\n`;
+        prompt += `3. 确保聊天记录充满生活琐碎感和活人语气，拒绝生硬的问答。\n`;
+        prompt += `推演结束后，直接返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
   {
     "name": "User的备注名", "isUser": true, "isGroup": false, "lastMsg": "最近的一条消息", "time": "10:30",
@@ -7046,8 +8861,8 @@ async function wcGeneratePhoneChats() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
-
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -7078,7 +8893,8 @@ async function wcGeneratePhoneChats() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[聊天列表生成失败] ${e.message}`);
+        else wcShowError("生成失败");
     }
 }
 
@@ -7194,8 +9010,9 @@ function wcSimSendMsg() {
     chat.lastMsg = text;
     chat.time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     
+    const userName = (char.chatConfig && char.chatConfig.userName) ? char.chatConfig.userName : wcState.user.name;
     wcAddMessage(char.id, 'system', 'system', 
-        `[系统提示: 你(User)操作了对方的手机，以对方的名义给 ${chat.name} 回复了: "${text}"]`, 
+        `[系统内部信息(仅AI可见)：${userName}(User) 偷偷拿到了你(${char.name})的手机，并以你(${char.name})的名义，给你的手机联系人 "${chat.name}" 回复了消息: "${text}"]`, 
         { hidden: true }
     );
 
@@ -7225,7 +9042,7 @@ async function wcSimTriggerAI() {
     const chat = char.phoneData.chats.find(c => c.id === wcActiveSimChatId);
     if (!chat) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请配置 API");
 
     // 检查限制
@@ -7281,7 +9098,8 @@ async function wcSimTriggerAI() {
         prompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
         prompt += `> 必须将长回复拆分成多条短消息（1-4条），严禁把所有话挤在一个气泡里！\n`;
         prompt += `> 【重要约束】：绝对不要凭空捏造没有发生过的事情。请严格基于现有的聊天记录上下文进行自然的日常问候、吐槽或顺延当前话题。\n`;
-        prompt += `> 【格式约束 (最高优先级)】：你必须先输出 <thinking> 标签进行思考，然后再输出 JSON 数组。**必须且只能**输出合法的 JSON 数组，严禁漏掉引号、括号或逗号！严禁输出损坏的 JSON 格式！\n`;
+        prompt += `> 【防重复约束】：严禁输出重复的句子或重复的对话序列！\n`;
+        prompt += `> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！严禁漏掉引号、括号或逗号！严禁输出损坏的 JSON 格式！\n`;
 
         
         // 注入最近聊天记录 (增加读取条数)
@@ -7304,8 +9122,8 @@ async function wcSimTriggerAI() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
-
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -7385,7 +9203,8 @@ async function wcSimTriggerAI() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("AI 回复失败");
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[模拟聊天回复失败] ${e.message}`);
+        else wcShowError("AI 回复失败");
     } finally {
         if(btn) btn.disabled = false;
     }
@@ -7395,13 +9214,26 @@ function renderSimHistory(history, meAvatar, themAvatar, isGroup = false) {
     const container = document.getElementById('wc-sim-chat-history');
     container.innerHTML = '';
     
+    let lastTime = 0;
+
     history.forEach(msg => {
+        // --- 新增：渲染时间戳 (间隔大于5分钟显示) ---
+        if (msg.time && (msg.time - lastTime > 5 * 60 * 1000)) {
+            const timeDiv = document.createElement('div');
+            timeDiv.style.textAlign = 'center';
+            timeDiv.style.margin = '10px 0';
+            // 使用系统自带的时间格式化函数
+            timeDiv.innerHTML = `<span style="background: rgba(0,0,0,0.1); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px;">${wcFormatSystemTime(msg.time)}</span>`;
+            container.appendChild(timeDiv);
+            lastTime = msg.time;
+        }
+
         const isMe = msg.sender === 'me'; 
         
         const row = document.createElement('div');
         row.style.display = 'flex';
         row.style.flexDirection = isMe ? 'row-reverse' : 'row';
-        row.style.marginBottom = '15px'; // 增加间距
+        row.style.marginBottom = '15px'; 
         row.style.alignItems = 'flex-start';
         row.style.width = '100%'; 
 
@@ -7435,22 +9267,50 @@ function renderSimHistory(history, meAvatar, themAvatar, isGroup = false) {
         }
 
         const bubble = document.createElement('div');
-        bubble.style.padding = '8px 12px';
-        bubble.style.borderRadius = '6px';
-        bubble.style.fontSize = '15px';
-        bubble.style.lineHeight = '1.4';
-        bubble.style.wordBreak = 'break-word';
         bubble.style.position = 'relative';
         
-        if (isMe) {
-            bubble.style.background = '#95EC69';
-            bubble.style.color = 'black';
+        // --- 新增：表情包和图片渲染逻辑 ---
+        if (msg.type === 'sticker' || msg.type === 'image') {
+            bubble.innerHTML = `<img src="${msg.content}" style="max-width: 120px; max-height: 120px; border-radius: 8px; display: block; object-fit: cover;">`;
+            bubble.style.background = 'transparent';
+            bubble.style.padding = '0';
         } else {
-            bubble.style.background = 'white';
-            bubble.style.color = 'black';
-        }
-        
+            // 普通文本气泡
+            bubble.style.padding = '8px 12px';
+            bubble.style.borderRadius = '6px';
+            bubble.style.fontSize = '15px';
+            bubble.style.lineHeight = '1.4';
+            bubble.style.wordBreak = 'break-word';
+            if (isMe) {
+                bubble.style.background = '#111111'; // 适配高级黑白主题
+                bubble.style.color = '#FFFFFF';
+                bubble.style.borderBottomRightRadius = '2px';
+            } else {
+                bubble.style.background = '#FFFFFF';
+                bubble.style.color = '#111111';
+                bubble.style.border = '1px solid #F0F0F0';
+                bubble.style.borderBottomLeftRadius = '2px';
+            }
+            // 检测是否为双语格式
+            const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
+            const match = msg.content.match(bilingualRegex);
+            
+            if (match) {
+                const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+                const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+                const transId = 'sim-trans-' + Math.random().toString(36).substr(2, 9);
+                
+                bubble.style.cursor = 'pointer';
+                bubble.onclick = function() { 
+                    const el = document.getElementById(transId); 
+                    if(el.style.display==='none'){el.style.display='block';}else{el.style.display='none';} 
+                };
+                // 核心修复：压缩为单行
+                bubble.innerHTML = `<div style="word-break: break-word; width: 100%;">${originalText}</div><div id="${transId}" style="display: none; width: 100%; margin-top: 8px;"><div style="height: 1px; width: 100%; background-color: ${isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)'}; margin-bottom: 8px;"></div><div style="font-size: 13px; word-break: break-word; color: ${isMe ? '#CCCCCC' : '#888888'};">${translatedText}</div></div>`;
+            } else {
                 bubble.innerHTML = msg.content;
+            }
+        }
         
         contentDiv.appendChild(bubble);
         
@@ -7473,7 +9333,7 @@ async function wcGeneratePhoneContacts() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+   const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     // 检查限制
@@ -7529,8 +9389,8 @@ async function wcGeneratePhoneContacts() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
-
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -7569,7 +9429,8 @@ async function wcGeneratePhoneContacts() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[通讯录生成失败] ${e.message}`);
+        else wcShowError("生成失败");
     }
 }
 
@@ -7657,6 +9518,7 @@ function wcHandleFriendRequest(reqId, action) {
     if (reqIndex === -1) return;
     const req = char.phoneData.friendRequests[reqIndex];
 
+    const userName = (char.chatConfig && char.chatConfig.userName) ? char.chatConfig.userName : wcState.user.name;
     if (action === 'accept') {
         if (!char.phoneData.contacts) char.phoneData.contacts = [];
         char.phoneData.contacts.push({
@@ -7666,9 +9528,9 @@ function wcHandleFriendRequest(reqId, action) {
             type: 'friend',
             avatar: getRandomNpcAvatar() 
         });
-        wcAddMessage(char.id, 'system', 'system', `[系统提示] 你(User)操作了对方的手机，通过了 "${req.name}" 的好友请求。`, { hidden: true });
+        wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见)：${userName}(User) 偷偷拿到了你(${char.name})的手机，并替你(${char.name})通过了 "${req.name}" 的好友请求。现在 "${req.name}" 已经成了你(${char.name})的好友。]`, { hidden: true });
     } else {
-        wcAddMessage(char.id, 'system', 'system', `[系统提示] 你(User)操作了对方的手机，拒绝了 "${req.name}" 的好友请求。`, { hidden: true });
+        wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见)：${userName}(User) 偷偷拿到了你(${char.name})的手机，并替你(${char.name})拒绝了 "${req.name}" 的好友请求。]`, { hidden: true });
     }
 
     char.phoneData.friendRequests.splice(reqIndex, 1);
@@ -7682,9 +9544,10 @@ function wcDeletePhoneContact() {
 
     if (confirm(`确定要删除好友 "${currentPhoneContact.name}" 吗？`)) {
         const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+        const userName = (char.chatConfig && char.chatConfig.userName) ? char.chatConfig.userName : wcState.user.name;
         char.phoneData.contacts = char.phoneData.contacts.filter(c => c.id !== currentPhoneContact.id);
         
-        wcAddMessage(char.id, 'system', 'system', `[系统提示] 你(User)操作了对方的手机，删除了好友 "${currentPhoneContact.name}"。`, { hidden: true });
+        wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见)：${userName}(User) 偷偷拿到了你(${char.name})的手机，并把你(${char.name})列表里的好友 "${currentPhoneContact.name}" 给删除了！]`, { hidden: true });
         
         wcSaveData();
         wcCloseModal('wc-modal-phone-contact-card');
@@ -7692,7 +9555,7 @@ function wcDeletePhoneContact() {
     }
 }
 
-function wcShareContactToMain() {
+async function wcShareContactToMain() {
     if (!currentPhoneContact) return;
     
     const name = currentPhoneContact.name;
@@ -7709,7 +9572,13 @@ function wcShareContactToMain() {
     };
     
     wcState.characters.push(newChar);
-    wcSaveData();
+    await wcWriteCharactersPersistentSnapshot();
+    try {
+        await wcDb.put('characters', newChar);
+    } catch (e) {
+        console.warn('主聊天联系人写入 IndexedDB 失败，已保留本地兜底快照', e);
+    }
+    await wcSaveData();
     
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     // 核心修改：明确告诉 AI 是 User 添加了好友，而不是 AI 自己添加的
@@ -7774,6 +9643,17 @@ function wcSwitchChatSettingsTab(tab) {
     document.getElementById(`wc-cs-tab-${tab}`).style.display = 'block';
     document.getElementById(`wc-cs-tab-${tab}`).classList.add('active');
     document.getElementById(`wc-cs-${tab}-btn`).classList.add('active');
+
+    // 👇 新增：星际轨道旋转逻辑 👇
+    const wheel = document.getElementById('wc-cs-orbit-wheel');
+    if (wheel) {
+        let targetRotation = 0;
+        if (tab === 'char') targetRotation = -26; // 对应左侧 item-0
+        else if (tab === 'heart') targetRotation = 0; // 对应中间 item-1
+        else if (tab === 'user') targetRotation = 26; // 对应右侧 item-2
+        
+        wheel.style.setProperty('--rotation', targetRotation);
+    }
 }
 
 // 【新增】：渲染聊天背景图库
@@ -7840,7 +9720,8 @@ function wcOpenChatSettings() {
     document.getElementById('wc-setting-char-avatar').src = char.avatar;
     document.getElementById('wc-setting-char-name').value = char.name;
     document.getElementById('wc-setting-char-note').value = char.note || "";
-        document.getElementById('wc-setting-char-prompt').value = char.prompt || "";
+    document.getElementById('wc-setting-char-prompt').value = char.prompt || "";
+    document.getElementById('wc-setting-life-status-toggle').checked = char.chatConfig.lifeStatusEnabled !== false; // 默认开启
     // 读取拉黑状态并更新按钮
     // 获取需要隐藏的元素容器
     const nameRow = document.getElementById('wc-setting-char-name').closest('.wc-avatar-row');
@@ -7918,20 +9799,44 @@ function wcOpenChatSettings() {
     document.getElementById('wc-setting-proactive-toggle').checked = char.chatConfig.proactiveEnabled || false;
     document.getElementById('wc-setting-proactive-interval').value = char.chatConfig.proactiveInterval || 60;
     document.getElementById('wc-setting-moment-freq').value = char.chatConfig.momentFreq || 0;
+    
+    const npcCommentToggle = document.getElementById('wc-setting-moment-npc-comment');
+    if (npcCommentToggle) {
+        npcCommentToggle.checked = char.chatConfig.momentNpcCommentEnabled !== false; // 默认开启
+    }
+    // 👇 新增：动态注入后台小动作概率滑块 👇
+    let bgUpdateGroup = document.getElementById('wc-bg-update-group');
+    if (!bgUpdateGroup) {
+        const momentFreqEl = document.getElementById('wc-setting-moment-freq');
+        if (momentFreqEl) {
+            const parent = momentFreqEl.closest('.wc-form-group') || momentFreqEl.parentElement;
+            bgUpdateGroup = document.createElement('div');
+            bgUpdateGroup.id = 'wc-bg-update-group';
+            bgUpdateGroup.className = 'wc-form-group';
+            bgUpdateGroup.innerHTML = `
+                <label class="wc-form-label">后台小动作概率 (改备注/签名/找NPC) <span id="bg-update-freq-val">30%</span></label>
+                <input type="range" id="wc-setting-bg-update-freq" min="0" max="100" value="30" class="wc-form-input" style="padding:0;" oninput="document.getElementById('bg-update-freq-val').innerText = this.value + '%'">
+            `;
+            parent.parentNode.insertBefore(bgUpdateGroup, parent.nextSibling);
+        }
+    }
+    if (document.getElementById('wc-setting-bg-update-freq')) {
+        const val = char.chatConfig.bgUpdateFreq !== undefined ? char.chatConfig.bgUpdateFreq : 30;
+        document.getElementById('wc-setting-bg-update-freq').value = val;
+        document.getElementById('bg-update-freq-val').innerText = val + '%';
+    }
+    // 👆 新增结束 👆
 
     const wbList = document.getElementById('wc-setting-worldbook-list');
     wbList.innerHTML = '';
-    if (worldbookEntries.length === 0) {
-        wbList.innerHTML = '<div style="color:#999; font-size:13px;">暂无世界书条目</div>';
-    } else {
-        worldbookEntries.forEach(entry => {
-            const div = document.createElement('div');
-            div.className = 'wc-checkbox-item';
-            const isChecked = char.chatConfig.worldbookEntries && char.chatConfig.worldbookEntries.includes(entry.id.toString());
-            div.innerHTML = `<input type="checkbox" value="${entry.id}" ${isChecked ? 'checked' : ''}><span>${entry.title} (${entry.type})</span>`;
-            wbList.appendChild(div);
+    let wbCount = 0;
+    if (char.chatConfig.worldbookEntries) {
+        char.chatConfig.worldbookEntries.forEach(id => {
+            wbList.innerHTML += `<input type="checkbox" value="${id}" checked>`;
+            wbCount++;
         });
     }
+    document.getElementById('wc-setting-wb-count').innerText = `已选 ${wbCount} 项`;
 
     const stickerList = document.getElementById('wc-setting-sticker-group-list');
     stickerList.innerHTML = '';
@@ -7939,7 +9844,7 @@ function wcOpenChatSettings() {
         const div = document.createElement('div');
         div.className = 'wc-checkbox-item';
         const isChecked = char.chatConfig.stickerGroupIds && char.chatConfig.stickerGroupIds.includes(idx);
-        div.innerHTML = `<input type="checkbox" value="${idx}" ${isChecked ? 'checked' : ''}><span>${cat.name}</span>`;
+        div.innerHTML = `<input type="checkbox" value="${idx}" ${isChecked ? 'checked' : ''} onchange="calculateRealtimeTokens()"><span>${cat.name}</span>`;
         stickerList.appendChild(div);
     });
 
@@ -7956,13 +9861,47 @@ function wcOpenChatSettings() {
     wcUpdateCssPresetSelect();
     wcState.tempImage = '';
     
-    // Default to Char tab
-    wcSwitchChatSettingsTab('char');
+    // Default to Heart (Advanced) tab
+    wcSwitchChatSettingsTab('heart');
     
     wcRenderChatBgGallery(); // 【新增】：打开设置时渲染图库
     
+    // 👇 新增：打开设置时自动计算 Token 和 查询额度
+    calculateRealtimeTokens();
+    refreshApiQuota();
+    
     wcOpenModal('wc-modal-chat-settings');
 }
+// ==========================================
+// 新增：聊天设置星际轨道滑动切换逻辑
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+    const navContainer = document.getElementById('wc-cs-nav-container');
+    if (!navContainer) return;
+
+    let startX = 0;
+    const tabs = ['char', 'heart', 'user'];
+
+    navContainer.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX;
+    }, {passive: true});
+
+    navContainer.addEventListener('touchend', e => {
+        let endX = e.changedTouches[0].clientX;
+        let diff = endX - startX;
+        
+        // 找到当前激活的 tab 索引
+        let currentIdx = 1; // 默认 heart
+        if (document.getElementById('wc-cs-char-btn').classList.contains('active')) currentIdx = 0;
+        if (document.getElementById('wc-cs-user-btn').classList.contains('active')) currentIdx = 2;
+
+        if (diff > 50 && currentIdx > 0) {
+            wcSwitchChatSettingsTab(tabs[currentIdx - 1]); // 向右滑，看左边的
+        } else if (diff < -50 && currentIdx < 2) {
+            wcSwitchChatSettingsTab(tabs[currentIdx + 1]); // 向左滑，看右边的
+        }
+    });
+});
 
 function wcImportMaskToChat(maskId) {
     if (!maskId) return;
@@ -7983,7 +9922,7 @@ function wcClearChatBackground() {
     wcState.tempBgCleared = true;
 }
 
-function wcSaveChatSettings() {
+async function wcSaveChatSettings() {
     const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     if (!char) return;
     
@@ -7996,6 +9935,7 @@ function wcSaveChatSettings() {
     if (!char.chatConfig) char.chatConfig = {};
     char.chatConfig.userName = document.getElementById('wc-setting-user-name').value;
     char.chatConfig.userPersona = document.getElementById('wc-setting-user-prompt').value;
+    char.chatConfig.lifeStatusEnabled = document.getElementById('wc-setting-life-status-toggle').checked;
     
     if (wcState.tempImage && wcState.tempImageType === 'setting-user') {
         char.chatConfig.userAvatar = wcState.tempImage;
@@ -8013,6 +9953,12 @@ function wcSaveChatSettings() {
     char.chatConfig.proactiveEnabled = document.getElementById('wc-setting-proactive-toggle').checked;
     char.chatConfig.proactiveInterval = parseInt(document.getElementById('wc-setting-proactive-interval').value) || 60;
     char.chatConfig.momentFreq = parseInt(document.getElementById('wc-setting-moment-freq').value) || 0;
+    // 👇 新增：保存后台小动作概率 👇
+    const bgUpdateFreqInput = document.getElementById('wc-setting-bg-update-freq');
+    if (bgUpdateFreqInput) {
+        char.chatConfig.bgUpdateFreq = parseInt(bgUpdateFreqInput.value) || 0;
+    }
+    // 👆 新增结束 👆
 
     const wbCheckboxes = document.querySelectorAll('#wc-setting-worldbook-list input[type="checkbox"]:checked');
     // 【修复】：这里原本写成了 summaryWorldbookEntries，导致保存失败，现在改回 worldbookEntries
@@ -8031,14 +9977,15 @@ function wcSaveChatSettings() {
     if (charIndex !== -1) {
         wcState.characters[charIndex] = char;
     }
-    wcSaveData();
-    
-    let displayName = char.note || char.name;
-    // 【新增】：如果是群聊，在名字后面加上人数
-    if (char.isGroup && char.members) {
-        displayName += ` (${char.members.length})`;
+    await wcWriteCharactersPersistentSnapshot();
+    try {
+        await wcDb.put('characters', char);
+    } catch (e) {
+        console.warn('聊天联系人配置写入 IndexedDB 失败，已保留本地兜底快照', e);
     }
-    document.getElementById('wc-nav-title').innerText = displayName;
+    await wcSaveData();
+    
+    updateChatTopBarStatus(char);
     wcApplyChatConfig(char);
     wcRenderMessages(char.id); 
     wcRenderChats(); 
@@ -8195,6 +10142,163 @@ function wcToggleMomentType(type) {
     document.getElementById('wc-area-desc-img').style.display = type === 'desc' ? 'block' : 'none';
 }
 
+// ==========================================
+// 新增：朋友圈 AI 互动逻辑 (单条触发版)
+// ==========================================
+let currentActionMomentId = null;
+
+// 控制弹出菜单的显示与隐藏
+window.wcToggleMomentMenu = function(e, id) {
+    e.stopPropagation();
+    // 先关闭其他所有打开的菜单
+    document.querySelectorAll('.wc-moment-popover').forEach(el => {
+        if (el.id !== `moment-popover-${id}`) el.classList.remove('active');
+    });
+    // 切换当前菜单
+    const popover = document.getElementById(`moment-popover-${id}`);
+    if (popover) popover.classList.toggle('active');
+};
+
+// 全局点击事件：点击空白处隐藏所有弹出菜单
+document.addEventListener('click', () => {
+    document.querySelectorAll('.wc-moment-popover').forEach(el => el.classList.remove('active'));
+});
+
+window.wcOpenMomentAISelectForSingle = function(e, momentId) {
+    e.stopPropagation();
+    // 隐藏菜单
+    document.querySelectorAll('.wc-moment-popover').forEach(el => el.classList.remove('active'));
+    
+    currentActionMomentId = momentId;
+    const list = document.getElementById('wc-moment-ai-char-list');
+    list.innerHTML = '';
+    
+    const chars = wcState.characters.filter(c => !c.isGroup);
+    if (chars.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">暂无联系人</div>';
+    } else {
+        chars.forEach(char => {
+            const div = document.createElement('div');
+            div.className = 'wc-list-item';
+            div.style.background = 'white';
+            div.style.borderBottom = '1px solid #F0F0F0';
+            div.innerHTML = `
+                <img src="${char.avatar}" class="wc-avatar" style="width:36px;height:36px;">
+                <div class="wc-item-content"><div class="wc-item-title">${char.name}</div></div>
+                <button class="wc-btn-mini" style="background:#AF52DE; color:white; border:none; padding:6px 16px; border-radius:16px; font-weight:bold;" onclick="wcExecuteSingleMomentAI(${char.id})">召唤</button>
+            `;
+            list.appendChild(div);
+        });
+    }
+    setTimeout(() => wcOpenModal('wc-modal-moment-ai-select'), 300); // 延迟等待上一个弹窗收起
+};
+
+window.wcExecuteSingleMomentAI = async function(charId) {
+    const char = wcState.characters.find(c => c.id === charId);
+    const targetMoment = wcState.moments.find(m => m.id === currentActionMomentId);
+    if (!char || !targetMoment) return;
+
+    const apiConfig = await getActiveApiConfig('chat');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcCloseModal('wc-modal-moment-ai-select');
+    wcShowLoading(`正在召唤 ${char.name} 来看这条朋友圈...`);
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 只提取当前这条朋友圈的信息
+        const commentsStr = targetMoment.comments ? targetMoment.comments.map(c => `${c.name}: ${c.text}`).join(' | ') : '无';
+        const likesStr = targetMoment.likes ? targetMoment.likes.join(', ') : '无';
+        const momentText = `[朋友圈ID:${targetMoment.id}] 发帖人:${targetMoment.name} | 内容:${targetMoment.text} | 图片:${targetMoment.imageDesc || '无'} | 点赞:[${likesStr}] | 评论:[${commentsStr}]`;
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n\n`;
+        prompt += `【当前你正在看的一条朋友圈】：\n${momentText}\n\n`;
+        prompt += `请根据你的人设，对这条朋友圈进行互动（点赞、评论、或回复别人的评论）。\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 互动必须符合你的人设和你们之间的关系。\n`;
+        prompt += `2. 如果是回复某人的评论，请使用 reply 类型，并指定 targetName。\n`;
+        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "actions": [
+    {"type": "like", "momentId": ${targetMoment.id}},
+    {"type": "comment", "momentId": ${targetMoment.id}, "content": "你的评论内容"}
+  ]
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        let actionLogs = [];
+
+        if (result.actions && result.actions.length > 0) {
+            result.actions.forEach(action => {
+                const momentId = parseInt(action.momentId);
+                if (!momentId) return;
+                
+                const moment = wcState.moments.find(m => m.id === momentId);
+                if (!moment) return;
+
+                if (action.type === 'like') {
+                    if (!moment.likes) moment.likes = [];
+                    if (!moment.likes.includes(char.name)) {
+                        moment.likes.push(char.name);
+                        actionLogs.push(`点赞了 ${moment.name} 的朋友圈("${moment.text.substring(0,10)}...")`);
+                    }
+                } else if (action.type === 'comment') {
+                    if (!moment.comments) moment.comments = [];
+                    moment.comments.push({ name: char.name, text: action.content });
+                    actionLogs.push(`评论了 ${moment.name} 的朋友圈: "${action.content}"`);
+                } else if (action.type === 'reply') {
+                    if (!moment.comments) moment.comments = [];
+                    moment.comments.push({ name: char.name, text: `回复 ${action.targetName}: ${action.content}` });
+                    actionLogs.push(`在 ${moment.name} 的朋友圈回复了 ${action.targetName}: "${action.content}"`);
+                }
+            });
+
+            wcSaveData();
+            wcRenderMoments();
+
+            if (actionLogs.length > 0) {
+                const logText = `[系统内部信息(仅AI可见): 你刚刚在朋友圈进行了以下互动：\n- ${actionLogs.join('\n- ')}\n请在接下来的聊天中记住这些事。]`;
+                wcAddMessage(char.id, 'system', 'system', logText, { hidden: true });
+            }
+
+            wcShowSuccess("互动成功！");
+        } else {
+            wcShowSuccess("Ta 看了看，什么都没说");
+        }
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("召唤失败");
+    }
+};
+
 function wcSaveMoment() {
     const text = document.getElementById('wc-input-moment-text').value;
     let image = null; let imageDesc = null;
@@ -8274,14 +10378,32 @@ function initProactiveSystem() {
 
 function checkProactiveMessages() {
     const now = Date.now();
+    const dateObj = new Date();
+    const currentHHMM = `${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
+    const todayStr = dateObj.toDateString();
+
     wcState.characters.forEach(char => {
+        // 1. 检查食谱定时发送逻辑
+        if (char.phoneData && char.phoneData.recipe && char.phoneData.recipe.ta) {
+            const taRecipe = char.phoneData.recipe.ta;
+            if (taRecipe.autoTime === currentHHMM && taRecipe.lastAutoSendDate !== todayStr) {
+                console.log(`触发 ${char.name} 定时发送食谱`);
+                // 标记为今天已发送，防止一分钟内重复触发
+                taRecipe.lastAutoSendDate = todayStr;
+                wcSaveData();
+                // 后台静默生成并发送
+                if (typeof wcGenerateTaRecipe === 'function') {
+                    wcGenerateTaRecipe(true, char.id);
+                }
+            }
+        }
+
+        // 2. 原有的主动发消息逻辑
         if (char.chatConfig && char.chatConfig.proactiveEnabled) {
-            // 将设定的分钟数转换为毫秒
             const interval = (char.chatConfig.proactiveInterval || 60) * 60 * 1000; 
             const msgs = wcState.chats[char.id] || [];
             let lastTime = 0;
             
-            // 【修复1】：准确找到最后一条非系统、非报错的实质性消息时间
             for (let i = msgs.length - 1; i >= 0; i--) {
                 if (!msgs[i].isError && msgs[i].type !== 'system') {
                     lastTime = msgs[i].time;
@@ -8289,17 +10411,35 @@ function checkProactiveMessages() {
                 }
             }
 
-            // 如果完全没有聊天记录，使用当前时间兜底，防止一上来就疯狂触发
             if (lastTime === 0) lastTime = now; 
 
-            // 【修复2】：判断时间间隔，并且确保当前没有正在生成回复
             if (now - lastTime > interval && !aiGeneratingLocks[char.id]) {
                 console.log(`触发 ${char.name} 主动消息`);
                 
-                // 【核心修复3】：注入一条隐藏的系统提示，强制 AI 找话题
-                // 只有告诉 AI 距离上次聊天很久了，它才会主动开启新话题，否则它会不知道说什么
-                wcAddMessage(char.id, 'system', 'system', `[系统内部提示：距离上次聊天已经过去很久了，请你根据人设主动找User搭话，感觉人设开启一个新的话题、分享你现在的状态或表达思念。]`, { hidden: true });
+                const gapMs = now - lastTime;
+                const gapMinutes = Math.floor(gapMs / 60000);
+                const gapHours = Math.floor(gapMinutes / 60);
+                const gapDays = Math.floor(gapHours / 24);
+                const remainHours = gapHours % 24;
+                const remainMinutes = gapMinutes % 60;
+
+                let timeGapStr = "";
+                if (gapDays > 0) timeGapStr += `${gapDays}天`;
+                if (remainHours > 0) timeGapStr += `${remainHours}小时`;
+                if (remainMinutes > 0 || timeGapStr === "") timeGapStr += `${remainMinutes}分钟`;
+
+                const nowStr = new Date().toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                 
+                const proactivePrompt = `[系统通知：距离上次互动已过去 ${timeGapStr}。话题可能已中断。
+请以 ${char.name} 的身份主动发起新话题，或自然地延续之前的对话，对时间流逝做出反应。
+
+【行动前请在内部逻辑中进行深度考量】：
+1. 现实感知：当前现实时间是 ${nowStr}。结合你的人设，你现在应该在做什么？
+2. 动机分析：你为什么会突然给 User 发消息？
+3. 绝对防 OOC：语气必须 100% 符合人设，像真人一样自然切入，拒绝AI味。
+考量完毕后，直接输出符合你人设的 JSON 消息数组！]`;
+                
+                wcAddMessage(char.id, 'system', 'system', proactivePrompt, { hidden: true });
                 wcTriggerAI(char.id);
             }
         }
@@ -8359,10 +10499,10 @@ const lsState = {
     letters: [],
     // 👇 新增这一段
     lettersConfig: {
-        bg: '',
-        img1: '',
-        img2: '',
-        text: '在这个宇宙，我们终会相遇'
+        bg: 'https://i.postimg.cc/KvnvwWS3/dong-tai-bei-jing1.gif',
+        img1: 'https://i.postimg.cc/7YgYdR84/Image-1770474411684-498.jpg',
+        img2: 'https://i.postimg.cc/GhkhVfwd/Image-1770474415295-455.jpg',
+        text: '休戀逝水 早悟蘭因'
     }
 };
 
@@ -8957,7 +11097,7 @@ async function lsTriggerNpcMessage() {
     
     const npc = contacts[Math.floor(Math.random() * contacts.length)];
     
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) return;
 
     try {
@@ -8993,10 +11133,10 @@ async function lsTriggerNpcMessage() {
             prompt += `示例：[{"type":"text", "content":"在吗？"}, {"type":"text", "content":"有个事想跟你说"}]\n`;
         }
         
-        prompt += `\n【当前时间】：${timeString} ${dayString}\n`;
+        prompt += `\n【现实感知】：当前时间是 ${timeString} ${dayString}。你的发言必须符合这个时间点的常理（如深夜不要说刚起床）。\n`;
         prompt += `【${char.name} 的人设】：${char.prompt}\n`;
         prompt += `${wbInfo}\n`;
-        prompt += `内容要求：口语化，生活化，符合你(${npc.name})的人设。拒绝油腻和AI味。\n`;
+        prompt += `【防OOC要求】：你是一个拥有独立生活的真人。发言必须极度口语化、生活化，完全符合你(${npc.name})的人设。绝对拒绝油腻、做作和AI味。不要像客服一样说话！\n`;
         if (chatConfig.bilingualEnabled) {
             const sourceLang = chatConfig.bilingualSource || '英语';
             const targetLang = chatConfig.bilingualTarget || '中文';
@@ -9011,7 +11151,8 @@ async function lsTriggerNpcMessage() {
         prompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
         prompt += `> 必须将长回复拆分成多条短消息（1-4条），严禁把所有话挤在一个气泡里！\n`;
         prompt += `> 【重要约束】：绝对不要凭空捏造没有发生过的事情、没有做过的约定或不存在的剧情。请严格基于现有的聊天记录上下文进行自然的日常问候、吐槽或顺延当前话题。\n`;
-        prompt += `> 【格式约束 (最高优先级)】：你必须先输出 <thinking> 标签进行思考，然后再输出 JSON 数组。**必须且只能**输出合法的 JSON 数组，严禁漏掉引号、括号或逗号！严禁输出损坏的 JSON 格式！\n`;
+        prompt += `> 【防重复约束】：严禁输出重复的句子或重复的对话序列！\n`;
+        prompt += `> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！严禁漏掉引号、括号或逗号！严禁输出损坏的 JSON 格式！\n`;
 
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
@@ -9020,8 +11161,8 @@ async function lsTriggerNpcMessage() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
-
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -9106,14 +11247,15 @@ async function lsTriggerNpcMessage() {
         );
 
         // 核心修改 2：给 AI 看的具体内容（隐藏，确保 AI 知道 NPC 说了什么）
-        wcAddMessage(char.id, 'system', 'system', 
-            `[系统内部信息(仅AI可见): 你的联系人 "${npc.name}" 刚刚在微信上给你发了具体消息: "${allContentCombined.trim()}"]`, 
-            { hidden: true } // 这条消息用户看不见，但 AI 读取上下文时能看到
-        );
-
+        const userName = (char.chatConfig && char.chatConfig.userName) ? char.chatConfig.userName : wcState.user.name;
         if (lsState.isLinked) {
             wcAddMessage(char.id, 'system', 'system', 
-                `[系统提示: ${npc.name} 刚刚给 ${char.name} 发送了消息: "${allContentCombined.trim()}"。请注意，你们开启了账号关联，你能感知到这一切。]`, 
+                `[系统内部信息(仅AI可见)：你(${char.name})的手机联系人 "${npc.name}" 刚刚在微信上给你发了消息: "${allContentCombined.trim()}"。\n【重要警告】：因为你(${char.name})和 ${userName}(User) 开启了“恋人空间账号关联”，${userName}(User) 的手机上同步弹出了提示，${userName}(User) 已经完全知道 ${npc.name} 给你(${char.name})发了消息！请在接下来的聊天中，根据你的人设对 ${userName}(User) 做出反应。]`, 
+                { hidden: true }
+            );
+        } else {
+            wcAddMessage(char.id, 'system', 'system', 
+                `[系统内部信息(仅AI可见)：你(${char.name})的手机联系人 "${npc.name}" 刚刚在微信上给你发了具体消息: "${allContentCombined.trim()}"]`, 
                 { hidden: true }
             );
         }
@@ -9122,6 +11264,7 @@ async function lsTriggerNpcMessage() {
         
     } catch (e) {
         console.error("NPC Gen Error", e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[NPC消息生成失败] ${e.message}`);
     }
 }
 // --- 桌面小组件渲染与交互 ---
@@ -9361,7 +11504,7 @@ async function wcGenerateSummary() {
     if (isNaN(startIdx) || isNaN(endIdx)) return alert("请输入有效的起始和结束层数");
     if (startIdx < 0 || endIdx >= msgs.length || startIdx > endIdx) return alert("层数范围无效");
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const checkboxes = document.querySelectorAll('#wc-mem-summary-wb-list input[type="checkbox"]:checked');
@@ -9422,7 +11565,8 @@ async function wcGenerateSummary() {
 
     } catch (e) {
         console.error(e);
-        alert("生成失败：" + e.message);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[回忆总结生成失败] ${e.message}`);
+        else alert("生成失败：" + e.message);
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;
@@ -9520,7 +11664,7 @@ async function wcGeneratePrivacyAndFavorites() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -9552,25 +11696,28 @@ async function wcGeneratePrivacyAndFavorites() {
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的所有数据（包括私密记录时间、备忘录时间、日记时间）必须严格符合这个当前时间！绝对不能出现未来的时间，且早中晚的逻辑必须自洽。\n`;
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; 
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的私密记录和微信收藏。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
-        prompt += `请基于你的人设、我的设定，以及我们**最近的聊天上下文**，一次性生成你的【私密自慰与春梦记录】和【微信收藏内容】。\n`;
-        prompt += `【要求】：\n`;
-        prompt += `1. 私密记录 (privacy)：生成你最近一次的私密自慰记录和春梦记录，包含时间、状态、动作/梦境描述和内心感受。\n`;
-        prompt += `2. 收藏-备忘录 (memos)：生成 3 至 8 个备忘录，内容可以是日常碎片、对User的秘密想法、待办事项等。\n`;
-        prompt += `3. 收藏-手写日记 (diaries)：生成 1 至 2 个手写草稿日记。这是你深夜写下但没有发给User的真心话，情感要极其细腻、深刻、甚至带点偏执或脆弱。\n`;
+        prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，一次性生成你的【私密自慰与春梦记录】和【微信收藏内容】。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. 【反模板化警告】：绝对禁止生成空泛的随笔！所有的内容必须是对【今天发生的事情】和【聊天中的情绪】的深刻复盘！\n`;
+        prompt += `2. 私密记录 (privacy)：必须夹杂着对 User 的幻想，且情绪要承接最近聊天中的氛围（如：聊天中吵架了，私密记录里可能是带着恨意的发泄；聊天很甜，则是温柔的渴望）。\n`;
+        prompt += `3. 收藏-备忘录 (memos) 3-8个：记录今天行程中遇到的琐事，或者为了下次和User见面做的攻略/计划也可以是记录关于User的一些事情和小事。\n`;
+        prompt += `4. 收藏-手写日记 (diaries) 1-2个：这是你深夜写下的真心话。必须是对今天某件具体事情（行程或聊天中的某句话）的深刻反思、纠结或偏执。\n`;
         prompt += `   - **字数要求**：每篇日记必须不少于 100 字！\n`;
-        prompt += `   - **排版与手账风格**：为了模拟真实的手写草稿和拼贴手账感，请在文本中随机使用以下标记：\n`;
-        prompt += `     - [涂改]写错或不想承认的话[/涂改]\n`;
-        prompt += `     - [高亮]特别重要的情绪或词语[/高亮]\n`;
-        prompt += `     - [拼贴]引用的聊天记录或突兀的想法[/拼贴]\n`;
-        prompt += `4. 所有内容必须和最近的聊天剧情强相关，拒绝凭空捏造无关剧情。\n`;
-        prompt += `5. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `   - **排版与手账风格**：请在文本中随机使用以下标记：[涂改]写错的话[/涂改]、[高亮]重要的词[/高亮]、[拼贴]引用的聊天记录[/拼贴]\n`;
+        prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
+        prompt += `1. 提炼【今日行程】和【聊天记录】中让你情绪波动最大的点。\n`;
+        prompt += `2. 围绕这个情绪点，构思你的日记和私密记录。\n`;
+        prompt += `推演结束后，直接返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "privacy": {
     "masturbation": {
@@ -9596,21 +11743,36 @@ async function wcGeneratePrivacyAndFavorites() {
   }
 }\n`;
 
+
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const resultData = JSON.parse(content);
+        
+        let resultData;
+        try {
+            resultData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         
@@ -9631,9 +11793,189 @@ async function wcGeneratePrivacyAndFavorites() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[一键破解失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
+// ==========================================
+// 新增：AI 后台暗中更新手机数据 (改备注/改签名/和NPC多回合聊天)
+// ==========================================
+async function wcTriggerBackgroundPhoneUpdate(charId) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await getActiveApiConfig('npc');
+    if (!apiConfig || !apiConfig.key) return;
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-20).map(m => {
+            if (m.isError || m.type === 'system') return null;
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return `${m.sender==='me'?'User':char.name}: ${content}`;
+        }).filter(Boolean).join('\n');
+
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        let npcListStr = "无";
+        if (char.phoneData && char.phoneData.contacts) {
+            const npcs = char.phoneData.contacts.filter(c => !c.isUser);
+            if (npcs.length > 0) {
+                npcListStr = npcs.map(n => `${n.name} (${n.desc})`).join('、');
+            }
+        }
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【最近你与User的聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `【你手机通讯录里的NPC】：${npcListStr}\n\n`;
+        
+        prompt += `请根据最近和 User 的聊天内容、情绪变化，决定是否要在你自己的手机里偷偷做一些更改，或者找通讯录里的 NPC 聊聊天。\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 如果聊天让你很开心/生气/暧昧，你可以修改【你手机里给 User 的备注名】 (newRemark)。\n`;
+        prompt += `2. 你可以修改你自己的个人主页网名 (newNickname) 和 个性签名 (newSign)。\n`;
+        prompt += `3. 你可以找通讯录里的某个 NPC 吐槽或分享刚才发生的事 (npcInteraction)。必须是一段有来有回的多句对话（至少3-6句）！\n`;
+        prompt += `4. 在对话中，你可以发送文本(text)或表情包(sticker)。\n`;
+        prompt += `5. 如果你觉得没必要改，对应字段填 null。\n`;
+        prompt += `6. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "newRemark": "给User的新备注名(不改填null)",
+  "newNickname": "你的新网名(不改填null)",
+  "newSign": "你的新个性签名(不改填null)",
+  "npcInteraction": {
+    "npcName": "你要联系的NPC名字(必须从通讯录选，不联系填null)",
+    "dialogue": [
+      {"sender": "me", "type": "text", "content": "在吗？刚才发生了一件事..."},
+      {"sender": "them", "type": "text", "content": "怎么了？"},
+      {"sender": "me", "type": "sticker", "content": "委屈"}
+    ]
+  }
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        if (!char.phoneData) char.phoneData = {};
+        if (!char.phoneData.profile) char.phoneData.profile = { nickname: char.name, sign: "暂无签名" };
+
+        let hasChanges = false;
+
+        if (result.newRemark && result.newRemark !== "null") {
+            char.phoneData.userRemark = result.newRemark;
+            if (char.phoneData.contacts) {
+                const uContact = char.phoneData.contacts.find(c => c.isUser);
+                if (uContact) uContact.name = result.newRemark;
+            }
+            if (char.phoneData.chats) {
+                const uChat = char.phoneData.chats.find(c => c.isUser);
+                if (uChat) uChat.name = result.newRemark;
+            }
+            wcAddMessage(charId, 'system', 'system', `[系统提示：${char.name} 偷偷在 Ta 的手机里，将你的备注改为了“${result.newRemark}”]`, { style: 'transparent' });
+            hasChanges = true;
+        }
+
+        if (result.newNickname && result.newNickname !== "null") {
+            char.phoneData.profile.nickname = result.newNickname;
+            hasChanges = true;
+        }
+        if (result.newSign && result.newSign !== "null") {
+            char.phoneData.profile.sign = result.newSign;
+            hasChanges = true;
+        }
+
+        // 处理：和 NPC 多回合聊天
+        if (result.npcInteraction && result.npcInteraction.npcName && result.npcInteraction.npcName !== "null" && result.npcInteraction.dialogue) {
+            const npcName = result.npcInteraction.npcName;
+            const dialogue = result.npcInteraction.dialogue;
+
+            if (!char.phoneData.chats) char.phoneData.chats = [];
+            let pChat = char.phoneData.chats.find(c => c.name === npcName);
+            if (!pChat) {
+                pChat = { id: Date.now(), name: npcName, avatar: getRandomNpcAvatar(), history: [] };
+                char.phoneData.chats.push(pChat);
+            }
+            
+            let feedText = `你感知到 ${char.name} 和 ${npcName} 进行了聊天：\n`;
+            let lastContent = "";
+
+            // 遍历对话数组，推入手机聊天记录
+            dialogue.forEach(msg => {
+                let finalContent = msg.content;
+                let finalType = msg.type || 'text';
+
+                // 解析表情包
+                if (finalType === 'sticker') {
+                    const stickerUrl = wcFindStickerUrlMulti(char.chatConfig.stickerGroupIds, msg.content);
+                    if (stickerUrl) {
+                        finalContent = stickerUrl;
+                    } else {
+                        finalType = 'text';
+                        finalContent = `[表情: ${msg.content}]`;
+                    }
+                }
+
+                pChat.history.push({ 
+                    sender: msg.sender, 
+                    type: finalType,
+                    content: finalContent,
+                    time: Date.now() - Math.floor(Math.random() * 10000) // 制造一点时间差
+                });
+                
+                const speaker = msg.sender === 'me' ? char.name : npcName;
+                let displayContent = finalType === 'sticker' ? '[表情包]' : finalContent;
+                feedText += `${speaker}: ${displayContent}\n`;
+                lastContent = displayContent;
+            });
+
+            pChat.lastMsg = lastContent;
+            pChat.time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            if (typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId) {
+                if (typeof lsAddFeed === 'function') {
+                    lsAddFeed(feedText.trim(), char.avatar);
+                }
+                wcAddMessage(charId, 'system', 'system', `[账号关联感知：${char.name} 刚刚和 ${npcName} 聊了天。]`, { style: 'transparent' });
+            }
+            hasChanges = true;
+        }
+
+        if (hasChanges) {
+            wcSaveData();
+        }
+
+    } catch (e) {
+        console.error("后台暗中更新手机数据失败:", e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[后台暗中更新失败] ${e.message}`);
+    }
+}
+
 // ==========================================================================
 // 新增：微信收藏 (Favorites) 逻辑
 // ==========================================================================
@@ -9769,7 +12111,7 @@ async function wcGeneratePhoneFavorites() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -9785,6 +12127,7 @@ async function wcGeneratePhoneFavorites() {
         const realMsgs = wcState.chats[char.id] || [];
         const recentMsgs = realMsgs.slice(-30).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
         const chatConfig = char.chatConfig || {};
+        const userName = chatConfig.userName || wcState.user.name; // 👈 新增这一行，定义 userName
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
 
         // 核心修复：只读取关联的世界书
@@ -9801,29 +12144,36 @@ async function wcGeneratePhoneFavorites() {
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的备忘录和日记的时间戳必须合理，不能超过当前时间，且内容要符合当前的时间段氛围。\n`;
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; // 新增
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的微信“我的收藏”。\n`;
-        prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
-        
-        prompt += `请基于你的人设、我的设定，以及我们**最近的聊天上下文**，生成你的微信收藏内容。\n`;
-        prompt += `【要求】：\n`;
-        prompt += `1. 生成 3 至 8 个备忘录 (memos)，内容可以是你的日常碎片、对User的秘密想法、待办事项等，必须和最近的聊天剧情强相关。\n`;
-        prompt += `2. 生成 1 至 2 个手写草稿日记 (diaries)。这是你深夜写下但没有发给User的真心话，情感要极其细腻、深刻、甚至带点偏执或脆弱。\n`;
+        prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;               
+        prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的微信收藏内容。\n`;       
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. 【反模板化警告】：绝对禁止生成空泛的随笔！所有的内容必须是对【今天发生的事情】和【聊天中的情绪】的深刻复盘！\n`;
+        prompt += `1. 备忘录 (memos) 3-8个：【独立生活指令】：可以是关于你个人的生活琐事（如：晦涩的工作纪要、奇怪的菜谱、无聊的脑洞、游戏连招记录、购物清单）。也可以是关于 User 的观察日志或计划。保持高度随机性，拒绝重复！重点是要和今天行程事件与聊天记录关联！！要注意你是一个真实的人！\n`;
+        prompt += `2. 手写日记 (diaries) 1-2个：这是你深夜写下的私密文字。可以是对未来的迷茫、对某件生活琐事的愤怒吐槽也可以是无聊时的闲谈随笔，也可以是夹杂着对 User${userName} 复杂情感的碎碎念，对User${userName} 想说却不敢说的真心话。必须充满真实的活人情绪起伏。\n`;
         prompt += `   - **字数要求**：每篇日记必须不少于 100 字！\n`;
         prompt += `   - **排版与手账风格**：为了模拟真实的手写草稿和拼贴手账感，请在文本中随机使用以下标记：\n`;
-        prompt += `     - [涂改]写错或不想承认的话[/涂改]\n`;
+        prompt += `     - [涂改]写错或不想承认的话[/涂改] （例如：我[涂改]一点也不[/涂改]很想你）\n`;
         prompt += `     - [高亮]特别重要的情绪或词语[/高亮]\n`;
         prompt += `     - [拼贴]引用的聊天记录或突兀的想法[/拼贴]\n`;
-        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
+        prompt += `1. 结合当前时间、地点和心情，今日发生的事情和聊天记录，推断你最近遇到了什么烦心事或有趣的事，需要记在备忘录里。\n`;
+        prompt += `2. 构思日记的情感基调，确保情绪真实、细腻、不僵硬。\n`;
+        prompt += `推演结束后，直接返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
+
   "memos": [
-    {"title": "备忘录标题", "content": "详细的备忘录正文内容...", "time": "2023-10-24 14:30"}
+    {"title": "User的饲养观察守则", "content": "1. 不能给Ta喝冰水会胃痛。2. 撒谎的时候眼睛会往右下角看。3. 极度吃软不吃硬。", "time": "2023-10-24 14:30"}
   ],
   "diaries": [
-    {"content": "手写日记的正文内容...", "time": "昨天深夜 03:15"}
+    {"content": "今天Ta又对着别人笑了。[涂改]真想把那个人杀了[/涂改] 我必须克制自己。可是[高亮]Ta只能看着我[/高亮]不是吗？[拼贴]“我们只是普通朋友”[/拼贴] 这句话真刺耳。", "time": "昨天深夜 03:15"}
   ]
 }\n`;
 
@@ -9833,7 +12183,8 @@ async function wcGeneratePhoneFavorites() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -9997,7 +12348,7 @@ async function wcGeneratePhoneBrowser() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -10029,34 +12380,43 @@ async function wcGeneratePhoneBrowser() {
         const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的浏览记录时间(time)必须在当前时间之前，且搜索内容要符合当前的时间点（如深夜可能会搜索情感问题，白天可能会搜索工作/学习内容）。\n`;
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; 
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的浏览器APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
-        prompt += `请基于你的人设、我的设定，以及我们**最近的聊天上下文**，生成你的浏览器数据。\n`;
-        prompt += `【要求】：\n`;
-        prompt += `1. 生成 4 至 8 条浏览记录 (history)。标题必须反映你最近在偷偷搜索或关注什么（比如因为聊天中的某件事去查资料、查怎么回复我、查某种情感等）。必须包含你当时的内心批注 (annotation)。\n`;
-        prompt += `2. 生成 2 至 5 个论坛帖子 (posts)。可以是你在匿名论坛发帖求助/吐槽，也可以是你浏览了别人的帖子并在下面评论。每个帖子必须包含 5 至 10 个评论 (comments)，评论里要有网友的回复，也要有你的互动。\n`;
-        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的浏览器数据。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. 【反模板化警告】：绝对禁止生成毫无关联的随机搜索！每一条浏览记录都必须能在【今日行程】或【聊天记录】中找到原因！\n`;
+        prompt += `2. 浏览记录(history) 4-8条：如果今天行程里去了超市，可能会搜某个菜的做法；如果聊天里User提到了某部电影，可能会搜影评；如果今天心情烦躁，可能会搜缓解焦虑的方法。必须是顺理成章的延伸！\n`;
+        prompt += `3. 内心批注(annotation)：这是你浏览该网页时的真实想法。必须结合你当下的心情(mood)来写，展现你最真实的心理活动。\n`;
+        prompt += `4. 论坛帖子(posts) 2-5个：你在匿名论坛发帖求助/吐槽。帖子的内容必须是对【今天发生的事情】或【刚刚和User聊天的内容】的复盘、纠结或吐槽！\n`;
+        prompt += `5. 帖子评论5-10个：可以是各种路人或者的NPC评论，也可以是你回复路人或NPC的评论，评论要模拟真实论坛，具备活人感！\n`;
+        prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
+        prompt += `1. 仔细阅读【今日行程】和【聊天记录】，提取出 3-5 个关键事件或情绪点。\n`;
+        prompt += `2. 针对这些事件，推断你会在浏览器里搜索什么，或者在论坛里发什么帖子。\n`;
+        prompt += `推演结束后，直接返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "history": [
-    {"title": "搜索的网页标题", "url_placeholder": "www.baidu.com/s?wd=...", "annotation": "你浏览这个网页时的内心真实想法", "time": "今天 10:20"}
+    {"title": "搜索的网页标题", "url_placeholder": "zhidao.baidu.com/question/...", "annotation": "你真实的内心批注", "time": "今天 02:20"}
   ],
   "posts": [
     {
-      "title": "帖子标题", 
-      "content": "帖子正文...", 
-      "author": "匿名用户 / ${char.name}", 
+      "title": "论坛帖子标题", 
+      "content": "帖子正文内容...", 
+      "author": "匿名用户", 
       "comments": [
-        {"author": "网友A", "content": "评论内容"},
-        {"author": "${char.name}", "content": "你的回复"}
+        {"author": "网友A", "content": "评论内容"}
       ]
     }
   ]
 }\n`;
+
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -10064,15 +12424,29 @@ async function wcGeneratePhoneBrowser() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const browserData = JSON.parse(content);
+        
+        let browserData;
+        try {
+            browserData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.browser = browserData;
@@ -10083,7 +12457,11 @@ async function wcGeneratePhoneBrowser() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[浏览器生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 // ==========================================================================
@@ -10499,21 +12877,14 @@ function wcSwitchShopTab(tab) {
 function wcOpenShopSettingsModal() {
     const list = document.getElementById('wc-shop-setting-wb-list');
     list.innerHTML = '';
-    
-    if (!wcState.shopData.config) wcState.shopData.config = { worldbookEntries: [] };
-    const selectedWbs = wcState.shopData.config.worldbookEntries || [];
-
-    if (worldbookEntries.length === 0) {
-        list.innerHTML = '<div style="color:#999; font-size:13px;">暂无世界书条目</div>';
-    } else {
-        worldbookEntries.forEach(entry => {
-            const div = document.createElement('div');
-            div.className = 'wc-checkbox-item';
-            const isChecked = selectedWbs.includes(entry.id.toString());
-            div.innerHTML = `<input type="checkbox" value="${entry.id}" ${isChecked ? 'checked' : ''}><span>${entry.title} (${entry.type})</span>`;
-            list.appendChild(div);
+    let shopWbCount = 0;
+    if (wcState.shopData.config && wcState.shopData.config.worldbookEntries) {
+        wcState.shopData.config.worldbookEntries.forEach(id => {
+            list.innerHTML += `<input type="checkbox" value="${id}" checked>`;
+            shopWbCount++;
         });
     }
+    document.getElementById('wc-shop-setting-wb-count').innerText = `已选 ${shopWbCount} 项`;
 
     wcOpenModal('wc-modal-shop-settings');
 }
@@ -10527,7 +12898,7 @@ function wcSaveShopSettings() {
 }
 
 async function wcGenerateShopItems() {
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -10540,6 +12911,18 @@ async function wcGenerateShopItems() {
     wcShowLoading("正在进货中...");
 
     try {
+        // 1. 获取当前角色和用户设定
+        const charId = wcState.activeChatId || wcState.editingCharId;
+        const char = wcState.characters.find(c => c.id === charId);
+        let charInfo = "";
+        let userInfo = "";
+        if (char) {
+            charInfo = `【角色设定 (${char.name})】：${char.prompt}\n`;
+            const chatConfig = char.chatConfig || {};
+            userInfo = `【用户设定】：${chatConfig.userPersona || wcState.user.persona || "无"}\n`;
+        }
+
+        // 2. 获取勾选的世界书
         let wbInfo = "";
         const selectedWbs = wcState.shopData.config.worldbookEntries || [];
         if (worldbookEntries.length > 0 && selectedWbs.length > 0) {
@@ -10549,11 +12932,24 @@ async function wcGenerateShopItems() {
             }
         }
 
-        let prompt = `请根据以下世界观设定，生成商城商品和外卖商品。\n${wbInfo}\n`;
+        // 3. 组装强大的 Prompt
+        let prompt = `你现在是一个商城和外卖平台的后台引擎。请根据以下设定，生成商城商品和外卖商品。\n`;
+        prompt += charInfo;
+        prompt += userInfo;
+        if (wbInfo) prompt += wbInfo + "\n";
+        
         prompt += `【要求】：\n`;
-        prompt += `1. 生成 10 个商城商品 (mall)，包含物品名称、符合世界观的简短描述、以及合理的价格(数字)。\n`;
-        prompt += `2. 生成 10 个外卖商品 (takeout)，包含食物名称、诱人的简短描述、以及合理的价格(数字)。\n`;
-        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `1. 总共生成 30 个商品：商城 (mall) 15 个，外卖 (takeout) 15 个。\n`;
+        prompt += `2. 商城商品 (mall) 包含两类：\n`;
+        prompt += `   - 前 8 个为【日常用品DAILY】：符合世界观和角色日常生活的普通物品。\n`;
+        prompt += `   - 后 7 个为【可能喜欢FAV】：根据角色和用户的设定，专门为他们推荐的特殊物品、礼物或情趣用品。\n`;
+        prompt += `   - 注意：日常用品和可能喜欢的商品必须完全不同，不互通！\n`;
+        prompt += `3. 外卖商品 (takeout) 包含两类：\n`;
+        prompt += `   - 前 8 个为【普通小吃/餐饮SNACK】：符合世界观的常见食物。\n`;
+        prompt += `   - 后 7 个为【可能喜欢的小吃FAV】：根据角色和用户的口味偏好，专门推荐的特色美食或饮品。\n`;
+        prompt += `   - 注意：普通小吃和可能喜欢的小吃必须完全不同，不互通！\n`;
+        prompt += `4. 每个商品包含物品名称 (name)、符合设定的简短描述 (desc)、以及合理的价格 (price，数字格式)。\n`;
+        prompt += `5. 返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
           "mall": [
             {"name": "商品名", "desc": "描述", "price": 99.00}
@@ -10569,7 +12965,8 @@ async function wcGenerateShopItems() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -10583,46 +12980,435 @@ async function wcGenerateShopItems() {
         wcState.shopData.takeout = generatedData.takeout || [];
         wcSaveData();
 
-        wcRenderShopItems('mall');
-        wcRenderShopItems('takeout');
+        wcUpdateCatOrbit(); // 刷新当前视图
         wcShowSuccess("进货成功");
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[商城进货失败] ${e.message}`);
+        else wcShowError("生成失败");
     }
 }
 
-function wcRenderShopItems(tab) {
-    const container = document.getElementById(`shop-list-${tab}`);
-    const items = wcState.shopData[tab] || [];
+// ==========================================
+// 商城全局状态与分类轨道逻辑 (支持商城与外卖双模式)
+// ==========================================
+let wcShopCurrentTab = 'mall'; // 记录当前是大 Tab 是商城还是外卖
+let wcShopCurrentItems = [];
+let wcCatCurrentIndex = 0;
+const wcCatRadius = 300; 
+const wcCatStepAngle = 30; 
+
+// 动态获取当前 Tab 的分类
+function getShopCategories() {
+    if (wcShopCurrentTab === 'mall') {
+        return [
+            { id: 'all', label: 'ALL' },
+            { id: 'daily', label: 'DAILY' },
+            { id: 'fav', label: 'FAV' },
+            { id: 'add', label: 'ADD' }
+        ];
+    } else {
+        return [
+            { id: 'all', label: 'ALL' },
+            { id: 'snack', label: 'SNACK' },
+            { id: 'fav', label: 'FAV' },
+            { id: 'add', label: 'ADD' }
+        ];
+    }
+}
+
+// 覆盖原有的 wcSwitchShopTab，让外卖也支持轨道
+function wcSwitchShopTab(tab) {
+    wcShopCurrentTab = tab; // 更新当前大 Tab 状态
     
-    if (items.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 50px;">点击右上角生成商品</div>';
+    document.querySelectorAll('.shop-tab, .shop-cap-tab').forEach(el => el.classList.remove('active'));
+    const activeTab = document.getElementById(`shop-tab-${tab}`) || document.getElementById(`cap-tab-${tab}`);
+    if (activeTab) activeTab.classList.add('active');
+    
+    document.querySelectorAll('.shop-list').forEach(el => el.style.display = 'none');
+    const activeList = document.getElementById(`shop-list-${tab}`);
+    if (activeList) activeList.style.display = 'flex'; // 保持 flex 布局
+    
+    // 无论是商城还是外卖，都显示星际轨道
+    document.querySelector('.orbit-category-container').style.display = 'flex';
+    
+    // 切换大 Tab 时，重置轨道到 ALL 分类
+    wcCatCurrentIndex = 0;
+    wcRenderCatOrbit();
+}
+
+function wcRenderCatOrbit() {
+    const wheel = document.getElementById('wc-cat-orbit-wheel');
+    if (!wheel) return;
+    wheel.innerHTML = '';
+    
+    const categories = getShopCategories();
+    categories.forEach((cat, i) => {
+        const angleDeg = i * wcCatStepAngle;
+        const angleRad = (angleDeg - 90) * (Math.PI / 180);
+        const x = wcCatRadius * Math.cos(angleRad);
+        const y = wcCatRadius * Math.sin(angleRad);
+
+        const node = document.createElement('div');
+        node.className = `orbit-node ${i === wcCatCurrentIndex ? 'active' : ''}`;
+        node.style.transform = `translate(${x}px, ${y}px)`;
+        
+        node.innerHTML = `
+            <div class="orbit-node-content" id="wc-cat-content-${i}">
+                <div class="orbit-dot"></div>
+                <div class="orbit-label">${cat.label}</div>
+            </div>
+        `;
+        node.onclick = () => {
+            wcCatCurrentIndex = i;
+            wcUpdateCatOrbit();
+        };
+        wheel.appendChild(node);
+    });
+    wcUpdateCatOrbit();
+}
+
+function wcUpdateCatOrbit() {
+    const wheel = document.getElementById('wc-cat-orbit-wheel');
+    if (!wheel) return;
+    const rotation = -wcCatCurrentIndex * wcCatStepAngle;
+    wheel.style.transform = `rotate(${rotation}deg)`;
+
+    const categories = getShopCategories();
+    categories.forEach((_, i) => {
+        const content = document.getElementById(`wc-cat-content-${i}`);
+        if (content) {
+            content.style.transform = `rotate(${-rotation}deg) ${i === wcCatCurrentIndex ? 'scale(1.2)' : 'scale(1)'}`;
+        }
+        const node = wheel.children[i];
+        if (node) {
+            if (i === wcCatCurrentIndex) node.classList.add('active');
+            else node.classList.remove('active');
+        }
+    });
+
+    // 动态过滤数据 (严格隔离前8个和后7个)
+    const catId = categories[wcCatCurrentIndex].id;
+    const allItems = wcState.shopData[wcShopCurrentTab] || [];
+    
+    if (catId === 'add') {
+        // 仅显示手动添加的商品
+        wcShopCurrentItems = allItems.filter(item => item.isManual);
+    } else if (catId === 'all') {
+        // 显示所有商品
+        wcShopCurrentItems = [...allItems];
+    } else if (catId === 'daily' || catId === 'snack') {
+        // 显示前半部分 AI 生成的商品 (前8个)
+        const aiItems = allItems.filter(item => !item.isManual);
+        wcShopCurrentItems = aiItems.slice(0, 8);
+    } else if (catId === 'fav') {
+        // 显示后半部分 AI 生成的商品 (后7个)
+        const aiItems = allItems.filter(item => !item.isManual);
+        wcShopCurrentItems = aiItems.slice(8, 15);
+    }
+    
+    // 渲染当前 Tab 的商品列表
+    wcRenderShopItems(wcShopCurrentTab, catId === 'add');
+}
+
+// 分类轨道滑动事件
+let wcCatStartX = 0;
+let wcCatIsDragging = false;
+window.wcCatTouchStart = function(e) { wcCatStartX = e.touches[0].clientX; wcCatIsDragging = true; };
+window.wcCatTouchMove = function(e) { if (wcCatIsDragging && e.cancelable) e.preventDefault(); };
+window.wcCatTouchEnd = function(e) {
+    if (!wcCatIsDragging) return;
+    wcCatIsDragging = false;
+    const diff = e.changedTouches[0].clientX - wcCatStartX;
+    const categories = getShopCategories();
+    if (diff > 40 && wcCatCurrentIndex > 0) {
+        wcCatCurrentIndex--; wcUpdateCatOrbit();
+    } else if (diff < -40 && wcCatCurrentIndex < categories.length - 1) {
+        wcCatCurrentIndex++; wcUpdateCatOrbit();
+    }
+};
+
+// ==========================================
+// 商品列表渲染与添加/编辑/删除逻辑
+// ==========================================
+function wcRenderShopItems(tab, isAddMode = false) {
+    const container = document.getElementById(`shop-list-${tab}`);
+    if (!container) return;
+    container.innerHTML = '';
+    
+    const items = wcShopCurrentItems;
+
+    if (isAddMode) {
+        // 渲染手动添加的商品（去除了卡片表面的编辑删除按钮，保持极简）
+        items.forEach((item, idx) => {
+            const icon = tab === 'mall' 
+                ? '<svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>' 
+                : '<svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>';
+            const card = document.createElement('div');
+            card.className = 'ins-shop-card manual-card';
+            card.innerHTML = `
+                <div class="ins-shop-card-icon">${icon}</div>
+                <div class="ins-shop-card-name">${item.name}</div>
+                <div class="ins-shop-card-price">¥${parseFloat(item.price).toFixed(2)}</div>
+            `;
+            card.onclick = () => wcOpenTarotModal(tab, idx);
+            container.appendChild(card);
+        });
+
+
+        // 渲染添加按钮卡片 (换成了高级的 SVG 加号)
+        const addCard = document.createElement('div');
+        addCard.className = 'ins-shop-card add-card';
+        addCard.onclick = () => {
+            document.getElementById('wc-add-modal-title').innerText = `添加新${tab === 'mall' ? '商品' : '外卖'}`;
+            document.getElementById('wc-add-id').value = '';
+            document.getElementById('wc-add-name').value = '';
+            document.getElementById('wc-add-desc').value = '';
+            document.getElementById('wc-add-price').value = '';
+            document.getElementById('wc-add-product-modal').classList.add('active');
+        };
+        addCard.innerHTML = `
+            <div class="ins-shop-card-icon">
+                <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M12 5v14M5 12h14"/></svg>
+            </div>
+            <div class="ins-shop-card-name">添加新${tab === 'mall' ? '商品' : '外卖'}</div>
+        `;
+        container.appendChild(addCard);
         return;
     }
 
-    let html = '';
+    if (items.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">空空如也</div>';
+        return;
+    }
+// 修改后的代码
     items.forEach((item, idx) => {
-        // 随机生成一个占位图颜色
-        const hue = Math.floor(Math.random() * 360);
-        const imgBg = `hsl(${hue}, 30%, 90%)`;
-        const icon = tab === 'mall' ? '🛍️' : '🍱';
-        
-        html += `
-            <div class="shop-item-card">
-                <div class="shop-item-img" style="background: ${imgBg}; display:flex; align-items:center; justify-content:center; font-size:30px;">${icon}</div>
-                <div class="shop-item-info">
-                    <div class="shop-item-title">${item.name}</div>
-                    <div class="shop-item-desc">${item.desc}</div>
-                    <div class="shop-item-price">¥${parseFloat(item.price).toFixed(2)}</div>
-                </div>
-                <div class="shop-item-add" onclick="wcAddToCart('${tab}', ${idx})">+</div>
-            </div>
+        const icon = tab === 'mall' 
+            ? '<svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>' 
+            : '<svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>';
+        const card = document.createElement('div');
+        card.className = 'ins-shop-card';
+        card.onclick = () => wcOpenTarotModal(tab, idx);
+        card.innerHTML = `
+            <div class="ins-shop-card-icon">${icon}</div>
+            <div class="ins-shop-card-name">${item.name}</div>
+            <div class="ins-shop-card-price">¥${parseFloat(item.price).toFixed(2)}</div>
         `;
+        container.appendChild(card);
     });
-    container.innerHTML = html;
 }
+
+window.wcSaveNewProduct = function() {
+    const idField = document.getElementById('wc-add-id').value;
+    const name = document.getElementById('wc-add-name').value.trim();
+    const desc = document.getElementById('wc-add-desc').value.trim();
+    const price = document.getElementById('wc-add-price').value.trim();
+    
+    if (!name || !price) return alert("请填写名称和价格");
+
+    if (!wcState.shopData[wcShopCurrentTab]) wcState.shopData[wcShopCurrentTab] = [];
+    
+    if (idField) {
+        // 编辑模式
+        const item = wcState.shopData[wcShopCurrentTab].find(i => i.id === idField);
+        if (item) {
+            item.name = name;
+            item.desc = desc;
+            item.price = parseFloat(price).toFixed(2);
+        }
+    } else {
+        // 新增模式
+        wcState.shopData[wcShopCurrentTab].push({
+            id: 'manual_' + Date.now(),
+            isManual: true, // 标记为手动添加
+            name: name,
+            desc: desc || '神秘的未知物品',
+            price: parseFloat(price).toFixed(2)
+        });
+    }
+    
+    wcSaveData();
+    
+    document.getElementById('wc-add-product-modal').classList.remove('active');
+    wcUpdateCatOrbit(); // 刷新当前视图
+    alert(idField ? "修改成功！" : "添加成功！");
+};
+
+window.wcDeleteProduct = function(tab, id) {
+    if (confirm("确定要删除这个商品吗？")) {
+        wcState.shopData[tab] = wcState.shopData[tab].filter(i => i.id !== id);
+        wcSaveData();
+        wcUpdateCatOrbit(); // 刷新当前视图
+    }
+};
+
+window.wcEditProduct = function(tab, id) {
+    const item = wcState.shopData[tab].find(i => i.id === id);
+    if (!item) return;
+    document.getElementById('wc-add-modal-title').innerText = "编辑商品";
+    document.getElementById('wc-add-id').value = item.id;
+    document.getElementById('wc-add-name').value = item.name;
+    document.getElementById('wc-add-desc').value = item.desc;
+    document.getElementById('wc-add-price').value = item.price;
+    document.getElementById('wc-add-product-modal').classList.add('active');
+};
+
+
+// ==========================================
+// 塔罗牌弹窗与星际轨道逻辑
+// ==========================================
+let wcTarotCurrentTab = 'mall';
+let wcTarotCurrentIdx = 0;
+const wcTarotRadius = 200;
+const wcTarotStepAngle = 25;
+
+window.wcOpenTarotModal = function(tab, idx) {
+    wcTarotCurrentTab = tab;
+    wcTarotCurrentIdx = idx;
+    wcRenderTarotCards(tab);
+    wcRenderTarotOrbit(tab);
+    wcUpdateTarotTransforms();
+    const modal = document.getElementById('wc-tarot-modal');
+    modal.style.display = 'flex'; // 👈 核心修复：先显示容器，彻底解决阻挡点击的Bug
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.wcCloseTarotModal = function() {
+    const modal = document.getElementById('wc-tarot-modal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 400); // 👈 核心修复：动画结束后彻底隐藏容器
+};
+// 修改后的代码
+window.wcRenderTarotCards = function(tab) {
+    const slider = document.getElementById('wc-tarot-slider');
+    slider.innerHTML = '';
+    const items = tab === 'mall' ? wcShopCurrentItems : (wcState.shopData[tab] || []);
+    
+    items.forEach((item, index) => {
+        const icon = tab === 'mall' 
+            ? '<svg viewBox="0 0 24 24" style="width:40px;height:40px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>' 
+            : '<svg viewBox="0 0 24 24" style="width:40px;height:40px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>';
+        const card = document.createElement('div');
+        card.className = 'tarot-card';
+        card.id = `tarot-card-${index}`;
+        
+        const displayId = String(index + 1).padStart(2, '0');
+        
+        // 👇 判断是否为手动添加的商品，如果是，注入高级 SVG 编辑/删除按钮
+        let manageActionsHtml = '';
+        if (item.isManual) {
+            manageActionsHtml = `
+                <div class="tarot-manage-actions">
+                    <div class="tarot-action-btn edit" onclick="event.stopPropagation(); wcEditProduct('${tab}', '${item.id}'); wcCloseTarotModal();" title="编辑">
+                        <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </div>
+                    <div class="tarot-action-btn delete" onclick="event.stopPropagation(); wcDeleteProduct('${tab}', '${item.id}'); wcCloseTarotModal();" title="删除">
+                        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    </div>
+                </div>
+            `;
+        }
+        
+        card.innerHTML = `
+            <div class="tarot-header">
+                <span class="tarot-tag">NO.${displayId}</span>
+                <span class="tarot-close" onclick="wcCloseTarotModal()">×</span>
+            </div>
+            ${manageActionsHtml}
+            <div class="tarot-icon">${icon}</div>
+            <div class="tarot-title">${item.name}</div>
+            <div class="tarot-desc">${item.desc}</div>
+            <div class="tarot-price">¥${parseFloat(item.price).toFixed(2)}</div>
+            <button class="tarot-btn" onclick="wcAddToCartFromTarot('${tab}', ${index})">ADD TO CART</button>
+        `;
+        slider.appendChild(card);
+    });
+};
+
+window.wcRenderTarotOrbit = function(tab) {
+    const wheel = document.getElementById('wc-tarot-orbit-wheel');
+    if (!wheel) return;
+    wheel.innerHTML = '';
+    const items = tab === 'mall' ? wcShopCurrentItems : (wcState.shopData[tab] || []);
+    
+    items.forEach((_, i) => {
+        const angleDeg = i * wcTarotStepAngle;
+        const angleRad = (angleDeg - 90) * (Math.PI / 180);
+        const x = wcTarotRadius * Math.cos(angleRad);
+        const y = wcTarotRadius * Math.sin(angleRad);
+
+        const node = document.createElement('div');
+        node.className = `tarot-orbit-node ${i === wcTarotCurrentIdx ? 'active' : ''}`;
+        node.style.transform = `translate(${x}px, ${y}px)`;
+        node.innerHTML = `<div class="tarot-orbit-dot"></div>`;
+        node.onclick = () => {
+            wcTarotCurrentIdx = i;
+            wcUpdateTarotTransforms();
+        };
+        wheel.appendChild(node);
+    });
+};
+
+window.wcUpdateTarotTransforms = function() {
+    // 👈 增加父级限制，防止误伤恋人空间里的同名卡片导致索引错位
+    const cards = document.querySelectorAll('#wc-tarot-slider .tarot-card');
+    cards.forEach((card, index) => {
+        const offset = index - wcTarotCurrentIdx;
+        if (offset === 0) {
+            card.style.transform = `translateX(0) scale(1) translateZ(0)`;
+            card.style.zIndex = 10; card.style.opacity = 1; card.style.pointerEvents = 'auto';
+        } else if (offset < 0) {
+            card.style.transform = `translateX(${offset * 120}px) scale(0.85) rotateY(15deg) translateZ(-100px)`;
+            card.style.zIndex = 5 + offset; card.style.opacity = 1 - Math.abs(offset) * 0.4; card.style.pointerEvents = 'none';
+        } else {
+            card.style.transform = `translateX(${offset * 120}px) scale(0.85) rotateY(-15deg) translateZ(-100px)`;
+            card.style.zIndex = 5 - offset; card.style.opacity = 1 - Math.abs(offset) * 0.4; card.style.pointerEvents = 'none';
+        }
+    });
+
+    const wheel = document.getElementById('wc-tarot-orbit-wheel');
+    if (wheel) {
+        const rotation = -wcTarotCurrentIdx * wcTarotStepAngle;
+        wheel.style.transform = `rotate(${rotation}deg)`;
+        Array.from(wheel.children).forEach((node, i) => {
+            if (i === wcTarotCurrentIdx) node.classList.add('active');
+            else node.classList.remove('active');
+        });
+    }
+};
+
+let wcTarotStartX = 0;
+let wcTarotIsDragging = false;
+window.wcTarotTouchStart = function(e) { wcTarotStartX = e.touches[0].clientX; wcTarotIsDragging = true; };
+window.wcTarotTouchMove = function(e) { if (wcTarotIsDragging && e.cancelable) e.preventDefault(); };
+window.wcTarotTouchEnd = function(e) {
+    if (!wcTarotIsDragging) return;
+    wcTarotIsDragging = false;
+    const diff = e.changedTouches[0].clientX - wcTarotStartX;
+    const items = wcTarotCurrentTab === 'mall' ? wcShopCurrentItems : (wcState.shopData[wcTarotCurrentTab] || []);
+
+    if (diff > 40 && wcTarotCurrentIdx > 0) {
+        wcTarotCurrentIdx--; wcUpdateTarotTransforms();
+    } else if (diff < -40 && wcTarotCurrentIdx < items.length - 1) {
+        wcTarotCurrentIdx++; wcUpdateTarotTransforms();
+    }
+};
+
+window.wcAddToCartFromTarot = function(tab, idx) {
+    // 找到真实的商品数据
+    const items = tab === 'mall' ? wcShopCurrentItems : (wcState.shopData[tab] || []);
+    const item = items[idx];
+    if (!item) return;
+    
+    if (!wcState.shopData.cart) wcState.shopData.cart = [];
+    wcState.shopData.cart.push({ ...item, id: Date.now() + Math.random() });
+    wcSaveData();
+    wcUpdateCartBadge();
+    
+    wcCloseTarotModal();
+    alert("已化作星光落入购物车");
+};
 
 function wcAddToCart(tab, idx) {
     const item = wcState.shopData[tab][idx];
@@ -10790,115 +13576,92 @@ function wcSetDeliveryTime(timeOption) {
     }
 }
 
-/**
- * 修改：wcPayAndSend 函数，使其能接收新的 deliveryText
- * @param {string} method - 'gift' 或 'daifu'
- * @param {string} deliveryText - '立即配送' 或 '预约: YYYY-MM-DD HH:mm'
- */
 function wcPayAndSend(method, deliveryText) {
     const cart = wcState.shopData.cart || [];
     if (cart.length === 0) return;
 
     let total = 0;
     let itemNames = [];
+    const receiptItems = [];
+    
     cart.forEach(item => {
         total += parseFloat(item.price);
         itemNames.push(item.name);
+        receiptItems.push({ name: item.name, price: parseFloat(item.price).toFixed(2) });
     });
 
     const itemsStr = itemNames.join('、');
-    
-    let cardHtml = '';
-    let aiSystemMessage = '';
+
+    // 构造基础小票数据
+    const receiptData = {
+        logo: method === 'gift' ? "LUXURY ORDER" : "PAYMENT REQUEST",
+        date: new Date().toLocaleString('zh-CN'),
+        items: receiptItems,
+        total: total.toFixed(2),
+        msg: "" // 稍后由用户输入填充
+    };
 
     if (method === 'gift') {
-        // 用户支付，生成粉色礼物卡片
-        cardHtml = `
-            <div class="shopping-card gift">
-                <div class="shopping-card-header">
-                    <div class="shopping-card-tag">GIFT</div>
-                    <div class="shopping-card-icon">
-                        <svg viewBox="0 0 24 24"><path d="M20 12v10H4V12M20 7H4V4h16v3M12 22V7m-4 0h8v0a4 4 0 0 1-8 0v0Z"></path></svg>
-                    </div>
-                </div>
-                <div class="shopping-card-body">
-                    <div class="shopping-card-title">For You</div>
-                    <div class="shopping-card-desc">一份包含 ${itemNames[0]} 等的礼物</div>
-                </div>
-                <div class="shopping-card-footer">
-                    <div class="shopping-card-price">¥${total.toFixed(2)}</div>
-                    <div class="shopping-card-status">已支付<br>${deliveryText}</div>
-                </div>
-            </div>
-        `;
-
-        aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚为你购买了以下物品：${itemsStr}。配送方式：${deliveryText}。]`;
-
-        // 支付流程
         wcOpenGeneralInput(`支付 ¥${total.toFixed(2)} (输入支付密码)`, (pass) => {
-            if (pass !== wcState.wallet.password) {
-                alert("密码错误！");
-                return;
-            }
-            if (wcState.wallet.balance < total) {
-                alert("余额不足！请先充值。");
-                return;
-            }
+            if (pass !== wcState.wallet.password) return alert("密码错误！");
+            if (wcState.wallet.balance < total) return alert("余额不足！请先充值。");
             
-            // 扣款
             wcState.wallet.balance -= total;
             wcState.wallet.transactions.push({
                 id: Date.now(), type: 'payment', amount: total,
                 note: `商城购物赠送`, time: Date.now()
             });
             
-            // 清空购物车并发送消息
             wcState.shopData.cart = [];
             wcSaveData();
             wcUpdateCartBadge();
             wcCloseModal('wc-modal-shop-cart');
             wcCloseShoppingPage();
-            
-            wcAddMessage(wcState.activeChatId, 'system', 'system', aiSystemMessage, { hidden: true });
+
+            // 支付成功后，弹出留言输入框
             setTimeout(() => {
-                wcAddMessage(wcState.activeChatId, 'me', 'receipt', cardHtml);
+                wcOpenGeneralInput("给 Ta 留个言吧 (选填)", (customMsg) => {
+                    receiptData.msg = customMsg || "“给你买了一点小礼物，希望你喜欢。”";
+                    
+                    const aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚为你购买了以下物品：${itemsStr}。配送方式：${deliveryText}。用户的留言是：“${receiptData.msg}”。请在回复中做出反应。]`;
+                    
+                    wcAddMessage(wcState.activeChatId, 'system', 'system', aiSystemMessage, { hidden: true });
+                    setTimeout(() => {
+                        wcAddMessage(wcState.activeChatId, 'me', 'order', '购物订单', {
+                            orderType: 'gift',
+                            deliveryText: deliveryText,
+                            receiptData: receiptData
+                        });
+                    }, 300);
+                });
             }, 300);
             
         }, true);
 
     } else if (method === 'daifu') {
-        // 代付，生成蓝色请求卡片
-        cardHtml = `
-            <div class="shopping-card daifu">
-                <div class="shopping-card-header">
-                    <div class="shopping-card-tag">REQUEST</div>
-                    <div class="shopping-card-icon">
-                        <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
-                    </div>
-                </div>
-                <div class="shopping-card-body">
-                    <div class="shopping-card-title">Payment</div>
-                    <div class="shopping-card-desc">包含 ${itemNames[0]} 等的订单</div>
-                </div>
-                <div class="shopping-card-footer">
-                    <div class="shopping-card-price">¥${total.toFixed(2)}</div>
-                    <div class="shopping-card-status">待支付<br>${deliveryText}</div>
-                </div>
-            </div>
-        `;
-
-        aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚向你发送了一个代付请求，希望你帮忙支付以下物品：${itemsStr}。总价：¥${total.toFixed(2)}。配送方式：${deliveryText}。请在回复中做出回应（同意付款或拒绝付款等）。]`;
-
-        // 清空购物车并发送消息
-        wcState.shopData.cart = [];
-        wcSaveData();
-        wcUpdateCartBadge();
         wcCloseModal('wc-modal-shop-cart');
         wcCloseShoppingPage();
-        
-        wcAddMessage(wcState.activeChatId, 'system', 'system', aiSystemMessage, { hidden: true });
+
+        // 直接弹出留言输入框
         setTimeout(() => {
-            wcAddMessage(wcState.activeChatId, 'me', 'receipt', cardHtml);
+            wcOpenGeneralInput("输入代付留言 (选填)", (customMsg) => {
+                receiptData.msg = customMsg || "“帮我付一下这个好不好~”";
+                
+                const aiSystemMessage = `[系统内部信息(仅AI可见): 用户刚刚向你发送了一个代付请求，希望你帮忙支付以下物品：${itemsStr}。总价：¥${total.toFixed(2)}。配送方式：${deliveryText}。用户的留言是：“${receiptData.msg}”。请在回复中做出回应（同意付款或拒绝付款等）。]`;
+
+                wcState.shopData.cart = [];
+                wcSaveData();
+                wcUpdateCartBadge();
+                
+                wcAddMessage(wcState.activeChatId, 'system', 'system', aiSystemMessage, { hidden: true });
+                setTimeout(() => {
+                    wcAddMessage(wcState.activeChatId, 'me', 'order', '代付请求', {
+                        orderType: 'daifu',
+                        deliveryText: deliveryText,
+                        receiptData: receiptData
+                    });
+                }, 300);
+            });
         }, 300);
     }
 }
@@ -10972,7 +13735,7 @@ async function wcGeneratePhoneCart() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('phone');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const limit = apiConfig.limit || 50;
@@ -10999,24 +13762,31 @@ async function wcGeneratePhoneCart() {
             }
         }
 
+        const lifeStatusPrompt = getLifeStatusPrompt(char); // 新增
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; 
         prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的购物APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
-        prompt += `请基于你的人设、我的设定，以及我们**最近的聊天上下文**，生成你的私密购物数据。\n`;
-        prompt += `【要求】：\n`;
-        prompt += `1. 生成 4 至 8 条购物车商品 (cart)。这些是你最近想买但还没买的东西，可能和聊天中提到的事情有关，也可能是你想送给User的礼物，或者是符合你人设的私密物品。\n`;
-        prompt += `2. 生成 4 至 8 条购买记录 (history)。这些是你最近已经买下的东西，必须包含购买日期(如"昨天", "10-24")。\n`;
-        prompt += `3. 商品描述(desc)要带有一点你添加购物车时的内心OS或用途说明。\n`;
-        prompt += `4. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的私密购物数据。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `1. 【反模板化警告】：绝对禁止生成老套的“防小人”、“智商税”等固定模板商品！商品必须与今天发生的事强相关！\n`;
+        prompt += `2. 购物车(cart) 5-10条：如果聊天里User说冷，你可能会加购暖宝宝；如果今天行程里你去了健身房，可能会加购蛋白粉；如果你们吵架了，可能会加购道歉礼物。必须有明确的因果关系！\n`;
+        prompt += `3. 购买记录(history) 5-10条：最近已经买下的东西。同样必须映射你们最近的聊天话题或你的生活状态。\n`;
+        prompt += `4. 内心OS(desc)：商品描述必须是你添加购物车时的【真实内心OS】。要体现出你买这个东西的动机（是因为User，还是因为今天遇到的某件事）。\n`;
+        prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
+        prompt += `1. 仔细阅读【今日行程】和【聊天记录】，找出你目前最缺什么，或者最想给User买什么。\n`;
+        prompt += `2. 构思具体的商品名称（带品牌或定语，显得真实）。\n`;
+        prompt += `推演结束后，直接返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "cart": [
-    {"name": "商品名称", "desc": "内心OS或商品描述", "price": "199.00"}
+    {"name": "具体的商品名称", "desc": "你加购时的真实内心OS", "price": "129.00"}
   ],
   "history": [
-    {"name": "商品名称", "desc": "内心OS或商品描述", "price": "59.90", "date": "10-24"}
+    {"name": "具体的商品名称", "desc": "购买原因OS", "price": "45.00", "date": "10-24"}
   ]
 }\n`;
 
@@ -11026,15 +13796,29 @@ async function wcGeneratePhoneCart() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
         const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。");
+        }
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const cartData = JSON.parse(content);
+        
+        let cartData;
+        try {
+            cartData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 50) + "...");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.cartApp = cartData;
@@ -11045,7 +13829,11 @@ async function wcGeneratePhoneCart() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("生成失败");
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[购物车生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
 // ==========================================================================
@@ -11102,35 +13890,31 @@ function wcBuyCharCartItem(index) {
         // 4. 刷新购物车页面 UI
         wcRenderPhoneCartContent();
 
-        // 5. 在聊天记录中生成一张高级感礼物卡片，并通知 AI
-        const cardHtml = `
-            <div class="shopping-card gift">
-                <div class="shopping-card-header">
-                    <div class="shopping-card-tag">SURPRISE</div>
-                    <div class="shopping-card-icon">
-                        <svg viewBox="0 0 24 24"><path d="M20 12v10H4V12M20 7H4V4h16v3M12 22V7m-4 0h8v0a4 4 0 0 1-8 0v0Z"></path></svg>
-                    </div>
-                </div>
-                <div class="shopping-card-body">
-                    <div class="shopping-card-title">Surprise Gift</div>
-                    <div class="shopping-card-desc">我偷偷清空了你的购物车：${item.name}</div>
-                </div>
-                <div class="shopping-card-footer">
-                    <div class="shopping-card-price">¥${price.toFixed(2)}</div>
-                    <div class="shopping-card-status">已支付<br>惊喜送达</div>
-                </div>
-            </div>
-        `;
+        // 5. 弹出留言输入框，并发送结构化的高级卡片
+        wcOpenGeneralInput("给 Ta 留个言吧 (选填)", (customMsg) => {
+            const finalMsg = customMsg || "“偷偷看了你的购物车，就当是给你的小惊喜吧。”";
+            
+            const receiptData = {
+                logo: "LUXURY ORDER",
+                date: new Date().toLocaleString('zh-CN'),
+                items: [{ name: item.name, price: price.toFixed(2) }],
+                total: price.toFixed(2),
+                msg: finalMsg
+            };
 
-        // 给 AI 发送隐藏的系统提示，强制让它做出反应
-        const aiSystemMessage = `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机购物车，并花钱帮你买下了你一直想买的物品："${item.name}" (价格: ¥${price.toFixed(2)})。]`;
+            const aiSystemMessage = `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机购物车，并花钱帮你买下了你一直想买的物品："${item.name}" (价格: ¥${price.toFixed(2)})。用户的留言是：“${finalMsg}”。请在回复中做出反应。]`;
 
-        wcAddMessage(char.id, 'system', 'system', aiSystemMessage, { hidden: true });
-        setTimeout(() => {
-            wcAddMessage(char.id, 'me', 'receipt', cardHtml);
-        }, 300);
+            wcAddMessage(char.id, 'system', 'system', aiSystemMessage, { hidden: true });
+            setTimeout(() => {
+                wcAddMessage(char.id, 'me', 'order', '购物订单', {
+                    orderType: 'gift',
+                    deliveryText: '惊喜送达',
+                    receiptData: receiptData
+                });
+            }, 300);
 
-        alert(`支付成功！已帮 Ta 买下 ${item.name}，快去聊天界面看看 Ta 的反应吧！`);
+            alert(`支付成功！已帮 Ta 买下 ${item.name}，快去聊天界面看看 Ta 的反应吧！`);
+        });
     }, true); // true 表示这是一个密码输入框
 }
 
@@ -11215,7 +13999,9 @@ function wcBuyCharCartItem(index) {
                 @font-face { font-family: 'CustomFont'; src: url('${finalUrl}'); } 
                 body, input, textarea, button, select, 
                 .ls-view, #wechat-root, #wc-view-phone-sim, .wc-page, .wc-bubble, 
-                .ls-feed-text, .ls-widget-note-text, .wc-system-msg-text { 
+                .ls-feed-text, .ls-widget-note-text, .wc-system-msg-text,
+                .ins-forum-root, .ins-forum-view, .ins-forum-post-text, .ins-forum-story-text,
+                .ins-forum-profile-name, .ins-forum-profile-bio, .ins-forum-comment-text { 
                     font-family: 'CustomFont', sans-serif !important; 
                 }
             `;
@@ -11506,7 +14292,9 @@ const musicState = {
         active: false,
         charId: null,
         startTime: 0,
-        timerInterval: null
+        timerInterval: null,
+        totalListenSeconds: 0,
+        sessionSongCount: 0
     },
     pendingAddSong: null
 };
@@ -11533,7 +14321,9 @@ async function musicSaveData() {
         listenTogether: {
             active: musicState.listenTogether.active,
             charId: musicState.listenTogether.charId,
-            startTime: musicState.listenTogether.startTime
+            startTime: musicState.listenTogether.startTime,
+            totalListenSeconds: musicState.listenTogether.totalListenSeconds,
+            sessionSongCount: musicState.listenTogether.sessionSongCount
         }
     });
 }
@@ -11574,7 +14364,10 @@ audioPlayer.addEventListener('timeupdate', () => {
     if (capTimeCurrentEl) capTimeCurrentEl.innerText = musicFormatTime(current);
     if (capTimeTotalEl) capTimeTotalEl.innerText = musicFormatTime(total);
     // 👆新增结束
-    
+    // 同步更新桌面小组件进度条
+    const widgetProgressFill = document.getElementById('widget-progress-fill');
+    if (widgetProgressFill) widgetProgressFill.style.width = `${percent}%`;
+
     // 2. 同步歌词
     if (musicState.lyrics.length > 0 && lyricsContainer) {
         let activeIndex = -1;
@@ -11596,9 +14389,24 @@ audioPlayer.addEventListener('timeupdate', () => {
                 
                 if (lines[activeIndex]) {
                     lines[activeIndex].classList.add('active');
-                    // 滚动歌词 (假设每行高度30px)
-                    const offset = activeIndex * 30;
-                    lyricsContainer.style.transform = `translateY(-${offset}px)`;
+                    
+                    const player = document.getElementById('music-full-player');
+                    const isLyricMode = player.classList.contains('lyric-mode');
+                    
+                    if (isLyricMode) {
+                        // 歌词模式下：动态计算高度并居中
+                        let offset = 0;
+                        for (let i = 0; i < activeIndex; i++) {
+                            offset += lines[i].offsetHeight;
+                        }
+                        const containerHeight = document.querySelector('.ins-music-fp-lyrics-container').offsetHeight;
+                        offset = offset - containerHeight / 2 + lines[activeIndex].offsetHeight / 2;
+                        lyricsContainer.style.transform = `translateY(-${Math.max(0, offset)}px)`;
+                    } else {
+                        // 唱片模式下：固定行高 30px
+                        const offset = activeIndex * 30;
+                        lyricsContainer.style.transform = `translateY(-${offset}px)`;
+                    }
                 }
                 // 记录当前高亮的歌词索引
                 lyricsContainer.setAttribute('data-active-index', activeIndex);
@@ -11607,6 +14415,28 @@ audioPlayer.addEventListener('timeupdate', () => {
                 if (capsuleLyricEl && musicState.lyrics[activeIndex]) {
                     capsuleLyricEl.innerText = musicState.lyrics[activeIndex].text || '...';
                 }               
+                // 同步歌词到桌面小组件 (带智能滚动判断)
+                const widgetLyricEl = document.getElementById('widget-song-lyric');
+                if (widgetLyricEl && musicState.lyrics[activeIndex]) {
+                    widgetLyricEl.innerText = musicState.lyrics[activeIndex].text || '...';
+                    
+                    // 动态判断是否需要滚动
+                    const wrapper = widgetLyricEl.parentElement;
+                    // 强制浏览器重绘以获取真实宽度
+                    void widgetLyricEl.offsetWidth; 
+                    
+                    if (widgetLyricEl.scrollWidth > wrapper.clientWidth) {
+                        // 如果歌词宽度大于容器宽度，计算需要滚动的距离 (负值)
+                        const dist = wrapper.clientWidth - widgetLyricEl.scrollWidth;
+                        widgetLyricEl.style.setProperty('--scroll-dist', `${dist}px`);
+                        widgetLyricEl.classList.add('scrolling');
+                    } else {
+                        // 如果不够长，移除滚动类，恢复居中静止状态
+                        widgetLyricEl.classList.remove('scrolling');
+                        widgetLyricEl.style.transform = 'translateX(0)';
+                    }
+                }
+
             }
         }
     }
@@ -11757,6 +14587,19 @@ window.musicAcceptInvite = function(charId, songId, title, artist, cover) {
     musicOpenFullPlayer();
 };
 
+// 计算两个经纬度之间的距离 (公里)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+    const R = 6371; // 地球半径
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return (R * c).toFixed(2);
+}
+
 function musicStartListenTogether(charId, isResume = false) {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
@@ -11764,54 +14607,112 @@ function musicStartListenTogether(charId, isResume = false) {
     musicState.listenTogether.active = true;
     musicState.listenTogether.charId = charId;
     
-    // 如果不是刷新恢复的，就重置开始时间并保存
     if (!isResume) {
         musicState.listenTogether.startTime = Date.now();
+        musicState.listenTogether.sessionSongCount = 1; // 初始算1首
         musicSaveData();
     }
     
-    // 获取用户头像 (优先取聊天设置里的面具头像)
     const userAvatar = (char.chatConfig && char.chatConfig.userAvatar) ? char.chatConfig.userAvatar : wcState.user.avatar;
-    
     document.getElementById('music-fp-avatar-user').src = userAvatar;
     document.getElementById('music-fp-avatar-char').src = char.avatar;
     document.getElementById('music-fp-together').style.display = 'flex';
     
+    // 尝试获取真实距离或虚拟距离
+    let distanceStr = "未知距离";
+    
+    if (char.chatConfig && char.chatConfig.locationType === 'virtual') {
+        // 如果是虚拟世界，直接读取自定义距离
+        if (char.chatConfig.virtualDistance) {
+            distanceStr = char.chatConfig.virtualDistance;
+            // 如果用户输入的是纯数字，自动加上"公里"，否则直接显示文本（如"光年之外"）
+            if (!isNaN(distanceStr)) {
+                distanceStr += " 公里";
+            }
+        } else {
+            distanceStr = "跨越次元";
+        }
+    } else if (char.chatConfig && char.chatConfig.locationLat && char.chatConfig.locationLon) {
+        // 如果是现实世界，计算经纬度距离
+        if (typeof sendLocLat !== 'undefined' && sendLocLat !== 0) {
+            const dist = calculateDistance(sendLocLat, sendLocLon, char.chatConfig.locationLat, char.chatConfig.locationLon);
+            if (dist) distanceStr = `${dist} 公里`;
+        } else if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition((pos) => {
+                const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, char.chatConfig.locationLat, char.chatConfig.locationLon);
+                if (dist) distanceStr = `${dist} 公里`; // 异步获取成功后更新变量，setInterval 会自动读到新值
+            }, () => {}, { timeout: 5000 });
+        }
+    }
+
     if (musicState.listenTogether.timerInterval) clearInterval(musicState.listenTogether.timerInterval);
     
     musicState.listenTogether.timerInterval = setInterval(() => {
-        const diff = Math.floor((Date.now() - musicState.listenTogether.startTime) / 1000);
-        const m = Math.floor(diff / 60).toString().padStart(2, '0');
-        const s = (diff % 60).toString().padStart(2, '0');
-        const timeStr = `${m}:${s}`;
+        const currentSessionSeconds = Math.floor((Date.now() - musicState.listenTogether.startTime) / 1000);
+        const totalSeconds = (musicState.listenTogether.totalListenSeconds || 0) + currentSessionSeconds;
         
-        const timerEl = document.getElementById('music-fp-timer');
-        // 修复：HTML中胶囊计时器的ID是 capsule-timer，不是 capsule-island-timer
+        const totalHours = Math.floor(totalSeconds / 3600);
+        const totalMins = Math.floor((totalSeconds % 3600) / 60);
+        
+        const metaEl = document.getElementById('music-fp-meta');
+        if (metaEl) {
+            metaEl.innerText = `相距 ${distanceStr}，一起听了 ${totalHours} 小时 ${totalMins} 分钟`;
+        }
+
+        const m = Math.floor(currentSessionSeconds / 60).toString().padStart(2, '0');
+        const s = (currentSessionSeconds % 60).toString().padStart(2, '0');
         const capsuleTimerEl = document.getElementById('capsule-timer'); 
-        
-        if (timerEl) timerEl.innerText = timeStr;
-        if (capsuleTimerEl) capsuleTimerEl.innerText = timeStr; // 同步更新胶囊上的时间
-    }, 1000); // 修复：补全了 setInterval 的闭合和 1000ms 参数
-} // 修复：补全了函数的闭合大括号
+        if (capsuleTimerEl) capsuleTimerEl.innerText = `${m}:${s}`;
+    }, 1000);
+}
 
 
 // 【新增】：手动结束一起听歌
 window.musicStopListenTogether = function() {
     if (confirm("要结束和 Ta 的一起听歌吗？")) {
-        const charId = musicState.listenTogether.charId; // 先保存 ID
-        musicState.listenTogether.active = false;
-        musicState.listenTogether.charId = null;
-        clearInterval(musicState.listenTogether.timerInterval);
-        document.getElementById('music-fp-together').style.display = 'none';
-        musicSaveData();
-         // 修复：结束听歌时重置胶囊的计时器显示
-        const capsuleTimerEl = document.getElementById('capsule-timer');
-        if (capsuleTimerEl) capsuleTimerEl.innerText = "00:00";      
-        // 【修复】：告诉 AI 结束了听歌
-        if (charId) {
+        const charId = musicState.listenTogether.charId;
+        
+        // 1. 计算本次时长并累加到总时长
+        const sessionDurationMs = Date.now() - musicState.listenTogether.startTime;
+        const sessionSeconds = Math.floor(sessionDurationMs / 1000);
+        musicState.listenTogether.totalListenSeconds = (musicState.listenTogether.totalListenSeconds || 0) + sessionSeconds;
+        
+        // 2. 构造总结数据
+        const summaryData = {
+            startTime: musicState.listenTogether.startTime,
+            endTime: Date.now(),
+            durationMs: sessionDurationMs,
+            songCount: musicState.listenTogether.sessionSongCount || 1
+        };
+
+        // 3. 找到聊天记录中最近的一条 music_invite，将其状态改为 ended 并附上数据
+        if (charId && wcState.chats[charId]) {
+            const msgs = wcState.chats[charId];
+            for (let i = msgs.length - 1; i >= 0; i--) {
+                if (msgs[i].type === 'music_invite' && msgs[i].status !== 'ended') {
+                    msgs[i].status = 'ended';
+                    msgs[i].summaryData = summaryData;
+                    break;
+                }
+            }
             wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 用户结束了和你的“一起听歌”。]`, { hidden: true });       
         }
-        alert("已结束一起听歌。");
+
+        // 4. 清理状态
+        musicState.listenTogether.active = false;
+        musicState.listenTogether.charId = null;
+        musicState.listenTogether.sessionSongCount = 0;
+        clearInterval(musicState.listenTogether.timerInterval);
+        document.getElementById('music-fp-together').style.display = 'none';
+        
+        const capsuleTimerEl = document.getElementById('capsule-timer');
+        if (capsuleTimerEl) capsuleTimerEl.innerText = "00:00";      
+        
+        musicSaveData();
+        wcSaveData();
+        if (charId === wcState.activeChatId) wcRenderMessages(charId); // 刷新聊天界面卡片
+        
+        alert("已结束一起听歌。聊天界面的卡片已生成听歌报告。");
     }
 };
 
@@ -11913,6 +14814,12 @@ async function musicPlaySong(id, title, artist, cover) {
             // 【核心修复】：捕获 play() 的 Promise 异常，防止 NotSupportedError 报错卡死
             audioPlayer.play().then(() => {
                 musicState.isPlaying = true;
+                
+                // 如果正在一起听歌，增加歌曲数量
+                if (musicState.listenTogether.active) {
+                    musicState.listenTogether.sessionSongCount = (musicState.listenTogether.sessionSongCount || 0) + 1;
+                }
+
                 document.getElementById('music-mini-player').style.display = 'flex';
                 musicUpdatePlayerUI();
                 musicCloseSearch();
@@ -12097,6 +15004,22 @@ function musicCloseFullPlayer() {
         fullPlayer.classList.remove('active');
     }
 }
+// 🌟 新增：切换歌词模式
+function toggleLyricMode() {
+    const player = document.getElementById('music-full-player');
+    if (!player) return;
+    
+    player.classList.toggle('lyric-mode');
+    
+    // 延迟重新计算滚动位置，等待 CSS 动画展开
+    setTimeout(() => {
+        // 强制触发一次 timeupdate 来重新计算歌词位置
+        if (audioPlayer && !audioPlayer.paused) {
+            const event = new Event('timeupdate');
+            audioPlayer.dispatchEvent(event);
+        }
+    }, 50);
+}
 
 function musicUpdatePlayerUI() {
     if (!musicState.currentSong) return;
@@ -12113,6 +15036,9 @@ if (miniTitle) miniTitle.innerText = musicState.currentSong.title;
 if (miniArtist) miniArtist.innerText = musicState.currentSong.artist;
 if (fpTitle) fpTitle.innerText = musicState.currentSong.title;
 if (fpArtist) fpArtist.innerText = musicState.currentSong.artist; 
+const widgetTitle = document.getElementById('widget-song-name');
+if (widgetTitle) widgetTitle.innerText = musicState.currentSong.title;
+
     const coverEl = document.getElementById('music-player-cover');
     const fpRecordEl = document.getElementById('music-fp-record');
     const playBtn = document.getElementById('music-btn-play');
@@ -12132,7 +15058,11 @@ if (fpArtist) fpArtist.innerText = musicState.currentSong.artist;
         playBtn.innerHTML = playIcon;
         fpPlayBtn.innerHTML = playIcon;
     }
-    
+    const widgetPlayBtn = document.getElementById('widget-btn-play');
+    if (widgetPlayBtn) {
+        widgetPlayBtn.innerHTML = musicState.isPlaying ? pauseIcon : playIcon;
+    }
+
     // 【追加这一行】：同步更新音乐胶囊的 UI
     if (typeof musicUpdateCapsuleUI === 'function') musicUpdateCapsuleUI();
 }
@@ -12255,7 +15185,8 @@ async function musicImportPlaylist() {
         
         if (dataDetail.code === 200 && dataDetail.playlist) {
             // 2. 获取歌单所有歌曲
-            const resTracks = await fetch(`https://zm.armoe.cn/playlist/track/all?id=${plId}&limit=50`);
+            // 👇 就是修改下面这一行，把 limit=50 改成 limit=1000 👇
+            const resTracks = await fetch(`https://zm.armoe.cn/playlist/track/all?id=${plId}&limit=1000`);
             const dataTracks = await resTracks.json();
             
             let tracks = [];
@@ -12579,15 +15510,40 @@ async function musicCharPlaySelected(charId, songId, songName) {
 
 // AI 强制退出一起听歌 (不弹确认框)
 function musicForceStopListenTogether(charId) {
+    const sessionDurationMs = Date.now() - musicState.listenTogether.startTime;
+    const sessionSeconds = Math.floor(sessionDurationMs / 1000);
+    musicState.listenTogether.totalListenSeconds = (musicState.listenTogether.totalListenSeconds || 0) + sessionSeconds;
+    
+    const summaryData = {
+        startTime: musicState.listenTogether.startTime,
+        endTime: Date.now(),
+        durationMs: sessionDurationMs,
+        songCount: musicState.listenTogether.sessionSongCount || 1
+    };
+
+    if (charId && wcState.chats[charId]) {
+        const msgs = wcState.chats[charId];
+        for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].type === 'music_invite' && msgs[i].status !== 'ended') {
+                msgs[i].status = 'ended';
+                msgs[i].summaryData = summaryData;
+                break;
+            }
+        }
+    }
+
     musicState.listenTogether.active = false;
     musicState.listenTogether.charId = null;
+    musicState.listenTogether.sessionSongCount = 0;
     clearInterval(musicState.listenTogether.timerInterval);
     
     const togetherEl = document.getElementById('music-fp-together');
     if (togetherEl) togetherEl.style.display = 'none';
     
     musicSaveData();
-    // 确保这里没有 hidden: true，这样用户就能在聊天界面看到
+    wcSaveData();
+    if (charId === wcState.activeChatId) wcRenderMessages(charId);
+
     wcAddMessage(charId, 'system', 'system', `[系统提示: 对方已退出一起听歌]`, { style: 'transparent' });
 }
 
@@ -12632,6 +15588,32 @@ function musicRejectCharInvite() {
     }
 }
 
+// 新增：后台静默搜索并播放的辅助函数
+async function musicSilentSearchAndPlay(keyword) {
+    if (!keyword) return false;
+    try {
+        const res = await fetch(`https://zm.armoe.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
+        const data = await res.json();
+        if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
+            const track = data.result.songs[0];
+            const newSong = {
+                id: track.id,
+                title: track.name,
+                artist: track.ar.map(a => a.name).join(', '),
+                cover: track.al.picUrl + '?param=100y100'
+            };
+            if (!musicState.currentPlaylist) musicState.currentPlaylist = [];
+            musicState.currentPlaylist.push(newSong);
+            musicState.currentIndex = musicState.currentPlaylist.length - 1;
+            musicPlaySong(newSong.id, newSong.title, newSong.artist, newSong.cover);
+            return true;
+        }
+    } catch (e) {
+        console.error("静默搜索失败", e);
+    }
+    return false;
+}
+
 async function musicAcceptCharInvite() {
     const modal = document.getElementById('music-char-invite-modal');
     modal.classList.add('hidden');
@@ -12641,23 +15623,54 @@ async function musicAcceptCharInvite() {
         const charId = pendingCharInviteData.charId;
         const songName = pendingCharInviteData.songName;
         
-        // 【修复】：不发送可见的文本消息，改为发送隐藏的系统提示给 AI
         wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 用户接受了你的听歌邀请，你们现在正在一起听歌。]`, { hidden: true });
         
-        // 打开音乐播放器并建立连接
         openMusicApp();
         musicStartListenTogether(charId);
         musicOpenFullPlayer();
 
-        // 如果 AI 指定了歌曲，自动搜索并播放
-        if (songName) {
-            document.getElementById('music-search-input').value = songName;
-            await musicPerformSearch();
-            if (musicState.currentPlaylist.length > 0) {
-                musicPlayFromSearch(0);
+        let playSuccess = false;
+
+        // 1. 第一重：尝试搜索 AI 指定的歌曲
+        if (songName && songName !== '随机推荐') {
+            playSuccess = await musicSilentSearchAndPlay(songName);
+        }
+
+        // 2. 第二重兜底：如果没搜到，从 Char 手机的“最近常听”歌单里随机挑一首
+        if (!playSuccess) {
+            const char = wcState.characters.find(c => c.id === charId);
+            if (char && char.phoneData && char.phoneData.settings && char.phoneData.settings.playlist && char.phoneData.settings.playlist.length > 0) {
+                const charPlaylist = char.phoneData.settings.playlist;
+                const randomSong = charPlaylist[Math.floor(Math.random() * charPlaylist.length)];
+                
+                playSuccess = await musicSilentSearchAndPlay(`${randomSong.title} ${randomSong.artist}`);
+                if (playSuccess) {
+                    wcAddMessage(charId, 'system', 'system', `[系统提示: 由于之前指定的歌曲未找到，系统自动从你的常听歌单中随机播放了《${randomSong.title}》]`, { style: 'transparent' });
+                }
             }
         }
 
+        // 3. 第三重兜底：如果 Char 没歌单，从 User 的全局歌单里随机挑一首
+        if (!playSuccess && musicState.playlists && musicState.playlists.length > 0) {
+            const validPlaylists = musicState.playlists.filter(pl => pl.tracks && pl.tracks.length > 0);
+            if (validPlaylists.length > 0) {
+                const randomPl = validPlaylists[Math.floor(Math.random() * validPlaylists.length)];
+                const randomSong = randomPl.tracks[Math.floor(Math.random() * randomPl.tracks.length)];
+                
+                musicState.currentPlaylist = [...randomPl.tracks];
+                const songIdx = randomPl.tracks.findIndex(s => s.id === randomSong.id);
+                musicState.currentIndex = songIdx !== -1 ? songIdx : 0;
+                
+                musicPlaySong(randomSong.id, randomSong.title, randomSong.artist, randomSong.cover);
+                playSuccess = true;
+                wcAddMessage(charId, 'system', 'system', `[系统提示: 系统自动从 User 的歌单中随机播放了《${randomSong.title}》]`, { style: 'transparent' });
+            }
+        }
+
+        // 4. 终极提示：如果连 User 都没有歌单，只能提示手动点播了
+        if (!playSuccess) {
+            alert("抱歉宝宝，Ta 推荐的歌曲未找到，且你们都没有预设歌单。请手动搜索播放一首歌曲吧~");
+        }
         
         pendingCharInviteData = null;
     }
@@ -13045,7 +16058,7 @@ async function endDreamAndSummarize() {
         return;
     }
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     // 修复：使用正确的 ID 获取按钮
@@ -13066,7 +16079,8 @@ async function endDreamAndSummarize() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: 0.7
+                temperature: 0.7,
+                max_tokens: 4000
             })
         });
 
@@ -13085,7 +16099,9 @@ async function endDreamAndSummarize() {
         dreamRenderCards();
 
     } catch (e) {
-        alert("总结失败：" + e.message);
+        console.error(e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[梦境总结失败] ${e.message}`);
+        else alert("总结失败：" + e.message);
     } finally {
         if (btn) btn.innerText = "醒来(总结)";
     }
@@ -13113,19 +16129,14 @@ function dreamRenderSettings() {
     // 1. 渲染世界书列表
     const wbList = document.getElementById('dream-wb-list');
     wbList.innerHTML = '';
-    if (typeof worldbookEntries !== 'undefined' && worldbookEntries.length > 0) {
-        worldbookEntries.forEach(entry => {
-            const isChecked = dreamState.selectedWbIds.includes(entry.id.toString());
-            wbList.innerHTML += `
-                <div class="dream-item-row">
-                    <span>${entry.title}</span>
-                    <input type="checkbox" class="dream-checkbox" value="${entry.id}" ${isChecked ? 'checked' : ''} onchange="dreamToggleWb(this)">
-                </div>
-            `;
+    let dreamWbCount = 0;
+    if (dreamState.selectedWbIds) {
+        dreamState.selectedWbIds.forEach(id => {
+            wbList.innerHTML += `<input type="checkbox" value="${id}" checked>`;
+            dreamWbCount++;
         });
-    } else {
-        wbList.innerHTML = '<div style="color:#999; font-size:12px;">暂无世界书，请在主界面添加</div>';
     }
+    document.getElementById('dream-wb-count').innerText = `已选 ${dreamWbCount} 项`;
 
     // 2. 渲染预设列表 (带左滑删除)
     const presetList = document.getElementById('dream-preset-list');
@@ -13294,7 +16305,7 @@ function sendDreamMessage() {
 async function triggerDreamAI() {
     if (dreamState.currentChat.length === 0) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请先在主设置中配置 API");
 
     // 1. 基础设定
@@ -13417,6 +16428,7 @@ async function triggerDreamAI() {
         dreamState.currentChat.pop(); 
         dreamState.currentChat.push({ role: 'system', content: '梦境连接断开: ' + e.message });
         dreamRenderChatWithHTML();
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[梦境生成失败] ${e.message}`);
     }
 }
 // 文本解析器：分离对话和旁白
@@ -13810,18 +16822,28 @@ function showDreamContextMenu(e, index, type = 'user') {
     dreamSelectedMsgIndex = index;
     const menu = document.getElementById('dream-context-menu');
     
-    // 动态生成菜单内容
+    // 动态生成菜单内容 (纯 SVG 图标)
     menu.innerHTML = '';
     if (type === 'user') {
         menu.innerHTML = `
-            <div class="dream-ctx-item" onclick="editDreamMsg()">EDIT / 编辑</div>
-            <div class="dream-ctx-item" style="color: #FF3B30;" onclick="deleteDreamMsg()">DELETE / 删除</div>
+            <div class="dream-ctx-item" onclick="editDreamMsg()">
+                <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            </div>
+            <div class="dream-ctx-item" onclick="deleteDreamMsg()">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </div>
         `;
     } else if (type === 'ai') {
         menu.innerHTML = `
-            <div class="dream-ctx-item" onclick="regenerateDreamMsg()">RETRY / 重生成</div>
-            <div class="dream-ctx-item" onclick="editDreamMsg()">EDIT / 编辑</div>
-            <div class="dream-ctx-item" style="color: #FF3B30;" onclick="deleteDreamMsg()">DELETE / 删除</div>
+            <div class="dream-ctx-item" onclick="regenerateDreamMsg()">
+                <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            </div>
+            <div class="dream-ctx-item" onclick="editDreamMsg()">
+                <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            </div>
+            <div class="dream-ctx-item" onclick="deleteDreamMsg()">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </div>
         `;
     }
 
@@ -13829,18 +16851,60 @@ function showDreamContextMenu(e, index, type = 'user') {
     let x = e.clientX || (e.touches && e.touches[0].clientX);
     let y = e.clientY || (e.touches && e.touches[0].clientY);
 
-    const menuWidth = 120;
-    const menuHeight = type === 'ai' ? 140 : 100; // AI菜单多一项，高度增加
+    // 估算菜单宽高 (每个 item 约 60px 宽，高度约 44px)
+    const menuWidth = type === 'ai' ? 180 : 120;
+    const menuHeight = 44; 
     const screenW = window.innerWidth;
-    const screenH = window.innerHeight;
+    
+    // 计算居中位置：X轴居中于点击点，Y轴在点击点上方
+    let leftPos = x - (menuWidth / 2);
+    let topPos = y - menuHeight - 20; // 距离手指上方 20px
 
-    if (x + menuWidth > screenW) x = screenW - menuWidth - 10;
-    if (y + menuHeight > screenH) y = screenH - menuHeight - 10;
+    // 边界保护：防止超出屏幕左右
+    if (leftPos < 10) leftPos = 10;
+    if (leftPos + menuWidth > screenW - 10) leftPos = screenW - menuWidth - 10;
 
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
+    // 边界保护：如果上方空间不够，就显示在手指下方，并翻转小三角
+    if (topPos < 10) {
+        topPos = y + 30;
+        menu.style.setProperty('--triangle-top', '-7px');
+        menu.style.setProperty('--triangle-bottom', 'auto');
+        menu.style.setProperty('--triangle-rotate', '180deg');
+    } else {
+        // 正常显示在上方
+        menu.style.setProperty('--triangle-top', '100%');
+        menu.style.setProperty('--triangle-bottom', 'auto');
+        menu.style.setProperty('--triangle-rotate', '0deg');
+    }
+
+    menu.style.left = leftPos + 'px';
+    menu.style.top = topPos + 'px';
     menu.style.display = 'flex';
 }
+// ==========================================
+// 新增：全局监听 - 点击任意位置隐藏梦境菜单
+// ==========================================
+document.addEventListener('touchstart', (e) => {
+    const menu = document.getElementById('dream-context-menu');
+    // 如果菜单正在显示
+    if (menu && menu.style.display === 'flex') {
+        // 并且点击的区域不是菜单本身
+        if (!e.target.closest('#dream-context-menu')) {
+            menu.style.display = 'none';
+            dreamSelectedMsgIndex = -1; // 重置选中状态
+        }
+    }
+}, { passive: true });
+
+document.addEventListener('mousedown', (e) => {
+    const menu = document.getElementById('dream-context-menu');
+    if (menu && menu.style.display === 'flex') {
+        if (!e.target.closest('#dream-context-menu')) {
+            menu.style.display = 'none';
+            dreamSelectedMsgIndex = -1;
+        }
+    }
+});
 
 // 重新生成 AI 回复
 function regenerateDreamMsg() {
@@ -13936,9 +17000,41 @@ function injectDreamToChar(cardId) {
 
 // --- 系统更新日志数据 ---
 const systemUpdateLogs = [
+   {
+        version: "小元机 03.22",
+        date: "2026.03.22",
+        title: "欢迎来到小元机^这里是小元。",
+        content: [
+            "1.依旧爆改了几个UI页面",
+            "2.增加了API额度查询和token计算，这个API额度查询有一些站子会出现查询不了显示充足的情况（显示充足就是没有查询到）",          
+            "3.增加了主副API，可以选择一些板块使用副API，如果没有开启副API，默认使用主API，并且我修了一些小问题嗯嗯对",
+            "不接受许愿和点菜，我也不在审核群和小红书群，有问题可以前往我的小红书@小元元元"
+        ],
+        notes: [
+            "更新后若遇到界面显示异常，请尝试清除浏览器缓存。",
+            "请妥善保管您的数据，建议定期在设置中进行备份。",
+            "一机一码，禁止二传二贩"
+        ]
+    },
+   {
+        version: "小元机 03.20",
+        date: "2026.03.20",
+        title: "欢迎来到小元机^这里是小元。",
+        content: [
+            "1.APP4论坛功能更新，还在完善，感觉差不多了",
+            "2.爆改了桌面和几个页面的UI嗯嗯对",            
+            "3.增加了语音通话",
+            "不想写更新日志，具体可以看我小红书@小元元元，可以去我评论区许愿，然后：我鸟都不鸟你"
+        ],
+        notes: [
+            "更新后若遇到界面显示异常，请尝试清除浏览器缓存。",
+            "请妥善保管您的数据，建议定期在设置中进行备份。",
+            "一机一码，禁止二传二贩"
+        ]
+    },
     {
         version: "小元机 03.16",
-        date: "2026.03.13",
+        date: "2026.03.16",
         title: "欢迎来到小元机^这里是小元。",
         content: [
             "1.音乐无法搜索已修复orz",
@@ -14100,7 +17196,7 @@ function renderUpdateLogs() {
         
         <div style="margin-bottom: 8px;"><strong>桌面APP介绍：</strong></div>
         <ul style="padding-left: 20px; margin: 0 0 12px 0;">
-            <li style="margin-bottom: 8px;"><strong>APP1为聊天：</strong>左上角圆形头像为创建角色，右上角的接听键为退出，删除角色前往contacts通讯录页面左滑角色删除，点击角色可以查手机，聊天页面点击对方头像可以快捷进入查手机。聊天设置中的心跳线是可以点击的！！！在心跳线页面里面关联世界书，导入聊天页面气泡美化，设置壁纸等等。回车键为用户发送键，那个小飞机图标是char回复键，拉黑角色后点击是以弹窗形式出现角色消息，角色消息会储存在chat页面（就是会话列表页面）的小卡片头像里面。爆改了朋友圈UI，点击朋友圈头像显示全部朋友圈，点击单个日期可查看单日朋友圈</li>
+            <li style="margin-bottom: 8px;"><strong>APP1为聊天：</strong>左上角圆形头像为创建角色，右上角的接听键为退出，删除角色前往contacts通讯录页面左滑角色删除，点击角色可以查手机，聊天页面点击对方头像可以快捷进入查手机。回车键为用户发送键，那个小飞机图标是char回复键，拉黑角色后点击是以弹窗形式出现角色消息，角色消息会储存在chat页面（就是会话列表页面）的小卡片头像里面。爆改了朋友圈UI，点击朋友圈头像显示全部朋友圈，点击单个日期可查看单日朋友圈</li>
             <li style="margin-bottom: 8px;"><strong>APP2为情侣空间：</strong><br>
             ① 可以选择开启桌面小组件（有便利贴和拍立得两种模式），选择发送概率，char就会在桌面发送消息或图片。<br>
             ② 关联账号：开启后，char会实时感知用户和其他人聊天，你可以选择NPC回复频率（注意：这个比较耗费额度），你也可以知道NPC给char发送消息，并且可以进入查手机，帮char回复。</li>
@@ -14938,7 +18034,7 @@ async function generateCharQa() {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     wcShowLoading("Ta 正在认真思考题目...");
@@ -14992,7 +18088,8 @@ async function generateCharQa() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -15017,7 +18114,8 @@ async function generateCharQa() {
 
     } catch (e) {
         console.error(e);
-        wcShowError("出题失败，请重试");
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[默契挑战出题失败] ${e.message}`);
+        else wcShowError("出题失败，请重试");
     }
 }
 
@@ -15215,7 +18313,7 @@ async function aiAnswerUserQa(questions) {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     wcShowLoading("Ta 正在紧张作答中...");
@@ -15242,7 +18340,8 @@ async function aiAnswerUserQa(questions) {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -15316,7 +18415,8 @@ async function aiAnswerUserQa(questions) {
 
     } catch (e) {
         console.error(e);
-        wcShowError("Ta 思考太久睡着了，请重试");
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[默契挑战答题失败] ${e.message}`);
+        else wcShowError("Ta 思考太久睡着了，请重试");
     }
 }
 
@@ -15430,7 +18530,6 @@ function renderQaArchive() {
 // 恋人空间：时空信箱 (Shrine & Stars) 核心逻辑
 // ==========================================
 // 1. 打开时空信箱全屏主页
-// 1. 打开时空信箱全屏主页
 function lsOpenLettersView() {
     if (!lsState.boundCharId) return alert("请先在首页绑定一位恋人哦~");
     
@@ -15439,23 +18538,25 @@ function lsOpenLettersView() {
         view = document.createElement('div');
         view.id = 'ls-view-letters';
         view.className = 'ins-shrine-view';
-        view.addEventListener('click', lsGlobalRipple); // <--- 加上这一行，绑定全局涟漪
         document.getElementById('loversSpaceModal').appendChild(view);
     }
     
-    const config = lsState.lettersConfig || { bg: '', img1: '', img2: '', text: '在这个宇宙，我们终会相遇', poem: 'In the universe of time,<br>we will eventually meet.' };
-    const bgStyle = config.bg ? `background-image: url('${config.bg}'); background-size: cover; background-position: center;` : '';
-    const img1Style = config.img1 ? `background-image: url('${config.img1}');` : '';
-    const img2Style = config.img2 ? `background-image: url('${config.img2}');` : '';
+    const char = wcState.characters.find(c => c.id === lsState.boundCharId);
+    const charName = char ? char.name : "You";
+
+    // 动态生成信件列表 HTML
+    let lettersHtml = '';
+    if (lsState.letters && lsState.letters.length > 0) {
+        const sortedLetters = [...lsState.letters].sort((a, b) => b.time - a.time);
+        sortedLetters.forEach(l => {
+            const dateStr = new Date(l.time).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '.');
+            lettersHtml += `<li onclick="lsOpenLetterDetail(${l.id})"><span>${l.title}</span><span>${dateStr}</span></li>`;
+        });
+    } else {
+        lettersHtml = '<li style="justify-content:center; color:#999;">暂无信件记录</li>';
+    }
 
     view.innerHTML = `
-        <!-- 自定义背景与星际轨迹 -->
-        <div class="shrine-bg" id="ls-letters-bg" style="${bgStyle}">
-            <div class="orbit-ring ring1"></div>
-            <div class="orbit-ring ring2"></div>
-            <div class="orbit-ring ring3"></div>
-        </div>
-        
         <div class="shrine-nav">
             <div class="shrine-nav-btn" onclick="lsCloseLettersView()">
                 <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
@@ -15464,49 +18565,44 @@ function lsOpenLettersView() {
             <div style="width: 40px;"></div>
         </div>
 
-        <!-- 隐藏的上传输入框 -->
-        <input type="file" id="ls-letters-bg-input" style="display:none" accept="image/*" onchange="lsHandleLettersUpload(this, 'bg')">
-        <input type="file" id="ls-letters-img1-input" style="display:none" accept="image/*" onchange="lsHandleLettersUpload(this, 'img1')">
-        <input type="file" id="ls-letters-img2-input" style="display:none" accept="image/*" onchange="lsHandleLettersUpload(this, 'img2')">
-
-        <!-- 拼贴容器 -->
-        <div class="shrine-space" id="ls-shrine-space">
-            
-            <div class="ins-collage-container" id="ls-collage-container">
-                <!-- 150x150 相框 (微圆角) -->
-                <div class="ins-collage-img2" id="ls-letters-img2" style="${img2Style}" onclick="lsTriggerRippleAndModal(event)">
-                    <span id="ls-img2-placeholder" style="display: ${config.img2 ? 'none' : 'block'}; color:#999; font-size:12px; font-weight:bold;">点击祈愿</span>
+        <div class="shrine-space">
+            <!-- 主纸片 (未来信件) -->
+            <div class="paper-main">
+                <div class="tape tape-1"></div>
+                <h2>TIME MAILBOX</h2>
+                <div class="greeting">To My Beloved：</div>
+                <div class="paragraph">
+                    你好。<br>
+                    这是一封来自未来的信件。时间在这里失去了意义，只有思念被折叠成文字，投递进无垠的星海。请查收属于我们的记忆碎片。
                 </div>
+
+                <div class="bill-title">未来信件</div>
+                <div class="bill-subtitle">ARCHIVES OF TIME</div>
                 
-                <!-- 左上角上传按钮图片 (100x100 覆盖在相框上) -->
-                <img src="https://i.postimg.cc/vHQc0zgt/retouch_2026031701240566.png" class="ins-upload-trigger" onclick="event.stopPropagation(); lsOpenUploadMenu()">
-                
-                <!-- 英文诗句 (可点击编辑) -->
-                <div class="ins-collage-poem" id="ls-letters-poem" onclick="event.stopPropagation(); lsEditLettersPoem()">
-                    ${config.poem || 'In the universe of time,<br>we will eventually meet.'}
+                <!-- 可滑动的信件列表 -->
+                <div class="bill-list-container">
+                    <ul class="bill-list">
+                        ${lettersHtml}
+                    </ul>
                 </div>
 
-                <!-- 250x150 白边圆角图片 -->
-                <div class="ins-collage-img1" id="ls-letters-img1" style="${img1Style}" onclick="document.getElementById('ls-letters-img1-input').click()">
-                    <span id="ls-img1-placeholder" style="display: ${config.img1 ? 'none' : 'block'}; color:#999; font-size:12px; font-weight:bold;">250x150</span>
-                    
-                    <!-- 底部文案 -->
-                    <div class="ins-collage-text" id="ls-letters-text" onclick="event.stopPropagation(); lsEditLettersText()">${config.text}</div>
-                    
-                    <!-- 右上角音乐符号装饰 (黑色) -->
-                    <div class="ins-music-decor">
-                        <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" fill="currentColor"/></svg>
-                        <svg viewBox="0 0 24 24" style="width:12px;height:12px;margin-top:-6px;"><path d="M9 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3H9z" fill="currentColor"/></svg>
-                    </div>
-
-                    <!-- 右下角播放按钮 (黑色) -->
-                    <div class="ins-music-play-btn" onclick="event.stopPropagation(); lsToggleLettersMusic()">
-                        <svg id="ls-letters-play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
-                    </div>
-                    
-                    <!-- 隐藏的音频标签 -->
-                    <audio id="ls-letters-audio" src="https://img.heliar.top/file/1773691226155_Y8m1ok-time_machine__feat._aren_park_-mj_apanay_aren_park.mp3" loop></audio>
+                <div class="signature-box">
+                    <span class="signature-label">Recipient</span>
+                    <span class="signature-name">${charName}</span>
                 </div>
+            </div>
+
+            <!-- 副纸片 (祈愿卡 - 绑定点击事件，内含下雨特效) -->
+            <div class="paper-sub" onclick="lsOpenShrineModal()">
+                <div class="rain-container">
+                    <div class="drop"></div><div class="drop"></div><div class="drop"></div><div class="drop"></div><div class="drop"></div>
+                </div>
+                <div class="paper-sub-content">
+                    <p>PRAYER</p>
+                    <h3>聆听星空的回音</h3>
+                    <div class="tags">点击开启祈愿<br>抽取命运的羁绊</div>
+                </div>
+                <div class="tape tape-2"></div>
             </div>
         </div>
 
@@ -15517,41 +18613,39 @@ function lsOpenLettersView() {
             </button>
         </div>
 
-        <!-- 上传菜单弹窗 -->
-        <div id="ls-upload-menu-modal" class="shrine-modal-overlay" onclick="lsCloseUploadMenu()">
-            <div class="shrine-modal-box" onclick="event.stopPropagation()">
-                <div class="shrine-modal-title">自定义外观</div>
-                <button class="shrine-modal-btn secondary" onclick="document.getElementById('ls-letters-bg-input').click(); lsCloseUploadMenu()">上传背景图</button>
-                <button class="shrine-modal-btn secondary" onclick="document.getElementById('ls-letters-img1-input').click(); lsCloseUploadMenu()">上传白边圆角图片</button>
-                <button class="shrine-modal-btn secondary" onclick="document.getElementById('ls-letters-img2-input').click(); lsCloseUploadMenu()">上传相框图片</button>
-                <button class="shrine-modal-btn cancel" onclick="lsCloseUploadMenu()">取消</button>
-            </div>
-        </div>
-
         <!-- 祈愿弹窗 -->
-        <div id="ls-shrine-modal" class="shrine-modal-overlay">
-            <div class="shrine-modal-box">
+        <div id="ls-shrine-modal" class="shrine-modal-overlay" onclick="lsCloseShrineModal()">
+            <div class="shrine-modal-box" onclick="event.stopPropagation()">
                 <div class="shrine-modal-title">星空の指引</div>
-                <div class="shrine-modal-desc">请选择你的祈愿</div>
-                <button class="shrine-modal-btn primary" onclick="lsGenerateAILetter()" id="btn-ai-pray">
-                    聆听 Ta 的心声 (生成信件)
-                </button>
-                <button class="shrine-modal-btn secondary" onclick="lsOpenLetterList()">
-                    翻阅星空档案 (信件列表)
-                </button>
-                <button class="shrine-modal-btn cancel" onclick="lsCloseShrineModal()">离开</button>
+                <button class="shrine-modal-btn primary" onclick="lsGenerateAILetter()" id="btn-ai-pray">生成未来信件</button>
+                <button class="shrine-modal-btn secondary" onclick="lsOpenLetterList()">查看过去信件</button>
             </div>
         </div>
 
-        <!-- 祈愿生成动画覆盖层 (打字机、碎裂、信封) -->
-        <div id="ls-pray-animation-overlay" class="pray-anim-overlay" style="display: none;">
-            <div id="pray-anim-text" class="pray-anim-text"></div>
-            <div id="pray-anim-envelope" class="pray-anim-envelope" style="display: none;">
-                <img src="" id="pray-env-avatar" class="env-avatar">
-                <svg class="env-heartbeat" viewBox="0 0 100 30">
-                    <polyline points="0,15 20,15 30,5 40,25 50,15 60,15 70,0 80,30 90,15 100,15" fill="none" stroke="#FF3B30" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- 祈愿生成动画覆盖层 (心电图 + 塔罗牌) -->
+        <div id="ls-pray-animation-overlay" class="pray-anim-overlay">
+            <!-- 方案三：命运交叉线 SVG -->
+            <div class="ecg-container" id="ecg-anim">
+                <svg viewBox="0 0 200 120" width="100%" height="100%">
+                    <path class="ecg-path" d="M 0 96 L 50 96 L 55 66 L 62.5 120 L 70 84 L 75 96 L 100 96 C 125 96, 155 66, 155 36 C 155 6, 100 6, 100 36" />
+                    <path class="ecg-path" d="M 200 96 L 150 96 L 145 66 L 137.5 120 L 130 84 L 125 96 L 100 96 C 75 96, 45 66, 45 36 C 45 6, 100 6, 100 36" />
                 </svg>
-                <div class="env-text">这是我给你的誓言</div>
+            </div>
+
+            <!-- 塔罗牌 3D 容器 -->
+            <div class="tarot-glow"></div>
+            <div class="tarot-container" id="tarot-anim" onclick="lsFlipTarot()">
+                <div class="tarot-card" id="tarot-card">
+                    <div class="tarot-face tarot-back"></div>
+                    <div class="tarot-face tarot-front">
+                        <img id="tarot-front-img" src="" alt="命运的指引">
+                    </div>
+                </div>
+                <div class="tarot-hint">点击翻开命运的指引</div>
+                <div class="tarot-desc-box">
+                    <div class="tarot-name" id="tarot-name-display"></div>
+                    <div class="tarot-meaning" id="tarot-meaning-display"></div>
+                </div>
             </div>
         </div>
 
@@ -15811,50 +18905,51 @@ function lsCloseLetterList() {
     setTimeout(() => view.style.display = 'none', 400);
 }
 
-// 4. AI 生成信件 (带打字机、移动、碎裂、信封动画)
+// ==========================================
+// 塔罗牌数据库 (多节点自动切换，确保 100% 加载成功)
+// ==========================================
+const globalTarotDeck = [
+    { id: "06", name: "恋人 (The Lovers)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/commons/d/db/Rider-Waite_Tarot_06_Lovers.jpg", "https://www.trustedtarot.com/img/cards/the-lovers.png", "https://sacred-texts.com/tarot/pkt/img/ar06.jpg"] },
+    { id: "17", name: "星星 (The Star)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/c/cd/RWS_Tarot_17_Star.jpg", "https://www.trustedtarot.com/img/cards/the-star.png", "https://sacred-texts.com/tarot/pkt/img/ar17.jpg"] },
+    { id: "19", name: "太阳 (The Sun)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/1/17/RWS_Tarot_19_Sun.jpg", "https://www.trustedtarot.com/img/cards/the-sun.png", "https://sacred-texts.com/tarot/pkt/img/ar19.jpg"] },
+    { id: "10", name: "命运之轮 (Wheel of Fortune)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/3/3c/RWS_Tarot_10_Wheel_of_Fortune.jpg", "https://www.trustedtarot.com/img/cards/wheel-of-fortune.png", "https://sacred-texts.com/tarot/pkt/img/ar10.jpg"] },
+    { id: "00", name: "愚者 (The Fool)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/9/90/RWS_Tarot_00_Fool.jpg", "https://www.trustedtarot.com/img/cards/the-fool.png", "https://sacred-texts.com/tarot/pkt/img/ar00.jpg"] },
+    { id: "02", name: "女祭司 (The High Priestess)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/8/88/RWS_Tarot_02_High_Priestess.jpg", "https://www.trustedtarot.com/img/cards/the-high-priestess.png", "https://sacred-texts.com/tarot/pkt/img/ar02.jpg"] },
+    { id: "03", name: "女皇 (The Empress)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/d/d2/RWS_Tarot_03_Empress.jpg", "https://www.trustedtarot.com/img/cards/the-empress.png", "https://sacred-texts.com/tarot/pkt/img/ar03.jpg"] },
+    { id: "08", name: "力量 (Strength)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/f/f5/RWS_Tarot_08_Strength.jpg", "https://www.trustedtarot.com/img/cards/strength.png", "https://sacred-texts.com/tarot/pkt/img/ar08.jpg"] },
+    { id: "14", name: "节制 (Temperance)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/f/f8/RWS_Tarot_14_Temperance.jpg", "https://www.trustedtarot.com/img/cards/temperance.png", "https://sacred-texts.com/tarot/pkt/img/ar14.jpg"] },
+    { id: "21", name: "世界 (The World)", sources: ["https://wsrv.nl/?url=upload.wikimedia.org/wikipedia/en/f/ff/RWS_Tarot_21_World.jpg", "https://www.trustedtarot.com/img/cards/the-world.png", "https://sacred-texts.com/tarot/pkt/img/ar21.jpg"] }
+];
+
+// 4. AI 生成信件 (带心电图与塔罗牌动画)
 async function lsGenerateAILetter() {
     const charId = lsState.boundCharId;
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     // 1. 关闭祈愿菜单，显示动画覆盖层
     lsCloseShrineModal();
     const animOverlay = document.getElementById('ls-pray-animation-overlay');
-    const animText = document.getElementById('pray-anim-text');
-    const animEnvelope = document.getElementById('pray-anim-envelope');
-    
     animOverlay.style.display = 'flex';
-    animEnvelope.style.display = 'none';
-    
-    // 重置文字状态
-    animText.className = 'pray-anim-text';
-    animText.innerHTML = '';
-    animText.style.display = 'block';
 
-    // 2. 启动打字机动画
-    const textStr = "能永远缠绕在一起吗 发丝 命运 我和你";
-    let typeIndex = 0;
-    const typeInterval = setInterval(() => {
-        animText.innerHTML += textStr[typeIndex];
-        typeIndex++;
-        if (typeIndex >= textStr.length) {
-            clearInterval(typeInterval);
-            // 打字完成后，延迟 500ms 触发移动到中央的动画
-            setTimeout(() => {
-                animText.classList.add('move-center');
-            }, 500);
-        }
-    }, 150);
+    // 2. 显示心电图并播放动画
+    const ecg = document.getElementById('ecg-anim');
+    ecg.style.display = 'block';
+    void ecg.offsetWidth; // 强制重绘
+    ecg.classList.add('active');
+
+    // 记录动画开始时间，确保心电图至少播放 4 秒
+    const animStartTime = Date.now();
 
     try {
         const chatConfig = char.chatConfig || {};
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
        
-                const msgs = wcState.chats[char.id] || [];
-        const recentMsgs = msgs.slice(-40).map(m => { // <--- 把 -100 改成 -40
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-40).map(m => {
             if (m.isError || m.type === 'system') return null;
             let content = m.content;
             if (m.type !== 'text') content = `[${m.type}]`;
@@ -15876,22 +18971,28 @@ async function lsGenerateAILetter() {
             memoryText = char.memories.slice(0, 15).map(m => `- ${m.content}`).join('\n');
         }
 
+        // 提取塔罗牌列表供 AI 选择
+        const tarotOptions = globalTarotDeck.map(t => `${t.id}: ${t.name}`).join(', ');
+
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)面具/设定】：${userPersona}\n`;
         prompt += `【你们的共同记忆（共 ${memoryCount} 条记录）】：\n${memoryText}\n\n`;
         prompt += `【最近的聊天记录（40条上下文）】：\n${recentMsgs}\n\n`;
         
-        prompt += `请以 ${char.name} 的口吻，给 User 写一封跨越时空的信。\n`;
+        prompt += `请以 ${char.name} 的口吻，给 User 写一封跨越时空的信，并为 User 抽取一张命运的塔罗牌。\n`;
         prompt += `【核心要求】：\n`;
         prompt += `1. 文风要求：极具高级感、日系/韩系文艺风、意识流、细腻且克制。不要太直白，要像深夜里的呢喃或散文诗。\n`;
         prompt += `2. 内容要求：必须结合【共同记忆】和【聊天记录】中的细节，表达你对 User 的深层情感。\n`;
-        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
-        prompt += `4. 必须严格按照以下 JSON 格式返回：\n`;
+        prompt += `3. 塔罗牌抽取：请根据当前的聊天氛围和你的心情，从以下列表中选择最合适的一张塔罗牌：[${tarotOptions}]。\n`;
+        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `5. 必须严格按照以下 JSON 格式返回：\n`;
         prompt += `{
   "title": "信件标题（如：写在星轨交汇时 / 听雨时的随笔）",
   "salutation": "对User的亲昵称呼：\\n见字如晤，",
   "content": "信件正文内容（支持使用 \\n 换行，字数400-600字左右）",
-  "signature": "你的署名（如：永远爱你的 ${char.name}）"
+  "signature": "你的署名（如：永远爱你的 ${char.name}）",
+  "tarotId": "你选择的塔罗牌ID（必须是两位数字，如 06）",
+  "tarotMeaning": "结合当前语境，你给出的专属塔罗牌判词（一句话，文艺且深情）"
 }\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
@@ -15900,7 +19001,8 @@ async function lsGenerateAILetter() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -15924,22 +19026,60 @@ async function lsGenerateAILetter() {
         
         lsSaveData();
         
-        // 3. API 返回成功，触发碎裂动画
-        animText.classList.add('shatter');
+        // 3. 处理塔罗牌图片加载
+        const tId = letterData.tarotId || "06";
+        let selectedCard = globalTarotDeck.find(t => t.id === tId);
+        if (!selectedCard) selectedCard = globalTarotDeck[0]; // 兜底恋人牌
+
+        const imgEl = document.getElementById('tarot-front-img');
+        let currentSourceIndex = 0;
         
-        // 4. 碎裂动画结束后 (800ms)，显示信封
+        imgEl.onerror = function() {
+            currentSourceIndex++;
+            if (currentSourceIndex < selectedCard.sources.length) {
+                imgEl.src = selectedCard.sources[currentSourceIndex];
+            } else {
+                imgEl.alt = "图片加载失败，请检查网络";
+            }
+        };
+        imgEl.src = selectedCard.sources[0];
+
+        document.getElementById('tarot-name-display').innerText = selectedCard.name;
+        document.getElementById('tarot-meaning-display').innerText = letterData.tarotMeaning || "命运的齿轮已经开始转动。";
+
+        // 4. 确保心电图至少播放了 4 秒
+        const elapsedTime = Date.now() - animStartTime;
+        const remainingTime = Math.max(0, 4000 - elapsedTime);
+
         setTimeout(() => {
-            animText.style.display = 'none';
-            document.getElementById('pray-env-avatar').src = char.avatar;
-            animEnvelope.style.display = 'flex';
+            ecg.style.display = 'none';
+            ecg.classList.remove('active');
             
-            // 绑定信封点击事件：打开信件并关闭动画层
-            animEnvelope.onclick = () => {
-                lsOpenLetterDetail(newLetterId);
-                animOverlay.style.display = 'none';
-                animEnvelope.style.display = 'none';
+            // 显示塔罗牌
+            const tarot = document.getElementById('tarot-anim');
+            tarot.classList.add('show');
+
+            // 绑定点击翻转事件
+            tarot.onclick = function() {
+                const card = document.getElementById('tarot-card');
+                if (card.classList.contains('flipped')) {
+                    // 再次点击结束动画
+                    animOverlay.style.display = 'none';
+                    tarot.classList.remove('show');
+                    card.classList.remove('flipped');
+                    
+                    // 刷新主页信件列表并打开信件详情
+                    lsOpenLettersView();
+                    setTimeout(() => {
+                        lsOpenLetterDetail(newLetterId);
+                    }, 300);
+                } else {
+                    // 第一次点击翻转
+                    card.classList.add('flipped');
+                }
             };
-        }, 800);
+
+        }, remainingTime);
 
         if (typeof showMainSystemNotification === 'function') {
             showMainSystemNotification("星の神社", `收到了一封来自 ${char.name} 的誓言信件`, char.avatar);
@@ -15947,11 +19087,17 @@ async function lsGenerateAILetter() {
 
     } catch (e) {
         console.error(e);
-        alert("祈愿失败，信号在星空中迷失了...");
-        animOverlay.style.display = 'none';
-        clearInterval(typeInterval);
+        document.getElementById('ls-pray-animation-overlay').style.display = 'none';
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[时空信箱生成失败] ${e.message}`);
+        else alert("祈愿失败，信号在星空中迷失了...");
     }
 }
+
+// 供全局调用的翻转函数 (兼容旧代码)
+window.lsFlipTarot = function() {
+    const card = document.getElementById('tarot-card');
+    if (card) card.classList.add('flipped');
+};
 
 
 // 5. 用户写信逻辑
@@ -16060,7 +19206,7 @@ async function lsRequestReply() {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const apiConfig = await idb.get('ios_theme_api_config');
+    const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
     const replyBtn = document.getElementById('ls-btn-request-reply');
@@ -16106,7 +19252,8 @@ async function lsRequestReply() {
             body: JSON.stringify({
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
-                temperature: parseFloat(apiConfig.temp) || 0.8
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
             })
         });
 
@@ -16134,7 +19281,8 @@ async function lsRequestReply() {
 
     } catch (e) {
         console.error("回信失败", e);
-        alert("回信在时空中迷失了，请重试...");
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[时空信箱回信失败] ${e.message}`);
+        else alert("回信在时空中迷失了，请重试...");
     } finally {
         replyBtn.innerText = originalText;
         replyBtn.style.pointerEvents = 'auto';
@@ -16142,45 +19290,103 @@ async function lsRequestReply() {
     }
 }
 /* ==========================================================================
-   APP 4: INS FORUM LOGIC (Black & White iOS Style - Enhanced)
+   APP 4: INS FORUM LOGIC (Advanced iOS Style - Twitter/INS Clone)
    ========================================================================== */
-
 const forumState = {
-    posts: [],
-    tempImage: null,
-    tempAvatar: null,
+    // 👇 新增：多窗口管理数据
+    windows: [
+        { id: 'default', name: 'Expansion Notice', prompt: '' }
+    ],
+    activeWindowId: 'default',
+    actionWindowId: null, 
+    
+    // 👇 新增：热搜与书城数据
+    hotSearches: [],
+    books: [], // 书城里的书
+    currentBookId: null, // 当前查看的书
+    actionPostId: null, // 当前操作的同人文帖子ID
+    readerPages: [], // 阅读器分页数据
+    currentReaderPage: 0,
+    // 👆 新增结束
+
     profile: {
-        name: 'Aesthetic User',
-        bio: 'Record every moment of life.',
-        avatar: 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'
+        name: 'User',
+        handle: '@user_id',
+        avatar: '',
+        bg: '', // 👈 新增背景图字段
+        bio: '记录生活的美好',
+        boundMaskId: null
     },
+
     config: {
         worldbookIds: [],
         charIds: [],
-        maskIds: []
-    }
+        maskIds: [],
+        fanficStyle: '',
+        fanficCharA: '',
+        fanficCharB: '',
+        fanficTrope: ''
+    },
+    posts: [], 
+    privateChats: [], // 👈 修改这里：改为 privateChats，存储会话列表
+    tempImage: null,
+    tempAvatar: null,
+    currentDetailPostId: null,
+    pendingSharePostId: null,
+    profileTab: 'posts',
+    activePMChatId: null // 👈 新增：记录当前正在聊天的私信ID
 };
-let forumCurrentPostId = null; // 记录当前正在查看或操作的帖子ID
+
 async function forumLoadData() {
     const data = await idb.get('ins_forum_data');
     if (data) {
+        if (data.windows) forumState.windows = data.windows;
+        if (data.activeWindowId) forumState.activeWindowId = data.activeWindowId;
+        if (data.profile) forumState.profile = { ...forumState.profile, ...data.profile };
+        if (data.config) forumState.config = { ...forumState.config, ...data.config };
         if (data.posts) forumState.posts = data.posts;
-        if (data.profile) forumState.profile = data.profile;
-        if (data.config) forumState.config = data.config;
+        if (data.privateChats) forumState.privateChats = data.privateChats; 
+        if (data.hotSearches) forumState.hotSearches = data.hotSearches; // 👈 新增
+        if (data.books) forumState.books = data.books; // 👈 新增
+    }
+    // 兜底：如果没有窗口，初始化一个默认的
+    if (!forumState.windows || forumState.windows.length === 0) {
+        forumState.windows = [{ id: 'default', name: 'Expansion Notice', prompt: '' }];
+        forumState.activeWindowId = 'default';
+    }
+    if (!forumState.profile.avatar) {
+        forumState.profile.avatar = wcState.user.avatar;
+        forumState.profile.name = wcState.user.name;
     }
 }
 
 async function forumSaveData() {
     await idb.set('ins_forum_data', {
-        posts: forumState.posts,
+        windows: forumState.windows,
+        activeWindowId: forumState.activeWindowId,
         profile: forumState.profile,
-        config: forumState.config
+        config: forumState.config,
+        posts: forumState.posts,
+        privateChats: forumState.privateChats,
+        hotSearches: forumState.hotSearches, // 👈 新增
+        books: forumState.books // 👈 新增
     });
+}
+
+// 生成虚拟的初始点赞数据，让帖子看起来有活人感
+function forumGenerateFakeLikes() {
+    const count = Math.floor(Math.random() * 80) + 15; // 随机 15 到 95 个赞
+    const likes = [];
+    for(let i = 0; i < count; i++) {
+        likes.push(`fake_user_${Math.random().toString(36).substr(2, 5)}`);
+    }
+    return likes;
 }
 
 async function openForumApp() {
     await forumLoadData();
     document.getElementById('forumModal').classList.add('open');
+    forumRenderWindows(); // 👈 新增：渲染顶部窗口列表
     forumSwitchTab('home');
 }
 
@@ -16188,252 +19394,1281 @@ function closeForumApp() {
     document.getElementById('forumModal').classList.remove('open');
 }
 
-function forumSwitchTab(tab) {
-    document.querySelectorAll('.ins-forum-view').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.ins-forum-tab').forEach(el => el.classList.remove('active'));
-    
-    document.getElementById(`forum-view-${tab}`).classList.add('active');
-    const tabBtn = document.getElementById(`forum-tab-${tab}`);
-    if (tabBtn) tabBtn.classList.add('active');
-    
-    if (tab === 'home') {
-        forumRenderPosts();
-    } else if (tab === 'profile') {
-        forumRenderProfile();
-    }
-}
-
-// --- 渲染帖子列表 ---
-function forumRenderPosts() {
-    const container = document.getElementById('forum-post-list');
+// ==========================================
+// 新增：多窗口管理核心逻辑
+// ==========================================
+function forumRenderWindows() {
+    const container = document.getElementById('forum-windows-container');
+    if (!container) return;
     container.innerHTML = '';
-    
-    if (forumState.posts.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 50px; font-style: italic; font-family: Georgia, serif;">No posts yet. Be the first to share.</div>';
-        return;
-    }
-    
-    const sortedPosts = [...forumState.posts].sort((a, b) => b.time - a.time);
-    
-    sortedPosts.forEach(post => {
-        const dateStr = new Date(post.time).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        let imgHtml = '';
-        if (post.image) {
-            imgHtml = `<img src="${post.image}" class="ins-forum-post-image">`;
-        }
-        
-        const commentCount = post.comments ? post.comments.length : 0;
-        
+
+    forumState.windows.forEach(win => {
+        const isActive = win.id === forumState.activeWindowId;
         const div = document.createElement('div');
-        div.className = 'ins-forum-post-card';
+        div.className = `forum-tab-item ${isActive ? 'active' : ''}`;
+        div.onclick = () => forumSwitchWindow(win.id);
+        
         div.innerHTML = `
-            <div class="ins-forum-post-header">
-                <img src="${post.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="ins-forum-post-avatar">
-                <div>
-                    <div class="ins-forum-post-author">${post.author}</div>
-                    <div class="ins-forum-post-time">${dateStr}</div>
-                </div>
-            </div>
-            <div style="cursor: pointer;" onclick="forumOpenPostDetail(${post.id})">
-                <div class="ins-forum-post-title">${post.title}</div>
-                <div class="ins-forum-post-text" style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">${post.content}</div>
-                ${imgHtml}
-            </div>
-            <div class="ins-forum-post-actions">
-                <div style="display: flex; gap: 20px;">
-                    <div class="ins-forum-action-btn" onclick="forumToggleLike(${post.id}, this)">
-                        <svg viewBox="0 0 24 24" style="fill: ${post.isLiked ? '#111' : 'none'}; stroke: ${post.isLiked ? '#111' : 'currentColor'};"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                        <span>${post.likes || 0}</span>
-                    </div>
-                    <div class="ins-forum-action-btn" onclick="forumOpenPostDetail(${post.id})">
-                        <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                        <span>${commentCount}</span>
-                    </div>
-                </div>
-                <div class="ins-forum-action-btn" onclick="forumOpenShareModal(${post.id})">
-                    <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
-                </div>
+            <svg class="tab-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>
+            <span>${win.name}</span>
+            <div class="tab-close" onclick="forumOpenWindowAction(event, '${win.id}')">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </div>
         `;
         container.appendChild(div);
     });
+
+    // 重新添加 + 号按钮
+    const addBtn = document.createElement('div');
+    addBtn.className = 'add-tab-btn';
+    addBtn.innerText = '+';
+    addBtn.onclick = forumOpenCreateWindow;
+    container.appendChild(addBtn);
+
+    // 滚动到激活的 Tab
+    setTimeout(() => {
+        const activeTab = container.querySelector('.forum-tab-item.active');
+        if (activeTab) {
+            // 修复：弃用 scrollIntoView，改用容器内部 scrollTo，彻底解决页面整体左移/偏移的 Bug
+            const scrollLeft = activeTab.offsetLeft - (container.offsetWidth / 2) + (activeTab.offsetWidth / 2);
+            container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+        }
+    }, 50);
 }
 
-// --- 帖子详情页 ---
-function forumOpenPostDetail(id) {
-    forumCurrentPostId = id; // 记录当前帖子ID
-    const post = forumState.posts.find(p => p.id === id);
-    if (!post) return;
-
-    const dateStr = new Date(post.time).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    let imgHtml = post.image ? `<img src="${post.image}" class="ins-forum-post-image" style="margin-top: 15px;">` : '';
-
-    let commentsHtml = '';
-    if (post.comments && post.comments.length > 0) {
-        post.comments.forEach(c => {
-            commentsHtml += `
-                <div style="padding: 15px 20px; border-bottom: 1px solid #F9F9F9; display: flex; gap: 12px;">
-                    <div style="width: 32px; height: 32px; border-radius: 50%; background: #F5F5F5; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #888; flex-shrink: 0;">${c.author.charAt(0)}</div>
-                    <div>
-                        <div style="font-size: 13px; font-weight: 700; color: #111; margin-bottom: 4px;">${c.author}</div>
-                        <div style="font-size: 14px; color: #555; line-height: 1.5;">${c.content}</div>
-                    </div>
-                </div>
-            `;
-        });
+function forumSwitchWindow(windowId) {
+    if (forumState.activeWindowId === windowId) {
+        // 如果点击的是当前窗口，且当前卡在热搜页或书城页，则强制回到主页
+        const isSearchActive = document.getElementById('forum-view-search').classList.contains('active');
+        const isBookstoreActive = document.getElementById('forum-view-bookstore').classList.contains('active');
+        const isBookDetailActive = document.getElementById('forum-view-book-detail').classList.contains('active');
+        if (isSearchActive || isBookstoreActive || isBookDetailActive) {
+            forumSwitchTab('home');
+        }
+        return;
+    }
+    
+    forumState.activeWindowId = windowId;
+    forumSaveData();
+    forumRenderWindows();
+    
+    // 检查当前是否在热搜页 (search) 或 书城页 (bookstore) 等没有底部高亮Tab的页面
+    const isSearchActive = document.getElementById('forum-view-search').classList.contains('active');
+    const isBookstoreActive = document.getElementById('forum-view-bookstore').classList.contains('active');
+    const isBookDetailActive = document.getElementById('forum-view-book-detail').classList.contains('active');
+    
+    if (isSearchActive || isBookstoreActive || isBookDetailActive) {
+        // 如果在热搜页或书城页点击了窗口，强制跳转回该窗口的 home 页面
+        forumSwitchTab('home');
     } else {
-        commentsHtml = '<div style="text-align: center; color: #CCC; padding: 30px; font-size: 13px; font-style: italic;">No comments yet.</div>';
+        // 否则，保持在当前的底部 Tab (如 home, fanfic, profile)
+        const activeTabBtn = document.querySelector('.tab-item.active');
+        if (activeTabBtn) {
+            const tabId = activeTabBtn.id.replace('forum-tab-', '');
+            forumSwitchTab(tabId);
+        } else {
+            forumSwitchTab('home'); // 兜底
+        }
+    }
+}
+
+function forumOpenCreateWindow() {
+    forumState.actionWindowId = null; // null 代表新建
+    document.getElementById('forum-window-modal-title').innerText = '创建新窗口';
+    document.getElementById('forum-window-name').value = '';
+    document.getElementById('forum-window-prompt').value = '';
+    wcOpenModal('forum-window-modal');
+}
+
+function forumOpenEditWindow() {
+    wcCloseModal('forum-window-action-sheet');
+    const win = forumState.windows.find(w => w.id === forumState.actionWindowId);
+    if (!win) return;
+    
+    document.getElementById('forum-window-modal-title').innerText = '编辑窗口信息';
+    document.getElementById('forum-window-name').value = win.name;
+    document.getElementById('forum-window-prompt').value = win.prompt;
+    wcOpenModal('forum-window-modal');
+}
+
+function forumSaveWindow() {
+    const name = document.getElementById('forum-window-name').value.trim();
+    const prompt = document.getElementById('forum-window-prompt').value.trim();
+    
+    if (!name) return alert("请输入窗口名称");
+
+    if (forumState.actionWindowId) {
+        // 编辑
+        const win = forumState.windows.find(w => w.id === forumState.actionWindowId);
+        if (win) {
+            win.name = name;
+            win.prompt = prompt;
+        }
+    } else {
+        // 新建
+        const newId = 'win_' + Date.now();
+        forumState.windows.push({ id: newId, name: name, prompt: prompt });
+        forumState.activeWindowId = newId; // 自动切换到新窗口
     }
 
-    const contentEl = document.getElementById('forum-detail-content');
-    contentEl.innerHTML = `
-        <div style="padding: 20px; background: #FFF; border-bottom: 8px solid #FAFAFA;">
-            <div class="ins-forum-post-header">
-                <img src="${post.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="ins-forum-post-avatar">
-                <div>
-                    <div class="ins-forum-post-author">${post.author}</div>
-                    <div class="ins-forum-post-time">${dateStr}</div>
-                </div>
+    forumSaveData();
+    wcCloseModal('forum-window-modal');
+    forumRenderWindows();
+    
+    // 刷新 URL 显示
+    const activeTabBtn = document.querySelector('.tab-item.active');
+    if (activeTabBtn) {
+        const tabId = activeTabBtn.id.replace('forum-tab-', '');
+        forumSwitchTab(tabId);
+    }
+}
+
+function forumOpenWindowAction(event, windowId) {
+    event.stopPropagation(); // 阻止触发切换窗口
+    forumState.actionWindowId = windowId;
+    wcOpenModal('forum-window-action-sheet');
+}
+
+function forumDeleteWindow() {
+    if (forumState.windows.length <= 1) {
+        return alert("至少需要保留一个窗口哦！");
+    }
+    if (confirm("确定要删除这个窗口吗？该窗口下的所有帖子也将被删除！")) {
+        const winId = forumState.actionWindowId;
+        // 删除窗口
+        forumState.windows = forumState.windows.filter(w => w.id !== winId);
+        // 删除该窗口下的帖子
+        forumState.posts = forumState.posts.filter(p => p.windowId !== winId);
+        
+        // 如果删除的是当前激活的窗口，自动切换到第一个
+        if (forumState.activeWindowId === winId) {
+            forumState.activeWindowId = forumState.windows[0].id;
+        }
+        
+        forumSaveData();
+        wcCloseModal('forum-window-action-sheet');
+        forumRenderWindows();
+        
+        const activeTabBtn = document.querySelector('.tab-item.active');
+        if (activeTabBtn) {
+            const tabId = activeTabBtn.id.replace('forum-tab-', '');
+            forumSwitchTab(tabId);
+        }
+    }
+}
+
+function forumSwitchTab(tab) {
+    // 1. 隐藏所有页面和取消所有底部按钮高亮
+    document.querySelectorAll('.ins-forum-view').forEach(el => {
+        el.classList.remove('active');
+        el.style.display = ''; 
+    });
+    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+    
+    // 👇 新增：切换 Tab 时，确保底部导航栏始终显示（兜底保护）
+    const tabbar = document.querySelector('#forum-root .custom-tabbar');
+    if (tabbar) tabbar.style.display = 'flex';
+    
+    // 2. 处理私信页面的特殊逻辑
+    if (tab === 'messages') {
+        forumOpenPrivateMessages();
+    } else {
+        const view = document.getElementById(`forum-view-${tab}`);
+        if (view) view.classList.add('active');
+    }
+    
+    // 3. 激活对应的底部按钮
+    const tabBtn = document.getElementById(`forum-tab-${tab}`);
+    if (tabBtn) tabBtn.classList.add('active');
+    
+    // 4. 渲染对应页面的数据
+    if (tab === 'home') {
+        forumRenderPosts('home');
+    } else if (tab === 'fanfic') {
+        forumRenderPosts('fanfic');
+    } else if (tab === 'post') {
+        document.getElementById('forum-post-user-avatar').src = forumState.profile.avatar;
+        document.getElementById('forum-post-user-name').innerText = forumState.profile.name;
+    } else if (tab === 'profile') {
+        forumRenderProfile();
+    } else if (tab === 'search') {
+        forumRenderHotSearches(); // 👈 新增
+    } else if (tab === 'bookstore') {
+        forumRenderBookstore(); // 👈 新增
+    }
+
+    // 5. 动态更新顶部电脑浏览器的 URL (跟随当前窗口名称)
+    const currentWin = forumState.windows.find(w => w.id === forumState.activeWindowId);
+    const winName = currentWin ? currentWin.name : 'Expansion Notice';
+    
+    let url = `https://forum.local/${encodeURIComponent(winName)}/home`;
+    if (tab === 'fanfic') { url = `https://forum.local/${encodeURIComponent(winName)}/fanfic`; }
+    else if (tab === 'post') { url = `https://forum.local/${encodeURIComponent(winName)}/compose`; }
+    else if (tab === 'messages') { url = `https://forum.local/${encodeURIComponent(winName)}/messages`; }
+    else if (tab === 'profile') { url = `https://forum.local/${encodeURIComponent(winName)}/profile`; }
+    
+    const topUrl = document.getElementById('urlInput'); // 👈 注意这里改成了 urlInput
+    if (topUrl) topUrl.value = url;
+
+    // 👇 6. 核心修改：控制右上角按钮的显隐 👇
+    const genBtn = document.getElementById('forum-top-btn-generate');
+    const setBtn = document.getElementById('forum-top-btn-settings');
+    const customFanficBtn = document.getElementById('forum-top-btn-custom-fanfic');
+    const genFanficBtn = document.getElementById('forum-top-btn-gen-fanfic');
+    const hotSearchBtn = document.getElementById('forum-top-btn-hot-search'); // 👈 获取热搜按钮
+    
+    if (genBtn && setBtn && customFanficBtn && genFanficBtn) {
+        // 先全部隐藏
+        genBtn.style.display = 'none';
+        setBtn.style.display = 'none';
+        customFanficBtn.style.display = 'none';
+        genFanficBtn.style.display = 'none';
+        if (hotSearchBtn) hotSearchBtn.style.display = 'none'; // 👈 隐藏热搜按钮
+
+        if (tab === 'profile') {
+            setBtn.style.display = 'block';
+        } else if (tab === 'home') {
+            genBtn.style.display = 'block';
+            genBtn.setAttribute('onclick', `forumGenerateAIPosts('home')`);
+        } else if (tab === 'fanfic') {
+            // 同人区显示专属的两个按键
+            customFanficBtn.style.display = 'block';
+            genFanficBtn.style.display = 'block';
+        } else if (tab === 'search') {
+            // 👈 热搜页专属：只显示热搜刷新按钮，其他按钮保持隐藏
+            if (hotSearchBtn) hotSearchBtn.style.display = 'block';
+        }
+    }
+}
+
+// --- 渲染帖子列表 (推特风) ---
+function forumRenderPosts(type) {
+    const container = document.getElementById(`forum-post-list-${type}`);
+    container.innerHTML = '';
+    
+    // 👈 核心修改：只渲染当前激活窗口的帖子
+    const filteredPosts = forumState.posts.filter(p => p.type === type && p.windowId === forumState.activeWindowId).sort((a, b) => b.time - a.time);
+    
+    if (filteredPosts.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #888; padding: 60px 20px; font-size: 14px; font-style: italic;">这里空空如也<br>点击右上角让 AI 注入灵魂吧</div>';
+        return;
+    }
+    
+    filteredPosts.forEach(post => {
+        container.appendChild(forumCreatePostElement(post));
+    });
+}
+
+function forumCreatePostElement(post) {
+    const div = document.createElement('div');
+    div.className = 'ins-forum-post-card';
+    
+    const timeStr = new Date(post.time).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    
+    const isLiked = Array.isArray(post.likes) && post.likes.includes(forumState.profile.name);
+    const likeIconFill = isLiked ? '#FF3B30' : 'none';
+    const likeIconStroke = isLiked ? '#FF3B30' : '#888';
+
+    const isSaved = Array.isArray(post.saves) && post.saves.includes(forumState.profile.name);
+    const saveIconFill = isSaved ? '#111' : 'none';
+    const saveIconStroke = isSaved ? '#111' : '#888';
+
+    // 渲染标题
+    let titleHtml = '';
+    if (post.title) {
+        // 增大字号到20px，字重900(最粗)，纯黑色，增加底部间距
+        titleHtml = `<div style="font-size: 20px; font-weight: 900; color: #000; margin-bottom: 12px; line-height: 1.4; letter-spacing: 0.5px;">${post.title}</div>`;
+    }
+
+    // 渲染图片或占位符
+    let imageHtml = '';
+    if (post.image) {
+        imageHtml = `<img src="${post.image}" class="ins-forum-post-image" onclick="event.stopPropagation(); wcPreviewImage('${post.image}')">`;
+    } else if (post.imageDesc) {
+        const safeDesc = post.imageDesc.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+        imageHtml = `<div class="wc-moment-image-placeholder" onclick="event.stopPropagation(); wcOpenImageDescCard('${safeDesc}')" style="margin-top: 12px;"><svg class="wc-icon" style="margin-bottom: 4px; width: 24px; height:24px;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${post.imageDesc}</div></div>`;
+    }
+
+    // 如果是同人小说，增加专属 Tag 和排版类名
+    let tagHtml = '';
+    let textClass = 'ins-forum-post-text';
+    let moreOptionsHtml = ''; // 👈 新增
+    
+    // 核心修复：只要是同人区的帖子，或者带有 isStory 标签，都显示菜单键和排版
+    if (post.isStory || post.type === 'fanfic') {
+        tagHtml = `<div style="font-size: 12px; color: #AF52DE; background: rgba(175,82,222,0.1); padding: 4px 10px; border-radius: 6px; font-weight: bold; margin-bottom: 12px; display: inline-block;">📖 同人小说</div>`;
+        textClass += ' ins-forum-story-text line-clamp-5'; 
+        
+        // 👈 新增：同人文专属的右上角菜单按钮
+        moreOptionsHtml = `
+            <div class="ins-forum-more-options" onclick="event.stopPropagation(); forumOpenFanficMenu(${post.id})">
+                <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg>
             </div>
-            <div class="ins-forum-post-title" style="font-size: 22px;">${post.title}</div>
-            <div class="ins-forum-post-text" style="font-size: 16px;">${post.content}</div>
-            ${imgHtml}
+        `;
+    }
+
+
+    // 👇 新增：如果是用户自己发的帖子，且还没有评论，显示 AI 注入按钮 👇
+    let aiInjectBtnHtml = '';
+    if (post.author.name === forumState.profile.name && (!post.comments || post.comments.length === 0)) {
+        aiInjectBtnHtml = `
+            <div class="ins-forum-action-btn" onclick="event.stopPropagation(); forumGenerateInteractions(${post.id})" title="让AI注入互动">
+                <svg viewBox="0 0 24 24" style="stroke: #AF52DE;"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+            </div>
+        `;
+    }
+    div.innerHTML = `
+        <div class="ins-forum-post-header">
+            <img src="${post.author.avatar}" class="ins-forum-avatar-small">
+            <div class="ins-forum-post-info">
+                <span class="ins-forum-post-name">${post.author.name}</span>
+                <span class="ins-forum-post-handle">${post.author.handle || '@' + post.author.name}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+                ${aiInjectBtnHtml}
+                ${moreOptionsHtml}
+            </div>
         </div>
-        <div style="background: #FFF;">
-            <div style="padding: 15px 20px; font-size: 12px; font-weight: 800; color: #999; letter-spacing: 1px; border-bottom: 1px solid #F0F0F0;">COMMENTS (${post.comments ? post.comments.length : 0})</div>
-            ${commentsHtml}
+        <div class="ins-forum-post-body" onclick="forumOpenPostDetail(${post.id})">
+
+            ${tagHtml}
+            ${titleHtml}
+            <div class="${textClass}">${post.content}</div>
+            ${imageHtml}
         </div>
+        <div class="ins-forum-post-actions">
+            <div class="action-btn" onclick="event.stopPropagation(); forumToggleLike(${post.id})">
+                <svg viewBox="0 0 24 24" style="fill: ${likeIconFill}; stroke: ${likeIconStroke};"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                <span style="color: ${isLiked ? '#FF3B30' : '#888'}">${Array.isArray(post.likes) ? post.likes.length : (post.likes || 0)}</span>
+            </div>
+            <div class="action-btn" onclick="forumOpenPostDetail(${post.id})">
+                <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                <span>${post.comments ? post.comments.length : 0}</span>
+            </div>
+            <div class="action-btn" onclick="event.stopPropagation(); forumOpenShareModal(${post.id})">
+                <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+            </div>
+            <div class="action-btn" onclick="event.stopPropagation(); forumToggleSave(${post.id})">
+                <svg viewBox="0 0 24 24" style="fill: ${saveIconFill}; stroke: ${saveIconStroke};"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <div class="action-btn delete-btn" onclick="event.stopPropagation(); forumDeletePost(${post.id})">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </div>
+        </div>
+        <div class="post-time">${timeStr}</div>
     `;
-
-    document.getElementById('forum-view-detail').classList.add('active');
+    return div;
 }
 
-function closeForumPostDetail() {
-    document.getElementById('forum-view-detail').classList.remove('active');
-    forumCurrentPostId = null;
-}
 // --- 发布与上传 ---
-function handleForumImageUpload(input) {
+// 新增：切换图片上传类型
+window.forumTogglePostImageType = function(type) {
+    forumState.postImageType = type;
+    document.getElementById('forum-seg-img-local').classList.toggle('active', type === 'local');
+    document.getElementById('forum-seg-img-desc').classList.toggle('active', type === 'desc');
+    document.getElementById('forum-area-img-local').style.display = type === 'local' ? 'block' : 'none';
+    document.getElementById('forum-area-img-desc').style.display = type === 'desc' ? 'block' : 'none';
+};
+
+function forumHandleImageUpload(input) {
     const file = input.files[0];
     if (file) {
         const reader = new FileReader();
         reader.onload = function(e) {
             forumState.tempImage = e.target.result;
-            document.getElementById('forum-preview-image').src = e.target.result;
-            document.getElementById('forum-preview-image').style.display = 'block';
-            document.getElementById('forum-upload-text').style.display = 'none';
+            document.getElementById('forum-post-image-preview').src = e.target.result;
+            document.getElementById('forum-post-image-preview').style.display = 'block';
         };
         reader.readAsDataURL(file);
     }
 }
 
-function submitForumPost() {
-    const title = document.getElementById('forum-input-title').value.trim();
-    const content = document.getElementById('forum-input-content').value.trim();
+function forumSubmitPost() {
+    const title = document.getElementById('forum-post-title-input').value.trim();
+    const content = document.getElementById('forum-post-input').value.trim();
+    const postType = document.getElementById('forum-post-type-select').value; 
+    const isAnonymous = document.getElementById('forum-post-anonymous').checked; 
     
-    if (!title || !content) {
-        alert("Title and content cannot be empty.");
-        return;
+    let image = null;
+    let imageDesc = null;
+    
+    if (forumState.postImageType === 'desc') {
+        imageDesc = document.getElementById('forum-post-img-desc-input').value.trim();
+    } else {
+        image = forumState.tempImage;
     }
     
+    if (!content && !image && !imageDesc && !title) {
+        return alert("请输入内容、标题或上传图片");
+    }
+    
+    let authorName = forumState.profile.name;
+    let authorHandle = forumState.profile.handle;
+    let authorAvatar = forumState.profile.avatar;
+
+    if (isAnonymous) {
+        authorName = "匿名网友";
+        authorHandle = "@anonymous";
+        const defaultAvatarSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#E5E5EA"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#888" font-size="30" font-weight="bold">匿</text></svg>`;
+        authorAvatar = 'data:image/svg+xml;base64,' + window.btoa(unescape(encodeURIComponent(defaultAvatarSvg)));
+    }
+
     const newPost = {
         id: Date.now(),
-        author: forumState.profile.name,
-        avatar: forumState.profile.avatar,
-        title: title,
+        windowId: forumState.activeWindowId, // 👈 核心修改：绑定当前窗口ID
+        type: postType, 
+        isStory: postType === 'fanfic', 
+        title: title, 
+        author: {
+            name: authorName,
+            handle: authorHandle,
+            avatar: authorAvatar
+        },
         content: content,
-        image: forumState.tempImage,
+        image: image,
+        imageDesc: imageDesc, // 👈 存入图片描述
         time: Date.now(),
-        likes: 0,
-        isLiked: false,
+        likes: [], 
+        saves: [],
         comments: []
     };
     
     forumState.posts.unshift(newPost);
     forumSaveData();
     
-    document.getElementById('forum-input-title').value = '';
-    document.getElementById('forum-input-content').value = '';
+    // 清空所有输入
+    document.getElementById('forum-post-title-input').value = '';
+    document.getElementById('forum-post-input').value = '';
+    document.getElementById('forum-post-img-desc-input').value = '';
+    document.getElementById('forum-post-image-preview').style.display = 'none';
+    document.getElementById('forum-post-anonymous').checked = false; 
     forumState.tempImage = null;
-    document.getElementById('forum-preview-image').style.display = 'none';
-    document.getElementById('forum-upload-text').style.display = 'block';
+    if (typeof forumTogglePostImageType === 'function') forumTogglePostImageType('local');
     
-    forumSwitchTab('home');
+    forumSwitchTab(postType); 
 }
 
-function forumToggleLike(id, btnElement) {
-    const post = forumState.posts.find(p => p.id === id);
-    if (post) {
-        post.isLiked = !post.isLiked;
-        post.likes += post.isLiked ? 1 : -1;
+
+// --- 互动：点赞、评论、分享 ---
+function forumToggleLike(postId) {
+    const post = forumState.posts.find(p => p.id === postId);
+    if (!post) return;
+    
+    if (!Array.isArray(post.likes)) post.likes = [];
+    const idx = post.likes.indexOf(forumState.profile.name);
+    
+    if (idx > -1) {
+        post.likes.splice(idx, 1);
+    } else {
+        post.likes.push(forumState.profile.name);
+    }
+    
+    forumSaveData();
+    
+    if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+    if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+    if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+    if (document.getElementById('forum-post-detail-view').classList.contains('active')) forumRenderPostDetailContent();
+}
+function forumToggleSave(postId) {
+    const post = forumState.posts.find(p => p.id === postId);
+    if (!post) return;
+    
+    if (!Array.isArray(post.saves)) post.saves = [];
+    const idx = post.saves.indexOf(forumState.profile.name);
+    if (idx > -1) {
+        post.saves.splice(idx, 1);
+    } else {
+        post.saves.push(forumState.profile.name);
+    }
+    
+    forumSaveData();
+    
+    // 刷新当前视图
+    if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+    if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+    if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+    if (document.getElementById('forum-post-detail-view').classList.contains('active')) forumRenderPostDetailContent();
+}
+
+function forumOpenPostDetail(postId) {
+    forumState.currentDetailPostId = postId;
+    document.getElementById('forum-post-detail-view').classList.add('active');
+    
+    // 👇 新增：进入详情页时隐藏底部导航栏，防止遮挡输入框
+    const tabbar = document.querySelector('#forum-root .custom-tabbar');
+    if (tabbar) tabbar.style.display = 'none';
+    
+    forumRenderPostDetailContent();
+}
+
+function forumClosePostDetail() {
+    document.getElementById('forum-post-detail-view').classList.remove('active');
+    forumState.currentDetailPostId = null;
+    
+    // 👇 新增：退出详情页时恢复显示底部导航栏
+    const tabbar = document.querySelector('#forum-root .custom-tabbar');
+    if (tabbar) tabbar.style.display = 'flex';
+    
+    // 关闭详情页时清理回复状态
+    if (typeof forumCancelReply === 'function') {
+        forumCancelReply();
+    }
+    
+    if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+    if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+    if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+}
+// --- 删除帖子逻辑 ---
+function forumDeletePost(postId, isFromDetail = false) {
+    if (confirm("确定要将这条帖子化作赛博尘埃吗？")) {
+        // 从数据中过滤掉该帖子
+        forumState.posts = forumState.posts.filter(p => p.id !== postId);
         forumSaveData();
         
-        const svg = btnElement.querySelector('svg');
-        const span = btnElement.querySelector('span');
-        svg.style.fill = post.isLiked ? '#111' : 'none';
-        svg.style.stroke = post.isLiked ? '#111' : 'currentColor';
-        span.innerText = post.likes;
+        if (isFromDetail) {
+            // 如果是在详情页删除的，关闭详情页（关闭时会自动刷新列表）
+            forumClosePostDetail();
+        } else {
+            // 如果是在列表页删除的，直接刷新当前激活的 Tab
+            if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+            if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+            if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+        }
     }
 }
 
-// --- 个人主页与设置 ---
+function forumRenderPostDetailContent() {
+    const post = forumState.posts.find(p => p.id === forumState.currentDetailPostId);
+    if (!post) return;
+    
+    const container = document.getElementById('forum-post-detail-content');
+    
+    const timeStr = new Date(post.time).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    
+    const isLiked = Array.isArray(post.likes) && post.likes.includes(forumState.profile.name);
+    const likeIconFill = isLiked ? '#FF3B30' : 'none';
+    const likeIconStroke = isLiked ? '#FF3B30' : '#888';
+
+    const isSaved = Array.isArray(post.saves) && post.saves.includes(forumState.profile.name);
+    const saveIconFill = isSaved ? '#111' : 'none';
+    const saveIconStroke = isSaved ? '#111' : '#888';
+    
+    // 渲染标题 (详情页字号更大)
+    let titleHtml = '';
+    if (post.title) {
+        // 增大字号到24px，纯黑色，增加底部间距，并加上一条极浅的分割线与正文彻底区分
+        titleHtml = `<div style="font-size: 24px; font-weight: 900; color: #000; margin-bottom: 16px; line-height: 1.4; letter-spacing: 0.5px; border-bottom: 1px solid #F0F0F0; padding-bottom: 12px;">${post.title}</div>`;
+    }
+
+    // 渲染图片或占位符
+    let imageHtml = '';
+    if (post.image) {
+        imageHtml = `<img src="${post.image}" class="ins-forum-post-image" style="margin-top: 15px;" onclick="wcPreviewImage('${post.image}')">`;
+    } else if (post.imageDesc) {
+        const safeDesc = post.imageDesc.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+        imageHtml = `<div class="wc-moment-image-placeholder" onclick="wcOpenImageDescCard('${safeDesc}')" style="margin-top: 15px;"><svg class="wc-icon" style="margin-bottom: 4px; width: 24px; height:24px;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div style="font-size: 10px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${post.imageDesc}</div></div>`;
+    }
+
+    let tagHtml = '';
+    let textClass = 'ins-forum-post-text';
+    if (post.isStory) {
+        tagHtml = `<div style="font-size: 12px; color: #AF52DE; background: rgba(175,82,222,0.1); padding: 4px 10px; border-radius: 6px; font-weight: bold; margin-bottom: 12px; display: inline-block;">📖 同人小说</div>`;
+        textClass += ' ins-forum-story-text'; // 详情页不截断
+    }
+    
+    let commentsHtml = '';
+    if (post.comments && post.comments.length > 0) {
+        post.comments.forEach(c => {
+            // 👇 新增：处理回复文本的高亮显示 👇
+            let displayContent = c.content;
+            const replyMatch = displayContent.match(/^(回复\s+@[^:]+[:：])\s*(.*)/);
+            if (replyMatch) {
+                displayContent = `<span style="color: #007AFF; font-weight: 500;">${replyMatch[1]}</span> ${replyMatch[2]}`;
+            }
+
+            // 👇 修改：给评论加上点击事件，触发回复 👇
+            commentsHtml += `
+                <div class="ins-forum-comment-item" onclick="forumPrepareReplyComment('${c.name}')" style="cursor: pointer;">
+                    <img src="${c.avatar}" class="ins-forum-avatar-small">
+                    <div class="ins-forum-comment-info">
+                        <div style="display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px;">
+                            <span class="ins-forum-comment-name">${c.name}</span>
+                            <span class="ins-forum-post-handle">${c.handle || '@'+c.name}</span>
+                        </div>
+                        <div class="ins-forum-comment-text">${displayContent}</div>
+                    </div>
+                </div>
+            `;
+        });
+    } else {
+        commentsHtml = '<div style="text-align: center; color: #888; padding: 20px; font-size: 13px;">暂无评论，快来抢沙发</div>';
+    }
+
+    // 👇 新增：底部 AI 互动按钮 👇
+    let aiActionHtml = '';
+    if (!post.comments || post.comments.length === 0) {
+        aiActionHtml = `
+            <div style="text-align: center; padding: 20px 15px;">
+                <button class="wc-btn-primary" style="background: #111; color: #FFF; border-radius: 20px; padding: 10px 24px; font-size: 14px; width: auto; margin: 0 auto; display: inline-flex; align-items: center; gap: 8px;" onclick="forumGenerateInteractions(${post.id})">
+                    <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+                    让 AI 注入点赞与评论
+                </button>
+            </div>
+        `;
+    } else {
+        aiActionHtml = `
+            <div style="text-align: center; padding: 20px 15px;">
+                <button class="wc-btn-primary" style="background: #F5F5F5; color: #111; border: 1px solid #EAEAEA; border-radius: 20px; padding: 10px 24px; font-size: 14px; width: auto; margin: 0 auto; display: inline-flex; align-items: center; gap: 8px;" onclick="forumGenerateMoreComments(${post.id})">
+                    <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+                    加载更多 AI 评论
+                </button>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = `
+        <div class="ins-forum-post-header" style="padding: 20px 20px 10px 20px; position: relative;">
+            <img src="${post.author.avatar}" class="ins-forum-avatar-small">
+            <div class="ins-forum-post-info">
+                <span class="ins-forum-post-name">${post.author.name}</span>
+                <span class="ins-forum-post-handle">${post.author.handle || '@'+post.author.name}</span>
+            </div>
+            <!-- 新增：右上角高级感关闭按钮 -->
+            <div class="ins-forum-detail-close" onclick="forumClosePostDetail()">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </div>
+        </div>
+        <div class="ins-forum-post-body" style="padding: 0 20px 20px 20px; border-bottom: 1px solid #F0F0F0;">
+            ${tagHtml}
+            ${titleHtml}
+            <div class="${textClass}" style="font-size: 16px;">${post.content}</div>
+            ${imageHtml}
+            
+            <div class="ins-forum-post-actions" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #F9F9F9;">
+                <div class="action-btn" onclick="forumToggleLike(${post.id})">
+                    <svg viewBox="0 0 24 24" style="fill: ${likeIconFill}; stroke: ${likeIconStroke};"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                    <span style="color: ${isLiked ? '#FF3B30' : '#888'}">${Array.isArray(post.likes) ? post.likes.length : (post.likes || 0)}</span>
+                </div>
+                <div class="action-btn">
+                    <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                    <span>${post.comments ? post.comments.length : 0}</span>
+                </div>
+                <div class="action-btn" onclick="forumOpenShareModal(${post.id})">
+                    <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+                </div>
+                <div class="action-btn" onclick="forumToggleSave(${post.id})">
+                    <svg viewBox="0 0 24 24" style="fill: ${saveIconFill}; stroke: ${saveIconStroke};"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                </div>
+                <div class="action-btn delete-btn" onclick="forumDeletePost(${post.id}, true)">
+                    <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </div>
+            </div>
+            <div class="post-time" style="margin-top: 10px;">${timeStr}</div>
+        </div>
+        <div class="ins-forum-comments-section">
+            ${commentsHtml}
+            ${aiActionHtml}
+        </div>
+    `;
+}
+
+function forumSubmitComment() {
+    const input = document.getElementById('forum-comment-input');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    const post = forumState.posts.find(p => p.id === forumState.currentDetailPostId);
+    if (!post) return;
+    
+    let finalContent = text;
+    if (forumState.replyingToComment) {
+        finalContent = `回复 @${forumState.replyingToComment}: ${text}`;
+    }
+    
+    // 👇 新增：判断是否勾选了匿名评论 👇
+    const isAnonymous = document.getElementById('forum-comment-anonymous') && document.getElementById('forum-comment-anonymous').checked;
+    let commenterName = forumState.profile.name;
+    let commenterHandle = forumState.profile.handle;
+    let commenterAvatar = forumState.profile.avatar;
+
+    if (isAnonymous) {
+        commenterName = "匿名网友";
+        commenterHandle = "@anonymous";
+        // 生成一个带“匿”字的默认灰色头像
+        const defaultAvatarSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#E5E5EA"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#888" font-size="30" font-weight="bold">匿</text></svg>`;
+        commenterAvatar = 'data:image/svg+xml;base64,' + window.btoa(unescape(encodeURIComponent(defaultAvatarSvg)));
+    }
+    // 👆 新增结束 👆
+
+    if (!post.comments) post.comments = [];
+    post.comments.push({
+        name: commenterName,       // 👈 使用处理后的名字
+        handle: commenterHandle,   // 👈 使用处理后的ID
+        avatar: commenterAvatar,   // 👈 使用处理后的头像
+        content: finalContent,
+        time: Date.now()
+    });
+    
+    forumSaveData();
+    input.value = '';
+    input.placeholder = "发布评论...";
+    forumState.replyingToComment = null; 
+    
+    // 👇 新增：隐藏回复预览区 👇
+    const previewArea = document.getElementById('forum-reply-preview-area');
+    if (previewArea) previewArea.style.display = 'none';
+    
+    // 评论完后自动取消勾选匿名，防止下次忘记关掉
+    if (document.getElementById('forum-comment-anonymous')) {
+        document.getElementById('forum-comment-anonymous').checked = false;
+    }
+    
+    forumRenderPostDetailContent();
+}
+
+// --- 新增：用户评论后，AI 自动回复并概率掉落私信 ---
+window.forumTriggerReactionToUser = async function(postId, userCommentText) {
+    const post = forumState.posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const apiConfig = await getActiveApiConfig('forum');
+    if (!apiConfig || !apiConfig.key) return;
+
+    // 静默加载，不打断用户浏览
+    const loadingToast = document.createElement('div');
+    loadingToast.style.cssText = 'position:fixed; top:60px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.7); color:#fff; padding:8px 16px; border-radius:20px; font-size:12px; z-index:9999;';
+    loadingToast.innerText = '网友正在回复你...';
+    document.body.appendChild(loadingToast);
+
+    try {
+        let contextInfo = "";
+        if (forumState.config.charIds.length > 0) {
+            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+            if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
+        }
+
+        let prompt = `你现在是一个社交论坛的后台引擎。用户（${forumState.profile.name}）刚刚在帖子里发表了一条评论。\n`;
+        prompt += `【原帖发帖人】：${post.author.name}\n`;
+        prompt += `【原帖内容】：\n${post.content}\n\n`;
+        prompt += `【用户的评论】：\n${userCommentText}\n\n`;
+        prompt += `${contextInfo}`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 请生成 5 到 10 条其他网友或 NPC 针对用户这条评论的【回复】。\n`;
+        prompt += `2. 语气要极度口语化、有网感（如：确实、笑死、抱抱楼主等）。请注意【原帖发帖人】、评论人（User）和回复人之间的身份关系，绝对不要认错人！\n`;
+        prompt += `3. 【私信掉落机制】：你有 35% 的概率生成一条发给用户的【私信】（比如有人想私下认识用户、或者 NPC 私下吐槽）。如果不生成私信，请将 privateMessage 设为 null。\n`;
+        prompt += `4. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）发表评论！所有评论人和私信发送人只能是 NPC 或 虚构网友！\n`;
+        prompt += `5. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "comments": [
+    {"name": "网友名字", "handle": "@ID", "content": "回复 @${forumState.profile.name}: 评论内容"}
+  ],
+  "privateMessage": {
+    "senderName": "发件人名字",
+    "content": "私信内容"
+  }
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        // 1. 处理追加的评论
+        if (result.comments && result.comments.length > 0) {
+            const processedComments = result.comments.map(c => {
+                const cNpc = wcState.characters.find(char => char.name === c.name);
+                return {
+                    name: c.name,
+                    handle: c.handle || '@' + c.name,
+                    avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
+                    content: c.content,
+                    time: Date.now()
+                };
+            });
+            post.comments.push(...processedComments);
+        }
+
+        // 2. 处理掉落的私信
+        if (result.privateMessage && result.privateMessage.senderName && result.privateMessage.content) {
+            const pm = result.privateMessage;
+            const npc = wcState.characters.find(c => c.name === pm.senderName);
+            const avatar = npc ? npc.avatar : getRandomNpcAvatar();
+
+            if (!forumState.privateMessages) forumState.privateMessages = [];
+            forumState.privateMessages.unshift({
+                id: Date.now(),
+                senderName: pm.senderName,
+                avatar: avatar,
+                content: pm.content,
+                contextPreview: userCommentText.substring(0, 15) + '...',
+                time: Date.now()
+            });
+            
+            if (typeof showMainSystemNotification === 'function') {
+                showMainSystemNotification("论坛私信", `收到来自 ${pm.senderName} 的新私信`, avatar);
+            }
+        }
+
+        forumSaveData();
+        if (forumState.currentDetailPostId === postId) {
+            forumRenderPostDetailContent();
+        }
+
+    } catch (e) {
+        console.error("AI 回复用户评论失败", e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[论坛回复用户失败] ${e.message}`);
+    } finally {
+        loadingToast.remove();
+    }
+};
+
+// ==========================================
+// 👇 新增：AI 注入互动与加载更多评论逻辑 👇
+// ==========================================
+
+window.forumPrepareReplyComment = function(name) {
+    forumState.replyingToComment = name;
+    const input = document.getElementById('forum-comment-input');
+    const previewArea = document.getElementById('forum-reply-preview-area');
+    const previewText = document.getElementById('forum-reply-text-content');
+    
+    if (previewArea && previewText) {
+        previewText.innerText = `回复 @${name}`;
+        previewArea.style.display = 'flex';
+    }
+    
+    if (input) {
+        input.placeholder = `回复 @${name}...`;
+        input.focus();
+    }
+};
+
+// 👇 新增：取消回复功能 👇
+window.forumCancelReply = function() {
+    forumState.replyingToComment = null;
+    const input = document.getElementById('forum-comment-input');
+    const previewArea = document.getElementById('forum-reply-preview-area');
+    
+    if (previewArea) {
+        previewArea.style.display = 'none';
+    }
+    
+    if (input) {
+        input.placeholder = "发布评论...";
+    }
+};
+
+window.forumGenerateInteractions = async function(postId) {
+    const post = forumState.posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const apiConfig = await getActiveApiConfig('forum');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("正在召唤网友...");
+
+    try {
+        let contextInfo = "";
+        if (forumState.config.worldbookIds.length > 0) {
+            const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
+            if (wbs.length > 0) contextInfo += "【世界观背景】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+        }
+        if (forumState.config.charIds.length > 0) {
+            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+            if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
+        }
+
+        let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子生成 8 到 15 条极具“活人感”的评论。\n`;
+        prompt += `【原帖发帖人】：${post.author.name}\n`;
+        prompt += `【帖子内容】：\n${post.content}\n\n`;
+        prompt += `${contextInfo}`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 评论人可以是【你认识的熟人(NPC)】，也可以是虚构的网友。请根据【原帖发帖人】的身份，生成符合逻辑的互动评论，绝对不要把发帖人当成 User（除非发帖人真的是 User）！\n`;
+        prompt += `2. 语气要极度口语化、有网感。评论区要有互动感（网友互相回复、吐槽等）。\n`;
+        prompt += `3. 【私信掉落机制】：你有 35% 的概率生成一条发给用户的【私信】。如果不生成私信，请将 privateMessage 设为 null。\n`;
+        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `5. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）发表评论！所有评论人和私信发送人只能是 NPC 或 虚构网友！\n`;
+        prompt += `6. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "comments": [
+    {"name": "评论人名字", "handle": "@ID", "content": "评论内容"}
+  ],
+  "privateMessage": {
+    "senderName": "发件人名字",
+    "content": "私信内容"
+  }
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        // 1. 增加点赞和评论
+        const newLikes = forumGenerateFakeLikes();
+        if (!Array.isArray(post.likes)) post.likes = [];
+        post.likes.push(...newLikes);
+
+        if (result.comments && result.comments.length > 0) {
+            if (!post.comments) post.comments = [];
+            const processedComments = result.comments.map(c => {
+                const cNpc = wcState.characters.find(char => char.name === c.name);
+                return {
+                    name: c.name,
+                    handle: c.handle || '@' + c.name,
+                    avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
+                    content: c.content,
+                    time: Date.now()
+                };
+            });
+            post.comments.push(...processedComments);
+        }
+
+        // 2. 处理掉落的私信 (升级为会话模式)
+        if (result.privateMessage && result.privateMessage.senderName && result.privateMessage.content) {
+            const pm = result.privateMessage;
+            
+            // 核心修复：查找是否已有该人在【当前窗口】的会话
+            let chat = forumState.privateChats.find(c => c.targetName === pm.senderName && c.windowId === forumState.activeWindowId);
+            if (!chat) {
+                const npc = wcState.characters.find(c => c.name === pm.senderName);
+                chat = {
+                    id: Date.now().toString(),
+                    windowId: forumState.activeWindowId, // 👈 绑定当前窗口
+                    targetName: pm.senderName,
+                    targetAvatar: npc ? npc.avatar : getRandomNpcAvatar(),
+                    messages: [],
+                    lastUpdateTime: Date.now()
+                };
+                forumState.privateChats.push(chat);
+            }
+            
+            // 将新消息推入会话
+            chat.messages.push({
+                id: Date.now(),
+                sender: 'them',
+                content: pm.content,
+                time: Date.now()
+            });
+            chat.lastUpdateTime = Date.now();
+            
+            if (typeof showMainSystemNotification === 'function') {
+                showMainSystemNotification("论坛私信", `收到来自 ${pm.senderName} 的新私信`, chat.targetAvatar);
+            }
+        }
+
+        forumSaveData();
+        forumRenderPostDetailContent();
+        if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+        if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+        if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+        
+        wcShowSuccess("互动注入成功！");
+
+    } catch (e) {
+        console.error(e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[论坛注入互动失败] ${e.message}`);
+        else wcShowError("生成失败");
+    }
+}
+
+window.forumGenerateMoreComments = async function(postId) {
+
+    const post = forumState.posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const apiConfig = await getActiveApiConfig('forum');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("正在加载更多评论...");
+
+    try {
+        let contextInfo = "";
+        if (forumState.config.worldbookIds.length > 0) {
+            const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
+            if (wbs.length > 0) contextInfo += "【世界观背景】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+        }
+        if (forumState.config.charIds.length > 0) {
+            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+            if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
+        }
+
+        const existingComments = (post.comments || []).slice(-10).map(c => `${c.name}: ${c.content}`).join('\n');
+
+        let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子继续生成 5 到 10 条后续评论。\n`;
+        prompt += `【原帖发帖人】：${post.author.name}\n`;
+        prompt += `【帖子内容】：\n${post.content}\n\n`;
+        if (existingComments) {
+            prompt += `【已有评论上下文】：\n${existingComments}\n\n`;
+        }
+        prompt += `${contextInfo}`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 评论人可以是【你认识的熟人(NPC)】，也可以是虚构的网友。请根据【原帖发帖人】和【已有评论上下文】的身份关系进行回复，绝对不要认错人！\n`;
+        prompt += `2. 语气要极度口语化、有网感。可以针对【已有评论上下文】进行回复（如：回复 @某某）。\n`;
+        prompt += `3. 【私信掉落机制】：你有 35% 的概率生成一条发给用户的【私信】。如果不生成私信，请将 privateMessage 设为 null。\n`;
+        prompt += `4. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）发表评论！所有评论人和私信发送人只能是 NPC 或 虚构网友！\n`;
+        prompt += `5. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "comments": [
+    {"name": "评论人名字", "handle": "@ID", "content": "评论内容"}
+  ],
+  "privateMessage": {
+    "senderName": "发件人名字",
+    "content": "私信内容"
+  }
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        // 1. 处理追加的评论
+        if (result.comments && result.comments.length > 0) {
+            if (!post.comments) post.comments = [];
+            const processedComments = result.comments.map(c => {
+                const cNpc = wcState.characters.find(char => char.name === c.name);
+                return {
+                    name: c.name,
+                    handle: c.handle || '@' + c.name,
+                    avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
+                    content: c.content,
+                    time: Date.now()
+                };
+            });
+            post.comments.push(...processedComments);
+        }
+
+        // 2. 处理掉落的私信 (升级为会话模式)
+        if (result.privateMessage && result.privateMessage.senderName && result.privateMessage.content) {
+            const pm = result.privateMessage;
+            
+            // 核心修复：查找是否已有该人在【当前窗口】的会话
+            let chat = forumState.privateChats.find(c => c.targetName === pm.senderName && c.windowId === forumState.activeWindowId);
+            if (!chat) {
+                const npc = wcState.characters.find(c => c.name === pm.senderName);
+                chat = {
+                    id: Date.now().toString(),
+                    windowId: forumState.activeWindowId, // 👈 绑定当前窗口
+                    targetName: pm.senderName,
+                    targetAvatar: npc ? npc.avatar : getRandomNpcAvatar(),
+                    messages: [],
+                    lastUpdateTime: Date.now()
+                };
+                forumState.privateChats.push(chat);
+            }
+            
+            // 将新消息推入会话
+            chat.messages.push({
+                id: Date.now(),
+                sender: 'them',
+                content: pm.content,
+                time: Date.now()
+            });
+            chat.lastUpdateTime = Date.now();
+            
+            if (typeof showMainSystemNotification === 'function') {
+                showMainSystemNotification("论坛私信", `收到来自 ${pm.senderName} 的新私信`, chat.targetAvatar);
+            }
+        }
+
+        forumSaveData();
+        forumRenderPostDetailContent();
+        if (document.getElementById('forum-view-home').classList.contains('active')) forumRenderPosts('home');
+        if (document.getElementById('forum-view-fanfic').classList.contains('active')) forumRenderPosts('fanfic');
+        if (document.getElementById('forum-view-profile').classList.contains('active')) forumRenderProfileList();
+        
+        wcShowSuccess("评论加载成功！");
+
+    } catch (e) {
+        console.error(e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[论坛加载评论失败] ${e.message}`);
+        else wcShowError("生成失败");
+    }
+};
+// --- 分享帖子给 Char ---
+function forumOpenShareModal(postId) {
+    forumState.pendingSharePostId = postId;
+    const list = document.getElementById('forum-share-char-list');
+    list.innerHTML = '';
+    
+    const chars = wcState.characters.filter(c => !c.isGroup);
+    if (chars.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">暂无联系人</div>';
+    } else {
+        chars.forEach(char => {
+            const div = document.createElement('div');
+            div.className = 'wc-list-item';
+            div.style.background = 'white';
+            div.style.borderBottom = '1px solid #F0F0F0';
+            div.innerHTML = `
+                <img src="${char.avatar}" class="wc-avatar" style="width:36px;height:36px;">
+                <div class="wc-item-content"><div class="wc-item-title">${char.name}</div></div>
+                <button class="wc-btn-mini" style="background:#111; color:white; border:none; padding:6px 16px; border-radius:16px; font-weight:bold;" onclick="forumConfirmShare(${char.id})">发送</button>
+            `;
+            list.appendChild(div);
+        });
+    }
+    wcOpenModal('forum-modal-share');
+}
+
+function forumConfirmShare(charId) {
+    const post = forumState.posts.find(p => p.id === forumState.pendingSharePostId);
+    if (!post) return;
+
+    // 构造高级感分享卡片
+    const cardHtml = `
+        <div class="chat-shared-card">
+            <div class="shared-card-tag">FORUM POST</div>
+            <div class="shared-card-title">${post.author.name} 的帖子</div>
+            <div class="shared-card-content">${post.content}</div>
+        </div>
+    `;
+
+    // 发送卡片到聊天
+    wcAddMessage(charId, 'me', 'receipt', cardHtml);
+
+    // 给 AI 发送隐藏的系统提示
+    const aiPrompt = `[系统内部信息(仅AI可见): 用户在论坛看到了一篇帖子并分享给了你。发帖人：${post.author.name}。内容：“${post.content}”。请在回复中针对这篇帖子发表你的看法或吐槽。]`;
+    wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
+
+    wcCloseModal('forum-modal-share');
+    alert("已成功分享给 Ta！快去微信看看 Ta 的反应吧~");
+}
+
+// --- 个人信息与设置 (推特风重构) ---
 function forumRenderProfile() {
+    // 渲染背景图和头像
+    const bgEl = document.getElementById('forum-profile-bg');
+    if (forumState.profile.bg) {
+        bgEl.style.backgroundImage = `url('${forumState.profile.bg}')`;
+    } else {
+        bgEl.style.backgroundImage = `url('https://i.postimg.cc/kgD9CsbW/IMG-8012.jpg')`; // 默认图
+    }
+    
     document.getElementById('forum-profile-avatar').src = forumState.profile.avatar;
     document.getElementById('forum-profile-name').innerText = forumState.profile.name;
+    document.getElementById('forum-profile-handle').innerText = forumState.profile.handle;
     document.getElementById('forum-profile-bio').innerText = forumState.profile.bio;
     
+    // 随机生成关注数 (仅作装饰)
+    document.getElementById('forum-following-count').innerText = Math.floor(Math.random() * 50) + 10;
+    document.getElementById('forum-follower-count').innerText = Math.floor(Math.random() * 500) + 50;
+    
+    forumSwitchProfileTab(forumState.profileTab);
+}
+
+function forumSwitchProfileTab(tab) {
+    forumState.profileTab = tab;
+    document.querySelectorAll('.ins-forum-profile-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(`forum-profile-tab-${tab}`).classList.add('active');
+    forumRenderProfileList();
+}
+
+function forumRenderProfileList() {
     const container = document.getElementById('forum-my-post-list');
     container.innerHTML = '';
     
-    const myPosts = forumState.posts.filter(p => p.author === forumState.profile.name).sort((a, b) => b.time - a.time);
+    let list = [];
     
-    if (myPosts.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 30px; font-style: italic; font-family: Georgia, serif;">No posts yet.</div>';
+    if (forumState.profileTab === 'posts') {
+        // 发布的帖子：与当前窗口独立
+        list = forumState.posts.filter(p => p.author.name === forumState.profile.name && p.windowId === forumState.activeWindowId);
+    } else if (forumState.profileTab === 'likes') {
+        // 点赞的帖子：与当前窗口独立
+        list = forumState.posts.filter(p => Array.isArray(p.likes) && p.likes.includes(forumState.profile.name) && p.windowId === forumState.activeWindowId);
+    } else if (forumState.profileTab === 'saves') {
+        // 核心修改：收藏的帖子是全局的！去掉 windowId 的限制
+        list = forumState.posts.filter(p => Array.isArray(p.saves) && p.saves.includes(forumState.profile.name));
+    }
+
+    list.sort((a, b) => b.time - a.time);
+    
+    if (list.length === 0) {
+        const emptyText = forumState.profileTab === 'saves' ? '暂无收藏的帖子' : '当前频道空空如也';
+        container.innerHTML = `<div style="text-align: center; color: #888; padding: 60px 20px; font-size: 14px; font-style: italic;">${emptyText}</div>`;
         return;
     }
     
-    myPosts.forEach(post => {
-        const dateStr = new Date(post.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        const div = document.createElement('div');
-        div.style.cssText = "background: #FFF; border-radius: 12px; padding: 15px; margin-bottom: 15px; border: 1px solid #F0F0F0; display: flex; justify-content: space-between; align-items: center;";
-        div.innerHTML = `
-            <div style="flex: 1; overflow: hidden; padding-right: 15px; cursor: pointer;" onclick="forumOpenPostDetail(${post.id})">
-                <div style="font-size: 15px; font-weight: 700; color: #111; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${post.title}</div>
-                <div style="font-size: 12px; color: #888; font-family: monospace;">${dateStr}</div>
-            </div>
-            <div style="color: #FF3B30; font-size: 12px; font-weight: bold; cursor: pointer; padding: 5px;" onclick="forumDeletePost(${post.id})">DELETE</div>
-        `;
-        container.appendChild(div);
+    list.forEach(post => {
+        container.appendChild(forumCreatePostElement(post));
     });
 }
 
-function forumDeletePost(id) {
-    if (confirm("Are you sure you want to delete this post?")) {
-        forumState.posts = forumState.posts.filter(p => p.id !== id);
-        forumSaveData();
-        forumRenderProfile();
-    }
-}
-
-// --- 编辑个人资料 ---
 function forumOpenEditProfile() {
     document.getElementById('forum-edit-name').value = forumState.profile.name;
+    document.getElementById('forum-edit-handle').value = forumState.profile.handle;
     document.getElementById('forum-edit-bio').value = forumState.profile.bio;
+    
+    document.getElementById('forum-edit-avatar-url').value = '';
+    document.getElementById('forum-edit-bg-url').value = '';
+    
     forumState.tempAvatar = null;
-    document.getElementById('forum-edit-avatar-preview').style.display = 'none';
-    document.getElementById('forum-edit-avatar-text').style.display = 'block';
+    forumState.tempProfileBg = null;
+
+    // 填充面具下拉框
+    const maskSelect = document.getElementById('forum-edit-mask-select');
+    if (maskSelect) {
+        maskSelect.innerHTML = '<option value="">默认身份 (User)</option>';
+        wcState.masks.forEach(m => {
+            const isSelected = forumState.profile.boundMaskId == m.id ? 'selected' : '';
+            maskSelect.innerHTML += `<option value="${m.id}" ${isSelected}>扮演: ${m.name}</option>`;
+        });
+    }
+
     wcOpenModal('forum-modal-edit-profile');
 }
 
-function forumHandleAvatarUpload(input) {
+// 统一处理头像和背景图的本地上传
+function forumHandleImageUploadForProfile(input, type) {
     const file = input.files[0];
     if (file) {
         const reader = new FileReader();
         reader.onload = function(e) {
-            forumState.tempAvatar = e.target.result;
-            document.getElementById('forum-edit-avatar-preview').src = e.target.result;
-            document.getElementById('forum-edit-avatar-preview').style.display = 'block';
-            document.getElementById('forum-edit-avatar-text').style.display = 'none';
+            if (type === 'avatar') {
+                forumState.tempAvatar = e.target.result;
+                document.getElementById('forum-edit-avatar-url').value = '已选择本地图片';
+            } else if (type === 'bg') {
+                forumState.tempProfileBg = e.target.result;
+                document.getElementById('forum-edit-bg-url').value = '已选择本地图片';
+            }
         };
         reader.readAsDataURL(file);
     }
@@ -16441,54 +20676,87 @@ function forumHandleAvatarUpload(input) {
 
 function forumSaveProfile() {
     const name = document.getElementById('forum-edit-name').value.trim();
+    const handle = document.getElementById('forum-edit-handle').value.trim();
     const bio = document.getElementById('forum-edit-bio').value.trim();
     
-    if (name) forumState.profile.name = name;
+    const avatarUrl = document.getElementById('forum-edit-avatar-url').value.trim();
+    const bgUrl = document.getElementById('forum-edit-bg-url').value.trim();
+    const maskId = document.getElementById('forum-edit-mask-select').value;
+
+    // 1. 处理面具绑定
+    if (!maskId) {
+        forumState.profile.boundMaskId = null;
+        forumState.profile.name = name || wcState.user.name;
+        // 如果没有填新的头像，才恢复默认头像
+        if (!avatarUrl && !forumState.tempAvatar) {
+            forumState.profile.avatar = wcState.user.avatar;
+        }
+    } else {
+        const mask = wcState.masks.find(m => m.id == maskId);
+        if (mask) {
+            forumState.profile.boundMaskId = mask.id;
+            forumState.profile.name = mask.name;
+            // 如果没有填新的头像，才使用面具头像
+            if (!avatarUrl && !forumState.tempAvatar) {
+                forumState.profile.avatar = mask.avatar;
+            }
+        }
+    }
+
+    // 2. 处理手动修改的名称和签名
+    if (name && !maskId) forumState.profile.name = name;
+    if (handle) forumState.profile.handle = handle.startsWith('@') ? handle : '@' + handle;
     if (bio) forumState.profile.bio = bio;
-    if (forumState.tempAvatar) forumState.profile.avatar = forumState.tempAvatar;
+    
+    // 3. 处理头像更新 (URL 优先，本地其次)
+    if (avatarUrl && avatarUrl !== '已选择本地图片') {
+        forumState.profile.avatar = avatarUrl;
+    } else if (forumState.tempAvatar) {
+        forumState.profile.avatar = forumState.tempAvatar;
+    }
+    
+    // 4. 处理背景图更新
+    if (bgUrl && bgUrl !== '已选择本地图片') {
+        forumState.profile.bg = bgUrl;
+    } else if (forumState.tempProfileBg) {
+        forumState.profile.bg = forumState.tempProfileBg;
+    }
+    
+    forumState.tempAvatar = null;
+    forumState.tempProfileBg = null;
     
     forumSaveData();
     forumRenderProfile();
     wcCloseModal('forum-modal-edit-profile');
 }
-
-// --- 关联设置 ---
 function forumOpenSettings() {
-    // 渲染世界书
+    // 渲染世界书列表
     const wbList = document.getElementById('forum-setting-wb-list');
     wbList.innerHTML = '';
-    if (typeof worldbookEntries !== 'undefined' && worldbookEntries.length > 0) {
-        worldbookEntries.forEach(entry => {
-            const isChecked = forumState.config.worldbookIds.includes(entry.id.toString());
-            wbList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" class="forum-wb-cb" value="${entry.id}" ${isChecked ? 'checked' : ''}><span>${entry.title}</span></div>`;
+    let forumWbCount = 0;
+    if (forumState.config.worldbookIds) {
+        forumState.config.worldbookIds.forEach(id => {
+            wbList.innerHTML += `<input type="checkbox" value="${id}" class="forum-wb-cb" checked>`;
+            forumWbCount++;
         });
-    } else {
-        wbList.innerHTML = '<div style="color:#999; font-size:12px;">暂无世界书</div>';
     }
+    document.getElementById('forum-setting-wb-count').innerText = `已选 ${forumWbCount} 项`;
 
-    // 渲染角色
+    // 渲染角色列表
     const charList = document.getElementById('forum-setting-char-list');
     charList.innerHTML = '';
-    if (typeof wcState !== 'undefined' && wcState.characters.length > 0) {
-        wcState.characters.forEach(c => {
-            const isChecked = forumState.config.charIds.includes(c.id.toString());
-            charList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" class="forum-char-cb" value="${c.id}" ${isChecked ? 'checked' : ''}><span>${c.name}</span></div>`;
-        });
-    } else {
-        charList.innerHTML = '<div style="color:#999; font-size:12px;">暂无角色</div>';
-    }
+    wcState.characters.filter(c => !c.isGroup).forEach(char => {
+        const isChecked = forumState.config.charIds.includes(char.id.toString());
+        charList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" value="${char.id}" class="forum-char-cb" ${isChecked ? 'checked' : ''}><span>${char.name}</span></div>`;
+    });
 
-    // 渲染面具
+    // 渲染面具列表
     const maskList = document.getElementById('forum-setting-mask-list');
     maskList.innerHTML = '';
-    if (typeof wcState !== 'undefined' && wcState.masks.length > 0) {
-        wcState.masks.forEach(m => {
-            const isChecked = forumState.config.maskIds.includes(m.id.toString());
-            maskList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" class="forum-mask-cb" value="${m.id}" ${isChecked ? 'checked' : ''}><span>${m.name}</span></div>`;
-        });
-    } else {
-        maskList.innerHTML = '<div style="color:#999; font-size:12px;">暂无面具</div>';
-    }
+    wcState.masks.forEach(mask => {
+        const isChecked = forumState.config.maskIds.includes(mask.id.toString());
+        maskList.innerHTML += `<div class="wc-checkbox-item"><input type="checkbox" value="${mask.id}" class="forum-mask-cb" ${isChecked ? 'checked' : ''}><span>${mask.name}</span></div>`;
+    });
 
     wcOpenModal('forum-modal-settings');
 }
@@ -16505,59 +20773,332 @@ function forumSaveSettings() {
 
     forumSaveData();
     wcCloseModal('forum-modal-settings');
-    alert("Settings saved successfully.");
+    alert("设定已保存！AI 生成帖子时将参考这些背景。");
 }
 
-// --- AI 批量生成帖子与评论 (防崩溃强化版) ---
-async function forumGeneratePosts() {
-    const apiConfig = await idb.get('ios_theme_api_config');
-    if (!apiConfig || !apiConfig.key) return alert("请先在设置中配置 API");
+// --- 核心：高强度活人感 AI 生成 (8帖 + 6评 + 绝对禁止生成User + 覆盖未收藏的旧帖) ---
+async function forumGenerateAIPosts(type) {
+    const apiConfig = await getActiveApiConfig('forum');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
-    wcShowLoading("正在生成社区动态...");
+    const limit = apiConfig.limit || 50;
+    if (limit > 0 && sessionApiCallCount >= limit) {
+        wcShowError("已达到API调用上限");
+        return;
+    }
+    sessionApiCallCount++;
+
+    wcShowLoading("正在刷新高浓度活人动态...");
 
     try {
-        // 收集背景信息
-        let bgInfo = "";
+        forumState.posts = forumState.posts.filter(p => {
+            if (p.type !== type) return true;
+            if (p.author.name === forumState.profile.name) return true;
+            if (Array.isArray(p.likes) && p.likes.includes(forumState.profile.name)) return true;
+            if (Array.isArray(p.saves) && p.saves.includes(forumState.profile.name)) return true;
+            return false;
+        });
+
+        let contextInfo = "";
+        const currentWin = forumState.windows.find(w => w.id === forumState.activeWindowId);
+        if (currentWin && currentWin.prompt) {
+            contextInfo += `【当前论坛板块专属背景设定 (${currentWin.name})】:\n${currentWin.prompt}\n\n`;
+        }
         
-        if (forumState.config.worldbookIds.length > 0 && typeof worldbookEntries !== 'undefined') {
+        if (forumState.config.worldbookIds.length > 0) {
             const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
             if (wbs.length > 0) {
-                bgInfo += "【世界观背景】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+                contextInfo += "【世界观背景】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+            }
+        }
+        
+        let npcNames = [];
+        if (forumState.config.charIds.length > 0) {
+            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+            if (chars.length > 0) {
+                contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => {
+                    npcNames.push(c.name);
+                    return `${c.name}: ${c.prompt}`;
+                }).join('\n') + "\n\n";
             }
         }
 
-        let participants = [];
-        if (forumState.config.charIds.length > 0 && typeof wcState !== 'undefined') {
-            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
-            chars.forEach(c => participants.push(`${c.name} (人设: ${c.prompt})`));
-        }
-        if (forumState.config.maskIds.length > 0 && typeof wcState !== 'undefined') {
+        let userNames = [forumState.profile.name, wcState.user.name];
+        if (forumState.config.maskIds.length > 0) {
             const masks = wcState.masks.filter(m => forumState.config.maskIds.includes(m.id.toString()));
-            masks.forEach(m => participants.push(`${m.name} (人设: ${m.prompt})`));
+            if (masks.length > 0) {
+                contextInfo += "【关于我(User)的设定/马甲】:\n" + masks.map(m => {
+                    userNames.push(m.name);
+                    return `${m.name}: ${m.prompt}`;
+                }).join('\n') + "\n\n";
+            }
         }
 
-        if (participants.length > 0) {
-            bgInfo += "【活跃用户/角色池】:\n" + participants.join('\n') + "\n\n";
+        let prompt = `你现在是一个社交论坛的后台引擎。请生成一批极具“活人感”的论坛帖子和评论。\n`;
+        if (type === 'home') {
+            prompt += `论坛类型：日常主页。内容是生活吐槽、情感分享、日常记录、发疯文学等。\n`;
+        } else {
+            prompt += `论坛类型：同人论坛。内容是关于某些角色（可以是设定的NPC或虚构人物）的同人段子、脑洞、CP向发言、泥塑等。\n`;
         }
-
-        let prompt = `你是一个高级感 INS/Twitter 风格论坛的内容生成器。\n`;
-        prompt += `${bgInfo}`;
-        // 【核心修改 1】：大幅减少生成数量，防止 JSON 被截断报错
-        prompt += `请生成 3 到 5 个具有高度多样性的论坛帖子。每个帖子包含 2 到 4 条评论。\n`;
-        prompt += `【核心要求（最高优先级）】：\n`;
-        prompt += `1. 帖子内容要极具“活人感”和“真实感”，仿造真实网友的日常动态、吐槽、吃瓜、求助、深夜emo等。\n`;
-        prompt += `2. 发帖人和评论人必须穿插大量的【活跃用户/角色池】中的 NPC，让他们互相评论、互动、甚至吵架、玩梗、阴阳怪气。\n`;
-        prompt += `3. 语言风格要求：极简、克制、高级感，或者带有强烈的当代网友发疯/吃瓜属性（如：救命、笑死、蹲一个、谁懂啊等）。拒绝浓重的 AI 味和书面语。\n`;
-        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
-        prompt += `5. 必须严格返回纯 JSON 数组，不要输出任何其他废话，格式如下：\n`;
+        
+        prompt += `\n${contextInfo}`;
+        
+        prompt += `【核心强制要求（最高优先级）】：\n`;
+        prompt += `1. 数量要求：必须一次性生成 6 到 10 条帖子！每条帖子必须包含至少 8 到 10 条评论！(减少数量防止截断)\n`;
+        prompt += `2. 角色穿插：发帖人和评论人中，必须穿插出现【你认识的熟人(NPC)】（如果有的话：${npcNames.join(', ')}），以及大量虚构的网友。\n`;
+        prompt += `3. 活人感：语气要极度口语化、有网感（如：笑死、救命、谁懂啊、破防了）。评论区要有互动感（网友互相回复、楼主回复网友）。\n`;
+        prompt += `4. 【绝对禁止扮演用户】：上面提供的【关于我(User)的设定/马甲】仅供你作为背景参考（NPC可以发关于User的帖子或吐槽User）。但是，你绝对不能以 User（${userNames.join('、')}）的身份发帖或评论！User 会自己操作，不需要你代劳！所有发帖人和评论人只能是 NPC 或 虚构网友！\n`;                
+        prompt += `5. 【身份隔离警告】：在生成 comments 时，必须清楚认知该帖子的 authorName 是谁！不要让 NPC 误以为帖子是 User 发的，除非帖子内容明确提到了 User！\n`;
+        prompt += `6. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `7. 返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
   {
-    "title": "写在失眠的夜",
-    "content": "窗外的雨声很大，突然想起了很久以前的一件事...",
-    "author": "某个角色的名字 或 匿名",
+    "title": "帖子标题(必须有，吸引眼球)",
+    "authorName": "发帖人名字(NPC或网友)",
+    "handle": "@英文ID",
+    "content": "帖子的正文内容...",
     "comments": [
-      {"author": "路人A", "content": "深有同感。"},
-      {"author": "某个角色的名字", "content": "早点休息吧。"}
+      {"name": "评论人名字", "handle": "@ID", "content": "评论内容"}
+    ]
+  }
+]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.9 
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        // 强力 JSON 容错解析
+        if (!content.endsWith(']')) {
+            const lastBrace = content.lastIndexOf('}');
+            if (lastBrace !== -1) {
+                content = content.substring(0, lastBrace + 1) + ']';
+            } else {
+                content += '}]';
+            }
+        }
+
+        let generatedPosts = [];
+        try {
+            generatedPosts = JSON.parse(content);
+        } catch (e) {
+            console.warn("JSON 解析失败，尝试正则提取兜底", e);
+            const regex = /\{[^{}]*"authorName"[^{}]*\}/g;
+            const matches = content.match(regex);
+            if (matches) {
+                generatedPosts = matches.map(m => {
+                    try { return JSON.parse(m); } catch(err) { return null; }
+                }).filter(Boolean);
+            } else {
+                throw new Error("JSON 解析彻底失败");
+            }
+        }
+
+        generatedPosts.forEach(p => {
+            let finalAuthorName = p.authorName;
+            if (userNames.includes(finalAuthorName)) {
+                finalAuthorName = "匿名网友" + Math.floor(Math.random() * 10000);
+            }
+
+            const npc = wcState.characters.find(c => c.name === finalAuthorName);
+            const avatar = npc ? npc.avatar : getRandomNpcAvatar();
+            
+            const processedComments = (p.comments || []).map(c => {
+                let finalCommentName = c.name;
+                if (userNames.includes(finalCommentName)) {
+                    finalCommentName = "热心网友" + Math.floor(Math.random() * 10000);
+                }
+                const cNpc = wcState.characters.find(char => char.name === finalCommentName);
+                return {
+                    name: finalCommentName,
+                    handle: c.handle || '@' + finalCommentName,
+                    avatar: cNpc ? cNpc.avatar : getRandomNpcAvatar(),
+                    content: c.content,
+                    time: Date.now() - Math.floor(Math.random() * 3600000)
+                };
+            });
+
+            forumState.posts.unshift({
+                id: Date.now() + Math.random(),
+                windowId: forumState.activeWindowId,
+                type: type,
+                title: p.title || '', // 确保保存标题
+                author: {
+                    name: finalAuthorName,
+                    handle: p.handle || '@' + finalAuthorName,
+                    avatar: avatar
+                },
+                content: p.content,
+                image: null,
+                time: Date.now() - Math.floor(Math.random() * 3600000),
+                likes: forumGenerateFakeLikes(), 
+                saves: [],
+                comments: processedComments
+            });
+        });
+
+        forumSaveData();
+        forumRenderPosts(type);
+        wcShowSuccess("刷新成功");
+
+    } catch (e) {
+        console.error(e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[论坛刷新失败] ${e.message}`);
+        else wcShowError("刷新失败，可能生成内容过长");
+    }
+}
+
+// ==========================================
+// 同人文书城生成逻辑 (Fanfic Generator)
+// ==========================================
+
+// --- 打开同人文设定弹窗 ---
+async function forumOpenGenFanficModal() {
+    // 👇 新增：强制加载梦境数据，确保能读到你在聊天更多面板(梦境)里保存的预设
+    if (typeof dreamLoadData === 'function') {
+        await dreamLoadData();
+    }
+
+    // 1. 填充文风预设 (读取梦境预设)
+    const styleSelect = document.getElementById('fanfic-style-select');
+    styleSelect.innerHTML = '<option value="">默认文风 (细腻/意识流)</option>';
+    if (typeof dreamState !== 'undefined' && dreamState.presets) {
+        dreamState.presets.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.content; // 直接把内容作为 value
+            opt.innerText = p.name;
+            styleSelect.appendChild(opt);
+        });
+    }
+
+    // 2. 填充角色 A 和 B
+    const charASelect = document.getElementById('fanfic-char-a');
+    const charBSelect = document.getElementById('fanfic-char-b');
+    
+    let charOptionsHtml = '<option value="">随机/不指定</option>';
+    charOptionsHtml += `<option value="${wcState.user.name} (User)">${wcState.user.name} (我)</option>`;
+    
+    wcState.characters.filter(c => !c.isGroup).forEach(c => {
+        charOptionsHtml += `<option value="${c.name}">${c.name}</option>`;
+    });
+    
+    wcState.masks.forEach(m => {
+        charOptionsHtml += `<option value="${m.name} (我的马甲)">${m.name} (面具)</option>`;
+    });
+
+    charASelect.innerHTML = charOptionsHtml;
+    charBSelect.innerHTML = charOptionsHtml;
+
+    // 3. 恢复已保存的设定
+    styleSelect.value = forumState.config.fanficStyle || '';
+    charASelect.value = forumState.config.fanficCharA || '';
+    charBSelect.value = forumState.config.fanficCharB || '';
+    document.getElementById('fanfic-trope-input').value = forumState.config.fanficTrope || '';
+
+    wcOpenModal('forum-modal-gen-fanfic');
+}
+
+// --- 保存同人文设定 ---
+function forumSaveFanficSettings() {
+    forumState.config.fanficStyle = document.getElementById('fanfic-style-select').value;
+    forumState.config.fanficCharA = document.getElementById('fanfic-char-a').value;
+    forumState.config.fanficCharB = document.getElementById('fanfic-char-b').value;
+    forumState.config.fanficTrope = document.getElementById('fanfic-trope-input').value.trim();
+
+    forumSaveData();
+    wcCloseModal('forum-modal-gen-fanfic');
+    alert("同人文设定已保存！点击右上角闪电图标即可一键生成。");
+}
+
+// --- 一键生成同人文 ---
+function forumDirectGenFanfic() {
+    const charA = forumState.config.fanficCharA || '随机角色A';
+    const charB = forumState.config.fanficCharB || '随机角色B';
+    const trope = forumState.config.fanficTrope || '随机日常/发疯脑洞';
+    const style = forumState.config.fanficStyle || '极具高级感、日系/韩系文艺风、意识流、细腻且克制。';
+
+    let basePrompt = `你现在是一个同人论坛的驻站神仙太太（同人文作者）。\n`;
+    basePrompt += `请根据以下设定，创作同人文：\n`;
+    basePrompt += `【主角 A】：${charA}\n`;
+    basePrompt += `【主角 B】：${charB}\n`;
+    basePrompt += `【小说类型/梗】：${trope}\n`;
+    basePrompt += `【文风要求】：${style}\n`;
+
+    // 附加世界书和角色设定作为背景参考
+    let contextInfo = "";
+    
+    // 👇 核心修改：读取当前窗口的专属世界观设定 👇
+    const currentWin = forumState.windows.find(w => w.id === forumState.activeWindowId);
+    if (currentWin && currentWin.prompt) {
+        contextInfo += `【当前论坛板块专属背景设定 (${currentWin.name})】:\n${currentWin.prompt}\n\n`;
+    }
+
+    if (forumState.config.worldbookIds.length > 0) {
+        const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
+        if (wbs.length > 0) {
+            contextInfo += "【世界观背景参考】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+        }
+    }
+    if (forumState.config.charIds.length > 0) {
+        const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+        if (chars.length > 0) {
+            contextInfo += "【角色性格参考】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
+        }
+    }
+    if (contextInfo) {
+        basePrompt += `\n${contextInfo}`;
+    }
+
+    _executeGenFanfic(basePrompt);
+}
+
+// 内部核心：执行同人文 API 请求 (覆盖未收藏的旧文)
+async function _executeGenFanfic(basePrompt) {
+    const apiConfig = await getActiveApiConfig('forum');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const limit = apiConfig.limit || 50;
+    if (limit > 0 && sessionApiCallCount >= limit) {
+        wcShowError("已达到API调用上限");
+        return;
+    }
+    sessionApiCallCount++;
+
+    wcShowLoading("正在生成同人文，请耐心等待...");
+
+    try {
+        forumState.posts = forumState.posts.filter(p => {
+            if (p.type !== 'fanfic') return true;
+            if (p.author.name === forumState.profile.name) return true;
+            if (Array.isArray(p.likes) && p.likes.includes(forumState.profile.name)) return true;
+            if (Array.isArray(p.saves) && p.saves.includes(forumState.profile.name)) return true;
+            return false;
+        });
+
+        let prompt = basePrompt;
+        prompt += `\n【核心强制要求（最高优先级）】：\n`;
+        prompt += `1. 数量与长度：必须一次性生成 2至3 篇不同视角的同人文！为了防止输出截断，每篇字数控制在 500-800 字左右，但必须保证故事结构完整！\n`;
+        prompt += `2. 评论互动：每篇小说必须附带 3-5 条读者评论（虚构的网友名字），评论要像真实的追更读者（如：太太饿饿饭饭、神仙绝美爱情、刀死我了等）。\n`;
+        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `4. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `[
+  {
+    "title": "同人文标题(必须有)",
+    "authorName": "虚构的作者笔名",
+    "handle": "@作者ID",
+    "content": "小说的正文内容（支持使用 \\n 换行排版）...",
+    "comments": [
+      {"name": "读者A", "handle": "@ID", "content": "评论内容"}
     ]
   }
 ]\n`;
@@ -16574,328 +21115,3058 @@ async function forumGeneratePosts() {
         });
 
         const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(data.error?.message || `HTTP Error: ${response.status}`);
-        }
-
-        if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
-            throw new Error("API 返回格式异常，未找到 choices 数据。");
-        }
-
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
         
-        // 【核心修改 2】：强大的 JSON 截断修复逻辑
-        const start = content.indexOf('[');
-        let end = content.lastIndexOf(']');
-        
-        if (start !== -1) {
-            if (end === -1 || end < start) {
-                // 如果找不到结尾的 ']'，说明被截断了，强行补全
-                content = content.substring(start);
-                // 找到最后一个完整的对象结尾 '}'
-                const lastBrace = content.lastIndexOf('}');
-                if (lastBrace !== -1) {
-                    content = content.substring(0, lastBrace + 1) + ']';
-                } else {
-                    content += ']'; // 极端情况兜底
-                }
+        // 强力 JSON 容错解析
+        if (!content.endsWith(']')) {
+            const lastBrace = content.lastIndexOf('}');
+            if (lastBrace !== -1) {
+                content = content.substring(0, lastBrace + 1) + ']';
             } else {
-                content = content.substring(start, end + 1);
+                content += '}]';
             }
         }
-        
-        const generatedPosts = JSON.parse(content);
-        
-        if (!Array.isArray(generatedPosts)) {
-            throw new Error("AI 没有返回正确的数组格式。");
+
+        let generatedPosts = [];
+        try {
+            generatedPosts = JSON.parse(content);
+        } catch (e) {
+            console.warn("JSON 解析失败，尝试正则提取兜底", e);
+            const regex = /\{[^{}]*"authorName"[^{}]*\}/g;
+            const matches = content.match(regex);
+            if (matches) {
+                generatedPosts = matches.map(m => {
+                    try { return JSON.parse(m); } catch(err) { return null; }
+                }).filter(Boolean);
+            } else {
+                throw new Error("JSON 解析彻底失败");
+            }
         }
-        
-        // 将生成的帖子加入列表
+
         generatedPosts.forEach(p => {
-            let avatarUrl = 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg';
-            if (typeof wcState !== 'undefined') {
-                const char = wcState.characters.find(c => c.name === p.author);
-                if (char) avatarUrl = char.avatar;
-                else {
-                    const mask = wcState.masks.find(m => m.name === p.author);
-                    if (mask) avatarUrl = mask.avatar;
-                }
-            }
+            const processedComments = (p.comments || []).map(c => ({
+                name: c.name,
+                handle: c.handle || '@' + c.name,
+                avatar: getRandomNpcAvatar(),
+                content: c.content,
+                time: Date.now() - Math.floor(Math.random() * 3600000)
+            }));
 
             forumState.posts.unshift({
                 id: Date.now() + Math.random(),
-                author: p.author || '匿名用户',
-                avatar: avatarUrl,
-                title: p.title || '无题',
-                content: p.content || '...',
+                windowId: forumState.activeWindowId,
+                type: 'fanfic',
+                isStory: true, 
+                title: p.title || '无题', // 确保保存标题
+                author: {
+                    name: p.authorName,
+                    handle: p.handle || '@' + p.authorName,
+                    avatar: getRandomNpcAvatar()
+                },
+                content: p.content,
                 image: null,
-                time: Date.now() - Math.floor(Math.random() * 10000000), 
-                likes: Math.floor(Math.random() * 100),
-                isLiked: false,
-                comments: p.comments || []
+                time: Date.now(),
+                likes: forumGenerateFakeLikes(), 
+                saves: [],
+                comments: processedComments
             });
         });
 
         forumSaveData();
-        forumRenderPosts();
-        wcShowSuccess("生成成功");
+        forumRenderPosts('fanfic');
+        wcShowSuccess("神仙太太更新啦！");
 
     } catch (e) {
-        console.error("Forum Generate Error:", e);
-        wcShowError(e.message || "生成失败，请重试");
+        console.error(e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[同人文生成失败] ${e.message}`);
+        else wcShowError("生成失败，可能是字数太多导致截断");
+    }
+}
+// ==========================================
+// 论坛私信系统 (会话列表 + 聊天界面)
+// ==========================================
+
+// 1. 打开私信会话列表
+function forumOpenPrivateMessages() {
+    let view = document.getElementById('forum-pm-list-view');
+    if (!view) {
+        view = document.createElement('div');
+        view.id = 'forum-pm-list-view';
+        view.className = 'ins-forum-view';
+        // 去掉了旧的 ins-forum-header，直接渲染内容区
+        view.innerHTML = `
+            <div class="ins-forum-content" id="forum-pm-list-container" style="padding: 0; background: #FFF;"></div>
+        `;
+        // 插入到 pages-container 中，而不是 forumModal 最外层
+        const pagesContainer = document.querySelector('.pages-container');
+        if (pagesContainer) {
+            pagesContainer.appendChild(view);
+        } else {
+            document.getElementById('forumModal').appendChild(view);
+        }
+    }
+    forumRenderPMList();
+    // 修复：不使用内联 display: flex，直接依赖 active 类，防止切换 tab 时页面重叠
+    view.classList.add('active');
+}
+function forumClosePrivateMessages() {
+    const view = document.getElementById('forum-pm-list-view');
+    if (view) {
+        view.classList.remove('active');
+        setTimeout(() => view.style.display = 'none', 300);
     }
 }
 
-// --- 渲染帖子列表 (中文化) ---
-function forumRenderPosts() {
-    const container = document.getElementById('forum-post-list');
+// 2. 渲染会话列表 (支持左滑删除)
+function forumRenderPMList() {
+    const container = document.getElementById('forum-pm-list-container');
     container.innerHTML = '';
     
-    if (forumState.posts.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 50px; font-size: 14px;">暂无帖子，快来分享第一条动态吧。</div>';
+    // 核心修复：只提取当前窗口的私信
+    const currentChats = (forumState.privateChats || []).filter(c => c.windowId === forumState.activeWindowId);
+    
+    if (currentChats.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #888; padding: 50px 20px; font-size: 13px;">当前频道暂无私信</div>';
         return;
     }
+
+    // 按最后更新时间排序
+    const sortedChats = [...currentChats].sort((a, b) => b.lastUpdateTime - a.lastUpdateTime);
     
-    const sortedPosts = [...forumState.posts].sort((a, b) => b.time - a.time);
+    sortedChats.forEach(chat => {
+        const lastMsg = chat.messages.length > 0 ? chat.messages[chat.messages.length - 1] : null;
+        const lastMsgText = lastMsg ? lastMsg.content : '...';
+        const timeStr = lastMsg ? new Date(lastMsg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+
+        const div = document.createElement('div');
+        div.className = 'forum-pm-swipe-wrapper';
+        
+        div.innerHTML = `
+            <div class="forum-pm-swipe-action" onclick="forumDeletePMChat('${chat.id}')">删除</div>
+            <div class="forum-pm-swipe-content" onclick="forumOpenPMChat('${chat.id}')" ontouchstart="forumPMTouchStart(event)" ontouchmove="forumPMTouchMove(event)" ontouchend="forumPMTouchEnd(event)">
+                <img src="${chat.targetAvatar}" class="forum-pm-avatar">
+                <div class="forum-pm-info">
+                    <div class="forum-pm-name-row">
+                        <span class="forum-pm-name">${chat.targetName}</span>
+                        <span class="forum-pm-time">${timeStr}</span>
+                    </div>
+                    <div class="forum-pm-preview">${lastMsgText}</div>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// 👇👇👇 在 forumRenderPMList 函数下方，紧接着粘贴这段滑动与删除逻辑 👇👇👇
+
+let forumPMSwipeXDown = null;
+let forumPMSwipeYDown = null;
+let forumPMCurrentSwipeElement = null;
+
+window.forumPMTouchStart = function(evt) {
+    forumPMSwipeXDown = evt.touches[0].clientX;
+    forumPMSwipeYDown = evt.touches[0].clientY;
+    forumPMCurrentSwipeElement = evt.currentTarget;
+};
+
+window.forumPMTouchMove = function(evt) {
+    if (!forumPMSwipeXDown || !forumPMSwipeYDown || !forumPMCurrentSwipeElement) return;
+    let xUp = evt.touches[0].clientX;
+    let yUp = evt.touches[0].clientY;
+    let xDiff = forumPMSwipeXDown - xUp;
+    let yDiff = forumPMSwipeYDown - yUp;
     
-    sortedPosts.forEach(post => {
-        const dateStr = new Date(post.time).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        let imgHtml = '';
-        if (post.image) {
-            imgHtml = `<img src="${post.image}" class="ins-forum-post-image">`;
+    // 确保是水平滑动
+    if (Math.abs(xDiff) > Math.abs(yDiff)) { 
+        if (xDiff > 0) {
+            // 向左滑，露出删除按钮 (宽度70px)
+            forumPMCurrentSwipeElement.style.transform = `translateX(-70px)`; 
+        } else {
+            // 向右滑，恢复原位
+            forumPMCurrentSwipeElement.style.transform = 'translateX(0px)'; 
+        }
+    }
+};
+
+window.forumPMTouchEnd = function(evt) {
+    forumPMSwipeXDown = null;
+    forumPMSwipeYDown = null;
+};
+
+window.forumDeletePMChat = function(chatId) {
+    if (confirm("确定要删除这个私信会话吗？")) {
+        forumState.privateChats = forumState.privateChats.filter(c => c.id !== chatId);
+        forumSaveData();
+        forumRenderPMList();
+    }
+};
+// 👆👆👆 粘贴结束 👆👆👆
+
+
+// 3. 打开具体的私信聊天页面
+function forumOpenPMChat(chatId) {
+    forumState.activePMChatId = chatId;
+    const chat = forumState.privateChats.find(c => c.id === chatId);
+    if (!chat) return;
+
+    let view = document.getElementById('forum-pm-chat-view');
+    if (!view) {
+        view = document.createElement('div');
+        view.id = 'forum-pm-chat-view';
+        view.className = 'ins-forum-view';
+        view.style.zIndex = '3100'; 
+        view.style.paddingBottom = '0'; 
+        
+        // 核心修复：增加 padding-top 避开刘海屏，整体下移
+        view.innerHTML = `
+            <div class="ins-forum-header" style="background: #F9F9F9; display: flex; justify-content: space-between; align-items: center; padding: calc(env(safe-area-inset-top, 20px) + 15px) 20px 15px 20px; border-bottom: 1px solid #E5E5EA;">
+                <div class="ins-forum-header-left" onclick="forumClosePMChat()" style="cursor: pointer; display: flex; align-items: center; width: 40px;">
+                    <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: none; stroke: #111; stroke-width: 2;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </div>
+                <div class="ins-forum-title" id="forum-pm-chat-title" style="font-size: 16px; font-weight: bold; color: #111; text-align: center; flex: 1;">名字</div>
+                <div style="width: 40px;"></div> 
+            </div>
+            <div class="forum-pm-chat-history" id="forum-pm-chat-history"></div>
+            <div class="forum-pm-chat-footer" style="display: flex; align-items: center; gap: 8px; padding: 10px; border-top: 1px solid #E5E5EA; background: #FFF;">
+                <div class="ins-forum-action-btn" onclick="forumTriggerPMAI(forumState.activePMChatId)" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #F5F5F5; border-radius: 50%; cursor: pointer; flex-shrink: 0;" title="让AI回复">
+                    <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: #AF52DE; stroke-width: 2;"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+                </div>
+                <input type="text" id="forum-pm-chat-input" placeholder="发私信..." style="flex: 1; border: 1px solid #E5E5EA; border-radius: 16px; padding: 0 12px; height: 32px; outline: none; font-size: 14px; background: transparent;">
+                <button onclick="forumSendPM()" style="background: #111; color: #FFF; border: none; border-radius: 16px; padding: 0 16px; height: 32px; font-weight: bold; cursor: pointer; flex-shrink: 0;">发送</button>
+            </div>
+        `;
+        document.getElementById('forumModal').appendChild(view);
+        document.getElementById('forum-pm-chat-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') forumSendPM();
+        });
+    }
+
+    document.getElementById('forum-pm-chat-title').innerText = chat.targetName;
+    forumRenderPMChatHistory();
+    
+    view.style.display = 'flex';
+    setTimeout(() => view.classList.add('active'), 10);
+}
+
+function forumClosePMChat() {
+    const view = document.getElementById('forum-pm-chat-view');
+    if (view) {
+        view.classList.remove('active');
+        setTimeout(() => view.style.display = 'none', 300);
+    }
+    forumState.activePMChatId = null;
+    forumRenderPMList(); // 退回列表时刷新一下最后一条消息
+}
+
+// 4. 渲染聊天记录
+function forumRenderPMChatHistory() {
+    const container = document.getElementById('forum-pm-chat-history');
+    container.innerHTML = '';
+    
+    const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
+    if (!chat) return;
+
+    chat.messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = `forum-pm-bubble-row ${msg.sender === 'me' ? 'me' : 'them'}`;
+        
+// 找到这段代码（大约在 17730 行左右）：
+        let avatarHtml = '';
+        if (msg.sender === 'them') {
+            avatarHtml = `<img src="${chat.targetAvatar}" class="forum-pm-bubble-avatar">`;
+        } else {
+            avatarHtml = `<img src="${forumState.profile.avatar}" class="forum-pm-bubble-avatar">`;
+        }
+        // 👇👇👇 将下面的 div.innerHTML 替换掉 👇👇👇
+        const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
+        const match = msg.content.match(bilingualRegex);
+        
+        let bubbleContentHtml = msg.content;
+        let onClickAttr = "";
+        const isMe = msg.sender === 'me';
+
+        if (match) {
+            const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+            const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+            const transId = 'pm-trans-' + Math.random().toString(36).substr(2, 9);
+            
+            onClickAttr = `onclick="const el = document.getElementById('${transId}'); if(el.style.display==='none'){el.style.display='block';}else{el.style.display='none';}" style="cursor: pointer; -webkit-tap-highlight-color: transparent;"`;
+            // 核心修复：压缩为单行
+            bubbleContentHtml = `<div style="word-break: break-word; width: 100%;">${originalText}</div><div id="${transId}" style="display: none; width: 100%; margin-top: 8px;"><div style="height: 1px; width: 100%; background-color: ${isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)'}; margin-bottom: 8px;"></div><div style="font-size: 13px; word-break: break-word; color: ${isMe ? '#CCCCCC' : '#888888'};">${translatedText}</div></div>`;
+        }
+
+        div.innerHTML = `
+            ${avatarHtml}
+            <div class="forum-pm-bubble" ${onClickAttr}>${bubbleContentHtml}</div>
+        `;
+        // 👆👆👆 替换结束 👆👆👆
+        
+        container.appendChild(div);
+    });
+
+    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 50);
+}
+
+// 5. 用户发送私信
+function forumSendPM() {
+    const input = document.getElementById('forum-pm-chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
+    if (!chat) return;
+
+    // 存入用户消息
+    chat.messages.push({
+        id: Date.now(),
+        sender: 'me',
+        content: text,
+        time: Date.now()
+    });
+    chat.lastUpdateTime = Date.now();
+    forumSaveData();
+    
+    input.value = '';
+    forumRenderPMChatHistory();
+
+}
+
+// 6. 专属的私信 AI 回复逻辑
+async function forumTriggerPMAI(chatId) {
+    const chat = forumState.privateChats.find(c => c.id === chatId);
+    if (!chat) return;
+
+    const apiConfig = await getActiveApiConfig('forum');
+    if (!apiConfig || !apiConfig.key) return;
+
+    // 插入一个临时的“正在输入”气泡
+    const container = document.getElementById('forum-pm-chat-history');
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'forum-pm-bubble-row them';
+    loadingDiv.id = 'forum-pm-loading';
+    loadingDiv.innerHTML = `<img src="${chat.targetAvatar}" class="forum-pm-bubble-avatar"><div class="forum-pm-bubble" style="color:#888;">正在输入...</div>`;
+    container.appendChild(loadingDiv);
+    container.scrollTop = container.scrollHeight;
+
+    try {
+        // 提取最近的聊天记录
+        const recentMsgs = chat.messages.slice(-15).map(m => {
+            const speaker = m.sender === 'me' ? forumState.profile.name : chat.targetName;
+            return `${speaker}: ${m.content}`;
+        }).join('\n');
+
+        // 👇 修改：查找对方是否是已知的 NPC，如果不是，赋予路人设定
+        const npc = wcState.characters.find(c => c.name === chat.targetName);
+        let npcPersona = npc ? npc.prompt : "一个在论坛上关注你的热心网友/路人。请根据你们的聊天记录推断你的性格，语气要像真实的活人网友。";
+
+        let prompt = `你现在正在一个社交论坛的私信界面里，和用户（${forumState.profile.name}）进行一对一私聊。\n`;
+        prompt += `【你的身份】：${chat.targetName}\n`;
+        prompt += `【你的人设】：${npcPersona}\n\n`;
+        prompt += `【最近的私信聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 请根据你的人设和聊天记录，回复用户的最后一条消息。\n`;
+        prompt += `2. 语气要符合论坛私聊的氛围（可以是网感、暧昧、吐槽等，取决于你的人设）。\n`;
+        // 👇 修改：强制要求碎片化输出
+        prompt += `3. 【碎片化口语化强制指令】：必须像真人聊天一样，将长回复拆分成 2-4 条短消息！严禁把所有话挤在一个气泡里！\n`;
+        prompt += `4. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）说话！你只能扮演 ${chat.targetName}！\n`;
+        prompt += `5. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `[
+  {"content": "第一句短消息"},
+  {"content": "第二句短消息"}
+]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 4000
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        // 👇 修改：解析数组，并遍历推入聊天记录
+        let replies = [];
+        try {
+            replies = JSON.parse(content);
+            if (!Array.isArray(replies)) {
+                replies = [replies]; // 兜底：如果AI还是返回了对象，转成数组
+            }
+        } catch (e) {
+            replies = [{"content": content}]; // 兜底：解析失败直接作为纯文本
+        }
+
+        // 移除 loading
+        const loadingEl = document.getElementById('forum-pm-loading');
+        if (loadingEl) loadingEl.remove();
+
+        // 存入 AI 回复 (遍历数组)
+        for (const reply of replies) {
+            if (reply.content) {
+                chat.messages.push({
+                    id: Date.now() + Math.random(),
+                    sender: 'them',
+                    content: reply.content,
+                    time: Date.now()
+                });
+            }
         }
         
-        const commentCount = post.comments ? post.comments.length : 0;
-        
-        const div = document.createElement('div');
-        div.className = 'ins-forum-post-card';
-        div.innerHTML = `
-            <div class="ins-forum-post-header">
-                <img src="${post.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="ins-forum-post-avatar">
-                <div>
-                    <div class="ins-forum-post-author">${post.author}</div>
-                    <div class="ins-forum-post-time">${dateStr}</div>
-                </div>
-            </div>
-            <div style="cursor: pointer;" onclick="forumOpenPostDetail(${post.id})">
-                <div class="ins-forum-post-title">${post.title}</div>
-                <div class="ins-forum-post-text" style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">${post.content}</div>
-                ${imgHtml}
-            </div>
-            <div class="ins-forum-post-actions">
-                <div style="display: flex; gap: 20px;">
-                    <div class="ins-forum-action-btn" onclick="forumToggleLike(${post.id}, this)">
-                        <svg viewBox="0 0 24 24" style="fill: ${post.isLiked ? '#000' : 'none'}; stroke: ${post.isLiked ? '#000' : 'currentColor'};"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                        <span>${post.likes || 0}</span>
-                    </div>
-                    <div class="ins-forum-action-btn" onclick="forumOpenPostDetail(${post.id})">
-                        <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                        <span>${commentCount}</span>
-                    </div>
-                </div>
-                <div class="ins-forum-action-btn" onclick="forumOpenShareModal(${post.id})">
-                    <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
-                </div>
-            </div>
-        `;
-        container.appendChild(div);
-    });
-}
-
-// --- 帖子详情页 (中文化) ---
-function forumOpenPostDetail(id) {
-    forumCurrentPostId = id; 
-    const post = forumState.posts.find(p => p.id === id);
-    if (!post) return;
-
-    const dateStr = new Date(post.time).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    let imgHtml = post.image ? `<img src="${post.image}" class="ins-forum-post-image" style="margin-top: 15px;">` : '';
-
-    let commentsHtml = '';
-    if (post.comments && post.comments.length > 0) {
-        post.comments.forEach(c => {
-            commentsHtml += `
-                <div style="padding: 15px 20px; border-bottom: 1px solid #F9F9F9; display: flex; gap: 12px;">
-                    <div style="width: 36px; height: 36px; border-radius: 50%; background: #F5F5F5; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #888; flex-shrink: 0;">${c.author.charAt(0)}</div>
-                    <div>
-                        <div style="font-size: 14px; font-weight: 700; color: #000; margin-bottom: 4px;">${c.author}</div>
-                        <div style="font-size: 15px; color: #333; line-height: 1.5;">${c.content}</div>
-                    </div>
-                </div>
-            `;
-        });
-    } else {
-        commentsHtml = '<div style="text-align: center; color: #8E8E93; padding: 30px; font-size: 13px;">还没有人评论，快来抢沙发吧。</div>';
-    }
-
-    const contentEl = document.getElementById('forum-detail-content');
-    contentEl.innerHTML = `
-        <div style="padding: 20px; background: #FFF; border-bottom: 8px solid #FAFAFA;">
-            <div class="ins-forum-post-header">
-                <img src="${post.avatar || 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg'}" class="ins-forum-post-avatar">
-                <div>
-                    <div class="ins-forum-post-author">${post.author}</div>
-                    <div class="ins-forum-post-time">${dateStr}</div>
-                </div>
-            </div>
-            <div class="ins-forum-post-title" style="font-size: 20px;">${post.title}</div>
-            <div class="ins-forum-post-text" style="font-size: 16px;">${post.content}</div>
-            ${imgHtml}
-        </div>
-        <div style="background: #FFF;">
-            <div style="padding: 15px 20px; font-size: 13px; font-weight: 800; color: #8E8E93; border-bottom: 1px solid #F0F0F0;">全部评论 (${post.comments ? post.comments.length : 0})</div>
-            ${commentsHtml}
-        </div>
-    `;
-
-    document.getElementById('forum-view-detail').classList.add('active');
-}
-
-// --- 个人主页与设置 (中文化) ---
-function forumRenderProfile() {
-    document.getElementById('forum-profile-avatar').src = forumState.profile.avatar;
-    document.getElementById('forum-profile-name').innerText = forumState.profile.name;
-    document.getElementById('forum-profile-bio').innerText = forumState.profile.bio;
-    
-    const container = document.getElementById('forum-my-post-list');
-    container.innerHTML = '';
-    
-    const myPosts = forumState.posts.filter(p => p.author === forumState.profile.name).sort((a, b) => b.time - a.time);
-    
-    if (myPosts.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 30px; font-size: 14px;">你还没有发布过动态。</div>';
-        return;
-    }
-    
-    myPosts.forEach(post => {
-        const dateStr = new Date(post.time).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-        const div = document.createElement('div');
-        div.style.cssText = "background: #FFF; border-radius: 12px; padding: 15px; margin-bottom: 15px; border: 1px solid #E5E5EA; display: flex; justify-content: space-between; align-items: center;";
-        div.innerHTML = `
-            <div style="flex: 1; overflow: hidden; padding-right: 15px; cursor: pointer;" onclick="forumOpenPostDetail(${post.id})">
-                <div style="font-size: 16px; font-weight: 700; color: #000; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${post.title}</div>
-                <div style="font-size: 12px; color: #8E8E93;">${dateStr}</div>
-            </div>
-            <div style="color: #FF3B30; font-size: 13px; font-weight: bold; cursor: pointer; padding: 5px;" onclick="forumDeletePost(${post.id})">删除</div>
-        `;
-        container.appendChild(div);
-    });
-}
-
-function forumDeletePost(id) {
-    if (confirm("确定要删除这条动态吗？")) {
-        forumState.posts = forumState.posts.filter(p => p.id !== id);
+        chat.lastUpdateTime = Date.now();
         forumSaveData();
-        forumRenderProfile();
+
+        // 如果当前还在这个聊天页面，刷新界面
+        if (forumState.activePMChatId === chatId) {
+            forumRenderPMChatHistory();
+        }
+
+    } catch (e) {
+        console.error("私信回复失败", e);
+        const loadingEl = document.getElementById('forum-pm-loading');
+        if (loadingEl) loadingEl.remove();
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[论坛私信回复失败] ${e.message}`);
     }
 }
-// ==========================================
-// 论坛补充功能：评论、分享到微信
-// ==========================================
+/* ==========================================================================
+   语音通话系统 (Voice Call Logic - 沉浸互通版)
+   ========================================================================== */
 
-// 1. 提交评论功能
-function forumSubmitComment() {
-    if (!forumCurrentPostId) return;
-    const input = document.getElementById('forum-comment-input');
-    const text = input.value.trim();
-    
-    if (!text) {
-        alert("评论内容不能为空哦~");
-        return;
-    }
-
-    const post = forumState.posts.find(p => p.id === forumCurrentPostId);
-    if (post) {
-        if (!post.comments) post.comments = [];
-        // 将用户的评论推入数组
-        post.comments.push({
-            author: forumState.profile.name,
-            content: text
-        });
-        
-        forumSaveData();
-        
-        // 重新渲染详情页和主页，清空输入框
-        forumOpenPostDetail(forumCurrentPostId); 
-        input.value = ''; 
-        forumRenderPosts(); 
-    }
-}
-
-// 2. 打开分享弹窗
-let forumPendingSharePostId = null;
-
-function forumOpenShareModal(postId = null) {
-    // 兼容主页列表点击和详情页点击
-    forumPendingSharePostId = postId || forumCurrentPostId; 
-    if (!forumPendingSharePostId) return;
-
-    const list = document.getElementById('forum-share-char-list');
-    list.innerHTML = '';
-
-    // 获取所有微信角色（排除群聊，只分享给单人）
-    const chars = wcState.characters.filter(c => !c.isGroup);
-
-    if (chars.length === 0) {
-        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">暂无联系人，请先在微信添加角色</div>';
-    } else {
-        chars.forEach(c => {
-            list.innerHTML += `
-                <div class="wc-list-item" style="background: #FFF; border-bottom: 1px solid #F0F0F0; padding: 12px 0; cursor: pointer;" onclick="forumShareToChar(${c.id})">
-                    <img src="${c.avatar}" style="width: 40px; height: 40px; border-radius: 8px; object-fit: cover;">
-                    <div style="flex: 1; margin-left: 15px; font-size: 15px; font-weight: 600; color: #111;">${c.name}</div>
-                    <div style="color: #007AFF; font-size: 13px; font-weight: bold; background: #F2F2F7; padding: 6px 12px; border-radius: 12px;">发送</div>
-                </div>
-            `;
-        });
-    }
-    wcOpenModal('forum-modal-share');
-}
-
-// 3. 执行分享给 Char 的逻辑
-function forumShareToChar(charId) {
-    if (!forumPendingSharePostId) return;
-    
-    const post = forumState.posts.find(p => p.id === forumPendingSharePostId);
+// 1. 我呼叫 Ta
+async function wcActionVoiceCall() {
+    wcCloseAllPanels();
+    const charId = wcState.activeChatId;
     const char = wcState.characters.find(c => c.id === charId);
-    if (!post || !char) return;
+    if (!char) return;
 
-    // 构造一张高级感的分享卡片，发送到微信聊天界面
+    if (char.isGroup) {
+        alert("群聊暂不支持语音通话哦~");
+        return;
+    }
+
+    // 初始化 UI (居中状态)
+    const callView = document.getElementById('wc-view-call-screen');
+    callView.classList.remove('active-call'); 
+    
+    document.getElementById('ins-call-bg').style.backgroundImage = `url('${char.avatar}')`;
+    document.getElementById('ins-call-avatar').src = char.avatar;
+    document.getElementById('ins-call-name').innerText = char.name;
+    document.getElementById('ins-call-status').innerText = "正在呼叫...";
+    document.getElementById('ins-call-voice-wave').classList.add('hidden'); // 隐藏音波
+    
+    document.getElementById('ins-call-actions-ringing').style.display = 'flex';
+    document.getElementById('ins-call-actions-incoming').style.display = 'none';
+    document.getElementById('ins-call-actions-active').style.display = 'none';
+    document.getElementById('ins-call-chat-area').style.display = 'none';
+    document.getElementById('ins-call-messages').innerHTML = '';
+    
+    callView.classList.remove('hidden');
+
+    wcState.callState.charId = charId;
+    wcState.callState.isActive = false;
+
+    // 触发 AI 决定是否接听
+    await wcProcessCallDecision(char);
+}
+
+// 2. AI 决定是否接听 (读取世界书、面具、记忆，严禁emoji)
+async function wcProcessCallDecision(char) {
+    const apiConfig = await getActiveApiConfig('chat');
+    if (!apiConfig || !apiConfig.key) {
+        setTimeout(() => wcHangUpCall('rejected', "未配置API，无法接通"), 2000);
+        return;
+    }
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-15).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
+        
+        // 读取世界书
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 读取记忆
+        let memoryText = "暂无特殊记忆。";
+        if (char.memories && char.memories.length > 0) {
+            const readCount = chatConfig.aiMemoryCount || 5;
+            memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content}`).join('\n');
+        }
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定/面具】：${userPersona}\n`;
+        prompt += `【你们的共同记忆】：\n${memoryText}\n\n`;
+        prompt += `【当前情境】：User 突然给你打来了一个语音电话。\n`;
+        prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `请根据你的人设、记忆、世界观以及最近的聊天氛围，决定是否接听这个电话。\n`;
+        prompt += `【核心表现要求】：\n`;
+        prompt += `1. 如果接听，请给出接通后的第一句话。你可以使用括号 () 来描述你接电话时的语气、呼吸声或环境音，例如：(刚睡醒，声音沙哑) 或 (轻笑一声)。\n`;
+        prompt += `2. 语气必须像真人一样自然、口语化，不要太死板！\n`;
+        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `如果拒接，请给出拒接的理由（内心OS）。\n`;
+        prompt += `返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{"accept": true, "firstSentence": "(接起电话，伴随着走路的喘息声) 喂？怎么突然打电话来了？"}\n`;
+        prompt += `或 {"accept": false, "reason": "现在在开会，不方便接。"}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.7,
+                max_tokens: 4000
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const decision = JSON.parse(content);
+
+        if (!document.getElementById('wc-view-call-screen') || document.getElementById('wc-view-call-screen').classList.contains('hidden')) return;
+
+        if (decision.accept) {
+            wcStartActiveCall(decision.firstSentence);
+        } else {
+            wcHangUpCall('rejected', decision.reason);
+        }
+
+    } catch (e) {
+        console.error("AI 决策失败", e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[语音通话决策失败] ${e.message}`);
+        wcStartActiveCall("(接通电话) 喂？");
+    }
+}
+
+// 3. Ta 呼叫我 (AI 主动来电)
+window.wcShowIncomingCall = function(charId) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    wcState.callState.charId = charId;
+    wcState.callState.isActive = false;
+
+    const callView = document.getElementById('wc-view-call-screen');
+    callView.classList.remove('active-call'); 
+    
+    document.getElementById('ins-call-bg').style.backgroundImage = `url('${char.avatar}')`;
+    document.getElementById('ins-call-avatar').src = char.avatar;
+    document.getElementById('ins-call-name').innerText = char.name;
+    document.getElementById('ins-call-status').innerText = "邀请你进行语音通话...";
+    document.getElementById('ins-call-voice-wave').classList.add('hidden');
+    
+    document.getElementById('ins-call-actions-ringing').style.display = 'none';
+    document.getElementById('ins-call-actions-incoming').style.display = 'flex'; 
+    document.getElementById('ins-call-actions-active').style.display = 'none';
+    document.getElementById('ins-call-chat-area').style.display = 'none';
+    document.getElementById('ins-call-messages').innerHTML = '';
+    
+    callView.classList.remove('hidden');
+    
+    if (typeof showMainSystemNotification === 'function') {
+        showMainSystemNotification("语音通话", `${char.name} 邀请你进行语音通话`, char.avatar);
+    }
+    if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+};
+
+// 4. 我接听 Ta 的来电
+window.wcAcceptIncomingCall = function() {
+    const charId = wcState.callState.charId;
+    if (!charId) return;
+
+    document.getElementById('ins-call-actions-incoming').style.display = 'none';
+    
+    wcAddMessage(charId, 'system', 'system', `[系统内部信息: User 接听了你的语音通话！请立刻说第一句话。]`, { hidden: true });
+    
+    wcStartActiveCall(); 
+    wcTriggerCallAI();
+};
+
+// 5. 我拒绝 Ta 的来电
+window.wcRejectIncomingCall = function() {
+    const charId = wcState.callState.charId;
+    if (!charId) return;
+
+    document.getElementById('wc-view-call-screen').classList.add('hidden');
+    wcAddMessage(charId, 'me', 'call_record', '已拒绝', { status: 'rejected' });
+    wcAddMessage(charId, 'system', 'system', `[系统内部信息: User 挂断/拒绝了你的语音通话。]`, { hidden: true });
+    
+    wcState.callState.isActive = false;
+    wcState.callState.charId = null;
+};
+
+// 6. 正式接通电话 (UI 变化)
+function wcStartActiveCall(firstSentence = null) {
+    wcState.callState.isActive = true;
+    wcState.callState.startTime = Date.now();
+
+    const callView = document.getElementById('wc-view-call-screen');
+    callView.classList.add('active-call'); 
+
+    document.getElementById('ins-call-actions-ringing').style.display = 'none';
+    document.getElementById('ins-call-actions-incoming').style.display = 'none';
+    document.getElementById('ins-call-actions-active').style.display = 'flex';
+    document.getElementById('ins-call-chat-area').style.display = 'flex';
+
+    wcState.callState.timerInterval = setInterval(() => {
+        const diff = Math.floor((Date.now() - wcState.callState.startTime) / 1000);
+        const m = Math.floor(diff / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        // 只有在没说话的时候才显示时间
+        if (!wcState.callState.isSpeaking) {
+            document.getElementById('ins-call-status').innerText = `${m}:${s}`;
+        }
+    }, 1000);
+
+    if (firstSentence) {
+        wcAddCallMessage('them', firstSentence);
+        wcAddMessage(wcState.callState.charId, 'system', 'system', `[语音通话已接通] ${wcState.characters.find(c=>c.id===wcState.callState.charId).name} 说: "${firstSentence}"`, { hidden: true });
+    }
+}
+
+// 7. 挂断电话 (注入强力记忆)
+window.wcHangUpCall = function(reason, aiReason = "") {
+    const charId = wcState.callState.charId;
+    if (!charId) return;
+
+    clearInterval(wcState.callState.timerInterval);
+    document.getElementById('wc-view-call-screen').classList.add('hidden');
+    document.getElementById('ins-call-voice-wave').classList.add('hidden');
+
+    if (reason === 'cancel') {
+        wcAddMessage(charId, 'me', 'call_record', '已取消', { status: 'canceled' });
+    } else if (reason === 'rejected') {
+        wcAddMessage(charId, 'them', 'call_record', '已拒绝接听', { status: 'rejected' });
+        if (aiReason) {
+            wcAddMessage(charId, 'system', 'system', `[系统内部信息: 对方拒接了电话，Ta的内心OS是: "${aiReason}"]`, { hidden: true });
+        }
+    } else if (reason === 'end') {
+        const diff = Math.floor((Date.now() - wcState.callState.startTime) / 1000);
+        const m = Math.floor(diff / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        const durationStr = `${m}:${s}`;
+        
+        wcAddMessage(charId, 'me', 'call_record', '通话时长', { duration: durationStr, status: 'ended' });
+        
+        // 👇 核心修改：挂断时注入强力记忆，确保文字聊天能接上话题 👇
+        const memoryPrompt = `[系统强制提示：你们刚刚结束了一通长达 ${durationStr} 的语音通话。在接下来的文字聊天中，请你自然地顺延刚刚电话里聊过的话题或情绪，不要表现得像刚认识一样！]`;
+        wcAddMessage(charId, 'system', 'system', memoryPrompt, { hidden: true });
+    }
+
+    wcState.callState.isActive = false;
+    wcState.callState.charId = null;
+    wcState.callState.isSpeaking = false;
+    document.getElementById('ins-call-avatar-wrapper').classList.remove('speaking');
+};
+
+// 8. 通话中发送消息 (User)
+window.wcSendCallMessage = function() {
+    const input = document.getElementById('ins-call-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    wcAddCallMessage('me', text);
+    wcAddMessage(wcState.callState.charId, 'system', 'system', `[语音通话中] User 说: "${text}"`, { hidden: true });
+
+    input.value = '';
+    setTimeout(wcTriggerCallAI, 500);
+};
+
+// 9. 通话中 AI 回复 (深度记忆互通、活人感、严禁emoji)
+window.wcTriggerCallAI = async function() {
+    const charId = wcState.callState.charId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char || !wcState.callState.isActive) return;
+
+    const apiConfig = await getActiveApiConfig('chat');
+    if (!apiConfig || !apiConfig.key) return;
+
+    // 开启说话动画和 SVG 音波
+    wcState.callState.isSpeaking = true;
+    document.getElementById('ins-call-avatar-wrapper').classList.add('speaking');
+    document.getElementById('ins-call-status').innerText = "对方正在说话...";
+    document.getElementById('ins-call-voice-wave').classList.remove('hidden');
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        // 读取世界书
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 读取记忆
+        let memoryText = "暂无特殊记忆。";
+        if (char.memories && char.memories.length > 0) {
+            const readCount = chatConfig.aiMemoryCount || 5;
+            memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content}`).join('\n');
+        }
+
+        // 提取最近的聊天记录（包含文字聊天和语音通话记录，实现无缝互通）
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-20).map(m => {
+            if (m.type === 'system' && m.content.includes('[语音通话中]')) return m.content;
+            if (m.type === 'system' && m.content.includes('[语音通话已接通]')) return m.content;
+            if (m.type === 'text') return `${m.sender==='me'?'User':char.name}: ${m.content}`;
+            return null;
+        }).filter(Boolean).join('\n');
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定/面具】：${userPersona}\n`;
+        prompt += `【你们的共同记忆】：\n${memoryText}\n\n`;
+        prompt += `【当前情境】：你正在和 User 打语音电话。\n`;
+        prompt += `【最近的文字与语音聊天记录】：\n${recentMsgs}\n\n`;
+        
+        prompt += `请根据你的人设、记忆、世界观以及上下文，回复 User 的话。\n`;
+        prompt += `【核心表现要求】：\n`;
+        prompt += `1. 语气要像真实的语音通话一样自然、口语化，可以带点语气词（嗯、啊、哦），绝对不要像机器或客服！不要太死板！\n`;
+        prompt += `2. 你可以使用括号 () 来描述你说话时的语气、呼吸声、微动作或环境音，例如：(轻笑)、(深吸一口气)、(翻身摩擦被子的声音)、(声音有些沙哑)。\n`;
+        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `返回纯 JSON 对象：{"content": "你说的话"}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const reply = JSON.parse(content);
+
+        if (wcState.callState.isActive) {
+            wcAddCallMessage('them', reply.content);
+            wcAddMessage(charId, 'system', 'system', `[语音通话中] ${char.name} 说: "${reply.content}"`, { hidden: true });
+        }
+
+    } catch (e) {
+        console.error("通话回复失败", e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[语音通话回复失败] ${e.message}`);
+    } finally {
+        // 关闭说话动画和 SVG 音波
+        wcState.callState.isSpeaking = false;
+        document.getElementById('ins-call-avatar-wrapper').classList.remove('speaking');
+        document.getElementById('ins-call-voice-wave').classList.add('hidden');
+        
+        // 恢复显示时间
+        const diff = Math.floor((Date.now() - wcState.callState.startTime) / 1000);
+        const m = Math.floor(diff / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        document.getElementById('ins-call-status').innerText = `${m}:${s}`;
+    }
+};
+
+// 10. 渲染单条通话消息到屏幕
+function wcAddCallMessage(sender, text) {
+    const container = document.getElementById('ins-call-messages');
+    const div = document.createElement('div');
+    div.className = `ins-call-msg ${sender}`;
+    
+    // 简单处理一下括号，让括号里的动作文字变成灰色斜体，更有高级感
+    let formattedText = text.replace(/\((.*?)\)/g, '<span style="color: rgba(255,255,255,0.5); font-style: italic;">($1)</span>');
+    formattedText = formattedText.replace(/（(.*?)）/g, '<span style="color: rgba(255,255,255,0.5); font-style: italic;">（$1）</span>');
+    
+    div.innerHTML = formattedText;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+// ==========================================
+// 新增：全局高级世界书选择弹窗逻辑
+// ==========================================
+let currentWbTargetListId = '';
+let currentWbTargetCountId = '';
+let currentWbCheckboxClass = '';
+let currentWbCallback = null;
+
+function openGlobalWbModal(listId, countId, checkboxClass = '', callback = null) {
+    currentWbTargetListId = listId;
+    currentWbTargetCountId = countId;
+    currentWbCheckboxClass = checkboxClass;
+    currentWbCallback = callback;
+
+    // 1. 读取当前已选的 ID
+    const hiddenInputs = document.querySelectorAll(`#${listId} input[type="checkbox"]:checked`);
+    const selectedIds = Array.from(hiddenInputs).map(input => input.value);
+
+    // 2. 渲染弹窗内容
+    const container = document.getElementById('global-wb-modal-body');
+    container.innerHTML = '';
+
+    if (!worldbookGroups || worldbookGroups.length === 0 || !worldbookEntries || worldbookEntries.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 20px; font-size:14px;">暂无世界书，请先在主界面添加哦~</div>';
+    } else {
+        worldbookGroups.forEach((group, index) => {
+            const entries = worldbookEntries.filter(e => e.type === group);
+            if (entries.length === 0) return;
+
+            const selectedInGroup = entries.filter(e => selectedIds.includes(e.id.toString())).length;
+            const isExpanded = index === 0 ? 'expanded' : ''; // 默认展开第一个
+
+            let html = `
+                <div class="ins-wb-group ${isExpanded}">
+                    <div class="ins-wb-group-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="ins-wb-group-title">${group} <span class="ins-wb-group-count">${selectedInGroup}/${entries.length}</span></div>
+                        <svg class="ins-wb-group-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </div>
+                    <div class="ins-wb-group-content">
+            `;
+
+            entries.forEach(entry => {
+                const isChecked = selectedIds.includes(entry.id.toString()) ? 'checked' : '';
+                html += `
+                    <label class="ins-wb-item">
+                        <input type="checkbox" value="${entry.id}" class="global-wb-checkbox" ${isChecked} onchange="updateGlobalWbGroupCount(this)">
+                        <span class="ins-wb-item-title">${entry.title}</span>
+                    </label>
+                `;
+            });
+
+            html += `</div></div>`;
+            container.innerHTML += html;
+        });
+    }
+
+    // 3. 显示弹窗
+    const modal = document.getElementById('global-wb-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function updateGlobalWbGroupCount(checkbox) {
+    const groupEl = checkbox.closest('.ins-wb-group');
+    const total = groupEl.querySelectorAll('.global-wb-checkbox').length;
+    const checked = groupEl.querySelectorAll('.global-wb-checkbox:checked').length;
+    groupEl.querySelector('.ins-wb-group-count').innerText = `${checked}/${total}`;
+}
+
+function closeGlobalWbModal() {
+    const modal = document.getElementById('global-wb-modal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+function confirmGlobalWbSelect() {
+    // 1. 获取弹窗中所有勾选的 ID
+    const selectedCheckboxes = document.querySelectorAll('#global-wb-modal-body .global-wb-checkbox:checked');
+    const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+    // 2. 更新隐藏的列表 (完美兼容原有的保存逻辑)
+    const hiddenList = document.getElementById(currentWbTargetListId);
+    if (hiddenList) {
+        hiddenList.innerHTML = '';
+        selectedIds.forEach(id => {
+            hiddenList.innerHTML += `<input type="checkbox" value="${id}" class="${currentWbCheckboxClass}" checked>`;
+        });
+    }
+
+    // 3. 更新按钮上的数量显示
+    const countDisplay = document.getElementById(currentWbTargetCountId);
+    if (countDisplay) {
+        countDisplay.innerText = `已选 ${selectedIds.length} 项`;
+    }
+
+    // 4. 触发回调 (如果有)
+    if (currentWbCallback) {
+        currentWbCallback(selectedIds);
+    }
+
+    // 触发实时 Token 计算 (如果当前在聊天设置页面)
+    if (typeof calculateRealtimeTokens === 'function') {
+        calculateRealtimeTokens();
+    }
+
+    closeGlobalWbModal();
+}
+// ==========================================
+// 新增：Token 计算与 API 额度查询逻辑 (增强版)
+// ==========================================
+
+// 粗略估算 Token (中文按 1.2 算，英文按 0.3 算)
+function estimateTokens(text) {
+    if (!text) return 0;
+    let tokens = 0;
+    for (let i = 0; i < text.length; i++) {
+        if (text.charCodeAt(i) > 255) {
+            tokens += 1.2;
+        } else {
+            tokens += 0.3;
+        }
+    }
+    return Math.ceil(tokens);
+}
+
+// 实时计算当前聊天的各项 Token 占用 (已剔除内置提示词)
+function calculateRealtimeTokens() {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    
+    let wbTokens = 0;
+    let chatTokens = 0;
+    let memTokens = 0;
+    let stickerTokens = 0;
+
+    // 1. 计算世界书 (从当前勾选的复选框读取)
+    const wbCheckboxes = document.querySelectorAll('#wc-setting-worldbook-list input[type="checkbox"]:checked');
+    const selectedWbIds = Array.from(wbCheckboxes).map(cb => cb.value);
+    if (selectedWbIds.length > 0) {
+        const linkedWbs = worldbookEntries.filter(e => selectedWbIds.includes(e.id.toString()));
+        linkedWbs.forEach(wb => {
+            wbTokens += estimateTokens(wb.title + wb.desc);
+        });
+    }
+
+    // 2. 计算聊天上下文 (从当前输入的限制条数读取)
+    const msgs = wcState.chats[char.id] || [];
+    let limit = parseInt(document.getElementById('wc-setting-context-limit').value);
+    if (isNaN(limit) || limit <= 0) limit = 30; // 默认30
+    const recentMsgs = msgs.slice(-limit);
+    recentMsgs.forEach(m => {
+        if (!m.isError) {
+            chatTokens += estimateTokens(m.content);
+        }
+    });
+
+    // 3. 计算记忆 (记忆条数不在当前面板修改，直接读 config)
+    if (char.memories && char.memories.length > 0) {
+        const readCount = (char.chatConfig && char.chatConfig.aiMemoryCount !== undefined) ? char.chatConfig.aiMemoryCount : 5;
+        const recentMemories = char.memories.slice(0, readCount);
+        recentMemories.forEach(m => {
+            memTokens += estimateTokens(m.content);
+        });
+    }
+
+    // 4. 计算表情包 (从当前勾选的复选框读取)
+    const stickerCheckboxes = document.querySelectorAll('#wc-setting-sticker-group-list input[type="checkbox"]:checked');
+    const selectedStickerIds = Array.from(stickerCheckboxes).map(cb => parseInt(cb.value));
+    if (selectedStickerIds.length > 0) {
+        selectedStickerIds.forEach(groupId => {
+            const group = wcState.stickerCategories[groupId];
+            if (group && group.list) {
+                group.list.forEach(s => {
+                    stickerTokens += estimateTokens(s.desc);
+                });
+            }
+        });
+    }
+
+    const totalTokens = wbTokens + chatTokens + memTokens + stickerTokens;
+
+    // 更新 UI
+    const uiTotal = document.getElementById('ui-total-token');
+    if (uiTotal) uiTotal.innerText = `约 ${totalTokens.toLocaleString()}`;
+    
+    const dWb = document.getElementById('detail-token-wb');
+    if (dWb) dWb.innerText = wbTokens.toLocaleString();
+    
+    const dChat = document.getElementById('detail-token-chat');
+    if (dChat) dChat.innerText = chatTokens.toLocaleString();
+    
+    const dMem = document.getElementById('detail-token-mem');
+    if (dMem) dMem.innerText = memTokens.toLocaleString();
+    
+    const dSticker = document.getElementById('detail-token-sticker');
+    if (dSticker) dSticker.innerText = stickerTokens.toLocaleString();
+    
+    const dTotal = document.getElementById('detail-token-total');
+    if (dTotal) dTotal.innerText = totalTokens.toLocaleString();
+}
+
+// 打开/关闭弹窗
+function openTokenModal() {
+    const modal = document.getElementById('tokenDetailModal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function closeTokenModal() {
+    const modal = document.getElementById('tokenDetailModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+// 查询 API 额度 (终极完美适配版)
+async function refreshApiQuota() {
+    const quotaEl = document.getElementById('ui-api-quota');
+    if (!quotaEl) return;
+    
+    quotaEl.innerText = "查询中...";
+    quotaEl.style.opacity = "0.5";
+
+    try {
+        const apiConfig = await getActiveApiConfig('chat');
+        if (!apiConfig || !apiConfig.key || !apiConfig.baseUrl) {
+            throw new Error("未配置API");
+        }
+
+        const baseUrlMatch = apiConfig.baseUrl.match(/^(https?:\/\/[^\/]+)/);
+        const host = baseUrlMatch ? baseUrlMatch[1] : apiConfig.baseUrl;
+
+        const response = await fetch(`${host}/v1/dashboard/billing/subscription`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${apiConfig.key}` }
+        });
+
+        if (!response.ok) throw new Error("接口不支持");
+
+        const data = await response.json();
+        let finalBalance = "未知";
+        
+        let rawValue = data.balance ?? data.remain_quota ?? data.total_available ?? data.quota;
+        if (data.data) {
+            rawValue = rawValue ?? data.data.balance ?? data.data.remain_quota ?? data.data.quota;
+        }
+
+        if (rawValue !== undefined && rawValue !== null) {
+            let num = parseFloat(rawValue);
+            if (num > 10000) {
+                let calc50 = (num / 500000).toFixed(2);
+                let calc10 = (num / 100000).toFixed(2);
+                finalBalance = `${calc50} 或 ${calc10} (原数据:${num})`;
+            } else {
+                finalBalance = num.toFixed(2);
+            }
+        } else if (data.hard_limit_usd !== undefined) {
+            let total_usage = 0;
+            if (data.total_usage !== undefined) {
+                total_usage = data.total_usage / 100;
+            } else {
+                try {
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    const startDate = `${year}-${month}-01`;
+                    const endDate = `${year}-${month}-${day}`;
+                    
+                    const usageRes = await fetch(`${host}/v1/dashboard/billing/usage?start_date=${startDate}&end_date=${endDate}`, {
+                        headers: { 'Authorization': `Bearer ${apiConfig.key}` }
+                    });
+                    const usageData = await usageRes.json();
+                    if (usageData.total_usage !== undefined) {
+                        total_usage = usageData.total_usage / 100;
+                    }
+                } catch(e) {}
+            }
+            
+            // 🌟 核心修改：如果是无限额度令牌，直接显示已消耗的金额！
+            if (data.hard_limit_usd > 9000000) {
+                finalBalance = `已用: $${total_usage.toFixed(4)} (无限额度令牌)`;
+            } else {
+                finalBalance = (data.hard_limit_usd - total_usage).toFixed(2);
+            }
+        }
+
+        if (finalBalance !== "未知") {
+            quotaEl.innerText = finalBalance;
+            quotaEl.style.fontSize = "12px"; 
+        } else {
+            quotaEl.innerText = "格式不支持";
+        }
+
+    } catch (e) {
+        console.warn("额度查询失败:", e);
+        quotaEl.innerText = "接口不支持";
+    } finally {
+        quotaEl.style.opacity = "1";
+    }
+}
+
+// ==========================================
+// 新增：位置功能核心逻辑 (发送位置 & 角色城市 & 查看地图)
+// ==========================================
+
+let sendLocMapInstance = null;
+let sendLocCurrentType = 'real'; 
+let sendLocRealAddress = "正在获取高精度定位...";
+let sendLocLat = 0;
+let sendLocLon = 0;
+
+// 1. 打开发送位置弹窗 (User)
+function wcOpenSendLocationModal() {
+    wcCloseAllPanels(); 
+    const modal = document.getElementById('wc-modal-send-location');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+    
+    wcSwitchSendLocTab('real'); 
+    fetchSendLocation(); 
+}
+
+function wcCloseSendLocationModal() {
+    const modal = document.getElementById('wc-modal-send-location');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+function wcSwitchSendLocTab(tab) {
+    sendLocCurrentType = tab;
+    document.getElementById('send-loc-seg-real').classList.toggle('active', tab === 'real');
+    document.getElementById('send-loc-seg-virtual').classList.toggle('active', tab === 'virtual');
+    document.getElementById('send-loc-view-real').style.display = tab === 'real' ? 'block' : 'none';
+    document.getElementById('send-loc-view-virtual').style.display = tab === 'virtual' ? 'block' : 'none';
+    
+    if (tab === 'real' && sendLocMapInstance) {
+        setTimeout(() => sendLocMapInstance.invalidateSize(), 100);
+    }
+}
+
+// 获取真实定位并渲染地图
+function fetchSendLocation() {
+    const titleEl = document.getElementById('send-loc-real-address');
+    titleEl.innerText = "正在获取高精度定位...";
+    
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+            sendLocLat = pos.coords.latitude;
+            sendLocLon = pos.coords.longitude;
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${sendLocLat}&lon=${sendLocLon}&zoom=18&addressdetails=1`, {
+                    headers: { 'Accept-Language': 'zh-CN' }
+                });
+                const data = await res.json();
+                
+                let address = data.display_name;
+                if (data.address) {
+                    const a = data.address;
+                    address = `${a.city || a.town || a.province || ''} ${a.suburb || a.county || ''} ${a.road || ''}`.trim();
+                    if (!address) address = data.display_name;
+                }
+                
+                sendLocRealAddress = address || `${sendLocLat.toFixed(4)}, ${sendLocLon.toFixed(4)}`;
+                titleEl.innerText = sendLocRealAddress;
+
+                // 渲染 Leaflet 地图
+                if (typeof L !== 'undefined') {
+                    if (!sendLocMapInstance) {
+                        sendLocMapInstance = L.map('send-real-map-container', {
+                            zoomControl: false, attributionControl: false
+                        }).setView([sendLocLat, sendLocLon], 16);
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(sendLocMapInstance);
+                    } else {
+                        sendLocMapInstance.setView([sendLocLat, sendLocLon], 16);
+                    }
+                    setTimeout(() => { sendLocMapInstance.invalidateSize(); }, 100);
+                }
+            } catch (e) {
+                sendLocRealAddress = `${sendLocLat.toFixed(4)}, ${sendLocLon.toFixed(4)}`;
+                titleEl.innerText = sendLocRealAddress;
+            }
+        }, (err) => {
+            sendLocRealAddress = "定位失败或未授权";
+            titleEl.innerText = sendLocRealAddress;
+        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+    } else {
+        sendLocRealAddress = "设备不支持定位";
+        titleEl.innerText = sendLocRealAddress;
+    }
+}
+
+// 发送位置到聊天 (带上经纬度参数)
+function wcSubmitSendLocation() {
+    const charId = wcState.activeChatId;
+    if (!charId) return;
+
+    let locTitle = "";
+    let locDesc = "";
+    let isVirtual = false;
+    let lat = 0, lon = 0;
+
+    if (sendLocCurrentType === 'real') {
+        locTitle = sendLocRealAddress;
+        locDesc = "真实地理位置";
+        lat = sendLocLat;
+        lon = sendLocLon;
+    } else {
+        const virtualInput = document.getElementById('send-loc-virtual-input').value.trim();
+        if (!virtualInput) return alert("请输入虚拟地名哦~");
+        locTitle = virtualInput;
+        locDesc = "自定义虚拟坐标";
+        isVirtual = true;
+    }
+
+    const mapClass = isVirtual ? "wc-bubble-location-map virtual" : "wc-bubble-location-map";
+    const markerClass = isVirtual ? "ins-loc-marker virtual-marker" : "ins-loc-marker";
+    
+    // 核心：给卡片绑定 onclick 事件，传入参数打开地图弹窗
     const cardHtml = `
-        <div class="shopping-card" style="background: #F9F9F9; border: 1px solid #E5E5EA; border-radius: 12px; overflow: hidden;">
-            <div class="shopping-card-header" style="border-bottom: 1px solid #E5E5EA; padding: 10px 12px; background: #FFF;">
-                <div class="shopping-card-tag" style="background: #111; color: #FFF; font-size: 10px; padding: 2px 6px; border-radius: 4px;">FORUM POST</div>
+        <div class="wc-bubble-location-card" onclick="window.wcOpenMapView(${isVirtual}, '${locTitle}', '${locDesc}', ${lat}, ${lon})">
+            <div class="${mapClass}">
+                <div class="${markerClass}"></div>
             </div>
-            <div class="shopping-card-body" style="padding: 12px;">
-                <div class="shopping-card-title" style="font-size: 15px; font-weight: bold; color: #000; margin-bottom: 6px;">${post.title}</div>
-                <div class="shopping-card-desc" style="color: #555; font-size: 13px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;">${post.content}</div>
-                <div style="font-size: 11px; color: #999; margin-top: 10px; font-family: monospace;">Author: ${post.author}</div>
+            <div class="wc-bubble-location-info">
+                <div class="wc-bubble-location-title">${locTitle}</div>
+                <div class="wc-bubble-location-desc">${locDesc}</div>
             </div>
         </div>
     `;
 
-    // 1. 关闭论坛和弹窗
-    wcCloseModal('forum-modal-share');
-    closeForumApp();
-
-    // 2. 将卡片作为 receipt 类型发送到聊天界面 (receipt 类型支持直接渲染 HTML)
     wcAddMessage(charId, 'me', 'receipt', cardHtml);
 
-    // 3. 给 AI 发送隐藏的系统提示，强制让它读取帖子内容并做出反应
-    const aiPrompt = `[系统内部信息(仅AI可见): 用户刚刚在微信上给你分享了一篇论坛帖子。帖子标题是《${post.title}》，内容是：“${post.content}”，发帖人是：${post.author}。请在接下来的回复中，针对这篇帖子的内容给出你的看法、吐槽或反应。]`;
+    const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚向你发送了一个地理位置。位置名称是：“${locTitle}”。请在接下来的回复中，根据这个地点做出自然的反应。]`;
     wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
 
-    // 4. 提示用户并自动跳转到聊天界面
-    setTimeout(() => {
-        alert(`已成功将帖子分享给 ${char.name}！快去看看 Ta 的反应吧~`);
-        if (!document.getElementById('wechatModal').classList.contains('open')) {
-            openWechat();
-        }
-        wcOpenChat(charId);
-    }, 300);
-    
-    forumPendingSharePostId = null;
+    wcCloseSendLocationModal();
 }
+
+// ==========================================
+// 2. 角色所在城市设定逻辑 (Char)
+// ==========================================
+let charLocCurrentType = 'real';
+let charLocMapInstance = null;
+let charLocLat = 0;
+let charLocLon = 0;
+
+function wcOpenCharLocationModal() {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    
+    const config = char.chatConfig || {};
+    const locType = config.locationType || 'real';
+
+    wcSwitchCharLocTab(locType);
+    
+    if (locType === 'virtual') {
+        document.getElementById('char-loc-virtual-input').value = config.locationName || '';
+        document.getElementById('char-loc-virtual-distance').value = config.virtualDistance || ''; // 读取自定义距离
+    } else {
+        document.getElementById('char-loc-real-country').value = config.locationCountry || '';
+        document.getElementById('char-loc-real-province').value = config.locationProvince || '';
+        document.getElementById('char-loc-real-city').value = config.locationCity || '';
+        
+        // 如果之前存过经纬度，直接渲染地图
+        if (config.locationLat && config.locationLon) {
+            charLocLat = config.locationLat;
+            charLocLon = config.locationLon;
+            document.getElementById('char-loc-coords-display').innerText = `经纬度: ${charLocLat.toFixed(4)}, ${charLocLon.toFixed(4)}`;
+            renderCharLocMap(charLocLat, charLocLon);
+        }
+    }
+
+    const modal = document.getElementById('wc-modal-char-location');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function wcCloseCharLocationModal() {
+    const modal = document.getElementById('wc-modal-char-location');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+function wcSwitchCharLocTab(tab) {
+    charLocCurrentType = tab;
+    document.getElementById('char-loc-seg-real').classList.toggle('active', tab === 'real');
+    document.getElementById('char-loc-seg-virtual').classList.toggle('active', tab === 'virtual');
+    document.getElementById('char-loc-view-real').style.display = tab === 'real' ? 'block' : 'none';
+    document.getElementById('char-loc-view-virtual').style.display = tab === 'virtual' ? 'block' : 'none';
+    
+    if (tab === 'real' && charLocMapInstance) {
+        setTimeout(() => charLocMapInstance.invalidateSize(), 100);
+    }
+}
+
+// 搜索 Char 的真实地理位置
+async function searchCharLocation() {
+    const country = document.getElementById('char-loc-real-country').value.trim();
+    const province = document.getElementById('char-loc-real-province').value.trim();
+    const city = document.getElementById('char-loc-real-city').value.trim();
+    
+    if (!country && !province && !city) return alert("请至少输入一个地名进行搜索哦~");
+    
+    const query = [country, province, city].filter(Boolean).join('+');
+    const coordsDisplay = document.getElementById('char-loc-coords-display');
+    coordsDisplay.innerText = "正在搜索地图坐标...";
+
+    try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`, {
+            headers: { 'Accept-Language': 'zh-CN' }
+        });
+        const data = await res.json();
+        
+        if (data && data.length > 0) {
+            charLocLat = parseFloat(data[0].lat);
+            charLocLon = parseFloat(data[0].lon);
+            coordsDisplay.innerText = `经纬度: ${charLocLat.toFixed(4)}, ${charLocLon.toFixed(4)}`;
+            renderCharLocMap(charLocLat, charLocLon);
+        } else {
+            coordsDisplay.innerText = "未找到该地点的坐标，请检查拼写";
+        }
+    } catch (e) {
+        coordsDisplay.innerText = "搜索失败，网络异常";
+    }
+}
+
+function renderCharLocMap(lat, lon) {
+    if (typeof L !== 'undefined') {
+        if (!charLocMapInstance) {
+            charLocMapInstance = L.map('char-real-map-container', {
+                zoomControl: false, attributionControl: false
+            }).setView([lat, lon], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(charLocMapInstance);
+        } else {
+            charLocMapInstance.setView([lat, lon], 12);
+        }
+        setTimeout(() => { charLocMapInstance.invalidateSize(); }, 100);
+    }
+}
+
+function wcSubmitCharLocation() {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    if (!char.chatConfig) char.chatConfig = {};
+
+    let locName = "";
+    let aiPrompt = "";
+    let displayLoc = "";
+
+    if (charLocCurrentType === 'virtual') {
+        locName = document.getElementById('char-loc-virtual-input').value.trim();
+        const virtualDist = document.getElementById('char-loc-virtual-distance').value.trim(); // 获取自定义距离
+        if (!locName) return alert("请输入虚拟城市名称哦~");
+        
+        char.chatConfig.locationType = 'virtual';
+        char.chatConfig.locationName = locName;
+        char.chatConfig.virtualDistance = virtualDist; // 保存自定义距离
+        
+        displayLoc = locName;
+        aiPrompt = `[系统设定更新：你现在的居住地设定为“${locName}”。请在后续聊天中，严格符合该城市/异世界的背景设定，并保持与 User 异地/跨次元的逻辑。]`;
+    } else {
+        const country = document.getElementById('char-loc-real-country').value.trim();
+        const province = document.getElementById('char-loc-real-province').value.trim();
+        const city = document.getElementById('char-loc-real-city').value.trim();
+        if (!country && !province && !city) return alert("请至少输入国家、省份或城市名称哦~");
+        
+        locName = [country, province, city].filter(Boolean).join(' ');
+        
+        char.chatConfig.locationType = 'real';
+        char.chatConfig.locationCountry = country;
+        char.chatConfig.locationProvince = province;
+        char.chatConfig.locationCity = city;
+        char.chatConfig.locationName = locName;
+        char.chatConfig.locationLat = charLocLat;
+        char.chatConfig.locationLon = charLocLon;
+        
+        displayLoc = locName;
+        aiPrompt = `[系统设定更新：你现在的居住地设定为现实世界中的“${locName}”。请在后续聊天中，符合该地的气候、时差、文化背景，并保持与 User 异地的逻辑。]`;
+    }
+
+    wcSaveData();
+
+    const displayEl = document.getElementById('wc-setting-loc-display');
+    if (displayEl) displayEl.innerText = displayLoc;
+
+    wcAddMessage(char.id, 'system', 'system', aiPrompt, { hidden: true });
+
+    wcCloseCharLocationModal();
+    alert("Ta 的城市设定已保存！");
+}
+
+const originalWcOpenChatSettings = wcOpenChatSettings;
+wcOpenChatSettings = function() {
+    originalWcOpenChatSettings(); 
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (char && char.chatConfig) {
+        const displayEl = document.getElementById('wc-setting-loc-display');
+        if (displayEl) {
+            if (char.chatConfig.locationName) {
+                displayEl.innerText = char.chatConfig.locationName;
+            } else {
+                displayEl.innerText = '未设置';
+            }
+        }
+    }
+};
+
+// ==========================================
+// 3. 查看地图详情弹窗 (点击聊天卡片触发)
+// ==========================================
+let viewMapInstance = null;
+let viewMapMarker = null;
+
+window.wcOpenMapView = function(isVirtual, title, desc, lat, lon) {
+    const modal = document.getElementById('wc-modal-map-view');
+    document.getElementById('view-map-title').innerText = title;
+    document.getElementById('view-map-desc').innerText = desc;
+    
+    const mapContainer = document.getElementById('view-map-container');
+    const virtualBg = document.getElementById('view-map-virtual-bg');
+    const coordsEl = document.getElementById('view-map-coords');
+
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+
+    if (isVirtual) {
+        // 虚拟位置：显示紫色网格背景，隐藏真实地图
+        virtualBg.style.display = 'flex';
+        coordsEl.innerText = "经纬度: 异世界坐标无法解析";
+        if (viewMapInstance) {
+            viewMapInstance.remove();
+            viewMapInstance = null;
+        }
+    } else {
+        // 真实位置：隐藏虚拟背景，渲染 Leaflet 地图
+        virtualBg.style.display = 'none';
+        coordsEl.innerText = `经纬度: ${parseFloat(lat).toFixed(4)}, ${parseFloat(lon).toFixed(4)}`;
+        
+        setTimeout(() => {
+            if (typeof L !== 'undefined') {
+                if (!viewMapInstance) {
+                    viewMapInstance = L.map('view-map-container', {
+                        zoomControl: false, attributionControl: false
+                    }).setView([lat, lon], 16);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(viewMapInstance);
+                    
+                    // 添加一个红色的定位大头针
+                    const customIcon = L.divIcon({
+                        className: 'custom-pin',
+                        html: `<svg viewBox="0 0 24 24" style="width:36px;height:36px;fill:#FF3B30;stroke:#FFF;stroke-width:2;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.3));"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3" fill="#FFF"></circle></svg>`,
+                        iconSize: [36, 36],
+                        iconAnchor: [18, 36]
+                    });
+                    viewMapMarker = L.marker([lat, lon], {icon: customIcon}).addTo(viewMapInstance);
+                } else {
+                    viewMapInstance.setView([lat, lon], 16);
+                    viewMapMarker.setLatLng([lat, lon]);
+                }
+                viewMapInstance.invalidateSize();
+            }
+        }, 300); // 等待弹窗动画结束再渲染地图，防止尺寸计算错误
+    }
+}
+
+window.wcCloseMapView = function() {
+    const modal = document.getElementById('wc-modal-map-view');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+// ==========================================
+// 新增：API 报错弹窗控制逻辑
+// ==========================================
+window.showApiErrorModal = function(errorMsg) {
+    const modal = document.getElementById('api-error-modal');
+    const textContainer = document.getElementById('api-error-text');
+    const btnText = document.getElementById('copy-btn-text');
+    
+    if (modal && textContainer) {
+        textContainer.innerText = errorMsg;
+        if (btnText) btnText.innerText = '一键复制报错信息'; // 重置按钮文字
+        
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('active'), 10);
+    }
+};
+
+window.closeApiErrorModal = function() {
+    const modal = document.getElementById('api-error-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
+    }
+};
+
+window.copyApiErrorText = function() {
+    const text = document.getElementById('api-error-text').innerText;
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    document.body.appendChild(textArea);
+    textArea.select();
+    
+    try {
+        document.execCommand('copy');
+        const btnText = document.getElementById('copy-btn-text');
+        if (btnText) btnText.innerText = '复制成功！';
+        if (navigator.vibrate) navigator.vibrate(50);
+    } catch (err) {
+        alert('复制失败，请手动长按上方灰色区域的文本进行复制哦~');
+    }
+    document.body.removeChild(textArea);
+};
+// ==========================================
+// 角色生活状态系统 (Life Status)
+// ==========================================
+
+// 初始化或获取角色的状态数据
+function getCharLifeStatus(charId) {
+    let char = wcState.characters.find(c => c.id === charId);
+    if (!char) return null;
+    
+    if (!char.lifeStatus) {
+        char.lifeStatus = {
+            location: "未知",
+            action: "未知",
+            mood: "未知",
+            timeline: [],
+            autoRefresh: true,
+            refreshTime: "06:00",
+            lastRefreshTimestamp: 0 // 记录上次刷新的时间戳
+        };
+    }
+    return char.lifeStatus;
+}
+
+// 打开状态弹窗
+function wcOpenCharStatusModal() {
+    if (!wcState.activeChatId) {
+        alert("请在单人聊天中使用");
+        return;
+    }
+    wcCloseAllPanels(); // 关闭更多面板
+    
+    const status = getCharLifeStatus(wcState.activeChatId);
+    if (!status) return;
+    // 如果跨天了，只清空 timeline，保留当前状态(模拟在线)
+    if (status.autoRefresh && isNewDayForStatus(status)) {
+        status.timeline = [];
+        wcSaveData();
+    }
+
+    // 渲染设置
+    document.getElementById('ins-status-time-picker').value = status.refreshTime || "06:00";
+    document.getElementById('ins-status-auto-toggle').checked = status.autoRefresh !== false;
+    
+    // 渲染内容
+    renderCharStatusUI(status);
+    
+    wcOpenModal('wc-modal-char-status');
+}
+
+// 保存设置
+function wcSaveCharStatusSettings() {
+    if (!wcState.activeChatId) return;
+    const status = getCharLifeStatus(wcState.activeChatId);
+    if (!status) return;
+    
+    status.refreshTime = document.getElementById('ins-status-time-picker').value;
+    status.autoRefresh = document.getElementById('ins-status-auto-toggle').checked;
+    wcSaveData();
+}
+
+// 渲染 UI
+function renderCharStatusUI(status) {
+    document.getElementById('ins-status-loc').innerText = status.location || "未知";
+    document.getElementById('ins-status-act').innerText = status.action || "未知";
+    document.getElementById('ins-status-mood').innerText = status.mood || "暂无状态";
+    
+    const timelineContainer = document.getElementById('ins-status-timeline');
+    timelineContainer.innerHTML = '';
+    
+    if (!status.timeline || status.timeline.length === 0) {
+        timelineContainer.innerHTML = '<div style="font-size: 12px; color: #888; text-align: center; padding: 20px 0;">暂无行程记录，点击刷新生成</div>';
+        return;
+    }
+    
+    status.timeline.forEach((item, index) => {
+        const isLast = index === status.timeline.length - 1;
+        const html = `
+            <div class="ins-timeline-item ${isLast ? 'active' : ''}">
+                <div class="ins-timeline-dot"></div>
+                <div class="ins-timeline-time">${item.time} ${isLast ? '(Now)' : ''}</div>
+                <div class="ins-timeline-content">${item.content}</div>
+            </div>
+        `;
+        timelineContainer.insertAdjacentHTML('beforeend', html);
+    });
+}
+
+// 判断是否跨越了设定的刷新时间 (即是否是新的一天)
+function isNewDayForStatus(status) {
+    const now = new Date();
+    const lastRefresh = new Date(status.lastRefreshTimestamp || 0);
+    
+    // 解析设定的刷新时间 (如 "06:00")
+    const [refreshHour, refreshMinute] = (status.refreshTime || "06:00").split(':').map(Number);
+    
+    // 获取今天的刷新时间点
+    const todayRefreshTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), refreshHour, refreshMinute, 0);
+    
+    // 如果当前时间已经过了今天的刷新点，且上次刷新时间在今天的刷新点之前，说明跨天了
+    if (now >= todayRefreshTime && lastRefresh < todayRefreshTime) {
+        return true;
+    }
+    
+    // 如果当前时间还没到今天的刷新点，但上次刷新时间在昨天的刷新点之前，也算跨天
+    const yesterdayRefreshTime = new Date(todayRefreshTime.getTime() - 24 * 60 * 60 * 1000);
+    if (now < todayRefreshTime && lastRefresh < yesterdayRefreshTime) {
+        return true;
+    }
+    
+    return false;
+}
+
+// 核心：请求 AI 生成/刷新状态 (极致活人感与时间感知版 - 极简模糊化)
+async function wcGenerateCharStatus() {
+    const charId = wcState.activeChatId;
+    if (!charId) return;
+    
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+    
+    const apiConfig = await getActiveApiConfig('chat');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const status = getCharLifeStatus(charId);
+    const isNewDay = isNewDayForStatus(status);
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const currentTimeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
+    
+    // 强力时间段感知
+    let timeSlotVibe = "";
+    if (hours >= 0 && hours < 6) timeSlotVibe = "凌晨/深夜：绝大多数人都在睡觉。如果行程更新在这个时间，大概率是‘睡得正香’、‘翻了个身’、‘起夜喝水’，或者‘被手机震动吵醒，有点懵/烦躁’。";
+    else if (hours >= 6 && hours < 9) timeSlotVibe = "清晨：刚醒、洗漱、买早饭、通勤挤地铁。可能带有起床气、没睡醒的迷糊感，或者匆忙感。";
+    else if (hours >= 9 && hours < 12) timeSlotVibe = "上午：正常上课或工作时间。状态可能是‘认真听讲/干活’，也可能是‘偷偷摸鱼刷手机’、‘喝咖啡续命’。";
+    else if (hours >= 12 && hours < 14) timeSlotVibe = "中午：午休时间。干饭、排队拿外卖、趴在桌上睡午觉。";
+    else if (hours >= 14 && hours < 18) timeSlotVibe = "下午：下午的课程或工作。容易犯困、发呆、盯着窗外、期待下班/放学。";
+    else if (hours >= 18 && hours < 21) timeSlotVibe = "傍晚：下班/放学、吃晚饭、通勤回家、在沙发上瘫着。";
+    else timeSlotVibe = "夜晚：私人放松时间。洗澡、打游戏、看剧、护肤、躺在床上酝酿睡意。";
+
+    // 准备已有行程文本
+    let existingTimelineText = "无";
+    if (!isNewDay && status.timeline && status.timeline.length > 0) {
+        existingTimelineText = status.timeline.map(t => `[${t.time}] ${t.content}`).join('\n');
+    }
+
+    const prompt = `
+你是一个极具“活人感”的角色扮演辅助系统。请根据角色的设定和当前极其具体的时间点，推断角色【现在】正在经历的生活碎片，并生成行程记录。
+
+【角色设定】：${char.prompt || char.name}
+【当前现实时间】：${dayString} ${currentTimeStr}
+【当前时间段状态参考】：${timeSlotVibe}
+
+【核心生成要求（最高优先级）】：
+1. **极度模糊与简练**：不要写具体的长句！"location"、"action"、"mood" 这三个字段【绝对不能超过10个字】！越短越好，越模糊越有真实感。
+   - "location" (地点)：如：被窝里、路上、工位、阳台、便利店。
+   - "action" (动作)：如：发呆、刚睡醒、走路、摸鱼中、吃东西。
+   - "mood" (状态/心情)：如：有点困、很烦躁、心情不错、饿了、懵懵的。
+2. **严格符合当前时间**：如果现在是凌晨3点，Ta大概率在睡觉，被吵醒了可能有点懵或起床气；如果是中午12点，Ta可能在干饭或午休。绝对不能出现时间逻辑错误！
+3. **行程记录要求**：
+   - ${isNewDay ? '这是新的一天！请清空之前的行程，根据当前时间生成 1 到 3 条从今天早上到现在的【生活碎片记录】。' : '这是同一天的状态更新！请在以下已有行程的基础上，推断角色现在的新状态，并追加 1 条当前时间的【最新生活碎片】。'}
+   - 行程内容可以稍微长一点，写成有画面的小事（例如：“差点没赶上公交，匆忙咽下了一个冷掉的包子”）。
+4. **已有行程记录**：\n${existingTimelineText}
+5. **绝对禁止**：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！
+
+请严格返回以下 JSON 格式（不要包含 markdown 代码块，直接返回纯 JSON）：
+{
+  "location": "极简地点(10字内)",
+  "action": "极简动作(10字内)",
+  "mood": "极简状态(10字内)",
+  "newTimeline": [
+    {"time": "时间(如 08:15)", "content": "充满画面的生活碎片记录"}
+  ]
+}`;
+
+    wcShowLoading("正在感知 Ta 的生活...");
+    try {
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8 
+            })
+        });
+
+        const data = await response.json();
+        let cleanText = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        cleanText = cleanText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(cleanText);
+
+        // 更新状态数据
+        status.location = result.location;
+        status.action = result.action;
+        status.mood = result.mood;
+        status.lastRefreshTimestamp = now.getTime();
+
+        // 更新行程
+        if (isNewDay) {
+            status.timeline = result.newTimeline || []; // 新的一天，直接覆盖
+        } else {
+            if (result.newTimeline && result.newTimeline.length > 0) {
+                status.timeline.push(...result.newTimeline); // 同一天，追加
+            }
+        }
+
+        wcSaveData();
+        renderCharStatusUI(status);
+        // 手动刷新后，同步更新聊天顶栏
+        if (wcState.activeChatId === charId) {
+            const char = wcState.characters.find(c => c.id === charId);
+            if (char) updateChatTopBarStatus(char);
+        }
+        wcShowSuccess("状态已更新");
+
+    } catch (error) {
+        console.error(error);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[获取状态失败] ${error.message}`);
+        else wcShowError("获取状态失败");
+    }
+}
+// ==========================================
+// 新增：食谱系统 (Recipe) 核心逻辑
+// ==========================================
+
+// 初始化食谱数据
+function initRecipeData(char) {
+    if (!char.phoneData) char.phoneData = {};
+    if (!char.phoneData.recipe) {
+        char.phoneData.recipe = {
+            my: { b: '', l: '', d: '', edits: {} },
+            ta: { b: '', l: '', d: '', edits: {} }
+        };
+    }
+    return char.phoneData.recipe;
+}
+
+// 打开食谱主页
+function wcActionRecipe() {
+    wcCloseAllPanels();
+    document.getElementById('wc-view-chat-detail').classList.remove('active');
+    document.getElementById('wc-view-recipe').classList.add('active');
+    
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'none';
+
+    wcSwitchRecipeTab('my');
+}
+
+function wcCloseRecipePage() {
+    document.getElementById('wc-view-recipe').classList.remove('active');
+    document.getElementById('wc-view-chat-detail').classList.add('active');
+    
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'flex';
+}
+
+function wcSwitchRecipeTab(tab) {
+    // 切换钢琴键状态
+    document.querySelectorAll('.piano-key').forEach(el => el.classList.remove('active'));
+    document.getElementById(`recipe-tab-${tab}`).classList.add('active');
+    wcRenderRecipeContent(tab);
+}
+
+function wcRenderRecipeContent(tab) {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const recipeData = initRecipeData(char);
+    const data = tab === 'my' ? recipeData.my : recipeData.ta;
+    const container = document.getElementById('wc-recipe-content-area');
+    
+    const title = tab === 'my' ? "TODAY'S MENU" : "TA'S MENU";
+    
+    let html = `
+        <div class="recipe-card active">
+            <div class="recipe-card-header">
+                <div class="recipe-date">${title}</div>
+                <div class="recipe-edit-btn" onclick="wcEditRecipe('${tab}')">
+                    <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    编辑
+                </div>
+            </div>
+    `;
+
+    const meals = [
+        { key: 'b', icon: '🥐', name: 'Breakfast' },
+        { key: 'l', icon: '🍱', name: 'Lunch' },
+        { key: 'd', icon: '🍲', name: 'Dinner' }
+    ];
+
+    meals.forEach(m => {
+        let desc = data[m.key] || '暂无记录，点击右上角编辑';
+        if (data.edits && data.edits[m.key]) {
+            desc = `<span style="color:#FF9500; font-weight:bold;">[已修改]</span> ${desc}`;
+        }
+        html += `
+            <div class="meal-item">
+                <div class="meal-icon-box">${m.icon}</div>
+                <div class="meal-info">
+                    <div class="meal-name">${m.name}</div>
+                    <div class="meal-desc">${desc}</div>
+                </div>
+            </div>
+        `;
+    });
+
+    // 动态生成底部操作区
+    if (tab === 'ta') {
+        const autoTime = data.autoTime || '12:00';
+        html += `
+            <div style="background: #F9F9F9; border-radius: 16px; padding: 16px; margin-top: 20px; border: 1px solid #F0F0F0;">
+                <div style="font-size: 13px; font-weight: bold; color: #111; margin-bottom: 10px;">定时报备设置</div>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-size: 12px; color: #888;">到达设定时间自动发送食谱</span>
+                    <input type="time" value="${autoTime}" onchange="wcSaveRecipeAutoTime(this.value)" style="background: #FFF; border: 1px solid #EAEAEA; padding: 6px 10px; border-radius: 8px; font-family: monospace; outline: none; color: #111;">
+                </div>
+            </div>
+            <button class="recipe-action-btn btn-dark" onclick="wcGenerateTaRecipe(true)">
+                <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                让 Ta 立即生成并主动报备
+            </button>
+        `;
+    } else {
+        html += `
+            <button class="recipe-action-btn btn-dark" onclick="wcSendRecipe('my')">
+                <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                发送给 Ta
+            </button>
+        `;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+// 保存定时发送时间
+window.wcSaveRecipeAutoTime = function(timeVal) {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const recipeData = initRecipeData(char);
+    recipeData.ta.autoTime = timeVal;
+    wcSaveData();
+};
+
+// ==========================================
+// 新增：高级食谱编辑弹窗逻辑
+// ==========================================
+let currentRecipeEditTab = 'my';
+
+function wcEditRecipe(tab) {
+    currentRecipeEditTab = tab;
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const recipeData = initRecipeData(char);
+    const data = tab === 'my' ? recipeData.my : recipeData.ta;
+
+    // 填充当前数据到输入框
+    document.getElementById('re-input-b').value = data.b || '';
+    document.getElementById('re-input-l').value = data.l || '';
+    document.getElementById('re-input-d').value = data.d || '';
+
+    // 设置标题
+    const title = tab === 'my' ? "编辑我的食谱" : "修改 Ta 的食谱";
+    document.getElementById('re-modal-title').innerText = title;
+
+    // 打开弹窗
+    const modal = document.getElementById('wc-modal-recipe-edit');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+}
+
+function wcCloseRecipeEdit() {
+    const modal = document.getElementById('wc-modal-recipe-edit');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+}
+
+function wcSaveRecipeEdit() {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const recipeData = initRecipeData(char);
+    const data = currentRecipeEditTab === 'my' ? recipeData.my : recipeData.ta;
+
+    // 获取新输入的数据
+    const newB = document.getElementById('re-input-b').value.trim();
+    const newL = document.getElementById('re-input-l').value.trim();
+    const newD = document.getElementById('re-input-d').value.trim();
+
+    let isModified = false;
+
+    // 辅助函数：检查并记录修改
+    const checkAndRecord = (key, newVal) => {
+        const oldVal = data[key] || '';
+        if (oldVal !== newVal) {
+            isModified = true;
+            // 如果是修改对方的食谱，记录修改痕迹
+            if (currentRecipeEditTab === 'ta') {
+                if (!data.edits) data.edits = {};
+                data.edits[key] = {
+                    old: oldVal || '无',
+                    new: newVal,
+                    author: wcState.user.name
+                };
+            }
+            data[key] = newVal; // 更新数据
+        }
+    };
+
+    checkAndRecord('b', newB);
+    checkAndRecord('l', newL);
+    checkAndRecord('d', newD);
+
+    if (isModified) {
+        wcSaveData();
+        wcRenderRecipeContent(currentRecipeEditTab);
+
+        // 如果修改了对方的食谱，发送卡片并通知 AI
+        if (currentRecipeEditTab === 'ta') {
+            wcAddMessage(char.id, 'me', 'recipe', '食谱', {
+                title: "Ta's Menu (已修改)",
+                desc: `我帮你把食谱改了`,
+                isEdited: true,
+                recipeData: JSON.parse(JSON.stringify(data)) // 深拷贝当前状态
+            });
+            
+            wcAddMessage(char.id, 'system', 'system', `[系统内部信息: User 刚刚强行修改了你的今日食谱。请在回复中对此做出反应（比如抗议、撒娇或顺从）。]`, { hidden: true });
+        }
+    }
+
+    wcCloseRecipeEdit();
+}
+
+// 发送我的食谱到聊天
+function wcSendRecipe(tab) {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const recipeData = initRecipeData(char);
+    const data = tab === 'my' ? recipeData.my : recipeData.ta;
+
+    wcAddMessage(char.id, 'me', 'recipe', '食谱', {
+        title: "My Menu",
+        desc: "这是我今天的食谱哦~",
+        isEdited: false,
+        recipeData: JSON.parse(JSON.stringify(data))
+    });
+    
+    wcAddMessage(char.id, 'system', 'system', `[系统内部信息: User 刚刚向你发送了Ta的今日食谱。早餐:${data.b||'无'}，午餐:${data.l||'无'}，晚餐:${data.d||'无'}。请在回复中对此做出反应。]`, { hidden: true });
+    
+    wcCloseRecipePage();
+    alert("已发送给 Ta！");
+}
+
+// AI 生成 Ta 的食谱 (支持主动发送到聊天)
+window.wcGenerateTaRecipe = async function(sendToChat = false, targetCharId = null) {
+    const charId = targetCharId || wcState.activeChatId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await getActiveApiConfig('chat');
+    if (!apiConfig || !apiConfig.key) {
+        if (!targetCharId) alert("请先配置 API");
+        return;
+    }
+
+    if (!targetCharId) wcShowLoading("正在感知 Ta 的饮食...");
+
+    try {
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
+        prompt += `请根据你的人设和当前的生活状态，生成你今天的【一日三餐食谱】。\n`;
+        prompt += `要求：\n1. 必须符合你的性格（比如：养生人吃沙拉，打工人吃外卖，发疯人吃泡面）。\n`;
+        prompt += `2. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{"b": "早餐内容", "l": "午餐内容", "d": "晚餐内容"}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        const recipeData = initRecipeData(char);
+        // 保留原有的 autoTime 设置
+        const currentAutoTime = recipeData.ta.autoTime || '12:00';
+        recipeData.ta = { b: result.b, l: result.l, d: result.d, edits: {}, autoTime: currentAutoTime };
+        
+        // 如果是定时触发，记录今天已经发送过
+        if (targetCharId) {
+            const todayStr = new Date().toDateString();
+            recipeData.ta.lastAutoSendDate = todayStr;
+        }
+        
+        wcSaveData();
+        
+        // 如果当前停留在食谱页，刷新 UI
+        if (!targetCharId && document.getElementById('wc-view-recipe').classList.contains('active')) {
+            wcRenderRecipeContent('ta');
+        }
+
+        // 如果要求发送到聊天界面
+        if (sendToChat) {
+            wcAddMessage(char.id, 'them', 'recipe', '食谱', {
+                title: "Ta's Menu",
+                desc: "这是我今天的食谱哦~",
+                isEdited: false,
+                recipeData: JSON.parse(JSON.stringify(recipeData.ta))
+            });
+            
+            // 发送一条配套的文本消息
+            wcAddMessage(char.id, 'them', 'text', "给你看看我今天吃了什么~");
+            
+            // 触发系统通知
+            if (typeof showMainSystemNotification === 'function') {
+                showMainSystemNotification("今日食谱", `${char.name} 向你报备了今日食谱`, char.avatar);
+            }
+        }
+
+        if (!targetCharId) wcShowSuccess("生成并发送成功！");
+
+    } catch (e) {
+        console.error(e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[食谱生成失败] ${e.message}`);
+        else if (!targetCharId) wcShowError("生成失败");
+    }
+};
+
+// 打开聊天记录中的食谱详情弹窗
+window.wcOpenRecipeDetail = function(msgId) {
+    const msgs = wcState.chats[wcState.activeChatId];
+    const msg = msgs.find(m => m.id.toString() === msgId.toString());
+    if (!msg || !msg.recipeData) return;
+
+    const data = msg.recipeData;
+    document.getElementById('recipe-detail-title').innerText = msg.title;
+    
+    const container = document.getElementById('recipe-detail-content');
+    let html = '';
+
+    const meals = [
+        { key: 'b', label: 'BRKF' },
+        { key: 'l', label: 'LNCH' },
+        { key: 'd', label: 'DINR' }
+    ];
+
+    meals.forEach(m => {
+        let detailHtml = '';
+        if (data.edits && data.edits[m.key]) {
+            // 有修改痕迹
+            const edit = data.edits[m.key];
+            detailHtml = `
+                <div class="rm-edit-group">
+                    <div class="rm-text-old">${edit.old}</div>
+                    <div class="rm-text-new">${edit.new}</div>
+                    <div class="rm-edit-author">${edit.author} 修改了此项</div>
+                </div>
+            `;
+        } else {
+            // 正常显示
+            detailHtml = `<div class="rm-text-normal">${data[m.key] || '无'}</div>`;
+        }
+
+        html += `
+            <div class="rm-meal-item">
+                <div class="rm-meal-label">${m.label}</div>
+                <div class="rm-meal-detail">${detailHtml}</div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+    
+    const modal = document.getElementById('wc-modal-recipe-detail');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.wcCloseRecipeDetail = function(e) {
+    if (e && e.target.id !== 'wc-modal-recipe-detail') return;
+    const modal = document.getElementById('wc-modal-recipe-detail');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+};
+// ==========================================
+// 新增：高级小票弹窗逻辑
+// ==========================================
+window.wcOpenReceiptDetail = function(msgId) {
+    const msgs = wcState.chats[wcState.activeChatId];
+    const msg = msgs.find(m => m.id.toString() === msgId.toString());
+    if (!msg || !msg.receiptData) return;
+
+    const data = msg.receiptData;
+    
+    document.getElementById('rcpt-logo').innerText = data.logo || 'RECEIPT';
+    document.getElementById('rcpt-date').innerText = data.date || new Date().toLocaleString();
+    
+    let itemsHtml = '';
+    if (data.items && data.items.length > 0) {
+        data.items.forEach(item => {
+            itemsHtml += `
+                <div class="rcpt-row">
+                    <div class="rcpt-col-left">1x ${item.name}</div>
+                    <div class="rcpt-col-right">¥${item.price}</div>
+                </div>
+            `;
+        });
+    }
+    document.getElementById('rcpt-items').innerHTML = itemsHtml;
+    
+    document.getElementById('rcpt-subtotal').innerText = `¥${data.total}`;
+    document.getElementById('rcpt-total').innerText = `¥${data.total}`;
+    document.getElementById('rcpt-msg').innerText = data.msg || '';
+    
+    // 随机生成一个订单号
+    document.getElementById('rcpt-order-no').innerText = `ORD-${Math.floor(Math.random() * 900000000) + 100000000}`;
+
+    const modal = document.getElementById('wc-modal-receipt');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.wcCloseReceiptDetail = function(e) {
+    if (e && e.target.id !== 'wc-modal-receipt' && !e.target.classList.contains('rcpt-close')) return;
+    const modal = document.getElementById('wc-modal-receipt');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+};
+// ==========================================
+// 听歌总结弹窗逻辑
+// ==========================================
+window.musicOpenSummaryModal = function(msgId) {
+    const charId = wcState.activeChatId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const msgs = wcState.chats[charId];
+    const msg = msgs.find(m => m.id.toString() === msgId.toString());
+    if (!msg || !msg.summaryData) return alert("报告数据已丢失");
+
+    const data = msg.summaryData;
+
+    // 渲染头像
+    const userAvatar = (char.chatConfig && char.chatConfig.userAvatar) ? char.chatConfig.userAvatar : wcState.user.avatar;
+    document.getElementById('summary-avatar-user').src = userAvatar;
+    document.getElementById('summary-avatar-char').src = char.avatar;
+
+    // 格式化时长 (HH:MM:SS)
+    const totalSecs = Math.floor(data.durationMs / 1000);
+    const h = Math.floor(totalSecs / 3600).toString().padStart(2, '0');
+    const m = Math.floor((totalSecs % 3600) / 60).toString().padStart(2, '0');
+    const s = (totalSecs % 60).toString().padStart(2, '0');
+    document.getElementById('summary-duration').innerText = `${h}:${m}:${s}`;
+
+    // 歌曲数量
+    document.getElementById('summary-song-count').innerText = `${data.songCount} 首`;
+
+    // 格式化开始和结束时间 (YYYY-MM-DD HH:MM:SS)
+    const formatFullTime = (ts) => {
+        const d = new Date(ts);
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+    };
+    document.getElementById('summary-start-time').innerText = formatFullTime(data.startTime);
+    document.getElementById('summary-end-time').innerText = formatFullTime(data.endTime);
+
+    // 显示弹窗
+    const modal = document.getElementById('music-modal-summary');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.musicCloseSummaryModal = function(e) {
+    if (e && e.target.id !== 'music-modal-summary') return;
+    const modal = document.getElementById('music-modal-summary');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+};
+// ==========================================
+// 论坛新增：热搜功能逻辑
+// ==========================================
+async function forumGenerateHotSearches() {
+    const apiConfig = await getActiveApiConfig('forum');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const list = document.getElementById('forum-hot-search-list');
+    list.innerHTML = '<div style="text-align:center; padding:40px 0;"><div class="wc-ios-spinner" style="margin: 0 auto;"></div><div style="color:#888; margin-top:10px; font-size:13px;">正在获取全网热点...</div></div>';
+
+    try {
+        // 👇 新增：读取关联的世界书和角色设定 👇
+        let contextInfo = "";
+        if (forumState.config.worldbookIds && forumState.config.worldbookIds.length > 0) {
+            const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
+            if (wbs.length > 0) {
+                contextInfo += "【世界观背景参考】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+            }
+        }
+        if (forumState.config.charIds && forumState.config.charIds.length > 0) {
+            const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
+            if (chars.length > 0) {
+                contextInfo += "【相关人物设定参考】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
+            }
+        }
+
+        let prompt = `你现在是一个社交论坛的后台引擎。请生成 10 个当前最热门的搜索词条（热搜）。\n`;
+        
+        // 👈 将背景设定注入到 Prompt 中
+        if (contextInfo) {
+            prompt += `请务必结合以下背景设定来生成热搜内容，让热搜看起来是发生在这个世界里的真实事件：\n${contextInfo}`;
+        }
+        
+        prompt += `要求：\n`;
+        prompt += `1. 词条内容可以是：社会新闻、娱乐八卦、重大事件、或者带有悬疑/科幻色彩的事件。\n`;
+        prompt += `2. 词条要简短有力，像真实的微博/B站热搜（例如：赛博朋克边缘行者大结局、魔法学院新生入学指南、某某角色深夜密会）。\n`;
+        prompt += `3. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `["词条1", "词条2", "词条3"]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.9
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const topics = JSON.parse(content);
+
+        forumState.hotSearches = topics.map(t => ({
+            title: t,
+            heat: Math.floor(Math.random() * 500) + 100
+        }));
+        forumSaveData();
+        forumRenderHotSearches();
+
+    } catch (e) {
+        console.error(e);
+        list.innerHTML = '<div style="text-align:center; color:#FF3B30; padding:40px 0; font-size:13px;">获取失败，请重试</div>';
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[论坛热搜生成失败] ${e.message}`);
+    }
+}
+
+function forumRenderHotSearches() {
+    const list = document.getElementById('forum-hot-search-list');
+    list.innerHTML = '';
+    
+    if (!forumState.hotSearches || forumState.hotSearches.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px;">点击顶栏右侧刷新图标获取全网热点</div>';
+        return;
+    }
+
+    forumState.hotSearches.forEach((item, index) => {
+        const div = document.createElement('div');
+        div.className = 'hot-item';
+        div.onclick = () => forumClickHotSearch(item.title);
+        div.innerHTML = `
+            <div class="hot-rank">${index + 1}</div>
+            <div class="hot-title">${item.title}</div>
+            <div class="hot-heat">${item.heat}w</div>
+        `;
+        list.appendChild(div);
+    });
+}
+
+function forumClickHotSearch(topic) {
+    // 取前三个字加省略号作为窗口名
+    const shortName = topic.length > 3 ? topic.substring(0, 3) + '...' : topic;
+    
+    // 检查是否已经存在同名窗口
+    const existingWin = forumState.windows.find(w => w.name === shortName);
+    
+    if (existingWin) {
+        // 如果存在，直接切换到该窗口
+        forumState.activeWindowId = existingWin.id;
+    } else {
+        // 如果不存在，创建新窗口
+        const newId = 'win_' + Date.now();
+        forumState.windows.push({ 
+            id: newId, 
+            name: shortName, 
+            prompt: `这是关于【${topic}】的专属讨论频道。请生成与此话题高度相关的帖子和讨论。` 
+        });
+        forumState.activeWindowId = newId;
+    }
+    
+    forumSaveData();
+    
+    // 刷新顶栏窗口列表
+    forumRenderWindows();
+    
+    // 切换回主页视图
+    forumSwitchTab('home');
+    
+    // 如果是新创建的，或者里面没帖子，给个提示
+    const currentPosts = forumState.posts.filter(p => p.windowId === forumState.activeWindowId && p.type === 'home');
+    if (currentPosts.length === 0) {
+        const container = document.getElementById('forum-post-list-home');
+        if (container) {
+            container.innerHTML = `<div style="text-align:center; color:#999; padding:60px 20px; font-size:14px; line-height:1.6;">欢迎来到【${topic}】专属频道<br>点击右上角让AI生成相关内容吧</div>`;
+        }
+    }
+}
+
+// ==========================================
+// 论坛新增：同人文菜单与催更逻辑
+// ==========================================
+function forumOpenFanficMenu(postId) {
+    forumState.actionPostId = postId;
+    wcOpenModal('forum-fanfic-action-sheet');
+}
+
+function forumAddToBookstore() {
+    const post = forumState.posts.find(p => p.id === forumState.actionPostId);
+    if (!post) return;
+
+    // 检查是否已存在
+    const exists = forumState.books.find(b => b.originalPostId === post.id);
+    if (exists) {
+        wcCloseModal('forum-fanfic-action-sheet');
+        return alert("这本书已经在你的书城里啦！");
+    }
+
+    // 随机生成一个封面颜色
+    const colors = ['#4A5568', '#2D3748', '#8E54E9', '#4776E6', '#FF9A9E', '#FECFEF', '#43E97B', '#38F9D7'];
+    const bg1 = colors[Math.floor(Math.random() * colors.length)];
+    const bg2 = colors[Math.floor(Math.random() * colors.length)];
+
+    const newBook = {
+        id: Date.now(),
+        originalPostId: post.id,
+        title: post.title || '无题',
+        author: post.author.name,
+        desc: post.content.substring(0, 50) + '...',
+        coverBg: `linear-gradient(135deg, ${bg1}, ${bg2})`,
+        chapters: [
+            { title: '第一章', content: post.content, time: post.time }
+        ]
+    };
+
+    forumState.books.unshift(newBook);
+    forumSaveData();
+    wcCloseModal('forum-fanfic-action-sheet');
+    alert("已成功加入书城！点击左上角 LABEL 即可查看。");
+}
+
+function forumOpenUrgeModal() {
+    wcCloseModal('forum-fanfic-action-sheet');
+    setTimeout(() => {
+        document.getElementById('forum-urge-prompt').value = '';
+        wcOpenModal('forum-urge-modal');
+    }, 300);
+}
+
+async function forumSubmitUrge() {
+    const post = forumState.posts.find(p => p.id === forumState.actionPostId);
+    if (!post) return;
+
+    const urgeText = document.getElementById('forum-urge-prompt').value.trim();
+    
+    const apiConfig = await getActiveApiConfig('forum');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcCloseModal('forum-urge-modal');
+    wcShowLoading("作者正在快马加鞭码字中...");
+
+    try {
+        let prompt = `你是一个同人文作者。你的读者正在催更你的小说。\n`;
+        prompt += `【小说作者（你现在的笔名）】：${post.author.name}\n`;
+        prompt += `【前文内容】：\n${post.content}\n\n`;
+        if (urgeText) {
+            prompt += `【读者的剧情期望】：${urgeText}\n\n`;
+        }
+        prompt += `请根据前文和读者的期望，续写下一章的内容。\n`;
+        prompt += `【核心要求】：\n`;
+        prompt += `1. 续写正文：字数 500-1000 字，保持文风一致，推动剧情发展。\n`;
+        prompt += `2. 读者评论：生成 3-5 条读者看到最新更新后的激动评论（如：啊啊啊终于更新了、太太太会写了、好甜/好虐等）。\n`;
+        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "content": "续写的正文内容（支持使用 \\n 换行排版）...",
+  "comments": [
+    {"name": "读者A", "content": "评论内容"}
+  ]
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8,
+                max_tokens: 4000
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+
+        let result;
+        try {
+            result = JSON.parse(content);
+        } catch (e) {
+            console.warn("JSON 解析失败，降级为纯文本", e);
+            result = { content: content, comments: [] };
+        }
+
+        const newContent = result.content || "作者卡文了...";
+        const newComments = result.comments || [];
+
+        // 1. 更新原帖内容 (追加)
+        post.content += `\n\n【更新分割线】\n\n${newContent}`;
+        
+        // 2. 追加新评论
+        if (newComments.length > 0) {
+            if (!post.comments) post.comments = [];
+            const processedComments = newComments.map(c => ({
+                name: c.name || "热心读者",
+                handle: '@' + (c.name || "reader"),
+                avatar: getRandomNpcAvatar(),
+                content: c.content,
+                time: Date.now()
+            }));
+            post.comments.push(...processedComments);
+        }
+
+        // 3. 如果这本书在书城里，同步更新章节
+        const book = forumState.books.find(b => b.originalPostId === post.id);
+        if (book) {
+            book.chapters.push({
+                title: `第 ${book.chapters.length + 1} 章`,
+                content: newContent,
+                time: Date.now()
+            });
+        }
+
+        forumSaveData();
+        
+        // 刷新当前视图
+        if (document.getElementById('forum-view-fanfic').classList.contains('active')) {
+            forumRenderPosts('fanfic');
+        }
+        if (forumState.currentDetailPostId === post.id) {
+            forumRenderPostDetailContent();
+        }
+        // 如果当前在书城详情页，也需要刷新评论区
+        if (document.getElementById('forum-view-book-detail').classList.contains('active') && forumState.currentBookId) {
+            forumOpenBookDetail(forumState.currentBookId);
+        }
+
+        wcShowSuccess("催更成功，已更新！");
+
+    } catch (e) {
+        console.error(e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[论坛催更失败] ${e.message}`);
+        else wcShowError("作者卡文了，请重试");
+    }
+}
+
+// ==========================================
+// 论坛新增：书城与全屏阅读器逻辑
+// ==========================================
+function forumRenderBookstore() {
+    const grid = document.getElementById('forum-book-grid');
+    grid.innerHTML = '';
+    
+    if (!forumState.books || forumState.books.length === 0) {
+        grid.innerHTML = '<div style="grid-column: span 3; text-align: center; color: #888; padding: 40px 0; font-size: 13px;">书架空空如也<br>去同人区把喜欢的文章加入书城吧</div>';
+        return;
+    }
+
+    forumState.books.forEach(book => {
+        const shortTitle = book.title.length > 4 ? book.title.substring(0, 4) : book.title;
+        const div = document.createElement('div');
+        div.className = 'book-item';
+        div.onclick = () => forumOpenBookDetail(book.id);
+        div.innerHTML = `
+            <div class="book-cover" style="background: ${book.coverBg};">
+                <span class="book-title-cover">${shortTitle}</span>
+            </div>
+            <div class="book-name">${book.title}</div>
+            <div class="book-author">${book.author}</div>
+        `;
+        grid.appendChild(div);
+    });
+}
+
+function forumOpenBookDetail(bookId) {
+    forumState.currentBookId = bookId;
+    const book = forumState.books.find(b => b.id === bookId);
+    if (!book) return;
+
+    const shortTitle = book.title.length > 4 ? book.title.substring(0, 4) : book.title;
+    document.getElementById('forum-bd-cover').style.background = book.coverBg;
+    document.getElementById('forum-bd-cover-text').innerText = shortTitle;
+    
+    // 👇 核心修改：注入带“催更”按钮的标题 👇
+    document.getElementById('forum-bd-title').innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 18px; font-weight: bold; color: #111; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${book.title}</span>
+            <span onclick="forumTriggerUrgeFromBook(${book.originalPostId})" style="font-size: 12px; color: #AF52DE; background: rgba(175,82,222,0.1); padding: 4px 12px; border-radius: 12px; cursor: pointer; flex-shrink: 0; margin-left: 10px; font-weight: bold;">催更</span>
+        </div>
+    `;
+    
+    document.getElementById('forum-bd-author').innerText = `作者：${book.author}`;
+    document.getElementById('forum-bd-desc').innerText = book.desc;
+
+    const list = document.getElementById('forum-bd-chapter-list');
+    list.innerHTML = '';
+    book.chapters.forEach((ch, idx) => {
+        const timeStr = new Date(ch.time).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+        const div = document.createElement('div');
+        div.className = 'chapter-item';
+        // 👇 核心修改：点击章节不再直接进阅读器，而是打开选择弹窗 👇
+        div.onclick = () => forumOpenChapterActionModal(idx);
+        div.innerHTML = `<span>${ch.title}</span> <span style="color:#999; font-size:12px;">${timeStr}</span>`;
+        list.appendChild(div);
+    });
+
+    // 👇 核心修改：渲染原帖的评论到下方 👇
+    const commentsSection = document.getElementById('forum-bd-comments-section');
+    if (commentsSection) {
+        const originalPost = forumState.posts.find(p => p.id === book.originalPostId);
+        let commentsHtml = '<div style="font-size: 14px; font-weight: bold; margin-bottom: 15px; color: #111;">读者评论</div>';
+        
+        if (originalPost && originalPost.comments && originalPost.comments.length > 0) {
+            originalPost.comments.forEach(c => {
+                commentsHtml += `
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <img src="${c.avatar}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid #F0F0F0;">
+                        <div>
+                            <div style="font-size: 12px; color: #888; margin-bottom: 4px; font-weight: bold;">${c.name}</div>
+                            <div style="font-size: 14px; color: #333; line-height: 1.5;">${c.content}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            commentsHtml += '<div style="text-align: center; color: #999; font-size: 12px; padding: 20px 0;">暂无评论</div>';
+        }
+        commentsSection.innerHTML = commentsHtml;
+    }
+
+    forumSwitchTab('book-detail');
+}
+
+// --- 阅读器核心逻辑 ---
+function forumOpenReader(chapterIndex) {
+    const book = forumState.books.find(b => b.id === forumState.currentBookId);
+    if (!book || !book.chapters[chapterIndex]) return;
+
+    forumState.currentChapterIndex = chapterIndex;
+    const chapter = book.chapters[chapterIndex];
+
+    document.getElementById('reader-book-title').innerText = book.title;
+    document.getElementById('reader-chapter-title').innerText = chapter.title;
+
+    // 简单的分页逻辑：按字数切割 (每页约 300 字)
+    const text = chapter.content;
+    const pageSize = 300;
+    forumState.readerPages = [];
+    for (let i = 0; i < text.length; i += pageSize) {
+        forumState.readerPages.push(text.substring(i, i + pageSize));
+    }
+    
+    forumState.currentReaderPage = 0;
+    forumRenderReaderPage();
+
+    // 更新时间
+    const now = new Date();
+    document.getElementById('reader-time-display').innerText = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+    document.getElementById('forum-reader-overlay').style.display = 'flex';
+    setTimeout(() => document.getElementById('forum-reader-overlay').classList.add('active'), 10);
+}
+
+function forumRenderReaderPage() {
+    const content = forumState.readerPages[forumState.currentReaderPage];
+    // 将换行符转换为 <br>
+    document.getElementById('reader-content-text').innerHTML = content.replace(/\n/g, '<br>');
+    document.getElementById('reader-page-num').innerText = `${forumState.currentReaderPage + 1} / ${forumState.readerPages.length}`;
+}
+
+function forumReaderNextPage() {
+    if (forumState.currentReaderPage < forumState.readerPages.length - 1) {
+        forumState.currentReaderPage++;
+        forumRenderReaderPage();
+    } else {
+        // 尝试进入下一章
+        const book = forumState.books.find(b => b.id === forumState.currentBookId);
+        if (book && forumState.currentChapterIndex < book.chapters.length - 1) {
+            forumOpenReader(forumState.currentChapterIndex + 1);
+        } else {
+            alert("已经是最后一页了，快去催更吧！");
+        }
+    }
+}
+
+function forumReaderPrevPage() {
+    if (forumState.currentReaderPage > 0) {
+        forumState.currentReaderPage--;
+        forumRenderReaderPage();
+    } else {
+        // 尝试进入上一章
+        if (forumState.currentChapterIndex > 0) {
+            forumOpenReader(forumState.currentChapterIndex - 1);
+            // 跳转到上一章的最后一页
+            setTimeout(() => {
+                forumState.currentReaderPage = forumState.readerPages.length - 1;
+                forumRenderReaderPage();
+            }, 50);
+        }
+    }
+}
+
+function forumToggleReaderMenu() {
+    document.getElementById('forum-reader-menu').classList.toggle('active');
+}
+
+function forumCloseReader() {
+    document.getElementById('forum-reader-overlay').classList.remove('active');
+    document.getElementById('forum-reader-menu').classList.remove('active');
+    setTimeout(() => document.getElementById('forum-reader-overlay').style.display = 'none', 300);
+}
+
+// 新增：切换回帖子模式
+function forumSwitchToPostMode() {
+    const book = forumState.books.find(b => b.id === forumState.currentBookId);
+    if (!book) return;
+    
+    // 关闭阅读器
+    forumCloseReader();
+    
+    // 打开对应的帖子详情页
+    setTimeout(() => {
+        forumOpenPostDetail(book.originalPostId);
+    }, 300);
+}
+// ==========================================
+// 新增：书城章节点击弹窗与催更逻辑
+// ==========================================
+let pendingChapterIndex = 0;
+
+// 打开选择阅读模式的弹窗
+function forumOpenChapterActionModal(idx) {
+    pendingChapterIndex = idx;
+    wcOpenModal('forum-chapter-action-modal');
+}
+
+// 执行选择的阅读模式
+function forumExecuteChapterAction(mode) {
+    wcCloseModal('forum-chapter-action-modal');
+    
+    // 延迟 300ms 等待弹窗收起动画结束，防止页面卡顿
+    setTimeout(() => {
+        if (mode === 'reader') {
+            // 进入全屏阅读器
+            forumOpenReader(pendingChapterIndex);
+        } else if (mode === 'post') {
+            // 进入论坛帖子模式
+            const book = forumState.books.find(b => b.id === forumState.currentBookId);
+            if (book) {
+                forumOpenPostDetail(book.originalPostId);
+            }
+        }
+    }, 300);
+}
+
+// 从书城详情页直接触发催更
+function forumTriggerUrgeFromBook(postId) {
+    forumState.actionPostId = postId;
+    document.getElementById('forum-urge-prompt').value = '';
+    wcOpenModal('forum-urge-modal');
+}
+// ==========================================
+// 新增：自定义分组逻辑与长按菜单
+// ==========================================
+
+// 动态生成 Header HTML
+function wcGenerateChatHeaderHTML() {
+    let tabsHtml = `<div class="new-tab ${wcState.activeChatGroup === 'All' ? 'active' : ''}" onclick="wcSwitchChatGroup('All')">All</div>`;
+    
+    (wcState.chatGroups || []).forEach(g => {
+        tabsHtml += `<div class="new-tab ${wcState.activeChatGroup === g ? 'active' : ''}" onclick="wcSwitchChatGroup('${g}')" ontouchstart="wcGroupTouchStart(event, '${g}')" ontouchend="wcGroupTouchEnd()">${g}</div>`;
+    });
+    
+    return `
+        <div class="new-chat-header">
+            <div class="new-top-bar">
+                <div class="new-title" onclick="closeWechat()">
+                    <div class="new-title-icon"></div>
+                    Message
+                </div>
+                <div class="new-add-btn" onclick="wcOpenModal('wc-modal-create-choice')">+</div>
+            </div>
+            <div class="tabs-container">
+                <div class="tabs-scroll">
+                    ${tabsHtml}
+                </div>
+                <div class="tab-add-star" onclick="wcAddChatGroup()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// 切换分组
+function wcSwitchChatGroup(groupName) {
+    wcState.activeChatGroup = groupName;
+    const titleEl = document.getElementById('wc-nav-title');
+    if (titleEl) titleEl.innerHTML = wcGenerateChatHeaderHTML();
+    wcRenderChats();
+}
+
+// 添加新分组
+function wcAddChatGroup() {
+    wcOpenGeneralInput("创建新分组", (name) => {
+        if (name && name.trim() !== "") {
+            const trimmedName = name.trim();
+            if (!wcState.chatGroups) wcState.chatGroups = [];
+            if (!wcState.chatGroups.includes(trimmedName) && trimmedName !== 'All') {
+                wcState.chatGroups.push(trimmedName);
+                wcSaveData();
+                wcSwitchChatGroup(trimmedName);
+            } else {
+                alert("分组名称已存在或无效！");
+            }
+        }
+    });
+}
+
+// 长按分组触发菜单
+function wcGroupTouchStart(e, groupName) {
+    wcState.groupLongPressTimer = setTimeout(() => {
+        const touch = e.touches[0];
+        wcShowGroupContextMenu(touch.clientX, touch.clientY, groupName);
+    }, 500);
+}
+
+function wcGroupTouchEnd() {
+    if (wcState.groupLongPressTimer) {
+        clearTimeout(wcState.groupLongPressTimer);
+        wcState.groupLongPressTimer = null;
+    }
+}
+
+// 显示分组菜单
+function wcShowGroupContextMenu(x, y, groupName) {
+    wcState.selectedGroupName = groupName;
+    let menu = document.getElementById('wc-group-context-menu');
+    
+    const editSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+    const deleteSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+
+    // 如果菜单不存在，动态创建
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'wc-group-context-menu';
+        menu.style.cssText = 'position: absolute; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); z-index: 3000; display: none; flex-direction: column; min-width: 140px; overflow: hidden;';
+        document.body.appendChild(menu);
+    }
+    
+    menu.innerHTML = `
+        <div style="padding: 12px 16px; font-size: 15px; color: #000; border-bottom: 0.5px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center;" onclick="wcEditChatGroup()">
+            ${editSvg} 编辑分组
+        </div>
+        <div style="padding: 12px 16px; font-size: 15px; color: #FF3B30; cursor: pointer; display: flex; align-items: center;" onclick="wcDeleteChatGroup()">
+            ${deleteSvg} 删除分组
+        </div>
+    `;
+
+    const menuWidth = 130;
+    const menuHeight = 90;
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    if (x + menuWidth > screenW) x = screenW - menuWidth - 10;
+    if (y + menuHeight > screenH) y = screenH - menuHeight - 10;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'flex';
+}
+
+// 隐藏分组菜单
+document.addEventListener('click', (e) => {
+    const menu = document.getElementById('wc-group-context-menu');
+    if (menu && !e.target.closest('.new-tab')) {
+        menu.style.display = 'none';
+    }
+});
+
+
+// 编辑分组
+function wcEditChatGroup() {
+    const oldName = wcState.selectedGroupName;
+    if (!oldName) return;
+    
+    document.getElementById('wc-group-context-menu').style.display = 'none';
+    
+    wcOpenGeneralInput("重命名分组", (newName) => {
+        if (newName && newName.trim() !== "" && newName !== oldName) {
+            const trimmedName = newName.trim();
+            if (wcState.chatGroups.includes(trimmedName) || trimmedName === 'All') {
+                return alert("分组名已存在或无效");
+            }
+            const idx = wcState.chatGroups.indexOf(oldName);
+            if (idx !== -1) wcState.chatGroups[idx] = trimmedName;
+            
+            // 更新角色所属分组
+            wcState.characters.forEach(c => {
+                if (c.groupName === oldName) c.groupName = trimmedName;
+            });
+            
+            if (wcState.activeChatGroup === oldName) wcState.activeChatGroup = trimmedName;
+            
+            wcSaveData();
+            const titleEl = document.getElementById('wc-nav-title');
+            if (titleEl) titleEl.innerHTML = wcGenerateChatHeaderHTML();
+            wcRenderChats();
+        }
+    });
+}
+
+// 删除分组
+function wcDeleteChatGroup() {
+    const groupName = wcState.selectedGroupName;
+    if (!groupName) return;
+    
+    document.getElementById('wc-group-context-menu').style.display = 'none';
+    
+    if (confirm(`确定要删除分组 "${groupName}" 吗？\n该分组下的角色将回到 All 列表。`)) {
+        wcState.chatGroups = wcState.chatGroups.filter(g => g !== groupName);
+        
+        // 将角色移回 All
+        wcState.characters.forEach(c => {
+            if (c.groupName === groupName) c.groupName = 'All';
+        });
+        
+        if (wcState.activeChatGroup === groupName) wcState.activeChatGroup = 'All';
+        
+        wcSaveData();
+        const titleEl = document.getElementById('wc-nav-title');
+        if (titleEl) titleEl.innerHTML = wcGenerateChatHeaderHTML();
+        wcRenderChats();
+    }
+}
+
+// 打开分配分组弹窗
+function wcOpenAssignGroupModal(charId) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+    
+    let modal = document.getElementById('wc-modal-assign-group');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'wc-modal-assign-group';
+        // 🔪 核心修复：将 z-index 提升到 100000，绝对保证在最顶层！
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 100000; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;';
+        document.body.appendChild(modal);
+    }
+    
+    let optionsHtml = `<div style="padding: 16px; font-size: 16px; color: #007AFF; cursor: pointer; border-bottom: 1px solid #ddd;" onclick="wcAssignGroup(${charId}, 'All')">All (默认)</div>`;
+    (wcState.chatGroups || []).forEach(g => {
+        optionsHtml += `<div style="padding: 16px; font-size: 16px; color: #007AFF; cursor: pointer; border-bottom: 1px solid #ddd;" onclick="wcAssignGroup(${charId}, '${g}')">${g}</div>`;
+    });
+    
+    modal.innerHTML = `
+        <div style="background: rgba(245, 245, 245, 0.95); backdrop-filter: blur(20px); width: 270px; border-radius: 14px; overflow: hidden; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1);" onclick="event.stopPropagation();">
+            <div style="padding: 20px 16px 15px 16px; font-weight: 600; font-size: 16px; color: #000; border-bottom: 1px solid #ddd;">移动到分组</div>
+            <div style="display: flex; flex-direction: column; max-height: 250px; overflow-y: auto;">
+                ${optionsHtml}
+            </div>
+            <div style="padding: 16px; font-size: 16px; font-weight: 600; color: #FF3B30; cursor: pointer;" onclick="closeAssignGroupModal()">取消</div>
+        </div>
+    `;
+    
+    // 点击半透明黑色背景也可以关闭弹窗
+    modal.onclick = closeAssignGroupModal;
+    
+    modal.style.display = 'flex';
+    // 延迟改变透明度，触发淡入动画
+    setTimeout(() => modal.style.opacity = '1', 10);
+}
+
+// 独立的关闭弹窗函数
+window.closeAssignGroupModal = function() {
+    const modal = document.getElementById('wc-modal-assign-group');
+    if (modal) {
+        modal.style.opacity = '0';
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 200);
+    }
+};
+
+// 执行分配分组
+window.wcAssignGroup = function(charId, groupName) {
+    try {
+        const char = wcState.characters.find(c => c.id === charId);
+        if (char) {
+            char.groupName = groupName;
+            wcSaveData();
+            wcRenderChats();
+        }
+    } catch (e) {
+        console.error("分组保存失败:", e);
+    } finally {
+        // 🔪 核心修复：无论前面执行是否卡顿，最后一步绝对强制关闭弹窗！
+        window.closeAssignGroupModal();
+    }
+};
+
+
+
+// 执行分配分组
+function wcAssignGroup(charId, groupName) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (char) {
+        char.groupName = groupName;
+        wcSaveData();
+        wcRenderChats();
+    }
+    document.getElementById('wc-modal-assign-group').classList.remove('active');
+}
+// ==========================================
+// 新增：角色会话长按菜单 (置顶 / 分组)
+// ==========================================
+let wcChatLongPressTimer = null;
+
+function wcChatTouchStart(e, charId) {
+    wcChatLongPressTimer = setTimeout(() => {
+        const touch = e.touches[0];
+        wcShowChatContextMenu(touch.clientX, touch.clientY, charId);
+    }, 500);
+}
+
+function wcChatTouchEnd() {
+    if (wcChatLongPressTimer) {
+        clearTimeout(wcChatLongPressTimer);
+        wcChatLongPressTimer = null;
+    }
+}
+
+function wcShowChatContextMenu(eOrX, yOrCharId, charIdIfTouch) {
+    let x, y, charId;
+    if (typeof eOrX === 'object') {
+        eOrX.preventDefault(); // 阻止电脑端默认右键菜单
+        x = eOrX.pageX;
+        y = eOrX.pageY;
+        charId = yOrCharId;
+    } else {
+        x = eOrX;
+        y = yOrCharId;
+        charId = charIdIfTouch;
+    }
+
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    let menu = document.getElementById('wc-chat-context-menu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'wc-chat-context-menu';
+        menu.style.cssText = 'position: absolute; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); z-index: 3000; display: none; flex-direction: column; min-width: 140px; overflow: hidden;';
+        document.body.appendChild(menu);
+    }
+
+    const pinText = char.isPinned ? "取消置顶" : "置顶会话";
+    const pinSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 11.2V6a3 3 0 0 0-6 0v5.2a2 2 0 0 1-1.11 1.35l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>`;
+    const groupSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+    // 🔪 新增：删除角色的垃圾桶图标
+    const deleteSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+
+    menu.innerHTML = `
+        <div style="padding: 12px 16px; font-size: 15px; color: #000; border-bottom: 0.5px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center;" onclick="wcTogglePin(${charId}); document.getElementById('wc-chat-context-menu').style.display='none';">
+            ${pinSvg} ${pinText}
+        </div>
+        <div style="padding: 12px 16px; font-size: 15px; color: #000; border-bottom: 0.5px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center;" onclick="wcOpenAssignGroupModal(${charId}); document.getElementById('wc-chat-context-menu').style.display='none';">
+            ${groupSvg} 移动分组
+        </div>
+        <div style="padding: 12px 16px; font-size: 15px; color: #FF3B30; cursor: pointer; display: flex; align-items: center;" onclick="wcDeleteCharacter(${charId}); document.getElementById('wc-chat-context-menu').style.display='none';">
+            ${deleteSvg} 删除角色
+        </div>
+    `;
+
+    const menuWidth = 140;
+    const menuHeight = 140; // 增加了菜单项，高度稍微调大一点
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    if (x + menuWidth > screenW) x = screenW - menuWidth - 10;
+    if (y + menuHeight > screenH) y = screenH - menuHeight - 10;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'flex';
+}
+
+// 全局点击隐藏所有菜单
+document.addEventListener('click', (e) => {
+    const groupMenu = document.getElementById('wc-group-context-menu');
+    if (groupMenu && !e.target.closest('.new-tab')) {
+        groupMenu.style.display = 'none';
+    }
+    
+    const chatMenu = document.getElementById('wc-chat-context-menu');
+    if (chatMenu && !e.target.closest('.wc-chat-swipe-content')) {
+        chatMenu.style.display = 'none';
+    }
+});
+// 覆盖 wcPostMoment 函数以支持分组
+window.wcPostMoment = function() {
+    const text = document.getElementById('wc-input-moment-text').value.trim();
+    const imageDesc = document.getElementById('wc-input-moment-image-desc').value.trim();
+    const groupSelect = document.getElementById('wc-input-moment-group');
+    const visibleGroup = groupSelect ? groupSelect.value : 'All';
+
+    if (!text && !wcState.tempImage && !imageDesc) {
+        alert("请填写内容或上传图片");
+        return;
+    }
+
+    const newMoment = {
+        id: Date.now(),
+        name: wcState.user.name,
+        avatar: wcState.user.avatar,
+        text: text,
+        image: wcState.tempImage || null,
+        imageDesc: imageDesc || null,
+        time: Date.now(),
+        likes: [],
+        comments: [],
+        visibleGroup: visibleGroup // 新增可见分组字段
+    };
+
+    wcState.moments.unshift(newMoment);
+    wcSaveData();
+    wcRenderMoments();
+    
+    document.getElementById('wc-input-moment-text').value = '';
+    document.getElementById('wc-input-moment-image-desc').value = '';
+    const previewImg = document.getElementById('wc-preview-moment-img');
+    if(previewImg) previewImg.style.display = 'none';
+    const uploadIcon = document.getElementById('wc-icon-moment-upload');
+    if(uploadIcon) uploadIcon.style.display = 'flex';
+    wcState.tempImage = '';
+    
+    wcCloseModal('wc-modal-post-moment');
+};
