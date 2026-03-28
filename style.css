@@ -4658,7 +4658,7 @@ input::-webkit-inner-spin-button {
     display: none !important;
 }
 .wc-navbar.custom-chat-nav-mode .wc-nav-title {
-    flex: 1; width: 100%; overflow: visible;
+    flex: 1; width: 100%; overflow: visible; white-space: normal !important;
 }
 
 /* 新增：Contacts 页面专属顶栏样式 */
@@ -4675,7 +4675,7 @@ input::-webkit-inner-spin-button {
     display: none !important;
 }
 .wc-navbar.custom-contacts-nav-mode .wc-nav-title {
-    flex: 1; width: 100%; overflow: visible;
+    flex: 1; width: 100%; overflow: visible; white-space: normal !important;
 }
 
 .custom-contacts-header { width: 100%; display: flex; flex-direction: column; padding: 0 10px; }
@@ -4688,8 +4688,8 @@ input::-webkit-inner-spin-button {
 
 .contacts-tabs-row { display: flex; align-items: center; gap: 24px; overflow-x: auto; scrollbar-width: none; padding: 0 5px; }
 .contacts-tabs-row::-webkit-scrollbar { display: none; }
-.contacts-tab-item { font-size: 16px; color: #888; cursor: pointer; white-space: nowrap; font-weight: 600; transition: all 0.2s; user-select: none; }
-.contacts-tab-item.active { color: #fff; background-color: #000; padding: 6px 20px; border-radius: 20px; }
+.contacts-tab-item { font-size: 16px; color: #888; cursor: pointer; white-space: nowrap; font-weight: 600; transition: all 0.2s; user-select: none; padding: 6px 20px; border-radius: 20px; }
+.contacts-tab-item.active { color: #fff; background-color: #000; }
 
 .new-chat-header { width: 100%; display: flex; flex-direction: column; padding: 0 10px; }
 .new-top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; margin-top: 10px; }
@@ -4710,8 +4710,8 @@ input::-webkit-inner-spin-button {
     padding-right: 15px; /* 给右侧留点空间，防止文字贴着分割线 */
 }
 .tabs-scroll::-webkit-scrollbar { display: none; }
-.new-tab { color: #888; font-size: 16px; cursor: pointer; white-space: nowrap; transition: all 0.2s; user-select: none; }
-.new-tab.active { color: #fff; background-color: #000; padding: 6px 18px; border-radius: 20px; font-weight: 600; }
+.new-tab { color: #888; font-size: 16px; cursor: pointer; white-space: nowrap; transition: all 0.2s; user-select: none; padding: 6px 18px; border-radius: 20px; }
+.new-tab.active { color: #fff; background-color: #000; font-weight: 600; }
 .tab-add-star { 
     margin-left: 10px; padding-left: 15px; 
     border-left: 1px solid #eee; 
