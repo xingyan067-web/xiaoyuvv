@@ -343,27 +343,20 @@ function updateAppViewportVars() {
             // 键盘弹起时，严格使用 visualViewport.height，防止输入框被遮挡
             docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
         } else {
-            // 🔪 终极修复 v3：键盘收起时，取所有可用高度源中的最大值
-            // window.innerHeight 在 iOS PWA standalone 模式下可能偏小（不含安全区）
-            // document.documentElement.clientHeight 在某些情况下更准确
-            // window.screen.height 是物理屏幕高度，在 standalone 模式下最可靠
-            // 取最大值确保页面能完整覆盖整个屏幕，不会留黑边/白边
+            // 键盘收起时，取所有可用高度源中的最大值
             const candidates = [
                 window.innerHeight,
                 document.documentElement.clientHeight,
                 window.visualViewport.height
             ];
-            // iOS standalone 模式下，screen.height 是最可靠的全屏高度
-            if (window.navigator.standalone === true) {
-                candidates.push(window.screen.height);
-            }
+            // 🔪 修复：删除了 window.screen.height，防止高度溢出把 Dock 栏挤到屏幕外面！
             const fullHeight = Math.max(...candidates);
             docStyle.setProperty('--app-height', `${fullHeight}px`);
+            
+            // 🔪 修复：仅在键盘收起时强制回滚到顶部，防止页面卡在半空
+            window.scrollTo(0, 0);
+            document.body.scrollTop = 0;
         }
-        
-        // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
-        window.scrollTo(0, 0);
-        document.body.scrollTop = 0;
     } else {
         // 降级方案：取 innerHeight 和 clientHeight 中的较大值
         const fallbackHeight = Math.max(window.innerHeight, document.documentElement.clientHeight);
@@ -390,11 +383,7 @@ if (window.visualViewport) {
             if (dreamHistory) dreamHistory.scrollTop = dreamHistory.scrollHeight;
         }, 100);
     });
-    // 防止 iOS 键盘弹出时整个页面被系统强行往上推
-    window.visualViewport.addEventListener('scroll', () => {
-        window.scrollTo(0, 0);
-        document.body.scrollTop = 0;
-    });
+    // 🔪 修复：彻底删除了 visualViewport 的 scroll 监听，允许 iOS 原生将输入框推上来！
 } else {
     window.addEventListener('resize', updateAppViewportVars);
 }
