@@ -4250,6 +4250,16 @@ input::-webkit-inner-spin-button {
 }
 .dream-item-row:last-child { border-bottom: none; }
 .dream-checkbox { width: 20px; height: 20px; accent-color: #111; }
+
+/* 梦境字体设置区块样式 */
+.dream-font-settings-box {
+    background: #FAFAFA; border-radius: 12px; padding: 15px; margin-bottom: 20px; border: 1px solid #E5E5EA;
+}
+.dream-font-settings-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #333; }
+.dream-font-slider { width: 100%; accent-color: #111; margin-bottom: 15px; }
+.dream-font-input { width: 100%; padding: 10px; border: 1px solid #E5E5EA; border-radius: 8px; font-size: 14px; outline: none; box-sizing: border-box; background: #FFF; }
+.dream-font-input:focus { border-color: #111; }
+
 /* ========================================== */
 /* 梦境预设编辑卡片 (档案袋/报纸风，无圆角) */
 /* ========================================== */
@@ -4441,36 +4451,41 @@ input::-webkit-inner-spin-button {
     stroke-linecap: round !important; 
 }
 /* ========================================== */
-/* AI 回复卡片与对话/旁白分离排版 */
+/* AI 回复卡片与对话/旁白分离排版 (仿小说居中) */
 /* ========================================== */ 
 .dream-msg.ai {
-    align-self: flex-start; 
-    background: #FFF; 
+    align-self: center; /* 整体居中 */
+    background: transparent; /* 去除白色背景 */
     color: #111; 
-    border: 1px solid #111; /* 黑色硬边框 */
-    border-radius: 0; /* 绝对无圆角 */
-    padding: 16px;
-    box-shadow: 4px 4px 0px rgba(0,0,0,0.05); /* 报纸风硬阴影 */
-    width: 90%; /* 卡片稍微宽一点 */
-    display: flex; flex-direction: column; gap: 8px;
+    border: none; /* 去除黑色硬边框 */
+    border-radius: 0; 
+    padding: 10px 0;
+    box-shadow: none; /* 去除阴影 */
+    width: 100%; 
+    max-width: 100%;
+    display: flex; flex-direction: column; gap: 12px;
+    text-align: center; /* 文本居中 */
 }
 
 /* 旁白文本 (无气泡) */
 .dream-narrative-text {
-    font-size: 14px; color: #555; line-height: 1.7;
-    font-family: 'Kaiti', 'STKaiti', '楷体', serif;
-    text-align: justify;
+    font-size: var(--dream-font-size, 14px); 
+    color: #555; line-height: 1.8;
+    font-family: var(--dream-font-family, 'Kaiti', 'STKaiti', '楷体', serif);
+    text-align: center; /* 居中 */
 }
 
-/* 对话文本 (带气泡包裹) */
+/* 对话文本 (去气泡包裹) */
 .dream-dialogue-bubble {
-    background: #F4F4F4;
-    border-left: 3px solid #111;
-    padding: 10px 14px;
-    font-size: 15px; color: #111; font-weight: bold;
-    border-radius: 0; /* 保持无圆角 */
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    margin: 4px 0;
+    background: transparent; /* 去除灰色背景 */
+    border-left: none; /* 去除左侧黑线 */
+    padding: 5px 0;
+    font-size: calc(var(--dream-font-size, 14px) + 1px); /* 对话稍微大一点点 */
+    color: #111; font-weight: bold;
+    border-radius: 0; 
+    font-family: var(--dream-font-family, 'Kaiti', 'STKaiti', '楷体', serif);
+    margin: 0;
+    text-align: center; /* 居中 */
 }
 
 /* ========================================== */

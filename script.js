@@ -331,54 +331,52 @@ window.onload = async function() {
         }
     });
 
-// ==========================================
-// iOS / PWA 全屏与键盘自适应最终版 (完美修复键盘遮挡与回弹)
-// ==========================================
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
+// iOS / PWA 全屏与键盘自适应最终版
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
     
-    if (isIOS && window.visualViewport) {
-        // 判断键盘是否弹起 (高度差大于 150px)
+    if (window.visualViewport) {
+        // 【核心修复】：判断键盘是否弹起。如果高度差大于 150，说明键盘弹起了
         const isKeyboardOpen = (window.innerHeight - window.visualViewport.height) > 150;
         
         if (isKeyboardOpen) {
-            // 🔪 核心修复 1：键盘弹起时，只更新高度变量，绝对不要强行 scrollTo(0,0)！
-            // 让 iOS 原生的“滚动到可视区域”发挥作用，把输入框推上来
+            // 键盘弹起时，严格使用 visualViewport.height，防止输入框被遮挡
             docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
-            document.body.style.position = 'fixed';
-            document.body.style.height = `${window.visualViewport.height}px`;
         } else {
-            // 键盘收起时：恢复全屏高度
+            // 🔪 终极修复 v3：键盘收起时，取所有可用高度源中的最大值
+            // window.innerHeight 在 iOS PWA standalone 模式下可能偏小（不含安全区）
+            // document.documentElement.clientHeight 在某些情况下更准确
+            // window.screen.height 是物理屏幕高度，在 standalone 模式下最可靠
+            // 取最大值确保页面能完整覆盖整个屏幕，不会留黑边/白边
             const candidates = [
                 window.innerHeight,
                 document.documentElement.clientHeight,
                 window.visualViewport.height
             ];
+            // iOS standalone 模式下，screen.height 是最可靠的全屏高度
             if (window.navigator.standalone === true) {
                 candidates.push(window.screen.height);
             }
             const fullHeight = Math.max(...candidates);
             docStyle.setProperty('--app-height', `${fullHeight}px`);
-            document.body.style.position = 'fixed';
-            document.body.style.height = '100%';
-            
-            // 只有在键盘完全收起时，才重置滚动，消除顶部/底部的白边黑边
-            window.scrollTo(0, 0);
-            document.body.scrollTop = 0;
         }
+        
+        // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
     } else {
-        // 安卓及其他设备：直接使用 innerHeight，不强行干预定位
-        docStyle.setProperty('--app-height', `${window.innerHeight}px`);
+        // 降级方案：取 innerHeight 和 clientHeight 中的较大值
+        const fallbackHeight = Math.max(window.innerHeight, document.documentElement.clientHeight);
+        docStyle.setProperty('--app-height', `${fallbackHeight}px`);
     }
     
+    // 统一输入栏高度变量，给微信聊天滚动区预留空间
     docStyle.setProperty('--wc-input-height', '64px');
     docStyle.setProperty('--keyboard-offset', '0px');
 }
 
 // 监听可视区域变化（键盘弹出/收起）
-if (isIOS && window.visualViewport) {
+if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
         updateAppViewportVars();
         // 键盘弹起导致高度变化时，稍微延迟一下让各个聊天列表自动滚动到底部
@@ -392,42 +390,22 @@ if (isIOS && window.visualViewport) {
             if (dreamHistory) dreamHistory.scrollTop = dreamHistory.scrollHeight;
         }, 100);
     });
-    
-    // 🔪 核心修复 2：彻底移除 scroll 监听中的无脑 scrollTo(0,0)
+    // 防止 iOS 键盘弹出时整个页面被系统强行往上推
     window.visualViewport.addEventListener('scroll', () => {
-        const isKeyboardOpen = (window.innerHeight - window.visualViewport.height) > 150;
-        // 仅在键盘未弹起时，防止页面被用户手动拖拽偏移；键盘弹起时允许系统自由推移页面
-        if (!isKeyboardOpen) {
-            window.scrollTo(0, 0);
-        }
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
     });
 } else {
-    // 安卓设备监听常规 resize
-    window.addEventListener('resize', () => {
-        updateAppViewportVars();
-        setTimeout(() => {
-            if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
-        }, 100);
-    });
+    window.addEventListener('resize', updateAppViewportVars);
 }
 
-// 监听输入框失去焦点（键盘收起），强制重置页面位置
-document.addEventListener('focusout', (e) => {
-    // 🔪 核心修复 3：如果焦点只是转移到了另一个输入框（比如从名称点到备注），千万不要重置！否则会导致键盘回弹！
-    if (e.relatedTarget && (e.relatedTarget.tagName === 'INPUT' || e.relatedTarget.tagName === 'TEXTAREA')) {
-        return;
-    }
-    if (isIOS) {
-        setTimeout(() => {
-            // 确保键盘真的收起了再重置
-            const isKeyboardOpen = window.visualViewport && (window.innerHeight - window.visualViewport.height) > 150;
-            if (!isKeyboardOpen) {
-                window.scrollTo(0, 0);
-                document.body.scrollTop = 0;
-                updateAppViewportVars();
-            }
-        }, 100);
-    }
+// 【新增杀招】：监听输入框失去焦点（键盘收起），强制重置页面位置，防止页面卡在半空中漏出白边
+document.addEventListener('focusout', () => {
+    setTimeout(() => {
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+        updateAppViewportVars();
+    }, 50);
 });
 
 // 初始化调用一次
@@ -3670,16 +3648,20 @@ function wcRenderMessages(charId, preserveScroll = false) {
             let statusText = msg.status === 'ended' ? '已结束，点击查看报告' : 'Tap to join';
             let onClickAttr = '';
             
+            // 🔪 核心修复：转义歌名和歌手名中的单双引号，防止破坏 HTML 结构导致卡片消失
+            const safeTitle = (msg.songTitle || '').replace(/'/g, "\\'").replace(/"/g, "&quot;");
+            const safeArtist = (msg.songArtist || '').replace(/'/g, "\\'").replace(/"/g, "&quot;");
+
             if (msg.status === 'ended') {
                 // 如果听歌已结束，点击打开总结报告
                 onClickAttr = `onclick="musicOpenSummaryModal('${msg.id}')"`;
             } else {
                 if (msg.sender === 'them') {
                     // 如果是 Char 发出的邀请，点击卡片重新打开确认弹窗
-                    onClickAttr = `onclick="musicShowCharInviteModal(${charId}, '${msg.songTitle || ''}')"`;
+                    onClickAttr = `onclick="musicShowCharInviteModal(${charId}, '${safeTitle}')"`;
                 } else {
                     // 如果是 User 发出的邀请，点击卡片执行接受逻辑
-                    onClickAttr = `onclick="musicAcceptInvite(${charId}, '${msg.songId}', '${msg.songTitle}', '${msg.songArtist}', '${msg.songCover}')"`;
+                    onClickAttr = `onclick="musicAcceptInvite(${charId}, '${msg.songId}', '${safeTitle}', '${safeArtist}', '${msg.songCover}')"`;
                 }
             }
 
@@ -14960,21 +14942,22 @@ async function musicPlaySong(id, title, artist, cover) {
                 musicFetchLyrics(id);
             }).catch(e => {
                 console.error("播放失败:", e);
-                alert("抱歉宝宝，这首歌可能是 VIP 专属或无版权，当前格式无法播放哦~");
+                alert(`抱歉宝宝，《${title}》可能是 VIP 专属或无版权，当前格式无法播放哦~`);
                 musicState.isPlaying = false;
                 musicUpdatePlayerUI();
             });
             
         } else {
-            alert("抱歉宝宝，这首歌无版权或需要 VIP，无法获取播放链接。");
-            // 如果列表里有多首歌，才尝试播放下一首，防止死循环
-            if (musicState.currentPlaylist.length > 1) {
-                musicPlayNext();
-            }
+            // 🔪 核心修复：移除自动调用 musicPlayNext()，防止无限切回旧歌
+            alert(`抱歉宝宝，《${title}》无版权或需要 VIP，无法获取播放链接。`);
+            musicState.isPlaying = false;
+            musicUpdatePlayerUI();
         }
     } catch (e) {
         console.error(e);
         alert("获取歌曲信息失败，网络异常。");
+        musicState.isPlaying = false;
+        musicUpdatePlayerUI();
     }
 }
 
@@ -16096,6 +16079,8 @@ const dreamState = {
     selectedWbIds: [], 
     selectedPresetId: null, 
     currentChat: [],
+    fontSize: 14, // 新增：梦境字体大小
+    fontUrl: '',  // 新增：梦境字体URL
     // 新增：扩展组件数据
     ext: {
         currentTab: 'css', // 当前停留的tab
@@ -16112,8 +16097,11 @@ async function dreamLoadData() {
         if (data.selectedWbIds) dreamState.selectedWbIds = data.selectedWbIds;
         if (data.selectedPresetId) dreamState.selectedPresetId = data.selectedPresetId;
         if (data.ext) dreamState.ext = { ...dreamState.ext, ...data.ext };
+        if (data.fontSize) dreamState.fontSize = data.fontSize;
+        if (data.fontUrl !== undefined) dreamState.fontUrl = data.fontUrl;
     }
     applyDreamCss(); // 加载时自动应用全局 CSS
+    applyDreamFontSettings(); // 加载时应用字体设置
 }
 
 async function dreamSaveData() {
@@ -16122,7 +16110,9 @@ async function dreamSaveData() {
         presets: dreamState.presets,
         selectedWbIds: dreamState.selectedWbIds,
         selectedPresetId: dreamState.selectedPresetId,
-        ext: dreamState.ext
+        ext: dreamState.ext,
+        fontSize: dreamState.fontSize,
+        fontUrl: dreamState.fontUrl
     });
 }
 
@@ -16274,6 +16264,11 @@ function closeDreamSettings() {
 }
 
 function dreamRenderSettings() {
+    // 0. 渲染字体设置
+    document.getElementById('dream-font-slider').value = dreamState.fontSize || 14;
+    document.getElementById('dream-font-size-val').innerText = (dreamState.fontSize || 14) + 'px';
+    document.getElementById('dream-font-url-input').value = dreamState.fontUrl || '';
+
     // 1. 渲染世界书列表
     const wbList = document.getElementById('dream-wb-list');
     wbList.innerHTML = '';
@@ -17100,14 +17095,43 @@ function closeDreamEditModal() {
     dreamSelectedMsgIndex = -1;
 }
 
-function saveDreamEditMsg() {
-    const newText = document.getElementById('dream-edit-textarea').value.trim();
-    if (newText && dreamSelectedMsgIndex > -1) {
-        dreamState.currentChat[dreamSelectedMsgIndex].content = newText;
-        dreamState.currentChat[dreamSelectedMsgIndex].rawContent = newText; // 同步更新
-        dreamRenderChatWithHTML();
+// --- 梦境字体设置逻辑 ---
+function changeDreamFontSize(val) {
+    dreamState.fontSize = val;
+    document.getElementById('dream-font-size-val').innerText = val + 'px';
+    document.documentElement.style.setProperty('--dream-font-size', val + 'px');
+    dreamSaveData();
+}
+
+function applyDreamFontUrl() {
+    const url = document.getElementById('dream-font-url-input').value.trim();
+    dreamState.fontUrl = url;
+    applyDreamFontSettings();
+    dreamSaveData();
+    alert("梦境字体已应用！");
+}
+
+function applyDreamFontSettings() {
+    // 应用大小
+    if (dreamState.fontSize) {
+        document.documentElement.style.setProperty('--dream-font-size', dreamState.fontSize + 'px');
     }
-    closeDreamEditModal();
+    // 应用字体文件
+    let styleTag = document.getElementById('dream-custom-font-inject');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'dream-custom-font-inject';
+        document.head.appendChild(styleTag);
+    }
+    
+    if (dreamState.fontUrl) {
+        styleTag.innerHTML = `
+            @font-face { font-family: 'DreamCustomFont'; src: url('${dreamState.fontUrl}'); }
+            :root { --dream-font-family: 'DreamCustomFont', 'Kaiti', 'STKaiti', '楷体', serif; }
+        `;
+    } else {
+        styleTag.innerHTML = `:root { --dream-font-family: 'Kaiti', 'STKaiti', '楷体', serif; }`;
+    }
 }
 // --- 将梦境作为潜意识注入给角色 ---
 function injectDreamToChar(cardId) {
@@ -20369,6 +20393,12 @@ window.forumTriggerReactionToUser = async function(postId, userCommentText) {
             if (typeof showMainSystemNotification === 'function') {
                 showMainSystemNotification("论坛私信", `收到来自 ${pm.senderName} 的新私信`, avatar);
             }
+            
+            // 👇 新增：同步 AI 主动发起的私信到主聊天记忆 👇
+            if (npc) {
+                wcAddMessage(npc.id, 'system', 'system', `[系统内部信息(仅AI可见): 你刚刚在论坛私信里主动给 User 发送了消息: "${pm.content}"]`, { hidden: true });
+            }
+            // 👆 新增结束 👆
         }
 
         forumSaveData();
@@ -20505,8 +20535,9 @@ window.forumGenerateInteractions = async function(postId) {
             
             // 核心修复：查找是否已有该人在【当前窗口】的会话
             let chat = forumState.privateChats.find(c => c.targetName === pm.senderName && c.windowId === forumState.activeWindowId);
+            const npc = wcState.characters.find(c => c.name === pm.senderName); // 提取 npc 变量
+            
             if (!chat) {
-                const npc = wcState.characters.find(c => c.name === pm.senderName);
                 chat = {
                     id: Date.now().toString(),
                     windowId: forumState.activeWindowId, // 👈 绑定当前窗口
@@ -20530,6 +20561,12 @@ window.forumGenerateInteractions = async function(postId) {
             if (typeof showMainSystemNotification === 'function') {
                 showMainSystemNotification("论坛私信", `收到来自 ${pm.senderName} 的新私信`, chat.targetAvatar);
             }
+            
+            // 👇 新增：同步 AI 主动发起的私信到主聊天记忆 👇
+            if (npc) {
+                wcAddMessage(npc.id, 'system', 'system', `[系统内部信息(仅AI可见): 你刚刚在论坛私信里主动给 User 发送了消息: "${pm.content}"]`, { hidden: true });
+            }
+            // 👆 新增结束 👆
         }
 
         forumSaveData();
@@ -20633,8 +20670,9 @@ window.forumGenerateMoreComments = async function(postId) {
             
             // 核心修复：查找是否已有该人在【当前窗口】的会话
             let chat = forumState.privateChats.find(c => c.targetName === pm.senderName && c.windowId === forumState.activeWindowId);
+            const npc = wcState.characters.find(c => c.name === pm.senderName); // 提取 npc 变量
+            
             if (!chat) {
-                const npc = wcState.characters.find(c => c.name === pm.senderName);
                 chat = {
                     id: Date.now().toString(),
                     windowId: forumState.activeWindowId, // 👈 绑定当前窗口
@@ -20658,6 +20696,12 @@ window.forumGenerateMoreComments = async function(postId) {
             if (typeof showMainSystemNotification === 'function') {
                 showMainSystemNotification("论坛私信", `收到来自 ${pm.senderName} 的新私信`, chat.targetAvatar);
             }
+            
+            // 👇 新增：同步 AI 主动发起的私信到主聊天记忆 👇
+            if (npc) {
+                wcAddMessage(npc.id, 'system', 'system', `[系统内部信息(仅AI可见): 你刚刚在论坛私信里主动给 User 发送了消息: "${pm.content}"]`, { hidden: true });
+            }
+            // 👆 新增结束 👆
         }
 
         forumSaveData();
@@ -20716,8 +20760,14 @@ function forumConfirmShare(charId) {
     // 发送卡片到聊天
     wcAddMessage(charId, 'me', 'receipt', cardHtml);
 
-    // 给 AI 发送隐藏的系统提示
-    const aiPrompt = `[系统内部信息(仅AI可见): 用户在论坛看到了一篇帖子并分享给了你。发帖人：${post.author.name}。内容：“${post.content}”。请在回复中针对这篇帖子发表你的看法或吐槽。]`;
+    // 👇 新增：提取评论内容 👇
+    let commentsStr = "无";
+    if (post.comments && post.comments.length > 0) {
+        commentsStr = post.comments.map(c => `${c.name}: ${c.content}`).join(' | ');
+    }
+
+    // 给 AI 发送隐藏的系统提示 (包含评论)
+    const aiPrompt = `[系统内部信息(仅AI可见): 用户在论坛看到了一篇帖子并分享给了你。发帖人：${post.author.name}。内容：“${post.content}”。该帖子的评论区：[${commentsStr}]。请在回复中针对这篇帖子或评论发表你的看法或吐槽。]`;
     wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
 
     wcCloseModal('forum-modal-share');
@@ -21030,29 +21080,48 @@ async function forumGenerateAIPosts(type) {
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
         
-        // 强力 JSON 容错解析
-        if (!content.endsWith(']')) {
-            const lastBrace = content.lastIndexOf('}');
-            if (lastBrace !== -1) {
-                content = content.substring(0, lastBrace + 1) + ']';
-            } else {
-                content += '}]';
-            }
-        }
-
         let generatedPosts = [];
         try {
-            generatedPosts = JSON.parse(content);
+            // 尝试直接解析
+            // 简单的补全括号容错
+            let tempContent = content;
+            if (!tempContent.endsWith(']')) {
+                let openBrackets = (tempContent.match(/\[/g) || []).length;
+                let closeBrackets = (tempContent.match(/\]/g) || []).length;
+                let openBraces = (tempContent.match(/\{/g) || []).length;
+                let closeBraces = (tempContent.match(/\}/g) || []).length;
+                
+                // 补齐缺失的 } 和 ]
+                while (openBraces > closeBraces) { tempContent += '}'; closeBraces++; }
+                while (openBrackets > closeBrackets) { tempContent += ']'; closeBrackets++; }
+            }
+            generatedPosts = JSON.parse(tempContent);
         } catch (e) {
-            console.warn("JSON 解析失败，尝试正则提取兜底", e);
-            const regex = /\{[^{}]*"authorName"[^{}]*\}/g;
-            const matches = content.match(regex);
-            if (matches) {
-                generatedPosts = matches.map(m => {
-                    try { return JSON.parse(m); } catch(err) { return null; }
-                }).filter(Boolean);
+            console.warn("JSON 解析失败，启用智能括号栈提取兜底", e);
+            // 智能提取完整闭合的 JSON 对象
+            let extracted = [];
+            let depth = 0;
+            let start = -1;
+            for (let i = 0; i < content.length; i++) {
+                if (content[i] === '{') {
+                    if (depth === 0) start = i;
+                    depth++;
+                } else if (content[i] === '}') {
+                    depth--;
+                    if (depth === 0 && start !== -1) {
+                        let objStr = content.substring(start, i + 1);
+                        try {
+                            let obj = JSON.parse(objStr);
+                            if (obj.authorName) extracted.push(obj);
+                        } catch(err) {}
+                        start = -1;
+                    }
+                }
+            }
+            if (extracted.length > 0) {
+                generatedPosts = extracted;
             } else {
-                throw new Error("JSON 解析彻底失败");
+                throw new Error("JSON 解析彻底失败，请尝试更换模型或缩短生成要求");
             }
         }
 
@@ -21271,29 +21340,48 @@ async function _executeGenFanfic(basePrompt) {
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
         
-        // 强力 JSON 容错解析
-        if (!content.endsWith(']')) {
-            const lastBrace = content.lastIndexOf('}');
-            if (lastBrace !== -1) {
-                content = content.substring(0, lastBrace + 1) + ']';
-            } else {
-                content += '}]';
-            }
-        }
-
         let generatedPosts = [];
         try {
-            generatedPosts = JSON.parse(content);
+            // 尝试直接解析
+            // 简单的补全括号容错
+            let tempContent = content;
+            if (!tempContent.endsWith(']')) {
+                let openBrackets = (tempContent.match(/\[/g) || []).length;
+                let closeBrackets = (tempContent.match(/\]/g) || []).length;
+                let openBraces = (tempContent.match(/\{/g) || []).length;
+                let closeBraces = (tempContent.match(/\}/g) || []).length;
+                
+                // 补齐缺失的 } 和 ]
+                while (openBraces > closeBraces) { tempContent += '}'; closeBraces++; }
+                while (openBrackets > closeBrackets) { tempContent += ']'; closeBrackets++; }
+            }
+            generatedPosts = JSON.parse(tempContent);
         } catch (e) {
-            console.warn("JSON 解析失败，尝试正则提取兜底", e);
-            const regex = /\{[^{}]*"authorName"[^{}]*\}/g;
-            const matches = content.match(regex);
-            if (matches) {
-                generatedPosts = matches.map(m => {
-                    try { return JSON.parse(m); } catch(err) { return null; }
-                }).filter(Boolean);
+            console.warn("JSON 解析失败，启用智能括号栈提取兜底", e);
+            // 智能提取完整闭合的 JSON 对象
+            let extracted = [];
+            let depth = 0;
+            let start = -1;
+            for (let i = 0; i < content.length; i++) {
+                if (content[i] === '{') {
+                    if (depth === 0) start = i;
+                    depth++;
+                } else if (content[i] === '}') {
+                    depth--;
+                    if (depth === 0 && start !== -1) {
+                        let objStr = content.substring(start, i + 1);
+                        try {
+                            let obj = JSON.parse(objStr);
+                            if (obj.authorName) extracted.push(obj);
+                        } catch(err) {}
+                        start = -1;
+                    }
+                }
+            }
+            if (extracted.length > 0) {
+                generatedPosts = extracted;
             } else {
-                throw new Error("JSON 解析彻底失败");
+                throw new Error("JSON 解析彻底失败，请尝试更换模型或缩短生成要求");
             }
         }
 
@@ -21579,11 +21667,18 @@ function forumSendPM() {
         time: Date.now()
     });
     chat.lastUpdateTime = Date.now();
+    
+    // 👇 新增：同步到主聊天记忆 👇
+    const npc = wcState.characters.find(c => c.name === chat.targetName);
+    if (npc) {
+        wcAddMessage(npc.id, 'system', 'system', `[系统内部信息(仅AI可见): User 刚刚在论坛私信里对你说: "${text}"]`, { hidden: true });
+    }
+    // 👆 新增结束 👆
+
     forumSaveData();
     
     input.value = '';
     forumRenderPMChatHistory();
-
 }
 
 // 6. 专属的私信 AI 回复逻辑
@@ -21614,16 +21709,31 @@ async function forumTriggerPMAI(chatId) {
         const npc = wcState.characters.find(c => c.name === chat.targetName);
         let npcPersona = npc ? npc.prompt : "一个在论坛上关注你的热心网友/路人。请根据你们的聊天记录推断你的性格，语气要像真实的活人网友。";
 
+        // 👇 新增：提取微信主聊天记录作为参考 👇
+        let mainChatHistory = "";
+        if (npc) {
+            const msgs = wcState.chats[npc.id] || [];
+            mainChatHistory = msgs.slice(-15).map(m => {
+                if (m.isError || m.type === 'system') return null;
+                let content = m.content;
+                if (m.type !== 'text') content = `[${m.type}]`;
+                return `${m.sender==='me'?'User':npc.name}: ${content}`;
+            }).filter(Boolean).join('\n');
+        }
+
         let prompt = `你现在正在一个社交论坛的私信界面里，和用户（${forumState.profile.name}）进行一对一私聊。\n`;
         prompt += `【你的身份】：${chat.targetName}\n`;
         prompt += `【你的人设】：${npcPersona}\n\n`;
         prompt += wcGenerateRelationshipPrompt(forumState.config.charIds); // 注入关系网
+        if (mainChatHistory) {
+            prompt += `【你们在微信上的最近聊天记录（作为参考）】：\n${mainChatHistory}\n\n`;
+        }
         prompt += `【最近的私信聊天记录】：\n${recentMsgs}\n\n`;
         prompt += `【要求】：\n`;
         prompt += `1. 请根据你的人设和聊天记录，回复用户的最后一条消息。\n`;
         prompt += `2. 语气要符合论坛私聊的氛围（可以是网感、暧昧、吐槽等，取决于你的人设）。\n`;
-        // 👇 修改：强制要求碎片化输出
-        prompt += `3. 【碎片化口语化强制指令】：必须像真人聊天一样，将长回复拆分成 2-4 条短消息！严禁把所有话挤在一个气泡里！\n`;
+        // 👇 修改：强制要求碎片化输出，并保证语义完整 👇
+        prompt += `3. 【碎片化口语化强制指令】：必须像真人聊天一样，将长回复拆分成 2-4 条短消息！严禁把所有话挤在一个气泡里！确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n`;
         prompt += `4. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）说话！你只能扮演 ${chat.targetName}！\n`;
         prompt += `5. 返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
@@ -21647,7 +21757,7 @@ async function forumTriggerPMAI(chatId) {
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
         
-        // 👇 修改：解析数组，并遍历推入聊天记录
+        // 解析数组，并遍历推入聊天记录
         let replies = [];
         try {
             replies = JSON.parse(content);
@@ -21663,6 +21773,7 @@ async function forumTriggerPMAI(chatId) {
         if (loadingEl) loadingEl.remove();
 
         // 存入 AI 回复 (遍历数组)
+        let combinedReply = "";
         for (const reply of replies) {
             if (reply.content) {
                 chat.messages.push({
@@ -21671,7 +21782,13 @@ async function forumTriggerPMAI(chatId) {
                     content: reply.content,
                     time: Date.now()
                 });
+                combinedReply += reply.content + " ";
             }
+        }
+        
+        // 👇 新增：同步 AI 的回复到主聊天记忆 👇
+        if (npc && combinedReply) {
+            wcAddMessage(npc.id, 'system', 'system', `[系统内部信息(仅AI可见): 你刚刚在论坛私信里回复了 User: "${combinedReply.trim()}"]`, { hidden: true });
         }
         
         chat.lastUpdateTime = Date.now();

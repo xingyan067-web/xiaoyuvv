@@ -4231,6 +4231,23 @@
             </div>
         </div>
         <div class="dream-modal-body">
+            <!-- 新增：梦境字体设置 -->
+            <div class="dream-section-title">梦境字体设置</div>
+            <div class="dream-font-settings-box">
+                <div class="dream-font-settings-row">
+                    <span>字体大小</span>
+                    <span id="dream-font-size-val">14px</span>
+                </div>
+                <!-- 将 min 改为 8，max 改为 20 -->
+                <input type="range" id="dream-font-slider" class="dream-font-slider" min="8" max="20" value="14" oninput="changeDreamFontSize(this.value)">
+                
+                <div style="font-size: 13px; color: #555; margin-bottom: 8px;">自定义字体 URL (WOFF/TTF)</div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="dream-font-url-input" class="dream-font-input" placeholder="https://.../font.woff2">
+                    <button class="dream-btn-primary" style="width: 80px; height: 38px; border-radius: 8px; margin: 0;" onclick="applyDreamFontUrl()">应用</button>
+                </div>
+            </div>
+
             <div class="dream-section-title">关联世界书</div>
             <div class="ins-wb-select-btn" onclick="openGlobalWbModal('dream-wb-list', 'dream-wb-count', '', () => { dreamState.selectedWbIds = Array.from(document.querySelectorAll('#dream-wb-list input:checked')).map(cb=>cb.value); dreamSaveData(); })">
                 <span class="title">选择要关联的世界书</span>
