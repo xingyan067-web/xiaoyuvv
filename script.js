@@ -343,10 +343,16 @@ function updateAppViewportVars() {
             // 键盘弹起时，严格使用 visualViewport.height，防止输入框被遮挡
             docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
         } else {
-            // 🔪 终极修复：键盘收起时，使用 window.innerHeight 精确计算实际可用高度
-            // 不再使用 100dvh，因为在某些 iOS 版本的 PWA standalone 模式下
-            // dvh 计算不准确会导致顶部/底部出现留白或留黑
-            const fullHeight = window.innerHeight;
+            // 🔪 终极修复 v2：键盘收起时，取所有可用高度源中的最大值
+            // window.innerHeight 在 iOS PWA standalone 模式下可能偏小（不含安全区）
+            // document.documentElement.clientHeight 在某些情况下更准确
+            // 取最大值确保页面能完整覆盖整个屏幕，不会留黑边/白边
+            const candidates = [
+                window.innerHeight,
+                document.documentElement.clientHeight,
+                window.visualViewport.height
+            ];
+            const fullHeight = Math.max(...candidates);
             docStyle.setProperty('--app-height', `${fullHeight}px`);
         }
         
@@ -354,8 +360,9 @@ function updateAppViewportVars() {
         window.scrollTo(0, 0);
         document.body.scrollTop = 0;
     } else {
-        // 降级方案：使用 innerHeight 精确值
-        docStyle.setProperty('--app-height', `${window.innerHeight}px`);
+        // 降级方案：取 innerHeight 和 clientHeight 中的较大值
+        const fallbackHeight = Math.max(window.innerHeight, document.documentElement.clientHeight);
+        docStyle.setProperty('--app-height', `${fallbackHeight}px`);
     }
     
     // 统一输入栏高度变量，给微信聊天滚动区预留空间
@@ -8911,6 +8918,7 @@ async function wcGeneratePhoneChats() {
         prompt += `1. 结合当前时间、地点和心情，推断你最近在和谁聊天，聊些什么（工作、八卦、游戏、求助等）。\n`;
         prompt += `2. 构思如何体现你独立的生活社交圈，同时也要保证 User 隐秘体现在你的社交圈和你的生活。\n`;
         prompt += `3. 确保聊天记录充满生活琐碎感和活人语气，拒绝生硬的问答。\n`;
+        prompt += `4. 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！严禁漏掉引号、括号或逗号！严禁输出损坏的 JSON 格式！请确保所有的字符串内部的双引号都被正确转义（\\"），并且不要包含真实的换行符（请使用 \\n 代替）。\n`;
         prompt += `推演结束后，直接返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
   {
@@ -8946,7 +8954,20 @@ async function wcGeneratePhoneChats() {
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const chatsData = JSON.parse(content);
+        
+        let chatsData;
+        try {
+            chatsData = JSON.parse(content);
+        } catch (parseErr) {
+            // 尝试修复常见的 JSON 错误
+            content = content.replace(/,\s*]/g, ']');
+            content = content.replace(/}\s*{/g, '},{');
+            try {
+                chatsData = JSON.parse(content);
+            } catch (e2) {
+                throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 100) + "...");
+            }
+        }
 
         if (!char.phoneData) char.phoneData = {};
         
