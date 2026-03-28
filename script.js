@@ -20273,7 +20273,7 @@ window.forumTriggerReactionToUser = async function(postId, userCommentText) {
             const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
             if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
         }
-        contextInfo += wcGenerateRelationshipPrompt(); // 注入关系网
+        contextInfo += wcGenerateRelationshipPrompt(forumState.config.charIds); // 注入关系网
 
         let prompt = `你现在是一个社交论坛的后台引擎。用户（${forumState.profile.name}）刚刚在帖子里发表了一条评论。\n`;
         prompt += `【原帖发帖人】：${post.author.name}\n`;
@@ -20417,7 +20417,7 @@ window.forumGenerateInteractions = async function(postId) {
             const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
             if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
         }
-        contextInfo += wcGenerateRelationshipPrompt(); // 注入关系网
+        contextInfo += wcGenerateRelationshipPrompt(forumState.config.charIds); // 注入关系网
 
         let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子生成 8 到 15 条极具“活人感”的评论。\n`;
         prompt += `【原帖发帖人】：${post.author.name}\n`;
@@ -20545,7 +20545,7 @@ window.forumGenerateMoreComments = async function(postId) {
             const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
             if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
         }
-        contextInfo += wcGenerateRelationshipPrompt(); // 注入关系网
+        contextInfo += wcGenerateRelationshipPrompt(forumState.config.charIds); // 注入关系网
 
         const existingComments = (post.comments || []).slice(-10).map(c => `${c.name}: ${c.content}`).join('\n');
 
@@ -20951,7 +20951,7 @@ async function forumGenerateAIPosts(type) {
                 }).join('\n') + "\n\n";
             }
         }
-        contextInfo += wcGenerateRelationshipPrompt(); // 注入关系网
+        contextInfo += wcGenerateRelationshipPrompt(forumState.config.charIds); // 注入关系网
 
         let userNames = [forumState.profile.name, wcState.user.name];
         if (forumState.config.maskIds.length > 0) {
@@ -20975,7 +20975,7 @@ async function forumGenerateAIPosts(type) {
         
         prompt += `【核心强制要求（最高优先级）】：\n`;
         prompt += `1. 数量要求：必须一次性生成 6 到 10 条帖子！每条帖子必须包含至少 8 到 10 条评论！(减少数量防止截断)\n`;
-        prompt += `2. 角色穿插：发帖人和评论人中，必须穿插出现【你认识的熟人(NPC)】（如果有的话：${npcNames.join(', ')}），以及大量虚构的网友。\n`;
+        prompt += `2. 角色穿插：发帖人和评论人中，必须穿插出现【你认识的熟人(NPC)】（如果有的话：${npcNames.join(', ')}），以及大量虚构的网友。请严格根据【全局角色关系网设定】来决定他们之间的互动态度（如：情侣会秀恩爱，仇人会互怼）。\n`;
         prompt += `3. 活人感：语气要极度口语化、有网感（如：笑死、救命、谁懂啊、破防了）。评论区要有互动感（网友互相回复、楼主回复网友）。\n`;
         prompt += `4. 【绝对禁止扮演用户】：上面提供的【关于我(User)的设定/马甲】仅供你作为背景参考（NPC可以发关于User的帖子或吐槽User）。但是，你绝对不能以 User（${userNames.join('、')}）的身份发帖或评论！User 会自己操作，不需要你代劳！所有发帖人和评论人只能是 NPC 或 虚构网友！\n`;                
         prompt += `5. 【身份隔离警告】：在生成 comments 时，必须清楚认知该帖子的 authorName 是谁！不要让 NPC 误以为帖子是 User 发的，除非帖子内容明确提到了 User！\n`;
@@ -21595,7 +21595,7 @@ async function forumTriggerPMAI(chatId) {
         let prompt = `你现在正在一个社交论坛的私信界面里，和用户（${forumState.profile.name}）进行一对一私聊。\n`;
         prompt += `【你的身份】：${chat.targetName}\n`;
         prompt += `【你的人设】：${npcPersona}\n\n`;
-        prompt += wcGenerateRelationshipPrompt(); // 注入关系网
+        prompt += wcGenerateRelationshipPrompt(forumState.config.charIds); // 注入关系网
         prompt += `【最近的私信聊天记录】：\n${recentMsgs}\n\n`;
         prompt += `【要求】：\n`;
         prompt += `1. 请根据你的人设和聊天记录，回复用户的最后一条消息。\n`;
@@ -23965,11 +23965,18 @@ function wcGenerateContactsHeaderHTML() {
 // ==========================================
 // 新增：生成角色关系网 Prompt 的核心辅助函数
 // ==========================================
-function wcGenerateRelationshipPrompt() {
+function wcGenerateRelationshipPrompt(allowedCharIds = null) {
     if (!wcState.relationships || wcState.relationships.length === 0) return "";
     
     let relTexts = [];
     wcState.relationships.forEach(rel => {
+        // 如果传入了允许的角色列表，过滤掉未勾选的角色关系
+        if (allowedCharIds) {
+            const sourceAllowed = rel.source === 'user' || allowedCharIds.includes(rel.source.toString());
+            const targetAllowed = rel.target === 'user' || allowedCharIds.includes(rel.target.toString());
+            if (!sourceAllowed || !targetAllowed) return;
+        }
+
         let sourceName = rel.source === 'user' ? (wcState.user.name || 'User') : '未知';
         let targetName = rel.target === 'user' ? (wcState.user.name || 'User') : '未知';
         
@@ -23988,7 +23995,7 @@ function wcGenerateRelationshipPrompt() {
     });
     
     if (relTexts.length > 0) {
-        return "【全局角色关系网设定 (请严格遵守这些人物关系，防止OOC)】:\n" + relTexts.join('\n') + "\n\n";
+        return "【全局角色关系网设定 (请严格遵守这些人物关系，决定他们之间的互动态度，如情侣秀恩爱、仇人互怼等)】:\n" + relTexts.join('\n') + "\n\n";
     }
     return "";
 }
