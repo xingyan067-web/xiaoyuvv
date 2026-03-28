@@ -331,52 +331,54 @@ window.onload = async function() {
         }
     });
 
-// iOS / PWA 全屏与键盘自适应最终版
+// ==========================================
+// iOS / PWA 全屏与键盘自适应最终版 (完美修复键盘遮挡与回弹)
+// ==========================================
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
     
-    if (window.visualViewport) {
-        // 【核心修复】：判断键盘是否弹起。如果高度差大于 150，说明键盘弹起了
+    if (isIOS && window.visualViewport) {
+        // 判断键盘是否弹起 (高度差大于 150px)
         const isKeyboardOpen = (window.innerHeight - window.visualViewport.height) > 150;
         
         if (isKeyboardOpen) {
-            // 键盘弹起时，严格使用 visualViewport.height，防止输入框被遮挡
+            // 🔪 核心修复 1：键盘弹起时，只更新高度变量，绝对不要强行 scrollTo(0,0)！
+            // 让 iOS 原生的“滚动到可视区域”发挥作用，把输入框推上来
             docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
+            document.body.style.position = 'fixed';
+            document.body.style.height = `${window.visualViewport.height}px`;
         } else {
-            // 🔪 终极修复 v3：键盘收起时，取所有可用高度源中的最大值
-            // window.innerHeight 在 iOS PWA standalone 模式下可能偏小（不含安全区）
-            // document.documentElement.clientHeight 在某些情况下更准确
-            // window.screen.height 是物理屏幕高度，在 standalone 模式下最可靠
-            // 取最大值确保页面能完整覆盖整个屏幕，不会留黑边/白边
+            // 键盘收起时：恢复全屏高度
             const candidates = [
                 window.innerHeight,
                 document.documentElement.clientHeight,
                 window.visualViewport.height
             ];
-            // iOS standalone 模式下，screen.height 是最可靠的全屏高度
             if (window.navigator.standalone === true) {
                 candidates.push(window.screen.height);
             }
             const fullHeight = Math.max(...candidates);
             docStyle.setProperty('--app-height', `${fullHeight}px`);
+            document.body.style.position = 'fixed';
+            document.body.style.height = '100%';
+            
+            // 只有在键盘完全收起时，才重置滚动，消除顶部/底部的白边黑边
+            window.scrollTo(0, 0);
+            document.body.scrollTop = 0;
         }
-        
-        // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
-        window.scrollTo(0, 0);
-        document.body.scrollTop = 0;
     } else {
-        // 降级方案：取 innerHeight 和 clientHeight 中的较大值
-        const fallbackHeight = Math.max(window.innerHeight, document.documentElement.clientHeight);
-        docStyle.setProperty('--app-height', `${fallbackHeight}px`);
+        // 安卓及其他设备：直接使用 innerHeight，不强行干预定位
+        docStyle.setProperty('--app-height', `${window.innerHeight}px`);
     }
     
-    // 统一输入栏高度变量，给微信聊天滚动区预留空间
     docStyle.setProperty('--wc-input-height', '64px');
     docStyle.setProperty('--keyboard-offset', '0px');
 }
 
 // 监听可视区域变化（键盘弹出/收起）
-if (window.visualViewport) {
+if (isIOS && window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
         updateAppViewportVars();
         // 键盘弹起导致高度变化时，稍微延迟一下让各个聊天列表自动滚动到底部
@@ -390,22 +392,42 @@ if (window.visualViewport) {
             if (dreamHistory) dreamHistory.scrollTop = dreamHistory.scrollHeight;
         }, 100);
     });
-    // 防止 iOS 键盘弹出时整个页面被系统强行往上推
+    
+    // 🔪 核心修复 2：彻底移除 scroll 监听中的无脑 scrollTo(0,0)
     window.visualViewport.addEventListener('scroll', () => {
-        window.scrollTo(0, 0);
-        document.body.scrollTop = 0;
+        const isKeyboardOpen = (window.innerHeight - window.visualViewport.height) > 150;
+        // 仅在键盘未弹起时，防止页面被用户手动拖拽偏移；键盘弹起时允许系统自由推移页面
+        if (!isKeyboardOpen) {
+            window.scrollTo(0, 0);
+        }
     });
 } else {
-    window.addEventListener('resize', updateAppViewportVars);
+    // 安卓设备监听常规 resize
+    window.addEventListener('resize', () => {
+        updateAppViewportVars();
+        setTimeout(() => {
+            if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
+        }, 100);
+    });
 }
 
-// 【新增杀招】：监听输入框失去焦点（键盘收起），强制重置页面位置，防止页面卡在半空中漏出白边
-document.addEventListener('focusout', () => {
-    setTimeout(() => {
-        window.scrollTo(0, 0);
-        document.body.scrollTop = 0;
-        updateAppViewportVars();
-    }, 50);
+// 监听输入框失去焦点（键盘收起），强制重置页面位置
+document.addEventListener('focusout', (e) => {
+    // 🔪 核心修复 3：如果焦点只是转移到了另一个输入框（比如从名称点到备注），千万不要重置！否则会导致键盘回弹！
+    if (e.relatedTarget && (e.relatedTarget.tagName === 'INPUT' || e.relatedTarget.tagName === 'TEXTAREA')) {
+        return;
+    }
+    if (isIOS) {
+        setTimeout(() => {
+            // 确保键盘真的收起了再重置
+            const isKeyboardOpen = window.visualViewport && (window.innerHeight - window.visualViewport.height) > 150;
+            if (!isKeyboardOpen) {
+                window.scrollTo(0, 0);
+                document.body.scrollTop = 0;
+                updateAppViewportVars();
+            }
+        }, 100);
+    }
 });
 
 // 初始化调用一次
