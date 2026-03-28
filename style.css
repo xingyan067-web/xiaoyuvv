@@ -25,15 +25,19 @@ body, input, textarea, select, button {
     font-family: inherit !important;
 }
 
-/* --- 核心全屏重置 (完美兼容 PWA Standalone) --- */
+/* --- 核心全屏重置 (完美兼容 PWA Standalone + iOS Safari) --- */
 html, body {
     width: 100%;
-    height: 100dvh; /* 🔪 核心修复：强制使用 100dvh 撑满物理屏幕 */
+    /* 🔪 终极修复：使用 var(--app-height) 统一高度，由 JS 动态计算 */
+    height: var(--app-height, 100vh);
+    height: 100dvh;
+    min-height: var(--app-height, 100vh);
     min-height: 100dvh;
     margin: 0;
     padding: 0;
     overflow: hidden;
-    background-color: transparent; /* 保持透明 */
+    /* 🔪 核心修复：将透明改为黑色，防止 iOS 全屏模式下露出白色/黑色系统背景 */
+    background-color: #000000;
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
     touch-action: manipulation;
@@ -43,17 +47,49 @@ html, body {
 
 body {
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
 }
 
+/* 🔪 iOS Safari 和 PWA Standalone 专属全屏修复 */
+/* 注意：不再使用 -webkit-fill-available，因为它在 iOS PWA standalone 模式下经常计算错误导致留白/留黑 */
 @supports (-webkit-touch-callout: none) {
-    html,
-    body,
-    #app-root,
-    #activation-overlay,
+    html {
+        /* iOS 上优先用 JS 动态计算的 --app-height，避免 -webkit-fill-available 的坑 */
+        height: var(--app-height, 100vh) !important;
+        min-height: var(--app-height, 100vh) !important;
+    }
+    body {
+        height: 100% !important;
+        min-height: 100% !important;
+    }
+    #app-root {
+        height: var(--app-height, 100vh) !important;
+        min-height: var(--app-height, 100vh) !important;
+    }
+    #activation-overlay {
+        height: var(--app-height, 100vh) !important;
+        min-height: var(--app-height, 100vh) !important;
+    }
     #wc-view-phone-sim {
-        height: -webkit-fill-available;
-        min-height: -webkit-fill-available;
+        height: var(--app-height, 100vh) !important;
+        min-height: var(--app-height, 100vh) !important;
+    }
+    .screen {
+        height: var(--app-height, 100vh) !important;
+        min-height: var(--app-height, 100vh) !important;
+    }
+    .settings-modal {
+        height: var(--app-height, 100vh) !important;
+        min-height: var(--app-height, 100vh) !important;
+    }
+    .dream-fullscreen-view {
+        height: var(--app-height, 100vh) !important;
+        min-height: var(--app-height, 100vh) !important;
     }
 }
 
@@ -4625,6 +4661,36 @@ input::-webkit-inner-spin-button {
     flex: 1; width: 100%; overflow: visible;
 }
 
+/* 新增：Contacts 页面专属顶栏样式 */
+.wc-navbar.custom-contacts-nav-mode {
+    background: #FFFFFF !important;
+    border-bottom: none !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.02) !important;
+    justify-content: center;
+    height: auto !important; 
+    padding-bottom: 10px;
+}
+.wc-navbar.custom-contacts-nav-mode .wc-nav-left,
+.wc-navbar.custom-contacts-nav-mode .wc-nav-right {
+    display: none !important;
+}
+.wc-navbar.custom-contacts-nav-mode .wc-nav-title {
+    flex: 1; width: 100%; overflow: visible;
+}
+
+.custom-contacts-header { width: 100%; display: flex; flex-direction: column; padding: 0 10px; }
+.contacts-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; margin-top: 10px; }
+.contacts-header-left { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.contacts-header-left:active { opacity: 0.6; }
+.contacts-home-icon { width: 28px; height: 28px; background-color: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.contacts-home-icon svg { width: 14px; height: 14px; fill: #fff; }
+.contacts-header-title { font-size: 28px; font-weight: 800; color: #000; letter-spacing: 0.5px; }
+
+.contacts-tabs-row { display: flex; align-items: center; gap: 24px; overflow-x: auto; scrollbar-width: none; padding: 0 5px; }
+.contacts-tabs-row::-webkit-scrollbar { display: none; }
+.contacts-tab-item { font-size: 16px; color: #888; cursor: pointer; white-space: nowrap; font-weight: 600; transition: all 0.2s; user-select: none; }
+.contacts-tab-item.active { color: #fff; background-color: #000; padding: 6px 20px; border-radius: 20px; }
+
 .new-chat-header { width: 100%; display: flex; flex-direction: column; padding: 0 10px; }
 .new-top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; margin-top: 10px; }
 .new-title { display: flex; align-items: center; font-size: 28px; font-weight: bold; letter-spacing: 0.5px; color: #000; cursor: pointer; }
@@ -4656,6 +4722,7 @@ input::-webkit-inner-spin-button {
 .tab-add-star:active { opacity: 0.5; }
 
 #wc-view-chat { padding-top: calc(120px + env(safe-area-inset-top, 20px)) !important; }
+#wc-view-contacts { padding-top: calc(120px + env(safe-area-inset-top, 20px)) !important; }
 
 .wc-search-bar-placeholder {
     width: auto; margin: 10px 20px 15px 20px; background-color: #f5f5f5; border-radius: 12px;

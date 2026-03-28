@@ -343,16 +343,19 @@ function updateAppViewportVars() {
             // 键盘弹起时，严格使用 visualViewport.height，防止输入框被遮挡
             docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
         } else {
-            // 键盘收起时，强制使用 100dvh，彻底抹杀 visualViewport 带来的底部白边误差！
-            docStyle.setProperty('--app-height', `100dvh`);
+            // 🔪 终极修复：键盘收起时，使用 window.innerHeight 精确计算实际可用高度
+            // 不再使用 100dvh，因为在某些 iOS 版本的 PWA standalone 模式下
+            // dvh 计算不准确会导致顶部/底部出现留白或留黑
+            const fullHeight = window.innerHeight;
+            docStyle.setProperty('--app-height', `${fullHeight}px`);
         }
         
         // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
         window.scrollTo(0, 0);
         document.body.scrollTop = 0;
     } else {
-        // 降级方案
-        docStyle.setProperty('--app-height', `100dvh`);
+        // 降级方案：使用 innerHeight 精确值
+        docStyle.setProperty('--app-height', `${window.innerHeight}px`);
     }
     
     // 统一输入栏高度变量，给微信聊天滚动区预留空间
@@ -3128,12 +3131,14 @@ function wcSwitchTab(tabId) {
     if (tabId === 'chat') {
         navbar.classList.add('custom-chat-nav-mode');
         navbar.classList.remove('custom-moments-nav-mode');
+        navbar.classList.remove('custom-contacts-nav-mode');
         titleEl.innerHTML = wcGenerateChatHeaderHTML();
         if (btnExit) btnExit.innerHTML = `<svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>退出`;
     }
  else if (tabId === 'moments') {
         navbar.classList.remove('custom-chat-nav-mode');
         navbar.classList.add('custom-moments-nav-mode');
+        navbar.classList.remove('custom-contacts-nav-mode');
         
         if (btnExit) btnExit.style.display = 'none';
         if (btnCalendar) btnCalendar.style.display = 'flex';
@@ -3141,9 +3146,15 @@ function wcSwitchTab(tabId) {
         // 顶栏恢复极简标题
         titleEl.innerHTML = `<span style="font-family: 'Georgia', serif; font-style: italic; letter-spacing: 2px; font-size: 16px;">MOMENTS</span>`;
         
+    } else if (tabId === 'contacts') {
+        navbar.classList.remove('custom-chat-nav-mode');
+        navbar.classList.remove('custom-moments-nav-mode');
+        navbar.classList.add('custom-contacts-nav-mode');
+        titleEl.innerHTML = wcGenerateContactsHeaderHTML();
     } else {
         navbar.classList.remove('custom-chat-nav-mode');
         navbar.classList.remove('custom-moments-nav-mode');
+        navbar.classList.remove('custom-contacts-nav-mode');
         titleEl.innerHTML = titleMap[tabId];
         if (btnExit) {
             btnExit.innerHTML = `<svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>退出`;
@@ -7000,7 +7011,19 @@ function wcRenderAll() { wcRenderContacts(); wcRenderChats(); wcRenderMoments();
 function wcRenderContacts() {
     const list = document.getElementById('wc-contacts-list');
     list.innerHTML = '';
-    wcState.characters.forEach(char => {
+    
+    // 过滤当前分组的角色
+    const filteredChars = wcState.characters.filter(c => {
+        if (wcState.activeContactsGroup === 'All') return true;
+        return c.groupName === wcState.activeContactsGroup;
+    });
+
+    if (filteredChars.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0;">该分组下暂无联系人</div>';
+        return;
+    }
+
+    filteredChars.forEach(char => {
         const div = document.createElement('div');
         div.className = 'wc-swipe-container';
         div.innerHTML = `<div class="wc-swipe-actions" onclick="wcDeleteCharacter(${char.id})">删除</div><div class="wc-swipe-content" onclick="wcShowCharDetail(${char.id})" ontouchstart="wcHandleTouchStartSwipe(event)" ontouchmove="wcHandleTouchMoveSwipe(event)" ontouchend="wcHandleTouchEndSwipe(event)"><img src="${char.avatar}" class="wc-avatar"><div class="wc-item-content"><div class="wc-item-title">${char.name}</div><div class="wc-item-subtitle">${char.note}</div></div></div>`;
@@ -23847,6 +23870,45 @@ function forumTriggerUrgeFromBook(postId) {
 // ==========================================
 // 新增：自定义分组逻辑与长按菜单
 // ==========================================
+
+// 新增：通讯录当前选中的分组状态
+wcState.activeContactsGroup = 'All';
+
+function wcGenerateContactsHeaderHTML() {
+    // 动态生成分组 Tab
+    let tabsHtml = `<div class="contacts-tab-item ${wcState.activeContactsGroup === 'All' ? 'active' : ''}" onclick="wcSwitchContactsGroup('All')">All</div>`;
+    
+    (wcState.chatGroups || []).forEach(g => {
+        tabsHtml += `<div class="contacts-tab-item ${wcState.activeContactsGroup === g ? 'active' : ''}" onclick="wcSwitchContactsGroup('${g}')">${g}</div>`;
+    });
+
+    return `
+        <div class="custom-contacts-header">
+            <div class="contacts-header-row">
+                <div class="contacts-header-left" onclick="closeWechat()">
+                    <div class="contacts-home-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 3L4 9v12h5v-7h6v7h5V9z"/>
+                        </svg>
+                    </div>
+                    <div class="contacts-header-title">Contacts</div>
+                </div>
+            </div>
+            <div class="contacts-tabs-row">
+                ${tabsHtml}
+            </div>
+        </div>
+    `;
+}
+
+function wcSwitchContactsGroup(groupName) {
+    wcState.activeContactsGroup = groupName;
+    const titleEl = document.getElementById('wc-nav-title');
+    if (titleEl && wcState.currentTab === 'contacts') {
+        titleEl.innerHTML = wcGenerateContactsHeaderHTML();
+    }
+    wcRenderContacts();
+}
 
 // 动态生成 Header HTML
 function wcGenerateChatHeaderHTML() {
