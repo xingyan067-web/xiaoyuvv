@@ -752,24 +752,23 @@
         </div>
 
         <!-- iOS 仿真设置页面 -->
-        <div class="settings-modal" id="iosSettingsModal">
-            <div class="settings-header">
-                <div class="header-left">
-                    <button class="nav-btn" onclick="closeIOSSettings()">
-                        <svg class="back-svg" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-                        <span>设置</span>
-                    </button>
-                </div>
-                <div class="header-title">设置</div>
-                <div class="header-right"></div>
-            </div>
-
-            <div class="settings-content ios-settings-content">
-                <div class="ios-search-bar">
-                    <input type="text" class="ios-search-input" placeholder="搜索" readonly>
+        <div class="settings-modal" id="iosSettingsModal" style="background-color: #f2f2f7;">
+            <div class="settings-content ios-settings-content" style="padding-top: env(safe-area-inset-top, 40px);">
+                <!-- 左上角大标题，点击退出 -->
+                <div style="padding: 10px 20px 10px 20px; cursor: pointer;" onclick="closeIOSSettings()">
+                    <h1 style="font-size: 34px; font-weight: 700; color: #000; margin: 0; letter-spacing: 0.5px;">设置</h1>
                 </div>
 
-                <div class="ios-profile-card" onclick="openAppleIdSettings()">
+                <!-- 优化后的搜索框 -->
+                <div class="ios-search-bar" style="padding: 0 20px 20px 20px; background: transparent;">
+                    <div style="position: relative;">
+                        <svg viewBox="0 0 24 24" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; stroke: #8e8e93; fill: none; stroke-width: 2;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input type="text" class="ios-search-input" placeholder="搜索" readonly style="background: #e3e3e8; color: #8e8e93; text-align: left; padding-left: 32px; height: 36px; border-radius: 10px;">
+                    </div>
+                </div>
+
+                <!-- 增加圆角和边距的个人信息卡片 -->
+                <div class="ios-profile-card" onclick="openAppleIdSettings()" style="margin: 0 20px 20px 20px; border-radius: 12px; overflow: hidden;">
                     <div class="ios-profile-avatar" id="appleIdAvatar">A</div>
                     <div class="ios-profile-info">
                         <h3 id="appleIdName">Apple ID</h3>
@@ -777,7 +776,9 @@
                     </div>
                     <svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
                 </div>
-                <div class="ios-list-group">
+                
+                <!-- 增加圆角和边距的列表组 -->
+                <div class="ios-list-group" style="margin: 0 20px 20px 20px; border-radius: 12px; border: none; overflow: hidden;">
                     <div class="ios-list-item" onclick="openApiSettings()">
                         <div class="ios-icon-box" style="background:#007aff"><svg viewBox="0 0 24 24"><path d="M12.01 21.49L23.64 7c-.45-.34-4.93-4-11.64-4C5.28 3 .81 6.66.36 7l11.63 14.49.01.01.01-.01z"/></svg></div>
                         <div class="ios-item-content">
@@ -3310,6 +3311,71 @@
                 </div>
             </div>
         </div>                        </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- 新增：角色关系网全屏弹窗 -->
+        <!-- ========================================== -->
+        <div id="wc-modal-relation-network" class="rn-overlay">
+            <div class="rn-header">
+                <div class="rn-close-btn" onclick="wcCloseRelationNetwork()">
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </div>
+                <div class="rn-header-title">角色关系网</div>
+                <div style="width: 32px;"></div>
+            </div>
+            
+            <div id="rn-container">
+                <canvas id="rn-canvas"></canvas>
+                <!-- 节点将由 JS 动态注入 -->
+            </div>
+            
+            <div class="rn-toolbar">
+                <div class="rn-tool-btn" onclick="wcOpenAddRelationModal()">
+                    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                    <span>添加关系</span>
+                </div>
+                <div class="rn-tool-btn" onclick="wcOpenManageRelationModal()">
+                    <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    <span>管理关系</span>
+                </div>
+                <div class="rn-tool-btn" onclick="wcAutoLayoutRelation()">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    <span>整理排版</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 添加关系弹窗 -->
+        <div id="wc-modal-add-relation" class="wc-modal hidden" style="z-index: 25000;">
+            <div class="wc-modal-content" style="padding: 24px; border-radius: 20px;">
+                <h3 style="margin-top: 0; text-align: center; margin-bottom: 20px;">绑定角色关系</h3>
+                <div class="wc-form-group">
+                    <label class="wc-form-label">角色 A</label>
+                    <select id="rn-char-a" class="ios-select"></select>
+                </div>
+                <div class="wc-form-group">
+                    <label class="wc-form-label">角色 B</label>
+                    <select id="rn-char-b" class="ios-select"></select>
+                </div>
+                <div class="wc-form-group">
+                    <label class="wc-form-label">关系描述 (如：宿敌、暗恋)</label>
+                    <input type="text" id="rn-relation-label" class="wc-form-input" placeholder="输入关系...">
+                </div>
+                <button class="wc-btn-primary" style="background: #111; color: #FFF;" onclick="wcSaveRelation()">确认绑定</button>
+                <button class="wc-btn-primary wc-btn-secondary" onclick="wcCloseModal('wc-modal-add-relation')">取消</button>
+            </div>
+        </div>
+
+        <!-- 管理关系弹窗 -->
+        <div id="wc-modal-manage-relation" class="wc-modal hidden" style="z-index: 25000;">
+            <div class="wc-modal-content" style="padding: 24px; border-radius: 20px; max-height: 80vh; display: flex; flex-direction: column;">
+                <h3 style="margin-top: 0; text-align: center; margin-bottom: 20px;">管理角色关系</h3>
+                <div id="rn-manage-list" style="flex: 1; overflow-y: auto; margin-bottom: 20px; background: #F9F9F9; border-radius: 12px; padding: 10px;">
+                    <!-- 动态注入关系列表 -->
+                </div>
+                <button class="wc-btn-primary wc-btn-secondary" onclick="wcCloseModal('wc-modal-manage-relation')">关闭</button>
             </div>
         </div>
 

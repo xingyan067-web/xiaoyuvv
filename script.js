@@ -2849,6 +2849,7 @@ const wcDb = {
 
 // --- WeChat State ---
 const wcState = {
+    relationships: [], // 新增：角色关系网数据
     chatGroups: [], // 新增：自定义分组列表
     activeChatGroup: 'All', // 新增：当前选中的分组
     selectedGroupName: null, // 新增：长按选中的分组名
@@ -2858,7 +2859,7 @@ const wcState = {
     currentTab: 'chat',
     characters: [],
     chats: {}, 
-    chatDisplayCount: 100, // 新增：控制聊天页面显示的消息条数
+    chatDisplayCount: 50, // 新增：控制聊天页面显示的消息条数
     moments: [],
     user: { name: 'User', avatar: '', cover: '', persona: '' },
     wallet: { balance: 0.00, transactions: [], password: '123456' },
@@ -2967,6 +2968,9 @@ async function wcLoadData() {
         const shopData = await safeGet('kv_store', 'shop_data');
         if (shopData) wcState.shopData = shopData;
         
+        const relData = await safeGet('kv_store', 'relationships');
+        if (relData) wcState.relationships = relData;
+        
         const unread = await safeGet('kv_store', 'unread_counts');
         if (unread) wcState.unreadCounts = unread;
 
@@ -3039,6 +3043,7 @@ async function wcSaveData() {
             store.put(wcState.chatBgPresets || [], 'chat_bg_presets');
             store.put(wcState.phonePresets || [], 'phone_presets');
             store.put(wcState.shopData || {}, 'shop_data');
+            store.put(wcState.relationships || [], 'relationships');
             store.put(charactersUpdatedAt, 'characters_updated_at');
         }).catch(e => console.warn("kv_store 保存异常", e));
 
@@ -3323,7 +3328,7 @@ function updateChatTopBarStatus(char) {
 // --- WeChat Chat Logic ---
 function wcOpenChat(charId) {
     wcState.activeChatId = charId;
-    wcState.chatDisplayCount = 100; // 新增：每次打开聊天重置显示条数
+    wcState.chatDisplayCount = 50; // 新增：每次打开聊天重置显示条数
     sessionApiCallCount = 0; 
     
     if (wcState.unreadCounts[charId]) {
@@ -3469,7 +3474,7 @@ function wcRenderMessages(charId, preserveScroll = false) {
     if (!char) return;
 
     // 分页逻辑：只截取最后 N 条消息
-    if (!wcState.chatDisplayCount) wcState.chatDisplayCount = 100;
+    if (!wcState.chatDisplayCount) wcState.chatDisplayCount = 50;
     const displayCount = wcState.chatDisplayCount;
     const msgs = allMsgs.slice(-displayCount);
 
@@ -3483,7 +3488,7 @@ function wcRenderMessages(charId, preserveScroll = false) {
         loadMoreDiv.style.cursor = 'pointer';
         loadMoreDiv.innerText = '点击加载更多消息';
         loadMoreDiv.onclick = () => {
-            wcState.chatDisplayCount += 100;
+            wcState.chatDisplayCount += 50;
             wcRenderMessages(charId, true); // 传入 true 保持滚动位置
         };
         container.insertBefore(loadMoreDiv, anchor);
@@ -4496,6 +4501,7 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
         }
         systemPrompt += `【你的唯一身份与设定】\n你是：${char.name}\n人设：${char.prompt || '无'}\n(警告：你只能扮演 ${char.name}，绝不能扮演其他人！)\n\n`;
         systemPrompt += `【对方(User)的设定】\n对方是：${config.userName || wcState.user.name}\n人设：${config.userPersona || '无'}\n\n`;
+        systemPrompt += wcGenerateRelationshipPrompt(); // 注入关系网
 
         // 史诗级强化：强制 AI 读取并应用记忆
         if (char.memories && char.memories.length > 0) {
@@ -5694,11 +5700,11 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
                 const boundChar = wcState.characters.find(c => c.id === lsState.boundCharId);
                 
                 if (boundChar) {
-                    // 修改为：只有同一个列表分组的ai角色才能知道同一个列表分组的ai角色的关联账号消息
-                    const currentGroup = targetChar.groupName || 'Default';
-                    const boundGroup = boundChar.groupName || 'Default';
+                    // 修改为：只有同一个列表分组的ai角色才能知道同一个列表分组的ai角色的关联账号消息 (不包含All分组)
+                    const currentGroup = targetChar.groupName || 'All';
+                    const boundGroup = boundChar.groupName || 'All';
                     
-                    if (currentGroup === boundGroup) {
+                    if (currentGroup !== 'All' && currentGroup === boundGroup) {
                         const isLoverInGroup = targetChar.isGroup && targetChar.members && targetChar.members.includes(lsState.boundCharId);
                         
                         if (!isLoverInGroup) {
@@ -8923,6 +8929,7 @@ async function wcGeneratePhoneChats() {
         prompt += `1. 结合当前时间、地点和心情，推断你最近在和谁聊天，聊些什么（工作、八卦、游戏、求助等）。\n`;
         prompt += `2. 构思如何体现你独立的生活社交圈，同时也要保证 User 隐秘体现在你的社交圈和你的生活。\n`;
         prompt += `3. 确保聊天记录充满生活琐碎感和活人语气，拒绝生硬的问答。\n`;
+        prompt += `4. 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！严禁漏掉引号、括号或逗号！严禁输出损坏的 JSON 格式！请确保所有的字符串内部的双引号都被正确转义（\\"），并且不要包含真实的换行符（请使用 \\n 代替）。\n`;
         prompt += `推演结束后，直接返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
   {
@@ -8958,7 +8965,20 @@ async function wcGeneratePhoneChats() {
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const chatsData = JSON.parse(content);
+        
+        let chatsData;
+        try {
+            chatsData = JSON.parse(content);
+        } catch (parseErr) {
+            // 尝试修复常见的 JSON 错误
+            content = content.replace(/,\s*]/g, ']');
+            content = content.replace(/}\s*{/g, '},{');
+            try {
+                chatsData = JSON.parse(content);
+            } catch (e2) {
+                throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 100) + "...");
+            }
+        }
 
         if (!char.phoneData) char.phoneData = {};
         
@@ -9166,6 +9186,8 @@ async function wcSimTriggerAI() {
             prompt += `【最高指令】：你现在的唯一身份是【${chat.name}】！\n`;
             prompt += `【绝对禁止】：绝对禁止以【${char.name}】(手机主人) 或【User】(玩家) 的口吻回复！绝对禁止套用他们的人设和面具！\n`;
             prompt += `【你的核心人设/简介】：${chat.desc || '普通朋友'}\n`;
+            prompt += wcGenerateRelationshipPrompt(); // 注入关系网
+
             prompt += `【任务】：请重点读取你的【核心人设/简介】和【最近聊天记录】，作为【${chat.name}】本人，回复 ${char.name} 的消息。必须符合你的人设口吻，严禁OOC！\n`;
             prompt += `【要求】：返回 JSON 数组，格式示例：[{"content":"好的"}]\n`;
         }
@@ -16117,11 +16139,12 @@ function dreamRenderCards() {
                 <span>INJECT</span>
             </div>
             <div style="position: absolute; top: 15px; right: 15px; display: flex; gap: 12px; align-items: center; font-family: 'Courier New', monospace; font-weight: bold;">
+                <div style="color: #AF52DE; cursor: pointer; font-size: 12px;" onclick="viewDreamChatHistory(${card.id})" title="查看聊天记录">CHAT</div>
                 <div style="color: #007AFF; cursor: pointer; font-size: 12px;" onclick="dreamEditCard(${card.id})">EDIT</div>
                 <div style="color: #CCC; cursor: pointer; font-size: 18px; line-height: 1;" onclick="dreamDeleteCard(${card.id})">×</div>
             </div>
             <div class="dream-card-date">${dateStr}</div>
-            <div class="dream-card-text">${card.content}</div>
+            <div class="dream-card-text" style="cursor: pointer;" onclick="viewDreamChatHistory(${card.id})" title="点击回溯梦境聊天">${card.content}</div>
         `;
         container.appendChild(div);
     });
@@ -16137,6 +16160,20 @@ function dreamEditCard(id) {
             dreamRenderCards();
         }
     });
+}
+function viewDreamChatHistory(id) {
+    const card = dreamState.cards.find(c => c.id === id);
+    if (!card) return;
+    
+    if (card.chatHistory && card.chatHistory.length > 0) {
+        // 恢复当时的聊天记录
+        dreamState.currentChat = JSON.parse(JSON.stringify(card.chatHistory));
+        // 打开梦境聊天界面
+        document.getElementById('dream-chat-page').classList.add('active');
+        dreamRenderChatWithHTML();
+    } else {
+        alert("这条梦境是很久以前的，没有保存聊天记录哦~");
+    }
 }
 
 // --- 醒来并总结梦境 (修复卡死 Bug) ---
@@ -16179,7 +16216,8 @@ async function endDreamAndSummarize() {
         dreamState.cards.push({
             id: Date.now(),
             time: Date.now(),
-            content: summary
+            content: summary,
+            chatHistory: JSON.parse(JSON.stringify(dreamState.currentChat)) // 保存当时的聊天记录
         });
         await dreamSaveData();
 
@@ -20235,6 +20273,7 @@ window.forumTriggerReactionToUser = async function(postId, userCommentText) {
             const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
             if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
         }
+        contextInfo += wcGenerateRelationshipPrompt(); // 注入关系网
 
         let prompt = `你现在是一个社交论坛的后台引擎。用户（${forumState.profile.name}）刚刚在帖子里发表了一条评论。\n`;
         prompt += `【原帖发帖人】：${post.author.name}\n`;
@@ -20378,6 +20417,7 @@ window.forumGenerateInteractions = async function(postId) {
             const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
             if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
         }
+        contextInfo += wcGenerateRelationshipPrompt(); // 注入关系网
 
         let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子生成 8 到 15 条极具“活人感”的评论。\n`;
         prompt += `【原帖发帖人】：${post.author.name}\n`;
@@ -20505,6 +20545,7 @@ window.forumGenerateMoreComments = async function(postId) {
             const chars = wcState.characters.filter(c => forumState.config.charIds.includes(c.id.toString()));
             if (chars.length > 0) contextInfo += "【你认识的熟人(NPC)设定】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
         }
+        contextInfo += wcGenerateRelationshipPrompt(); // 注入关系网
 
         const existingComments = (post.comments || []).slice(-10).map(c => `${c.name}: ${c.content}`).join('\n');
 
@@ -20910,6 +20951,7 @@ async function forumGenerateAIPosts(type) {
                 }).join('\n') + "\n\n";
             }
         }
+        contextInfo += wcGenerateRelationshipPrompt(); // 注入关系网
 
         let userNames = [forumState.profile.name, wcState.user.name];
         if (forumState.config.maskIds.length > 0) {
@@ -21553,6 +21595,7 @@ async function forumTriggerPMAI(chatId) {
         let prompt = `你现在正在一个社交论坛的私信界面里，和用户（${forumState.profile.name}）进行一对一私聊。\n`;
         prompt += `【你的身份】：${chat.targetName}\n`;
         prompt += `【你的人设】：${npcPersona}\n\n`;
+        prompt += wcGenerateRelationshipPrompt(); // 注入关系网
         prompt += `【最近的私信聊天记录】：\n${recentMsgs}\n\n`;
         prompt += `【要求】：\n`;
         prompt += `1. 请根据你的人设和聊天记录，回复用户的最后一条消息。\n`;
@@ -23906,12 +23949,50 @@ function wcGenerateContactsHeaderHTML() {
                     <div class="contacts-header-title">Contacts</div>
                 </div>
             </div>
-            <div class="contacts-tabs-row">
-                ${tabsHtml}
+            <!-- 修改：让分组和关系网图标在同一行，且图标无背景包裹 -->
+            <div class="contacts-tabs-row" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                <div style="display: flex; gap: 24px; overflow-x: auto; scrollbar-width: none; flex: 1;">
+                    ${tabsHtml}
+                </div>
+                <div onclick="wcOpenRelationNetwork()" style="cursor: pointer; display: flex; align-items: center; justify-content: center; padding-left: 15px; flex-shrink: 0; color: #111;" title="角色关系网">
+                    <svg viewBox="0 0 24 24" style="width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2;"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                </div>
             </div>
         </div>
     `;
 }
+
+// ==========================================
+// 新增：生成角色关系网 Prompt 的核心辅助函数
+// ==========================================
+function wcGenerateRelationshipPrompt() {
+    if (!wcState.relationships || wcState.relationships.length === 0) return "";
+    
+    let relTexts = [];
+    wcState.relationships.forEach(rel => {
+        let sourceName = rel.source === 'user' ? (wcState.user.name || 'User') : '未知';
+        let targetName = rel.target === 'user' ? (wcState.user.name || 'User') : '未知';
+        
+        if (rel.source !== 'user') {
+            const sChar = wcState.characters.find(c => c.id === rel.source);
+            if (sChar) sourceName = sChar.name;
+        }
+        if (rel.target !== 'user') {
+            const tChar = wcState.characters.find(c => c.id === rel.target);
+            if (tChar) targetName = tChar.name;
+        }
+        
+        if (sourceName !== '未知' && targetName !== '未知') {
+            relTexts.push(`[${sourceName}] 和 [${targetName}] 的关系是：${rel.label}`);
+        }
+    });
+    
+    if (relTexts.length > 0) {
+        return "【全局角色关系网设定 (请严格遵守这些人物关系，防止OOC)】:\n" + relTexts.join('\n') + "\n\n";
+    }
+    return "";
+}
+
 
 function wcSwitchContactsGroup(groupName) {
     wcState.activeContactsGroup = groupName;
@@ -24297,3 +24378,345 @@ window.wcPostMoment = function() {
     
     wcCloseModal('wc-modal-post-moment');
 };
+
+// ==========================================
+// 角色关系网 (Spider Web) 核心逻辑
+// ==========================================
+let rnNodes = [];
+let rnNodeElements = {};
+let rnLabelElements = [];
+let rnCanvas, rnCtx;
+let rnWidth = 0, rnHeight = 0;
+
+function wcOpenRelationNetwork() {
+    if (wcState.activeContactsGroup === 'All') {
+        alert("All分组默认不可以绑定关系网，请先切换到具体的分组哦~");
+        return;
+    }
+    const modal = document.getElementById('wc-modal-relation-network');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+    
+    // 延迟初始化，确保容器有宽高
+    setTimeout(() => {
+        wcInitRelationData();
+        wcRenderRelationNetwork();
+    }, 300);
+}
+
+function wcCloseRelationNetwork() {
+    const modal = document.getElementById('wc-modal-relation-network');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 400);
+}
+
+function wcInitRelationData() {
+    const container = document.getElementById('rn-container');
+    rnWidth = container.clientWidth;
+    rnHeight = container.clientHeight;
+    
+    rnCanvas = document.getElementById('rn-canvas');
+    rnCtx = rnCanvas.getContext('2d');
+    
+    // 处理高分屏模糊问题
+    const dpr = window.devicePixelRatio || 1;
+    rnCanvas.width = rnWidth * dpr;
+    rnCanvas.height = rnHeight * dpr;
+    rnCtx.scale(dpr, dpr);
+    
+    rnNodes = [];
+    
+    // 1. 提取当前分组的角色
+    const filteredChars = wcState.characters.filter(c => {
+        if (c.isGroup) return false; // 排除群聊
+        if (wcState.activeContactsGroup === 'All') return true;
+        return c.groupName === wcState.activeContactsGroup;
+    });
+
+    // 2. 加入 User 节点
+    if (!wcState.user.relX) {
+        wcState.user.relX = rnWidth / 2;
+        wcState.user.relY = rnHeight / 2;
+    }
+    rnNodes.push({
+        id: 'user',
+        name: wcState.user.name,
+        avatar: wcState.user.avatar,
+        x: wcState.user.relX,
+        y: wcState.user.relY,
+        isUser: true,
+        ref: wcState.user
+    });
+
+    // 3. 加入 Char 节点
+    filteredChars.forEach((char, index) => {
+        if (!char.relX || !char.relY) {
+            // 如果没有坐标，环绕 User 随机排布
+            const angle = (index / filteredChars.length) * Math.PI * 2;
+            const radius = 120 + Math.random() * 50;
+            char.relX = (rnWidth / 2) + Math.cos(angle) * radius;
+            char.relY = (rnHeight / 2) + Math.sin(angle) * radius;
+        }
+        rnNodes.push({
+            id: char.id,
+            name: char.name,
+            avatar: char.avatar,
+            x: char.relX,
+            y: char.relY,
+            isUser: false,
+            ref: char
+        });
+    });
+}
+
+function wcRenderRelationNetwork() {
+    const container = document.getElementById('rn-container');
+    // 清理旧的 DOM 节点
+    Object.values(rnNodeElements).forEach(el => el.remove());
+    rnLabelElements.forEach(item => item.el.remove());
+    rnNodeElements = {};
+    rnLabelElements = [];
+
+    // 渲染节点 DOM
+    rnNodes.forEach(node => {
+        const el = document.createElement('div');
+        el.className = `rn-node ${node.isUser ? 'is-user' : ''}`;
+        el.innerHTML = `
+            <img src="${node.avatar}">
+            <div class="rn-node-name">${node.name}</div>
+        `;
+        container.appendChild(el);
+        rnNodeElements[node.id] = el;
+
+        // 绑定拖拽事件
+        let isDragging = false;
+        let startX, startY, initialX, initialY;
+
+        const startDrag = (e) => {
+            isDragging = true;
+            el.style.zIndex = 10;
+            const touch = e.touches ? e.touches[0] : e;
+            startX = touch.clientX;
+            startY = touch.clientY;
+            initialX = node.x;
+            initialY = node.y;
+        };
+
+        const moveDrag = (e) => {
+            if (!isDragging) return;
+            if (e.cancelable) e.preventDefault();
+            const touch = e.touches ? e.touches[0] : e;
+            const dx = touch.clientX - startX;
+            const dy = touch.clientY - startY;
+            
+            node.x = initialX + dx;
+            node.y = initialY + dy;
+            
+            // 边界限制
+            if (node.x < 30) node.x = 30;
+            if (node.x > rnWidth - 30) node.x = rnWidth - 30;
+            if (node.y < 30) node.y = 30;
+            if (node.y > rnHeight - 30) node.y = rnHeight - 30;
+
+            wcUpdateRelationPositions();
+        };
+
+        const endDrag = () => {
+            if (!isDragging) return;
+            isDragging = false;
+            el.style.zIndex = node.isUser ? 3 : 2;
+            // 保存坐标到数据源
+            node.ref.relX = node.x;
+            node.ref.relY = node.y;
+            wcSaveData();
+        };
+
+        el.addEventListener('mousedown', startDrag);
+        window.addEventListener('mousemove', moveDrag);
+        window.addEventListener('mouseup', endDrag);
+
+        el.addEventListener('touchstart', startDrag, {passive: false});
+        window.addEventListener('touchmove', moveDrag, {passive: false});
+        window.addEventListener('touchend', endDrag);
+    });
+
+    // 渲染关系标签 DOM
+    if (!wcState.relationships) wcState.relationships = [];
+    
+    wcState.relationships.forEach((rel, index) => {
+        // 检查两个节点是否都在当前视图中
+        const sourceNode = rnNodes.find(n => n.id === rel.source);
+        const targetNode = rnNodes.find(n => n.id === rel.target);
+        
+        if (sourceNode && targetNode) {
+            const el = document.createElement('div');
+            el.className = 'rn-label';
+            el.innerText = rel.label;
+            el.onclick = () => wcDeleteRelation(index); // 点击删除关系
+            container.appendChild(el);
+            rnLabelElements.push({ rel, el, sourceNode, targetNode });
+        }
+    });
+
+    wcUpdateRelationPositions();
+}
+
+function wcUpdateRelationPositions() {
+    // 更新节点位置
+    rnNodes.forEach(node => {
+        const el = rnNodeElements[node.id];
+        if (el) {
+            el.style.left = node.x + 'px';
+            el.style.top = node.y + 'px';
+        }
+    });
+
+    // 绘制连线
+    rnCtx.clearRect(0, 0, rnWidth, rnHeight);
+    rnLabelElements.forEach(item => {
+        rnCtx.beginPath();
+        rnCtx.moveTo(item.sourceNode.x, item.sourceNode.y);
+        rnCtx.lineTo(item.targetNode.x, item.targetNode.y);
+        rnCtx.strokeStyle = '#D1D1D6';
+        rnCtx.lineWidth = 2;
+        rnCtx.stroke();
+
+        // 更新标签位置 (居中)
+        const midX = (item.sourceNode.x + item.targetNode.x) / 2;
+        const midY = (item.sourceNode.y + item.targetNode.y) / 2;
+        item.el.style.left = midX + 'px';
+        item.el.style.top = midY + 'px';
+    });
+}
+
+// --- 添加与删除关系 ---
+function wcOpenManageRelationModal() {
+    const list = document.getElementById('rn-manage-list');
+    list.innerHTML = '';
+    
+    if (!wcState.relationships || wcState.relationships.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">暂无绑定的关系</div>';
+    } else {
+        wcState.relationships.forEach((rel, index) => {
+            let sourceName = rel.source === 'user' ? wcState.user.name : '未知';
+            let targetName = rel.target === 'user' ? wcState.user.name : '未知';
+            
+            if (rel.source !== 'user') {
+                const sChar = wcState.characters.find(c => c.id === rel.source);
+                if (sChar) sourceName = sChar.name;
+            }
+            if (rel.target !== 'user') {
+                const tChar = wcState.characters.find(c => c.id === rel.target);
+                if (tChar) targetName = tChar.name;
+            }
+            
+            const div = document.createElement('div');
+            div.className = 'wc-list-item';
+            div.style.background = 'white';
+            div.style.borderBottom = '1px solid #F0F0F0';
+            div.innerHTML = `
+                <div class="wc-item-content">
+                    <div class="wc-item-title" style="font-size: 14px;">${sourceName} ↔ ${targetName}</div>
+                    <div class="wc-item-subtitle" style="color: #007AFF;">${rel.label}</div>
+                </div>
+                <button class="wc-btn-mini" style="background:#FF3B30; color:white; border:none; padding:6px 12px; border-radius:12px; font-weight:bold;" onclick="wcDeleteRelationFromManage(${index})">删除</button>
+            `;
+            list.appendChild(div);
+        });
+    }
+    
+    wcOpenModal('wc-modal-manage-relation');
+}
+
+function wcDeleteRelationFromManage(index) {
+    if (confirm("确定要解除这段关系吗？")) {
+        wcState.relationships.splice(index, 1);
+        wcSaveData();
+        wcRenderRelationNetwork();
+        wcOpenManageRelationModal(); // 刷新列表
+    }
+}
+
+function wcOpenAddRelationModal() {
+    const selectA = document.getElementById('rn-char-a');
+    const selectB = document.getElementById('rn-char-b');
+    selectA.innerHTML = '';
+    selectB.innerHTML = '';
+
+    rnNodes.forEach(node => {
+        const optA = document.createElement('option');
+        optA.value = node.id; optA.innerText = node.name;
+        selectA.appendChild(optA);
+        
+        const optB = document.createElement('option');
+        optB.value = node.id; optB.innerText = node.name;
+        selectB.appendChild(optB);
+    });
+
+    document.getElementById('rn-relation-label').value = '';
+    wcOpenModal('wc-modal-add-relation');
+}
+
+function wcSaveRelation() {
+    const source = document.getElementById('rn-char-a').value;
+    const target = document.getElementById('rn-char-b').value;
+    const label = document.getElementById('rn-relation-label').value.trim();
+
+    if (source === target) return alert("不能和自己绑定关系哦~");
+    if (!label) return alert("请输入关系描述");
+
+    // 转换 ID 类型 (User 是 string, Char 是 number)
+    const parsedSource = source === 'user' ? 'user' : parseInt(source);
+    const parsedTarget = target === 'user' ? 'user' : parseInt(target);
+
+    // 检查是否已存在
+    const exists = wcState.relationships.find(r => 
+        (r.source === parsedSource && r.target === parsedTarget) || 
+        (r.source === parsedTarget && r.target === parsedSource)
+    );
+
+    if (exists) {
+        exists.label = label; // 更新标签
+    } else {
+        wcState.relationships.push({ source: parsedSource, target: parsedTarget, label });
+    }
+
+    wcSaveData();
+    wcCloseModal('wc-modal-add-relation');
+    wcRenderRelationNetwork();
+}
+
+function wcDeleteRelation(index) {
+    if (confirm("确定要解除这段关系吗？")) {
+        wcState.relationships.splice(index, 1);
+        wcSaveData();
+        wcRenderRelationNetwork();
+    }
+}
+
+// --- 一键整理排版 (环形布局) ---
+function wcAutoLayoutRelation() {
+    const centerX = rnWidth / 2;
+    const centerY = rnHeight / 2;
+    const radius = Math.min(rnWidth, rnHeight) * 0.35;
+
+    const userNode = rnNodes.find(n => n.isUser);
+    if (userNode) {
+        userNode.x = centerX;
+        userNode.y = centerY;
+        userNode.ref.relX = centerX;
+        userNode.ref.relY = centerY;
+    }
+
+    const otherNodes = rnNodes.filter(n => !n.isUser);
+    otherNodes.forEach((node, index) => {
+        const angle = (index / otherNodes.length) * Math.PI * 2;
+        node.x = centerX + Math.cos(angle) * radius;
+        node.y = centerY + Math.sin(angle) * radius;
+        node.ref.relX = node.x;
+        node.ref.relY = node.y;
+    });
+
+    wcSaveData();
+    wcUpdateRelationPositions();
+}
