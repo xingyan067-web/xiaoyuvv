@@ -336,34 +336,35 @@ function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
     
     if (window.visualViewport) {
-        // 【核心修复】：判断键盘是否弹起。如果高度差大于 150，说明键盘弹起了
-        const isKeyboardOpen = (window.innerHeight - window.visualViewport.height) > 150;
+        // 🔪 终极修复：用 screen.height 减去 visualViewport.height 来精准判断键盘！
+        // 之前用 innerHeight 减，在 iOS 上差值往往是 0，导致系统根本不知道键盘弹起了，所以弹窗死死卡在下面！
+        const isKeyboardOpen = (window.screen.height - window.visualViewport.height) > 150;
         
         if (isKeyboardOpen) {
-            // 键盘弹起时，严格使用 visualViewport.height，防止输入框被遮挡
+            // 键盘弹起时，高度缩小到可视区域，把弹窗、输入框和 Dock 栏完美“托”上来
             docStyle.setProperty('--app-height', `${window.visualViewport.height}px`);
         } else {
-            // 键盘收起时，取所有可用高度源中的最大值
+            // 键盘收起时，恢复最大高度（包含 screen.height），彻底消灭底部的黑边！
             const candidates = [
                 window.innerHeight,
                 document.documentElement.clientHeight,
                 window.visualViewport.height
             ];
-            // 🔪 修复：删除了 window.screen.height，防止高度溢出把 Dock 栏挤到屏幕外面！
+            if (window.navigator.standalone === true) {
+                candidates.push(window.screen.height);
+            }
             const fullHeight = Math.max(...candidates);
             docStyle.setProperty('--app-height', `${fullHeight}px`);
-            
-            // 🔪 修复：仅在键盘收起时强制回滚到顶部，防止页面卡在半空
-            window.scrollTo(0, 0);
-            document.body.scrollTop = 0;
         }
+        
+        // 强制回滚到顶部，防止 iOS 默认的滚动推移导致错位
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
     } else {
-        // 降级方案：取 innerHeight 和 clientHeight 中的较大值
         const fallbackHeight = Math.max(window.innerHeight, document.documentElement.clientHeight);
         docStyle.setProperty('--app-height', `${fallbackHeight}px`);
     }
     
-    // 统一输入栏高度变量，给微信聊天滚动区预留空间
     docStyle.setProperty('--wc-input-height', '64px');
     docStyle.setProperty('--keyboard-offset', '0px');
 }
@@ -372,7 +373,6 @@ function updateAppViewportVars() {
 if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
         updateAppViewportVars();
-        // 键盘弹起导致高度变化时，稍微延迟一下让各个聊天列表自动滚动到底部
         setTimeout(() => {
             if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
             const simHistory = document.getElementById('wc-sim-chat-history');
@@ -383,12 +383,17 @@ if (window.visualViewport) {
             if (dreamHistory) dreamHistory.scrollTop = dreamHistory.scrollHeight;
         }, 100);
     });
-    // 🔪 修复：彻底删除了 visualViewport 的 scroll 监听，允许 iOS 原生将输入框推上来！
+    
+    // 恢复防滚动机制，配合正确的键盘高度计算，实现原生 App 体验
+    window.visualViewport.addEventListener('scroll', () => {
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+    });
 } else {
     window.addEventListener('resize', updateAppViewportVars);
 }
 
-// 【新增杀招】：监听输入框失去焦点（键盘收起），强制重置页面位置，防止页面卡在半空中漏出白边
+// 监听输入框失去焦点（键盘收起），强制重置页面位置，防止页面卡在半空中漏出白边
 document.addEventListener('focusout', () => {
     setTimeout(() => {
         window.scrollTo(0, 0);
