@@ -102,8 +102,8 @@ input, textarea, select {
     position: absolute; 
     inset: 0;
     width: 100%;
-    height: 100dvh; /* 🔪 核心修复：强制 100dvh */
-    min-height: 100dvh;
+    height: var(--app-height, 100vh); /* 🔪 终极修复 v3：统一使用 --app-height，确保 iOS 全屏覆盖 */
+    min-height: var(--app-height, 100vh);
     overflow: hidden;
     background-color: transparent;
     z-index: 1;
@@ -114,7 +114,7 @@ input, textarea, select {
     position: absolute; 
     inset: 0;
     width: 100%;
-    height: 100dvh; /* 🔪 核心修复：强制 100dvh，无论键盘怎么弹，壁纸永远铺满全屏，绝不缩水！ */
+    height: var(--app-height, 100vh); /* 🔪 终极修复 v3：统一使用 --app-height，确保 iOS 全屏覆盖 */
     background: linear-gradient(180deg, #fdfdfd 0%, #e5e5ea 100%);
     background-size: cover !important; 
     background-position: center !important;
