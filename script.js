@@ -3645,15 +3645,18 @@ function wcRenderMessages(charId, preserveScroll = false) {
                     </div>
                 </div>`;
         } else if (msg.type === 'music_invite') {
-            let statusText = msg.status === 'ended' ? '已结束，点击查看报告' : 'Tap to join';
+            let statusText = 'Tap to join';
+            if (msg.status === 'ended') statusText = '已结束，点击查看报告';
+            else if (msg.status === 'rejected') statusText = '已婉拒，点击查看报告'; // 👈 新增婉拒状态文字
+
             let onClickAttr = '';
             
             // 🔪 核心修复：转义歌名和歌手名中的单双引号，防止破坏 HTML 结构导致卡片消失
             const safeTitle = (msg.songTitle || '').replace(/'/g, "\\'").replace(/"/g, "&quot;");
             const safeArtist = (msg.songArtist || '').replace(/'/g, "\\'").replace(/"/g, "&quot;");
 
-            if (msg.status === 'ended') {
-                // 如果听歌已结束，点击打开总结报告
+            // 👇 修改：如果是 ended 或 rejected，点击都打开总结报告
+            if (msg.status === 'ended' || msg.status === 'rejected') {
                 onClickAttr = `onclick="musicOpenSummaryModal('${msg.id}')"`;
             } else {
                 if (msg.sender === 'them') {
@@ -3665,9 +3668,11 @@ function wcRenderMessages(charId, preserveScroll = false) {
                 }
             }
 
+            // 👇 核心修复：使用 flex 布局彻底消除幽灵空白，解决上下间距过大的问题
             contentHtml = `
-                <div class="wc-bubble music-invite" ${onClickAttr}>
-                    <div class="ins-music-chat-card ${msg.status === 'ended' ? 'ended' : ''}">
+                <div class="wc-bubble music-invite" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important; display: flex !important; flex-direction: column !important; width: fit-content !important; font-size: 0 !important; line-height: 0 !important;" ${onClickAttr}>
+                    ${quoteHtml}
+                    <div class="ins-music-chat-card ${msg.status === 'ended' || msg.status === 'rejected' ? 'ended' : ''}">
                         <div class="ins-music-chat-top">
                             <div class="ins-music-chat-tag">Listen</div>
                             <svg class="ins-music-chat-icon" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
@@ -4339,12 +4344,32 @@ async function wcTriggerAI(charIdOverride = null) {
 - 播放选定的歌曲: {"type":"music_play_selected", "songId": 12345, "songName": "歌名"} (必须在收到搜索结果后，根据ID使用此指令播放)
 - 删除当前歌曲: {"type":"music_delete_song", "content":"太难听了，删掉"}
 - 主动退出一起听歌: {"type":"music_exit", "content":"我有点事，先不听啦"}
-请在回复中自然地体现出你们正在一起听歌的氛围，或者配合你的切歌/点播动作进行说明。\n`;
-        } else {
+请在回复中自然地体现出你们正在一起听歌的氛围，或者配合你的切歌/点播动作进行说明。\n`;        } else {
+            // 提取双方歌单
+            let availableSongs = [];
+            if (char.phoneData && char.phoneData.settings && char.phoneData.settings.playlist) {
+                char.phoneData.settings.playlist.forEach(s => availableSongs.push(`《${s.title}》-${s.artist}`));
+            }
+            if (typeof musicState !== 'undefined' && musicState.playlists) {
+                musicState.playlists.forEach(pl => {
+                    if (pl.tracks) pl.tracks.forEach(s => availableSongs.push(`《${s.title}》-${s.artist}`));
+                });
+            }
+            availableSongs = [...new Set(availableSongs)]; // 去重
+            
+            let songListPrompt = "请选择一首真实存在的流行歌。";
+            if (availableSongs.length > 0) {
+                const sampleSongs = availableSongs.slice(0, 30).join('、');
+                songListPrompt = `你**必须且只能**从以下你们的歌单中挑选一首歌：[${sampleSongs}]。绝对不可以随机编造歌曲！`;
+            }
+
             musicContextPrompt = `\n【主动邀请听歌特权 (强烈建议使用)】\n如果你觉得当前氛围很好，或者你想分享一首歌给User，你**必须**主动邀请User一起听歌！
-请在JSON数组中加入指令：{"type":"music_invite_user", "songName":"你想听的歌曲名(最好从你的手机歌单里选，或者选一首真实存在的流行歌)", "content":"邀请的话语"}
-注意：只要你提到了“一起听歌”，就必须带上这个 JSON 指令，否则 User 看不到邀请卡片！\n`;
+请在JSON数组中加入指令：{"type":"music_invite_user", "songName":"你想听的歌曲名", "content":"邀请的话语"}
+注意：
+1. 只要你提到了“一起听歌”，就必须带上这个 JSON 指令，否则 User 看不到邀请卡片！
+2. ${songListPrompt}\n`;
         }
+
         // 👇 修复：让 AI 知道自己被拉黑了，并且记住自己被拉黑后发过的话 👇
         let blockPrompt = "";
         if (char.isBlocked) {
@@ -5218,8 +5243,9 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 wcAddMessage(charId, 'them', 'text', action.content, extra);
             }
             
-            // 2. 再发送一张音乐邀请卡片到聊天记录
+            // 2. 再发送一张音乐邀请卡片到聊天记录 (👇 核心修复：合并 extra 参数，防止群聊时丢失发送者名字)
             wcAddMessage(charId, 'them', 'music_invite', '邀请听歌', {
+                ...extra,
                 songTitle: action.songName || '随机推荐',
                 songArtist: char.name,
                 status: 'pending'
@@ -15696,9 +15722,31 @@ function musicRejectCharInvite() {
 
     if (pendingCharInviteData) {
         const charId = pendingCharInviteData.charId;
+        
+        // 👇 新增：找到聊天记录中最近的一条邀请卡片，改为 rejected 并附上空的总结数据
+        if (wcState.chats[charId]) {
+            const msgs = wcState.chats[charId];
+            for (let i = msgs.length - 1; i >= 0; i--) {
+                if (msgs[i].type === 'music_invite' && msgs[i].status === 'pending') {
+                    msgs[i].status = 'rejected';
+                    msgs[i].summaryData = {
+                        startTime: Date.now(),
+                        endTime: Date.now(),
+                        durationMs: 0,
+                        songCount: 0,
+                        isRejected: true // 标记为已拒绝
+                    };
+                    break;
+                }
+            }
+            wcSaveData();
+            if (charId === wcState.activeChatId) wcRenderMessages(charId); // 刷新聊天界面卡片
+        }
+        // 👆 新增结束
+
         // 【修复】：不发送可见的文本消息，改为发送隐藏的系统提示给 AI
         wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 用户婉拒了你的听歌邀请。]`, { hidden: true });
-        wcTriggerAI(charId); // 让 AI 回应你的拒绝
+        // 🔪 删除了 wcTriggerAI(charId); 不再自动调取 API 回复
         pendingCharInviteData = null;
     }
 }
@@ -23532,23 +23580,31 @@ window.musicOpenSummaryModal = function(msgId) {
     document.getElementById('summary-avatar-user').src = userAvatar;
     document.getElementById('summary-avatar-char').src = char.avatar;
 
-    // 格式化时长 (HH:MM:SS)
-    const totalSecs = Math.floor(data.durationMs / 1000);
-    const h = Math.floor(totalSecs / 3600).toString().padStart(2, '0');
-    const m = Math.floor((totalSecs % 3600) / 60).toString().padStart(2, '0');
-    const s = (totalSecs % 60).toString().padStart(2, '0');
-    document.getElementById('summary-duration').innerText = `${h}:${m}:${s}`;
+    // 👇 新增：判断是否为婉拒状态 👇
+    if (data.isRejected) {
+        document.getElementById('summary-duration').innerText = `00:00:00`;
+        document.getElementById('summary-song-count').innerText = `0 首 (已婉拒)`;
+        document.getElementById('summary-start-time').innerText = '--';
+        document.getElementById('summary-end-time').innerText = '--';
+    } else {
+        // 格式化时长 (HH:MM:SS)
+        const totalSecs = Math.floor(data.durationMs / 1000);
+        const h = Math.floor(totalSecs / 3600).toString().padStart(2, '0');
+        const m = Math.floor((totalSecs % 3600) / 60).toString().padStart(2, '0');
+        const s = (totalSecs % 60).toString().padStart(2, '0');
+        document.getElementById('summary-duration').innerText = `${h}:${m}:${s}`;
 
-    // 歌曲数量
-    document.getElementById('summary-song-count').innerText = `${data.songCount} 首`;
+        // 歌曲数量
+        document.getElementById('summary-song-count').innerText = `${data.songCount} 首`;
 
-    // 格式化开始和结束时间 (YYYY-MM-DD HH:MM:SS)
-    const formatFullTime = (ts) => {
-        const d = new Date(ts);
-        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
-    };
-    document.getElementById('summary-start-time').innerText = formatFullTime(data.startTime);
-    document.getElementById('summary-end-time').innerText = formatFullTime(data.endTime);
+        // 格式化开始和结束时间 (YYYY-MM-DD HH:MM:SS)
+        const formatFullTime = (ts) => {
+            const d = new Date(ts);
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+        };
+        document.getElementById('summary-start-time').innerText = formatFullTime(data.startTime);
+        document.getElementById('summary-end-time').innerText = formatFullTime(data.endTime);
+    }
 
     // 显示弹窗
     const modal = document.getElementById('music-modal-summary');
