@@ -7832,6 +7832,49 @@ async function readDocxFile(file) {
     });
 }
 // ==========================================
+// 新增：一键导入 CSS 美化 (TXT/DOCX)
+// ==========================================
+async function wcHandleCssImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    wcShowLoading("正在解析 CSS 代码...");
+
+    try {
+        const fileName = file.name;
+        const ext = fileName.split('.').pop().toLowerCase();
+        let cssText = '';
+
+        if (ext === 'txt') {
+            cssText = await file.text();
+        } else if (ext === 'docx') {
+            // 复用之前写好的 DOCX 解析辅助函数
+            cssText = await readDocxFile(file);
+        } else {
+            throw new Error("不支持的文件格式，请使用 TXT 或 DOCX");
+        }
+
+        if (!cssText || cssText.trim() === '') {
+            throw new Error("文件内容为空");
+        }
+
+        // 将提取到的 CSS 填入输入框
+        const cssInput = document.getElementById('wc-setting-custom-css');
+        if (cssInput) {
+            cssInput.value = cssText;
+        }
+
+        wcShowSuccess("CSS 导入成功！请点击右上角保存生效。");
+
+    } catch (error) {
+        console.error("CSS 导入失败:", error);
+        wcShowError("导入失败: " + error.message);
+    } finally {
+        event.target.value = ''; // 清空 input，允许重复导入同一个文件
+    }
+}
+
+// ==========================================
 // 强化：角色卡 (JSON/PNG/TXT/DOCX) 一键导入逻辑
 // ==========================================
 async function wcHandleCharImport(event) {
