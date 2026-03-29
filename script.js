@@ -1732,7 +1732,7 @@ function switchWorldbookView(view) {
         title.innerText = "所有条目";
         // 👇 核心修复：在这里动态注入导入按钮和添加按钮 👇
         if(rightBtnContainer) rightBtnContainer.innerHTML = `
-            <button class="nav-btn" onclick="triggerWbImportWithPassword()" style="margin-right: 15px;" title="导入世界书">
+            <button class="nav-btn" onclick="document.getElementById('wbImportInput').click()" style="margin-right: 15px;" title="导入世界书">
                 <svg class="svg-icon" viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
             </button>
             <button class="nav-btn" onclick="openWorldbookEditor()">
