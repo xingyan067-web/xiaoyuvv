@@ -1393,8 +1393,14 @@
                 <!-- 视图 1：主页 (发现与角色) -->
                 <div id="music-view-home" class="ins-music-view active">
                     <div class="ins-music-header">
-                        <!-- 在这里加上了 onclick 和 cursor 样式 -->
-                        <div class="ins-music-title" onclick="closeMusicApp()" style="cursor: pointer;">Discover</div>
+                        <!-- 修改：将标题和五角星按钮放在同一行 -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <div class="ins-music-title" onclick="closeMusicApp()" style="cursor: pointer; margin-bottom: 0;">Discover</div>
+                            <!-- 新增：五角星接口切换按钮 -->
+                            <div class="ins-music-api-toggle" onclick="musicOpenApiToggleModal()">
+                                <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                            </div>
+                        </div>
                         <div class="ins-music-search-bar" onclick="musicOpenSearch()">
                             <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
                             <span>Search for music...</span>
@@ -1586,6 +1592,22 @@
         <!-- ========================================== -->
         <!-- 音乐 APP 弹窗集合 -->
         <!-- ========================================== -->
+
+        <!-- 新增：音乐接口切换弹窗 -->
+        <div id="music-modal-api-toggle" class="wc-modal hidden" style="z-index: 3900; align-items: center; justify-content: center;">
+            <div class="wc-modal-content" style="width: 80%; max-width: 300px; border-radius: 16px; padding: 20px; background: #FFF; display: flex; flex-direction: column; align-items: center;">
+                <h3 style="margin-top: 0; margin-bottom: 20px; font-size: 18px; color: #111;">选择音乐接口</h3>
+                <div class="wc-ios-list-group" style="width: 100%; margin: 0; border-radius: 12px; overflow: hidden; border: 1px solid #EAEAEA;">
+                    <div class="wc-list-item center-content" onclick="musicSetApi('primary')" style="height: 50px; border-bottom: 1px solid #EAEAEA;">
+                        <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-primary-text">主接口</span>
+                    </div>
+                    <div class="wc-list-item center-content" onclick="musicSetApi('secondary')" style="height: 50px;">
+                        <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-secondary-text">副接口</span>
+                    </div>
+                </div>
+                <button class="wc-btn-secondary" style="width: 100%; margin-top: 15px; border-radius: 12px; padding: 12px; font-weight: bold; border: none;" onclick="wcCloseModal('music-modal-api-toggle')">取消</button>
+            </div>
+        </div>
 
         <!-- 歌单详情弹窗 -->
         <div id="music-modal-playlist-detail" class="wc-modal hidden" style="z-index: 3600; align-items: flex-end;">
