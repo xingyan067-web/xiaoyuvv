@@ -7832,44 +7832,6 @@ async function readDocxFile(file) {
     });
 }
 // ==========================================
-// 新增：导入功能密码锁 (密码: 0110，只需输入一次)
-// ==========================================
-
-function checkImportPassword(callback) {
-    // 1. 检查本地缓存，如果已经解锁过，直接放行
-    if (localStorage.getItem('ios_theme_import_unlocked') === 'true') {
-        callback();
-        return;
-    }
-    
-    // 2. 如果没解锁过，弹出密码框
-    wcOpenGeneralInput("请输入导入密码", (pwd) => {
-        if (pwd === "0110") {
-            // 密码正确，记录解锁状态到本地，并执行导入
-            localStorage.setItem('ios_theme_import_unlocked', 'true');
-            alert("密码正确！以后导入不再需要密码啦~");
-            callback();
-        } else {
-            alert("密码错误，无法导入！");
-        }
-    }, true); // true 表示输入框为密码模式（显示星号）
-}
-
-// 触发角色导入
-function triggerCharImportWithPassword() {
-    checkImportPassword(() => {
-        document.getElementById('wc-import-char-input').click();
-    });
-}
-
-// 触发世界书导入
-function triggerWbImportWithPassword() {
-    checkImportPassword(() => {
-        document.getElementById('wbImportInput').click();
-    });
-}
-
-// ==========================================
 // 强化：角色卡 (JSON/PNG/TXT/DOCX) 一键导入逻辑
 // ==========================================
 async function wcHandleCharImport(event) {
