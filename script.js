@@ -1730,7 +1730,15 @@ function switchWorldbookView(view) {
         tabAll.classList.add('active');
         tabGroup.classList.remove('active');
         title.innerText = "所有条目";
-        if(rightBtnContainer) rightBtnContainer.innerHTML = `<button class="nav-btn" onclick="openWorldbookEditor()"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>`;
+        // 👇 核心修复：在这里动态注入导入按钮和添加按钮 👇
+        if(rightBtnContainer) rightBtnContainer.innerHTML = `
+            <button class="nav-btn" onclick="triggerWbImportWithPassword()" style="margin-right: 15px;" title="导入世界书">
+                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+            </button>
+            <button class="nav-btn" onclick="openWorldbookEditor()">
+                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </button>
+        `;
         renderWorldbookList();
     } else {
         container.style.transform = 'translateX(-50%)'; 
@@ -1742,16 +1750,68 @@ function switchWorldbookView(view) {
     }
 }
 
+
 function renderWorldbookList() {
+    // 动态注入折叠栏所需的 CSS (仅注入一次)
+    if (!document.getElementById('wb-all-group-style')) {
+        const style = document.createElement('style');
+        style.id = 'wb-all-group-style';
+        style.innerHTML = `
+            .wb-all-group-container { margin-bottom: 12px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.02); border: 1px solid #E5E5EA; }
+            .wb-all-group-header { padding: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: #F9F9F9; border-bottom: 1px solid #E5E5EA; user-select: none; }
+            .wb-all-group-header:active { background: #F0F0F0; }
+            .wb-all-group-header .chevron { width: 20px; height: 20px; stroke: #CCC; fill: none; stroke-width: 2; transition: transform 0.3s ease; }
+            .wb-all-group-container.expanded .chevron { transform: rotate(180deg); }
+            .wb-all-group-content { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+            .wb-all-group-container.expanded .wb-all-group-content { max-height: 5000px; }
+            .wb-all-group-content .wb-list-item-wrapper:last-child { border-bottom: none; }
+        `;
+        document.head.appendChild(style);
+    }
+
     const container = document.getElementById('worldbookList');
     container.innerHTML = '';
     if (worldbookEntries.length === 0) {
         container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">暂无条目，点击右上角添加</div>';
         return;
     }
-    const sortedEntries = [...worldbookEntries].sort((a, b) => a.title.localeCompare(b.title));
-    sortedEntries.forEach(entry => {
-        container.appendChild(createEntryElement(entry));
+
+    // 按分组 (type) 归类
+    const groups = {};
+    worldbookEntries.forEach(entry => {
+        const groupName = entry.type || 'Default';
+        if (!groups[groupName]) groups[groupName] = [];
+        groups[groupName].push(entry);
+    });
+
+    // 排序分组名
+    const sortedGroupNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+    sortedGroupNames.forEach(groupName => {
+        const entries = groups[groupName].sort((a, b) => a.title.localeCompare(b.title));
+        
+        const groupDiv = document.createElement('div');
+        // 👇 核心修改：去掉了 expanded，现在默认是折叠状态啦 👇
+        groupDiv.className = 'wb-all-group-container'; 
+        
+        const header = document.createElement('div');
+        header.className = 'wb-all-group-header';
+        header.onclick = () => groupDiv.classList.toggle('expanded');
+        header.innerHTML = `
+            <div style="font-size: 16px; font-weight: bold; color: #111;">${groupName} <span style="font-size: 12px; color: #888; font-weight: normal; margin-left: 8px;">(${entries.length})</span></div>
+            <svg viewBox="0 0 24 24" class="chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        `;
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'wb-all-group-content';
+        
+        entries.forEach(entry => {
+            contentDiv.appendChild(createEntryElement(entry));
+        });
+        
+        groupDiv.appendChild(header);
+        groupDiv.appendChild(contentDiv);
+        container.appendChild(groupDiv);
     });
 }
 
@@ -7752,6 +7812,281 @@ function wcManageGroupMembers(action) {
         };
     }
     wcOpenModal('wc-modal-manage-group-members');
+}
+// ==========================================
+// 新增：DOCX 解析辅助函数
+// ==========================================
+async function readDocxFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if (typeof mammoth === 'undefined') {
+                return reject(new Error("DOCX 解析库未加载，请检查网络"));
+            }
+            mammoth.extractRawText({arrayBuffer: e.target.result})
+                .then(result => resolve(result.value))
+                .catch(err => reject(err));
+        };
+        reader.onerror = () => reject(new Error("读取文件失败"));
+        reader.readAsArrayBuffer(file);
+    });
+}
+// ==========================================
+// 新增：导入功能密码锁 (密码: 0110，只需输入一次)
+// ==========================================
+
+function checkImportPassword(callback) {
+    // 1. 检查本地缓存，如果已经解锁过，直接放行
+    if (localStorage.getItem('ios_theme_import_unlocked') === 'true') {
+        callback();
+        return;
+    }
+    
+    // 2. 如果没解锁过，弹出密码框
+    wcOpenGeneralInput("请输入导入密码", (pwd) => {
+        if (pwd === "0110") {
+            // 密码正确，记录解锁状态到本地，并执行导入
+            localStorage.setItem('ios_theme_import_unlocked', 'true');
+            alert("密码正确！以后导入不再需要密码啦~");
+            callback();
+        } else {
+            alert("密码错误，无法导入！");
+        }
+    }, true); // true 表示输入框为密码模式（显示星号）
+}
+
+// 触发角色导入
+function triggerCharImportWithPassword() {
+    checkImportPassword(() => {
+        document.getElementById('wc-import-char-input').click();
+    });
+}
+
+// 触发世界书导入
+function triggerWbImportWithPassword() {
+    checkImportPassword(() => {
+        document.getElementById('wbImportInput').click();
+    });
+}
+
+// ==========================================
+// 强化：角色卡 (JSON/PNG/TXT/DOCX) 一键导入逻辑
+// ==========================================
+async function wcHandleCharImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    wcShowLoading("正在解析角色数据...");
+
+    try {
+        let charaData = null;
+        let avatarBase64 = null;
+        const fileName = file.name;
+        const ext = fileName.split('.').pop().toLowerCase();
+
+        if (ext === 'png') {
+            charaData = await readTavernPNG(file);
+            avatarBase64 = await wcCompressImage(file);
+        } else if (ext === 'json') {
+            const text = await file.text();
+            charaData = JSON.parse(text);
+        } else if (ext === 'txt') {
+            const text = await file.text();
+            charaData = { name: fileName.replace('.txt', ''), description: text };
+        } else if (ext === 'docx') {
+            const text = await readDocxFile(file);
+            charaData = { name: fileName.replace('.docx', ''), description: text };
+        }
+
+        if (!charaData) throw new Error("无法识别的角色卡格式");
+
+        const data = charaData.data || charaData;
+        
+        const name = data.name || "未知角色";
+        const description = data.description || "";
+        const personality = data.personality || "";
+        const scenario = data.scenario || "";
+        const mes_example = data.mes_example || "";
+        const first_mes = data.first_mes || "";
+
+        let promptParts = [];
+        if (description) promptParts.push(`【角色设定】\n${description}`);
+        if (personality) promptParts.push(`【性格特点】\n${personality}`);
+        if (scenario) promptParts.push(`【当前场景】\n${scenario}`);
+        if (mes_example) promptParts.push(`【对话示例】\n${mes_example}`);
+        const finalPrompt = promptParts.join('\n\n');
+
+        if (!avatarBase64) {
+            const defaultAvatarSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#8E8E93"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="40">${name[0] || '?'}</text></svg>`;
+            avatarBase64 = 'data:image/svg+xml;base64,' + window.btoa(unescape(encodeURIComponent(defaultAvatarSvg)));
+        }
+
+        const newChar = {
+            id: Date.now(),
+            name: name,
+            note: name,
+            prompt: finalPrompt,
+            avatar: avatarBase64,
+            isPinned: false
+        };
+
+        wcState.characters.push(newChar);
+        await wcWriteCharactersPersistentSnapshot();
+        try { await wcDb.put('characters', newChar); } catch (e) {}
+
+        if (first_mes) {
+            wcAddMessage(newChar.id, 'them', 'text', first_mes);
+        }
+
+        // 👇 核心：提取并自动导入世界书 (character_book) 👇
+        let wbImportedCount = 0;
+        if (data.character_book && data.character_book.entries && Array.isArray(data.character_book.entries)) {
+            const groupName = `${name}的设定`;
+            if (!worldbookGroups.includes(groupName)) worldbookGroups.push(groupName);
+            
+            data.character_book.entries.forEach(entry => {
+                worldbookEntries.push({
+                    id: Date.now() + Math.random(),
+                    title: entry.name || (entry.keys && entry.keys[0]) || '未命名',
+                    type: groupName,
+                    keys: Array.isArray(entry.keys) ? entry.keys.join(', ') : (entry.keys || ''),
+                    desc: entry.content || ''
+                });
+                wbImportedCount++;
+            });
+            await saveWorldbookData();
+        }
+
+        await wcSaveData();
+        wcRenderAll();
+        
+        let successMsg = `成功导入角色：${name}`;
+        if (wbImportedCount > 0) successMsg += `\n并自动提取了 ${wbImportedCount} 条世界书设定！`;
+        wcShowSuccess(successMsg);
+
+    } catch (error) {
+        console.error("导入失败:", error);
+        wcShowError("导入失败: " + error.message);
+    } finally {
+        event.target.value = ''; 
+    }
+}
+
+// ==========================================
+// 新增：世界书独立导入逻辑 (JSON/TXT/DOCX)
+// ==========================================
+async function handleWorldbookImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    wcShowLoading("正在导入世界书...");
+    
+    try {
+        const fileName = file.name;
+        const ext = fileName.split('.').pop().toLowerCase();
+        const groupName = fileName.replace(`.${ext}`, '');
+        let importedCount = 0;
+
+        if (!worldbookGroups.includes(groupName)) {
+            worldbookGroups.push(groupName);
+        }
+
+        if (ext === 'json') {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            // 兼容酒馆的 worldbook 或 character_book 格式
+            const entries = data.entries || (data.character_book ? data.character_book.entries : null) || (data.data ? data.data.entries : null);
+            
+            if (entries && Array.isArray(entries)) {
+                entries.forEach(entry => {
+                    worldbookEntries.push({
+                        id: Date.now() + Math.random(),
+                        title: entry.name || (entry.keys && entry.keys[0]) || '未命名',
+                        type: groupName,
+                        keys: Array.isArray(entry.keys) ? entry.keys.join(', ') : (entry.keys || ''),
+                        desc: entry.content || ''
+                    });
+                    importedCount++;
+                });
+            } else {
+                throw new Error("未找到有效的 entries 数组，请确保是酒馆格式的世界书");
+            }
+        } else if (ext === 'txt' || ext === 'docx') {
+            let text = '';
+            if (ext === 'txt') text = await file.text();
+            else if (ext === 'docx') text = await readDocxFile(file);
+            
+            // 纯文本作为一个大条目导入
+            worldbookEntries.push({
+                id: Date.now() + Math.random(),
+                title: groupName,
+                type: groupName,
+                keys: groupName,
+                desc: text
+            });
+            importedCount = 1;
+        }
+
+        await saveWorldbookData();
+        
+        // 刷新世界书视图
+        if (document.getElementById('tab-wb-all').classList.contains('active')) {
+            renderWorldbookList();
+        } else {
+            renderGroupView();
+        }
+        
+        wcShowSuccess(`成功导入 ${importedCount} 个世界书条目`);
+    } catch (e) {
+        console.error(e);
+        wcShowError("导入失败: " + e.message);
+    } finally {
+        event.target.value = '';
+    }
+}
+
+// 辅助函数：解析 PNG 中的 tEXt 块 (提取酒馆角色数据)
+function readTavernPNG(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const buffer = e.target.result;
+            const dataView = new DataView(buffer);
+            const uint8Array = new Uint8Array(buffer);
+            
+            if (dataView.getUint32(0) !== 0x89504E47) return reject(new Error("不是有效的 PNG 文件"));
+
+            let offset = 8;
+            while (offset < uint8Array.length) {
+                const length = dataView.getUint32(offset);
+                const type = String.fromCharCode(uint8Array[offset + 4], uint8Array[offset + 5], uint8Array[offset + 6], uint8Array[offset + 7]);
+                
+                if (type === 'tEXt') {
+                    const dataOffset = offset + 8;
+                    let keyword = '';
+                    let i = 0;
+                    while (uint8Array[dataOffset + i] !== 0 && i < length) {
+                        keyword += String.fromCharCode(uint8Array[dataOffset + i]);
+                        i++;
+                    }
+                    
+                    if (keyword === 'chara') {
+                        const textData = new Uint8Array(buffer, dataOffset + i + 1, length - i - 1);
+                        const text = new TextDecoder('utf-8').decode(textData);
+                        try {
+                            return resolve(JSON.parse(atob(text)));
+                        } catch (err) {
+                            try { return resolve(JSON.parse(text)); } catch(e) { return reject(new Error("解析角色数据失败")); }
+                        }
+                    }
+                }
+                offset += 12 + length;
+            }
+            reject(new Error("PNG 图片中未找到角色卡数据"));
+        };
+        reader.onerror = () => reject(new Error("读取文件失败"));
+        reader.readAsArrayBuffer(file);
+    });
 }
 
 async function wcSaveCharacter() {

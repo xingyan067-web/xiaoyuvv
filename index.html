@@ -26,6 +26,8 @@
     <!-- 新增：Leaflet 地图库 (免费开源，无需Key) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+    <!-- 👇 新增：Mammoth.js 用于解析 DOCX 文件 👇 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <link rel="stylesheet" href="style.css">
     
 </head>
@@ -1252,6 +1254,10 @@
                 </div>
                 <div class="header-title" id="wbHeaderTitle">所有条目</div>
                  <div class="header-right" id="wbHeaderRightContainer">
+                    <!-- 👇 修改：导入世界书按钮 (加密码锁) 👇 -->
+                    <button class="nav-btn" onclick="triggerWbImportWithPassword()" style="margin-right: 10px;" title="导入世界书">
+                        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+                    </button>
                     <button class="nav-btn" onclick="openWorldbookEditor()">
                         <svg class="svg-icon" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                     </button>
@@ -2401,6 +2407,10 @@
                             <div class="wc-list-item center-content" onclick="wcCloseModal('wc-modal-create-choice'); wcOpenAddGroupModal();" style="background: white; height: 56px;">
                                 <span style="font-size: 18px; color: #007AFF;">创建群聊</span>
                             </div>
+                            <!-- 👇 新增：导入角色按钮 👇 -->
+                            <div class="wc-list-item center-content" onclick="wcCloseModal('wc-modal-create-choice'); triggerCharImportWithPassword();" style="background: white; height: 56px; border-top: 1px solid #EAEAEA;">
+                                <span style="font-size: 18px; color: #007AFF;">导入角色 (JSON/PNG)</span>
+                            </div>
                         </div>
                         <div class="wc-ios-list-group" style="margin: 10px 10px 20px 10px; border-radius: 12px; overflow: hidden;">
                             <div class="wc-list-item center-content" onclick="wcCloseModal('wc-modal-create-choice')" style="background: white; height: 56px;">
@@ -3307,6 +3317,12 @@
                  <input type="file" id="wc-file-input-group" accept="image/*" onchange="wcHandleFileSelect(event, 'group')" style="display:none;">
 
                 <input type="file" id="wc-file-input-char" accept="image/*" onchange="wcHandleFileSelect(event, 'char')" style="display:none;">
+                <!-- 👇 新增：角色导入文件框 (支持 txt/docx) 👇 -->
+                <input type="file" id="wc-import-char-input" accept=".json,.png,.txt,.docx" style="display:none;" onchange="wcHandleCharImport(event)">
+                <!-- 👇 新增：世界书导入文件框 👇 -->
+                <input type="file" id="wbImportInput" accept=".json,.txt,.docx" style="display:none;" onchange="handleWorldbookImport(event)">
+                <!-- 👇 新增：角色导入文件框 👇 -->
+                <input type="file" id="wc-import-char-input" accept=".json,.png" style="display:none;" onchange="wcHandleCharImport(event)">
                 <input type="file" id="wc-file-input-edit-char" accept="image/*" onchange="wcHandleFileSelect(event, 'edit-char')" style="display:none;">
                 <input type="file" id="wc-file-input-user" accept="image/*" onchange="wcHandleFileSelect(event, 'user')" style="display:none;">
                 <input type="file" id="wc-file-input-cover" accept="image/*" onchange="wcHandleFileSelect(event, 'cover')" style="display:none;">
