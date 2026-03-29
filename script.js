@@ -8855,7 +8855,7 @@ async function wcPlayCharPlaylistSong(idx) {
                 trackCover = `https://music-api.gdstudio.xyz/api.php?types=pic&source=netease&id=${track.pic_id}&size=300`;
             }
         } else {
-            const res = await fetch(`https://163api.qijieya.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
+            const res = await fetch(`https://zm.armoe.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
             const data = await res.json();
             
             if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
@@ -14919,7 +14919,7 @@ async function musicPerformSearch() {
             }
         } else {
             // 原来的主接口搜索
-            const res = await fetch(`https://163api.qijieya.cn/cloudsearch?keywords=${encodeURIComponent(kw)}`);
+            const res = await fetch(`https://zm.armoe.cn/cloudsearch?keywords=${encodeURIComponent(kw)}`);
             const data = await res.json();
             
             if (data.code === 200 && data.result && data.result.songs) {
@@ -15400,13 +15400,13 @@ async function musicImportPlaylist() {
     
     try {
         // 1. 获取歌单详情
-        const resDetail = await fetch(`https://163api.qijieya.cn/playlist/detail?id=${plId}`);
+        const resDetail = await fetch(`https://zm.armoe.cn/playlist/detail?id=${plId}`);
         const dataDetail = await resDetail.json();
         
         if (dataDetail.code === 200 && dataDetail.playlist) {
             // 2. 获取歌单所有歌曲
             // 👇 就是修改下面这一行，把 limit=50 改成 limit=1000 👇
-            const resTracks = await fetch(`https://163api.qijieya.cn/playlist/track/all?id=${plId}&limit=1000`);
+            const resTracks = await fetch(`https://zm.armoe.cn/playlist/track/all?id=${plId}&limit=1000`);
             const dataTracks = await resTracks.json();
             
             let tracks = [];
@@ -15683,7 +15683,7 @@ async function musicCharSearch(charId, keyword) {
                 }));
             }
         } else {
-            const res = await fetch(`https://163api.qijieya.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
+            const res = await fetch(`https://zm.armoe.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
             const data = await res.json();
             if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
                 songsList = data.result.songs.slice(0, 5).map(song => ({
@@ -15744,7 +15744,7 @@ async function musicCharPlaySelected(charId, songId, songName) {
                 };
             }
         } else {
-            const res = await fetch(`https://163api.qijieya.cn/song/detail?ids=${songId}`);
+            const res = await fetch(`https://zm.armoe.cn/song/detail?ids=${songId}`);
             const data = await res.json();
             
             if (data.code === 200 && data.songs && data.songs.length > 0) {
@@ -15902,7 +15902,7 @@ async function musicSilentSearchAndPlay(keyword) {
                 return true;
             }
         } else {
-            const res = await fetch(`https://163api.qijieya.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
+            const res = await fetch(`https://zm.armoe.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
             const data = await res.json();
             if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
                 const track = data.result.songs[0];
