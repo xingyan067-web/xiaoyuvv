@@ -5507,7 +5507,7 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
 }
 
 // ==========================================
-// 核心修复：朋友圈生成逻辑 (带NPC评论版)
+// 核心修复：朋友圈生成逻辑 (带NPC评论版 + 严格错误拦截)
 // ==========================================
 async function wcTriggerAIMoment(charId) {
     console.log(`Char ${charId} 尝试发布朋友圈...`);
@@ -5591,13 +5591,22 @@ async function wcTriggerAIMoment(charId) {
         });
 
         const data = await response.json();
+        
+        // 👇 核心修复：拦截并显示真实的 API 错误原因 👇
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。详细报错：" + JSON.stringify(data));
+        }
+        // 👆 修复结束 👆
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
         const momentData = JSON.parse(content);
 
         if (momentData && (momentData.text || momentData.imageDesc)) {
-            // 👇 修改：把 npcComments 传给处理函数
             wcAIHandleMomentPost(charId, momentData.text || "", momentData.imageDesc || null, momentData.comment || null, momentData.npcComments || []);
             console.log(`Char ${charId} 成功发布朋友圈`);
         }
@@ -5606,6 +5615,7 @@ async function wcTriggerAIMoment(charId) {
         if (typeof showApiErrorModal === 'function') showApiErrorModal(`[朋友圈生成失败] ${e.message}`);
     }
 }
+
 
 function wcAIHandleMomentPost(charId, text, imageDesc, selfComment = null, npcComments = []) {
     const char = wcState.characters.find(c => c.id === charId);
@@ -11298,7 +11308,9 @@ async function lsCheckNpcTrigger() {
     }
 }
 
-// --- 修复：NPC 消息接收不全与群聊 OOC ---
+// ==========================================
+// 核心修复：NPC 消息接收不全与群聊 OOC (带严格错误拦截)
+// ==========================================
 async function lsTriggerNpcMessage() {
     const char = wcState.characters.find(c => c.id === lsState.boundCharId);
     if (!char || !char.phoneData || !char.phoneData.contacts) return;
@@ -11331,10 +11343,12 @@ async function lsTriggerNpcMessage() {
         if (npc.type === 'group') {
             prompt += `你正在模拟一个名为【${npc.name}】的微信群聊。\n`;
             prompt += `群聊背景/描述：${npc.desc}\n`;
-            prompt += `群成员正在聊天。请生成 1-3 条群消息。\n`;
-            prompt += `【重要】：你需要扮演群里的不同成员发言。不要扮演“群聊系统”，要扮演具体的人。\n`;
-            prompt += `【输出格式】：JSON数组，必须包含 senderName (发言人名字)。\n`;
-            prompt += `示例：[{"type":"text", "senderName":"老王", "content":"今晚去哪吃？"}, {"type":"text", "senderName":"小李", "content":"吃火锅吧"}]\n`;
+            prompt += `群里的人正在跟群成员【${char.name}】(User扮演) 聊天。\n`;
+            prompt += `【任务】：请重点读取群聊背景，以群里其他成员的身份回复消息。\n`;
+            prompt += `【要求】：\n`;
+            prompt += `1. 可以是一个人回复，也可以是几个人七嘴八舌。\n`;
+            prompt += `2. 必须返回 JSON 数组，每个对象必须包含 "senderName" (发言人名字)。\n`;
+            prompt += `3. 格式示例：[{"type":"text", "senderName":"老王", "content":"今晚去哪吃？"}, {"type":"text", "senderName":"小李", "content":"吃火锅吧"}]\n`;
         } else {
             prompt += `【最高指令】：你现在的唯一身份是【${npc.name}】！\n`;
             prompt += `【绝对禁止】：绝对禁止以【${char.name}】(手机主人) 或【User】(玩家) 的口吻回复！绝对禁止套用他们的人设和面具！\n`;
@@ -11378,6 +11392,16 @@ async function lsTriggerNpcMessage() {
         });
 
         const data = await response.json();
+        
+        // 👇 核心修复：拦截并显示真实的 API 错误原因 👇
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。详细报错：" + JSON.stringify(data));
+        }
+        // 👆 修复结束 👆
+
         let content = data.choices[0].message.content.trim();
         
         let actions = [];
@@ -11397,8 +11421,6 @@ async function lsTriggerNpcMessage() {
         } catch (e) {
             console.error("JSON Parse Error", e);
         }
-
-        // 移除强制拆分逻辑，信任 AI 的 JSON 结构
 
         if (actions.length === 0) return;
 
@@ -11451,13 +11473,11 @@ async function lsTriggerNpcMessage() {
         
         lsAddFeed(`${npc.name} 给 ${char.name} 发送了消息: "${allContentCombined.trim()}"`, chat.avatar);
 
-        // 核心修改 1：给用户看的模糊提示（可见，不包含具体内容）
         wcAddMessage(char.id, 'system', 'system', 
             `[系统提示: ${npc.name} 给 ${char.name} 发送了微信消息]`, 
-            { style: 'transparent' } // 这里没有 hidden: true，所以会显示在界面上
+            { style: 'transparent' } 
         );
 
-        // 核心修改 2：给 AI 看的具体内容（隐藏，确保 AI 知道 NPC 说了什么）
         const userName = (char.chatConfig && char.chatConfig.userName) ? char.chatConfig.userName : wcState.user.name;
         if (lsState.isLinked) {
             wcAddMessage(char.id, 'system', 'system', 
@@ -11478,6 +11498,7 @@ async function lsTriggerNpcMessage() {
         if (typeof showApiErrorModal === 'function') showApiErrorModal(`[NPC消息生成失败] ${e.message}`);
     }
 }
+
 // --- 桌面小组件渲染与交互 ---
 function lsRenderWidget() {
     let widget = document.getElementById('ls-desktop-widget');
