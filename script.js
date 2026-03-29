@@ -8839,49 +8839,30 @@ async function wcPlayCharPlaylistSong(idx) {
         const keyword = `${song.title} ${song.artist}`;
         let trackId, trackTitle, trackArtist, trackCover;
 
-        // 👇 核心修改：加入双路接口判断 👇
-        if (currentMusicApi === 'secondary') {
-            const data = await SecondaryMusicAPI.search(keyword);
-            let songs = [];
-            if (Array.isArray(data)) songs = data;
-            else if (data && Array.isArray(data.data)) songs = data.data;
-            else if (data && Array.isArray(data.result)) songs = data.result;
-
-            if (songs.length > 0) {
-                const track = songs[0];
-                trackId = track.id;
-                trackTitle = track.name;
-                trackArtist = Array.isArray(track.artist) ? track.artist.join(', ') : track.artist;
-                trackCover = `https://music-api.gdstudio.xyz/api.php?types=pic&source=netease&id=${track.pic_id}&size=300`;
-            }
-        } else {
-            const res = await fetch(`https://zm.armoe.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
-            const data = await res.json();
-            
-            if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
-                const track = data.result.songs[0];
-                trackId = track.id;
-                trackTitle = track.name;
-                trackArtist = track.ar.map(a => a.name).join(', ');
-                trackCover = track.al.picUrl + '?param=100y100';
-            }
+        const baseUrl = getMusicApiBaseUrl();
+        const res = await fetch(`${baseUrl}/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
+        const data = await res.json();
+        
+        if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
+            const track = data.result.songs[0];
+            trackId = track.id;
+            trackTitle = track.name;
+            trackArtist = track.ar.map(a => a.name).join(', ');
+            trackCover = track.al.picUrl + '?param=100y100';
         }
 
         if (trackId) {
             wcShowSuccess("即将播放");
             
-            // 更新唱片封面
             const coverEl = document.getElementById('char-playlist-record-cover');
             if (coverEl) {
                 coverEl.src = trackCover;
-                coverEl.style.opacity = '1'; // 确保有图片时显示
+                coverEl.style.opacity = '1'; 
             }
             
-            // 延迟一下等待提示消失
             setTimeout(() => {
                 if (!musicState.currentPlaylist) musicState.currentPlaylist = [];
                 
-                // 检查列表中是否已经有这首歌，避免重复添加
                 let existingIdx = musicState.currentPlaylist.findIndex(s => s.id === trackId);
                 if (existingIdx !== -1) {
                     musicState.currentIndex = existingIdx;
@@ -8890,10 +8871,8 @@ async function wcPlayCharPlaylistSong(idx) {
                     musicState.currentIndex = musicState.currentPlaylist.length - 1;
                 }
                 
-                // 这里的 musicPlaySong 本身已经支持双路接口了
                 musicPlaySong(trackId, trackTitle, trackArtist, trackCover);
                 
-                // 判断当前是否正在和该角色一起听歌
                 if (musicState.listenTogether.active && musicState.listenTogether.charId === char.id) {
                     wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机歌单，并点播了你最近常听的《${trackTitle}》，这首歌已加入你们的播放列表，现在你们正在一起听这首歌。]`, { hidden: true });
                 }
@@ -14891,54 +14870,28 @@ async function musicPerformSearch() {
     resultsContainer.innerHTML = '<div class="wc-ios-spinner" style="margin: 50px auto;"></div>';
 
     try {
-        if (currentMusicApi === 'secondary') {
-            // 使用副接口搜索
-            const data = await SecondaryMusicAPI.search(kw);
-            
-            // 兼容返回对象包含数组的情况
-            let songs = [];
-            if (Array.isArray(data)) {
-                songs = data;
-            } else if (data && Array.isArray(data.data)) {
-                songs = data.data;
-            } else if (data && Array.isArray(data.result)) {
-                songs = data.result;
-            }
-
-            if (songs.length > 0) {
-                musicState.currentPlaylist = songs.map(song => ({
-                    id: song.id,
-                    title: song.name,
-                    artist: Array.isArray(song.artist) ? song.artist.join(', ') : song.artist,
-                    // 动态拼接副接口的专辑图 URL
-                    cover: `https://music-api.gdstudio.xyz/api.php?types=pic&source=netease&id=${song.pic_id}&size=300`
-                }));
-                musicRenderSearchResults(musicState.currentPlaylist);
-            } else {
-                resultsContainer.innerHTML = '<div class="ins-music-empty-state">No results found.</div>';
-            }
+        // 动态判断使用主接口还是副接口进行搜索
+        const baseUrl = getMusicApiBaseUrl();
+        const res = await fetch(`${baseUrl}/cloudsearch?keywords=${encodeURIComponent(kw)}`);
+        const data = await res.json();
+        
+        if (data.code === 200 && data.result && data.result.songs) {
+            musicState.currentPlaylist = data.result.songs.map(song => ({
+                id: song.id,
+                title: song.name,
+                artist: song.ar.map(a => a.name).join(', '),
+                cover: song.al.picUrl + '?param=100y100'
+            }));
+            musicRenderSearchResults(musicState.currentPlaylist);
         } else {
-            // 原来的主接口搜索
-            const res = await fetch(`https://zm.armoe.cn/cloudsearch?keywords=${encodeURIComponent(kw)}`);
-            const data = await res.json();
-            
-            if (data.code === 200 && data.result && data.result.songs) {
-                musicState.currentPlaylist = data.result.songs.map(song => ({
-                    id: song.id,
-                    title: song.name,
-                    artist: song.ar.map(a => a.name).join(', '),
-                    cover: song.al.picUrl + '?param=100y100'
-                }));
-                musicRenderSearchResults(musicState.currentPlaylist);
-            } else {
-                resultsContainer.innerHTML = '<div class="ins-music-empty-state">No results found.</div>';
-            }
+            resultsContainer.innerHTML = '<div class="ins-music-empty-state">No results found.</div>';
         }
     } catch (e) {
         console.error("Search Error:", e);
         resultsContainer.innerHTML = '<div class="ins-music-empty-state">Search failed.</div>';
     }
 }
+
 
 function musicRenderSearchResults(songs) {
     const container = document.getElementById('music-search-results');
@@ -14982,32 +14935,22 @@ async function musicPlaySong(id, title, artist, cover) {
     try {
         let songUrl = '';
         
-        // 1. 获取播放链接 (双路判断)
-        if (currentMusicApi === 'secondary') {
-            const data = await SecondaryMusicAPI.getUrl(id);
-            if (data && data.url) {
-                songUrl = data.url;
-            }
-        } else {
-            const res = await fetch(`https://api.qijieya.cn/meting/?server=netease&type=song&id=${id}`);
-            const data = await res.json();
-            if (data && data.length > 0) {
-                if (data[0].url) songUrl = data[0].url;
-                // 新增：从 meting 接口获取歌名、歌手、封面，覆盖搜索传过来的默认值
-                if (data[0].title) title = data[0].title;
-                if (data[0].author) artist = data[0].author;
-                if (data[0].pic) cover = data[0].pic;
-            }
+        // 统一使用主接口获取播放链接
+        const res = await fetch(`https://api.qijieya.cn/meting/?server=netease&type=song&id=${id}`);
+        const data = await res.json();
+        if (data && data.length > 0) {
+            if (data[0].url) songUrl = data[0].url;
+            if (data[0].title) title = data[0].title;
+            if (data[0].author) artist = data[0].author;
+            if (data[0].pic) cover = data[0].pic;
         }
         
         if (songUrl) {
-            // 强制将 http 转换为 https，防止浏览器拦截混合内容
             songUrl = songUrl.replace('http://', 'https://');
             
             musicState.currentSong = { id, title, artist, cover, url: songUrl };
             audioPlayer.src = songUrl;
             
-            // 捕获 play() 的 Promise 异常
             audioPlayer.play().then(() => {
                 musicState.isPlaying = true;
                 
@@ -15019,7 +14962,6 @@ async function musicPlaySong(id, title, artist, cover) {
                 musicUpdatePlayerUI();
                 musicCloseSearch();
                 
-                // 2. 获取歌词
                 musicFetchLyrics(id);
             }).catch(e => {
                 console.error("播放失败:", e);
@@ -15049,29 +14991,20 @@ async function musicFetchLyrics(id) {
     try {
         let rawLyric = '';
         
-        // 双路获取歌词
-        if (currentMusicApi === 'secondary') {
-            const data = await SecondaryMusicAPI.getLyric(id);
-            if (data && data.lyric) {
-                rawLyric = data.lyric;
-            }
-        } else {
-            // 修改：使用 meting 接口获取歌词，并增加对纯文本和JSON格式的兼容处理
-            const res = await fetch(`https://api.qijieya.cn/meting/?server=netease&type=lrc&id=${id}`);
-            const textData = await res.text();
-            try {
-                const jsonData = JSON.parse(textData);
-                if (jsonData.lrc && jsonData.lrc.lyric) {
-                    rawLyric = jsonData.lrc.lyric;
-                } else if (jsonData.lyric) {
-                    rawLyric = jsonData.lyric;
-                } else {
-                    rawLyric = textData;
-                }
-            } catch (e) {
-                // 如果解析 JSON 失败，说明接口直接返回了纯文本歌词
+        // 统一使用主接口获取歌词
+        const res = await fetch(`https://api.qijieya.cn/meting/?server=netease&type=lrc&id=${id}`);
+        const textData = await res.text();
+        try {
+            const jsonData = JSON.parse(textData);
+            if (jsonData.lrc && jsonData.lrc.lyric) {
+                rawLyric = jsonData.lrc.lyric;
+            } else if (jsonData.lyric) {
+                rawLyric = jsonData.lyric;
+            } else {
                 rawLyric = textData;
             }
+        } catch (e) {
+            rawLyric = textData;
         }
         
         if (rawLyric) {
@@ -15668,30 +15601,15 @@ async function musicCharSearch(charId, keyword) {
     try {
         let songsList = [];
         
-        if (currentMusicApi === 'secondary') {
-            const data = await SecondaryMusicAPI.search(keyword);
-            let songs = [];
-            if (Array.isArray(data)) songs = data;
-            else if (data && Array.isArray(data.data)) songs = data.data;
-            else if (data && Array.isArray(data.result)) songs = data.result;
-            
-            if (songs.length > 0) {
-                songsList = songs.slice(0, 5).map(song => ({
-                    id: song.id,
-                    name: song.name,
-                    artist: Array.isArray(song.artist) ? song.artist.join(', ') : song.artist
-                }));
-            }
-        } else {
-            const res = await fetch(`https://zm.armoe.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
-            const data = await res.json();
-            if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
-                songsList = data.result.songs.slice(0, 5).map(song => ({
-                    id: song.id,
-                    name: song.name,
-                    artist: song.ar.map(a => a.name).join(', ')
-                }));
-            }
+        const baseUrl = getMusicApiBaseUrl();
+        const res = await fetch(`${baseUrl}/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
+        const data = await res.json();
+        if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
+            songsList = data.result.songs.slice(0, 5).map(song => ({
+                id: song.id,
+                name: song.name,
+                artist: song.ar.map(a => a.name).join(', ')
+            }));
         }
         
         if (songsList.length > 0) {
@@ -15701,10 +15619,8 @@ async function musicCharSearch(charId, keyword) {
             });
             resultText += `请仔细核对歌名和歌手，筛选出正确的版本，然后使用 {"type":"music_play_selected", "songId": 对应的ID, "songName": "歌名"} 指令来播放。]`;
             
-            // 把搜索结果作为隐藏消息发给 AI
             wcAddMessage(charId, 'system', 'system', resultText, { hidden: true });
             
-            // 自动触发 AI 再次思考并做出选择
             setTimeout(() => {
                 wcTriggerAI(charId);
             }, 1500);
@@ -15722,44 +15638,25 @@ async function musicCharSearch(charId, keyword) {
 
 // AI 播放选定歌曲逻辑
 async function musicCharPlaySelected(charId, songId, songName) {
-
     if (!songId) return;
     try {
         let newSong = null;
         
-        if (currentMusicApi === 'secondary') {
-            const data = await SecondaryMusicAPI.search(songName || songId);
-            let songs = [];
-            if (Array.isArray(data)) songs = data;
-            else if (data && Array.isArray(data.data)) songs = data.data;
-            else if (data && Array.isArray(data.result)) songs = data.result;
-            
-            const track = songs.find(s => s.id == songId) || songs[0];
-            if (track) {
-                newSong = {
-                    id: track.id,
-                    title: track.name,
-                    artist: Array.isArray(track.artist) ? track.artist.join(', ') : track.artist,
-                    cover: `https://music-api.gdstudio.xyz/api.php?types=pic&source=netease&id=${track.pic_id}&size=300`
-                };
-            }
-        } else {
-            const res = await fetch(`https://zm.armoe.cn/song/detail?ids=${songId}`);
-            const data = await res.json();
-            
-            if (data.code === 200 && data.songs && data.songs.length > 0) {
-                const song = data.songs[0];
-                newSong = {
-                    id: song.id,
-                    title: song.name,
-                    artist: song.ar.map(a => a.name).join(', '),
-                    cover: song.al.picUrl + '?param=100y100'
-                };
-            }
+        const baseUrl = getMusicApiBaseUrl();
+        const res = await fetch(`${baseUrl}/song/detail?ids=${songId}`);
+        const data = await res.json();
+        
+        if (data.code === 200 && data.songs && data.songs.length > 0) {
+            const song = data.songs[0];
+            newSong = {
+                id: song.id,
+                title: song.name,
+                artist: song.ar.map(a => a.name).join(', '),
+                cover: song.al.picUrl + '?param=100y100'
+            };
         }
         
         if (newSong) {
-            // 加入当前播放列表并播放
             musicState.currentPlaylist.push(newSong);
             musicState.currentIndex = musicState.currentPlaylist.length - 1;
             musicPlaySong(newSong.id, newSong.title, newSong.artist, newSong.cover);
@@ -15879,45 +15776,22 @@ function musicRejectCharInvite() {
 async function musicSilentSearchAndPlay(keyword) {
     if (!keyword) return false;
     try {
-        if (currentMusicApi === 'secondary') {
-            const data = await SecondaryMusicAPI.search(keyword);
-            
-            let songs = [];
-            if (Array.isArray(data)) songs = data;
-            else if (data && Array.isArray(data.data)) songs = data.data;
-            else if (data && Array.isArray(data.result)) songs = data.result;
-
-            if (songs.length > 0) {
-                const track = songs[0];
-                const newSong = {
-                    id: track.id,
-                    title: track.name,
-                    artist: Array.isArray(track.artist) ? track.artist.join(', ') : track.artist,
-                    cover: `https://music-api.gdstudio.xyz/api.php?types=pic&source=netease&id=${track.pic_id}&size=300`
-                };
-                if (!musicState.currentPlaylist) musicState.currentPlaylist = [];
-                musicState.currentPlaylist.push(newSong);
-                musicState.currentIndex = musicState.currentPlaylist.length - 1;
-                musicPlaySong(newSong.id, newSong.title, newSong.artist, newSong.cover);
-                return true;
-            }
-        } else {
-            const res = await fetch(`https://zm.armoe.cn/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
-            const data = await res.json();
-            if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
-                const track = data.result.songs[0];
-                const newSong = {
-                    id: track.id,
-                    title: track.name,
-                    artist: track.ar.map(a => a.name).join(', '),
-                    cover: track.al.picUrl + '?param=100y100'
-                };
-                if (!musicState.currentPlaylist) musicState.currentPlaylist = [];
-                musicState.currentPlaylist.push(newSong);
-                musicState.currentIndex = musicState.currentPlaylist.length - 1;
-                musicPlaySong(newSong.id, newSong.title, newSong.artist, newSong.cover);
-                return true;
-            }
+        const baseUrl = getMusicApiBaseUrl();
+        const res = await fetch(`${baseUrl}/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
+        const data = await res.json();
+        if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
+            const track = data.result.songs[0];
+            const newSong = {
+                id: track.id,
+                title: track.name,
+                artist: track.ar.map(a => a.name).join(', '),
+                cover: track.al.picUrl + '?param=100y100'
+            };
+            if (!musicState.currentPlaylist) musicState.currentPlaylist = [];
+            musicState.currentPlaylist.push(newSong);
+            musicState.currentIndex = musicState.currentPlaylist.length - 1;
+            musicPlaySong(newSong.id, newSong.title, newSong.artist, newSong.cover);
+            return true;
         }
     } catch (e) {
         console.error("静默搜索失败", e);
@@ -16266,13 +16140,32 @@ if (capArtist) capArtist.innerText = musicState.currentSong.artist;
     }
 }
 // 1. 定义全局变量记录当前使用的接口 (使用 localStorage 保存，刷新不重置)
-let currentMusicApi = localStorage.getItem('ins_music_api_preference') || 'primary'; // 'primary' 或 'secondary'
+let currentMusicApi = localStorage.getItem('ins_music_api_preference') || 'primary'; // 'primary', 'secondary' 或 'tertiary'
+
+// 获取当前音乐接口的 BaseUrl
+function getMusicApiBaseUrl() {
+    if (currentMusicApi === 'secondary') return 'https://ncmapi.btwoa.com';
+    if (currentMusicApi === 'tertiary') return 'https://ncm.zhenxin.me'; 
+    if (currentMusicApi === 'api4') return 'http://110.42.255.106:3000'; // 👉 替换为真实的第四个接口
+    if (currentMusicApi === 'api5') return 'https://www.musicapi.cn'; // 👉 替换为真实的第五个接口
+    return 'https://zm.armoe.cn'; // primary
+}
 
 // 2. 打开切换弹窗
 function musicOpenApiToggleModal() {
     // 更新选中状态的颜色
     document.getElementById('music-api-primary-text').style.color = currentMusicApi === 'primary' ? '#007AFF' : '#111';
     document.getElementById('music-api-secondary-text').style.color = currentMusicApi === 'secondary' ? '#007AFF' : '#111';
+    
+    const tertiaryText = document.getElementById('music-api-tertiary-text');
+    if (tertiaryText) tertiaryText.style.color = currentMusicApi === 'tertiary' ? '#007AFF' : '#111';
+    
+    const api4Text = document.getElementById('music-api-api4-text');
+    if (api4Text) api4Text.style.color = currentMusicApi === 'api4' ? '#007AFF' : '#111';
+    
+    const api5Text = document.getElementById('music-api-api5-text');
+    if (api5Text) api5Text.style.color = currentMusicApi === 'api5' ? '#007AFF' : '#111';
+    
     wcOpenModal('music-modal-api-toggle');
 }
 
@@ -16283,61 +16176,18 @@ function musicSetApi(apiType) {
     wcCloseModal('music-modal-api-toggle');
     
     // 提示用户
-    const apiName = apiType === 'primary' ? '主接口' : '副接口';
+    let apiName = '主接口';
+    if (apiType === 'secondary') apiName = '副接口';
+    if (apiType === 'tertiary') apiName = '第三接口';
+    if (apiType === 'api4') apiName = '第四接口';
+    if (apiType === 'api5') apiName = '第五接口';
+    
     if(typeof showIosNotification === 'function') {
         showIosNotification('音乐接口已切换', `当前正在使用: ${apiName}`);
     } else {
         alert(`已切换至: ${apiName}`);
     }
 }
-
-// 4. 封装副接口的请求方法 (供你原有的搜索/播放逻辑调用)
-const SecondaryMusicAPI = {
-    baseUrl: 'https://music-api.gdstudio.xyz/api.php',
-    // 更换为对本地文件 (origin 'null') 完全开放的跨域代理
-    proxy: 'https://api.codetabs.com/v1/proxy?quest=',
-    
-    // 搜索歌曲
-    async search(keyword, page = 1) {
-        const url = `${this.baseUrl}?types=search&source=netease&name=${encodeURIComponent(keyword)}&count=20&pages=${page}`;
-        const res = await fetch(this.proxy + encodeURIComponent(url));
-        return await res.json();
-    },
-    
-    // 获取播放链接
-    async getUrl(trackId) {
-        const url = `${this.baseUrl}?types=url&source=netease&id=${trackId}&br=999`;
-        const res = await fetch(this.proxy + encodeURIComponent(url));
-        return await res.json();
-    },
-    
-    // 获取专辑图
-    async getPic(picId) {
-        const url = `${this.baseUrl}?types=pic&source=netease&id=${picId}&size=500`;
-        const res = await fetch(this.proxy + encodeURIComponent(url));
-        return await res.json();
-    },
-    
-    // 获取歌词
-    async getLyric(lyricId) {
-        const url = `${this.baseUrl}?types=lyric&source=netease&id=${lyricId}`;
-        const res = await fetch(this.proxy + encodeURIComponent(url));
-        return await res.json();
-    }
-};
-
-/* 
-  5. 在你原有的搜索逻辑中进行判断拦截：
-  例如：
-  async function performMusicSearch(keyword) {
-      if (currentMusicApi === 'secondary') {
-          const data = await SecondaryMusicAPI.search(keyword);
-          // 渲染 data 到列表...
-      } else {
-          // 执行你原来的主接口搜索逻辑...
-      }
-  }
-*/
 
 /* ==========================================================================
    梦境系统 (Dream Space) 逻辑
