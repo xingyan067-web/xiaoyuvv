@@ -239,6 +239,58 @@ input, textarea, select {
     transform: translateY(0) scale(0.98);
 }
 
+/* ========================================== */
+/* 新增：Discord 登录按钮与分割线样式 */
+/* ========================================== */
+.divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 20px 0;
+    color: #8b6d71;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.divider::before { margin-right: 10px; }
+.divider::after { margin-left: 10px; }
+
+.discord-btn {
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 18px;
+    cursor: pointer;
+    background: #5865F2; /* Discord 品牌蓝紫色 */
+    color: #FFFFFF;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    transition: all 0.4s ease;
+    box-shadow: 0 8px 25px rgba(88, 101, 242, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.discord-btn:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 12px 30px rgba(88, 101, 242, 0.5);
+    filter: brightness(1.1);
+}
+
+.discord-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
 .activation-footer {
     margin-top: 30px;
     font-size: 12px;

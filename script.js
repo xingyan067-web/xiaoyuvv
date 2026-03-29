@@ -27,12 +27,77 @@ initStandaloneMode();
 
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
+// ==========================================
+// 👇 新增：Discord OAuth2 配置
+// ==========================================
+const DISCORD_CLIENT_ID = '1487784025526501436'; 
+const DISCORD_GUILD_ID = '1434236443818983580'; 
+const DISCORD_REDIRECT_URI = window.location.origin + window.location.pathname; 
+
 /**
- * 检查、生成并显示激活状态
+ * 检查、生成并显示激活状态 (包含 Discord 回调检测)
  */
 async function checkAndShowActivation() {
     const overlay = document.getElementById('activation-overlay');
     
+    // --- 新增：检测 Discord OAuth2 回调 Token ---
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    const accessToken = fragment.get('access_token');
+    const tokenType = fragment.get('token_type');
+    
+    if (accessToken) {
+        // 清除 URL 中的 token，防止刷新重复触发或泄露
+        window.history.replaceState(null, null, window.location.pathname);
+        
+        if (overlay) {
+            const btn = document.getElementById('discord-login-btn');
+            if (btn) btn.innerText = "验证社区身份中...";
+        }
+        
+        try {
+            // 获取用户加入的服务器列表
+            const response = await fetch('https://discord.com/api/users/@me/guilds', {
+                headers: { authorization: `${tokenType} ${accessToken}` }
+            });
+            
+            if (response.ok) {
+                const guilds = await response.json();
+                // 检查用户是否在指定的社区中
+                const isInGuild = guilds.some(guild => guild.id === DISCORD_GUILD_ID);
+                
+                if (isInGuild) {
+                    // 验证通过，写入激活状态
+                    localStorage.setItem('ios_theme_activation_v2_fallback', 'true');
+                    if (overlay) overlay.style.display = 'none';
+                    alert('Discord 社区验证成功！欢迎使用。');
+                    
+                    // 异步后台保存
+                    try {
+                        await idb.set('ios_theme_activation_v2_status', {
+                            activated: true,
+                            method: 'discord',
+                            activationTime: new Date().toISOString()
+                        });
+                    } catch (dbError) {}
+                    return; // 成功后直接返回
+                } else {
+                    alert('验证失败：您尚未加入指定的 Discord 社区！');
+                }
+            } else {
+                alert('Discord 验证请求失败，请重试。');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('发生网络错误，请重试。');
+        }
+        
+        // 恢复按钮文字
+        if (overlay) {
+            const btn = document.getElementById('discord-login-btn');
+            if (btn) btn.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg> Discord 社区登录`;
+        }
+    }
+
     // 1. 优先检查 localStorage (改用 V2 的 Key)
     if (localStorage.getItem('ios_theme_activation_v2_fallback') === 'true') {
         if (overlay) overlay.style.display = 'none';
@@ -56,6 +121,12 @@ async function checkAndShowActivation() {
 
     // 3. 如果都没激活，显示激活页面
     if (overlay) overlay.style.display = 'flex';
+}
+
+// 👇 新增：触发 Discord 登录跳转
+function loginWithDiscord() {
+    const oauthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&response_type=token&scope=identify%20guilds`;
+    window.location.href = oauthUrl;
 }
 
 /**
