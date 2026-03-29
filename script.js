@@ -4402,14 +4402,15 @@ async function wcTriggerAI(charIdOverride = null) {
             
 【你的音乐控制特权】(你可以自主控制播放器，请在JSON数组中加入以下指令)：
 - 暂停/继续音乐: {"type":"music_control", "action":"pause"} 或 {"type":"music_control", "action":"play"}
-- 切换上一首/下一首: {"type":"music_control", "action":"prev"} 或 {"type":"music_control", "action":"next"}
-- 随机播放一首: {"type":"music_control", "action":"random"}
+- 切换上一首/下一首: {"type":"music_control", "action":"prev"} 或 {"type":"music_control", "action":"next"} (注意：切歌时直接发送此指令即可，绝对不要先发送 pause 暂停音乐！)
 - 播放列表中的指定歌曲: {"type":"music_play_list_index", "index": 索引数字, "content":"切到这首"}
 - 搜索歌曲/歌手: {"type":"music_search", "keyword":"歌曲名 或 歌手名"} (系统会返回搜索结果列表给你，你需要从中筛选出正确的版本)
 - 播放选定的歌曲: {"type":"music_play_selected", "songId": 12345, "songName": "歌名"} (必须在收到搜索结果后，根据ID使用此指令播放)
+- 添加选定的歌曲到列表(不立即播放): {"type":"music_add_selected", "songId": 12345, "songName": "歌名"} (必须在收到搜索结果后，根据ID使用此指令添加)
 - 删除当前歌曲: {"type":"music_delete_song", "content":"太难听了，删掉"}
 - 主动退出一起听歌: {"type":"music_exit", "content":"我有点事，先不听啦"}
-请在回复中自然地体现出你们正在一起听歌的氛围，或者配合你的切歌/点播动作进行说明。\n`;        } else {
+请在回复中自然地体现出你们正在一起听歌的氛围，或者配合你的切歌/点播动作进行说明。\n`;
+        } else {
             // 提取双方歌单
             let availableSongs = [];
             if (char.phoneData && char.phoneData.settings && char.phoneData.settings.playlist) {
@@ -5256,10 +5257,13 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         } else if (action.type === 'music_control') {
             let actionText = "";
             if (action.action === 'pause') { audioPlayer.pause(); musicState.isPlaying = false; actionText = "暂停了音乐"; }
-            else if (action.action === 'play') { audioPlayer.play(); musicState.isPlaying = true; actionText = "继续播放了音乐"; }
+            else if (action.action === 'play') { 
+                audioPlayer.play().catch(e => console.warn("浏览器拦截了自动播放", e)); 
+                musicState.isPlaying = true; 
+                actionText = "继续播放了音乐"; 
+            }
             else if (action.action === 'next') { musicPlayNext(); actionText = "切到了下一首歌"; }
             else if (action.action === 'prev') { musicPlayPrev(); actionText = "切到了上一首歌"; }
-            else if (action.action === 'random') { musicState.playMode = 'random'; musicPlayNext(); actionText = "随机播放了一首歌"; }
             
             musicUpdatePlayerUI();
             // 明确显示系统提示
@@ -5287,6 +5291,11 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             // AI 筛选后确认播放
             wcAddMessage(charId, 'them', 'text', action.content || `*(为你播放: ${action.songName})*`, extra);
             musicCharPlaySelected(charId, action.songId, action.songName);
+            
+        } else if (action.type === 'music_add_selected') {
+            // AI 筛选后确认添加到列表
+            wcAddMessage(charId, 'them', 'text', action.content || `*(已将 ${action.songName} 加入播放列表)*`, extra);
+            musicCharAddSelected(charId, action.songId, action.songName);
             
         } else if (action.type === 'music_delete_song') {
             wcAddMessage(charId, 'them', 'text', action.content || "*(删除了当前歌曲)*", extra);
@@ -15004,6 +15013,10 @@ window.musicOpenAddToPlaylistFromSearch = function(index) {
 
 async function musicPlaySong(id, title, artist, cover) {
     try {
+        // 【核心修复】：在请求网络前，立即更新 UI 为新歌信息，消除“卡顿没切歌”的错觉
+        musicState.currentSong = { id, title, artist, cover, url: '' };
+        musicUpdatePlayerUI();
+        
         let songUrl = '';
         
         // 统一使用主接口获取播放链接
@@ -15688,7 +15701,7 @@ async function musicCharSearch(charId, keyword) {
             songsList.forEach((song, index) => {
                 resultText += `${index + 1}. ID: ${song.id}, 歌名: ${song.name}, 歌手: ${song.artist}\n`;
             });
-            resultText += `请仔细核对歌名和歌手，筛选出正确的版本，然后使用 {"type":"music_play_selected", "songId": 对应的ID, "songName": "歌名"} 指令来播放。]`;
+            resultText += `请仔细核对歌名和歌手，筛选出正确的版本，然后使用 {"type":"music_play_selected", "songId": 对应的ID, "songName": "歌名"} 指令来播放，或者使用 {"type":"music_add_selected", "songId": 对应的ID, "songName": "歌名"} 指令来添加到播放列表。]`;
             
             wcAddMessage(charId, 'system', 'system', resultText, { hidden: true });
             
@@ -15704,6 +15717,37 @@ async function musicCharSearch(charId, keyword) {
     } catch (e) {
         console.error("AI 搜索失败", e);
         wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 搜索失败，网络异常。]`, { hidden: true });
+    }
+}
+
+// AI 添加选定歌曲到列表逻辑
+async function musicCharAddSelected(charId, songId, songName) {
+    if (!songId) return;
+    try {
+        let newSong = null;
+        
+        const baseUrl = getMusicApiBaseUrl();
+        const res = await fetch(`${baseUrl}/song/detail?ids=${songId}`);
+        const data = await res.json();
+        
+        if (data.code === 200 && data.songs && data.songs.length > 0) {
+            const song = data.songs[0];
+            newSong = {
+                id: song.id,
+                title: song.name,
+                artist: song.ar.map(a => a.name).join(', '),
+                cover: song.al.picUrl + '?param=100y100'
+            };
+        }
+        
+        if (newSong) {
+            musicState.currentPlaylist.push(newSong);
+            wcAddMessage(charId, 'system', 'system', `[系统提示: ${wcState.characters.find(c=>c.id===charId).name} 将《${newSong.title}》- ${newSong.artist} 加入了播放列表]`, { style: 'transparent' });
+        } else {
+            wcAddMessage(charId, 'system', 'system', `[系统提示: 歌曲获取失败]`, { style: 'transparent' });
+        }
+    } catch (e) {
+        console.error("AI 添加选中歌曲失败", e);
     }
 }
 
