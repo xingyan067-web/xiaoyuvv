@@ -3206,7 +3206,10 @@
                                         <div id="wc-chat-bg-gallery" style="margin-top: 5px; overflow-x: auto; white-space: nowrap; padding-bottom: 5px; display: flex; gap: 10px;"></div>
                                     </div>
                                     <div class="wc-form-group">
-                                        <label class="wc-form-label">自定义 CSS</label>
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                            <label class="wc-form-label" style="margin-bottom: 0;">自定义 CSS</label>
+                                            <button class="wc-ios-btn-block wc-btn-secondary" style="width: auto; padding: 4px 10px; font-size: 12px; margin: 0; border-radius: 6px;" onclick="document.getElementById('wc-import-css-input').click()">导入 (TXT/DOCX)</button>
+                                        </div>
                                         <textarea id="wc-setting-custom-css" class="wc-form-textarea" style="height: 150px; font-family: monospace; font-size: 12px;" placeholder="/* 输入 CSS 代码 */"></textarea>
                                     </div>
                                     <div class="wc-form-group">
@@ -3321,6 +3324,8 @@
                 <input type="file" id="wc-import-char-input" accept=".json,.png,.txt,.docx" style="display:none;" onchange="wcHandleCharImport(event)">
                 <!-- 👇 新增：世界书导入文件框 👇 -->
                 <input type="file" id="wbImportInput" accept=".json,.txt,.docx" style="display:none;" onchange="handleWorldbookImport(event)">
+                <!-- 👇 新增：CSS 导入文件框 👇 -->
+                <input type="file" id="wc-import-css-input" accept=".txt,.docx" style="display:none;" onchange="wcHandleCssImport(event)">
                 <!-- 👇 新增：角色导入文件框 👇 -->
                 <input type="file" id="wc-import-char-input" accept=".json,.png" style="display:none;" onchange="wcHandleCharImport(event)">
                 <input type="file" id="wc-file-input-edit-char" accept="image/*" onchange="wcHandleFileSelect(event, 'edit-char')" style="display:none;">
