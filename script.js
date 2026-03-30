@@ -1556,6 +1556,10 @@ function enterHomeEditMode() {
     document.body.classList.add('edit-mode-active');
     document.getElementById('home-edit-bar').style.display = 'flex';
     
+    // 👇 新增：进入编辑模式时隐藏底部的 Dock 栏
+    const dock = document.querySelector('.dock-container');
+    if (dock) dock.style.display = 'none';
+    
     // 备份当前布局和位置，以便取消时恢复
     backupGridLayout = getCurrentGridLayout();
     backupWidgetPosition = { ...lsState.widgetData.position };
@@ -1568,6 +1572,10 @@ function saveHomeEdit() {
     document.body.classList.remove('edit-mode-active');
     document.getElementById('home-edit-bar').style.display = 'none';
     
+    // 👇 新增：退出编辑模式时恢复底部的 Dock 栏
+    const dock = document.querySelector('.dock-container');
+    if (dock) dock.style.display = 'flex';
+    
     // 保存网格布局
     saveGridLayout();
     // 小组件位置在拖拽结束时已更新到 lsState，这里统一保存
@@ -1578,6 +1586,10 @@ function cancelHomeEdit() {
     isHomeEditMode = false;
     document.body.classList.remove('edit-mode-active');
     document.getElementById('home-edit-bar').style.display = 'none';
+    
+    // 👇 新增：退出编辑模式时恢复底部的 Dock 栏
+    const dock = document.querySelector('.dock-container');
+    if (dock) dock.style.display = 'flex';
     
     // 恢复网格布局
     restoreGridLayout(backupGridLayout);
@@ -4424,6 +4436,18 @@ async function wcTriggerAI(charIdOverride = null) {
         const msgs = wcState.chats[charId] || [];
         const timeGapPrompt = wcGenerateTimeGapPrompt(msgs, now.getTime());
 
+        // --- 新增：时间感知开关逻辑 ---
+        const isTimePerceptionEnabled = config.timePerceptionEnabled !== false;
+        let timeContextPrompt = "";
+        if (isTimePerceptionEnabled) {
+            timeContextPrompt = `-   **当前时间**: ${timeString} ${dayString}
+-   **当前时段氛围参考**: ${timeSlotVibe}
+-   **时间观念 (强制)**: 你应知晓当前时间${dayString} ${timeString}，但除非对话内容明确相关，否则不要主动提及或评论时间（不要催促我睡觉，不可以催促用户！！禁止催促用户睡觉！！），你的作息、行为、对话内容都必须符合当前的具体时间点和星期。
+${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
+        } else {
+            timeContextPrompt = `-   **时间观念**: 你当前处于一个模糊的时间维度，不需要关注具体的时间流逝，也不要提及当前是几点或星期几。`;
+        }
+
         // --- 核心修复：正确读取并筛选已勾选的世界书 ---
         let worldBookContent = "无特定世界观设定。";
         const selectedWorldBookIds = config.worldbookEntries || [];
@@ -4550,10 +4574,7 @@ async function wcTriggerAI(charIdOverride = null) {
 4. **绝对防 OOC (Anti-OOC)**：你的语气、用词习惯、对待 User 的态度必须与人设 100% 吻合。
 
 # 情境信息 (Contextual Information)
--   **当前时间**: ${timeString} ${dayString}
--   **当前时段氛围参考**: ${timeSlotVibe}
--   **时间观念 (强制)**: 你应知晓当前时间${dayString} ${timeString}，但除非对话内容明确相关，否则不要主动提及或评论时间（不要催促我睡觉，不可以催促用户！！禁止催促用户睡觉！！），你的作息、行为、对话内容都必须符合当前的具体时间点和星期。
-${timeGapPrompt ? timeGapPrompt + '\n' : ''}
+${timeContextPrompt}
 -   **世界观设定 (World Information)**: 以下是你所在世界的既定事实、传说和背景。你必须将其视为绝对真理。
 ${worldBookContent}
 -   **你的角色设定 (Your Persona)**: 这就是你。你的一切行为、言语和思想都必须严格遵守此设定。
@@ -5084,62 +5105,14 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
 
     // 移除强制拆分逻辑，完全信任 AI 的 JSON 结构，防止一句话被错误切断
 
-    // 👇 新增：去重逻辑，防止 AI 抽风输出重复的段落序列 👇
-    let finalActions = [];
-    for (let i = 0; i < actions.length; i++) {
-        const action = actions[i];
-        if (!action) continue; // 🚨 修复：去掉了 !action.content 的粗暴拦截
-        
-        // 相邻去重 (防止 A, A)
-        if (finalActions.length > 0 && action.content !== undefined) {
-            const lastAction = finalActions[finalActions.length - 1];
-            if (lastAction.type === action.type && lastAction.content === action.content) {
-                continue;
-            }
-        }
-        finalActions.push(action);
-    }
-
-    // 检查是否存在前后两半完全一样的情况 (防止 A,B, A,B)
-    const len = finalActions.length;
-    if (len >= 4 && len % 2 === 0) {
-        const half = len / 2;
-        let isRepeat = true;
-        for (let i = 0; i < half; i++) {
-            if (finalActions[i].content === undefined || finalActions[i].content !== finalActions[i + half].content || finalActions[i].type !== finalActions[i + half].type) {
-                isRepeat = false;
-                break;
-            }
-        }
-        if (isRepeat) {
-            finalActions = finalActions.slice(0, half);
-        }
-    }
-    
-    // 检查是否存在前中后三分之一完全一样的情况 (防止 A,B, A,B, A,B)
-    const len3 = finalActions.length;
-    if (len3 >= 6 && len3 % 3 === 0) {
-        const third = len3 / 3;
-        let isRepeat = true;
-        for (let i = 0; i < third; i++) {
-            if (finalActions[i].content === undefined || finalActions[i].content !== finalActions[i + third].content || finalActions[i].content !== finalActions[i + 2 * third].content || finalActions[i].type !== finalActions[i + third].type) {
-                isRepeat = false;
-                break;
-            }
-        }
-        if (isRepeat) {
-            finalActions = finalActions.slice(0, third);
-        }
-    }
-
     // 👇 新增：智能拦截兜底，防止 AI 忘了发邀请指令 👇
-    let hasMusicInvite = finalActions.some(a => a.type === 'music_invite_user' || a.type === 'music_invite');
+    let hasMusicInvite = actions.some(a => a && (a.type === 'music_invite_user' || a.type === 'music_invite'));
     if (!hasMusicInvite) {
         // 检查文本中是否包含强烈的听歌暗示
-        const textContent = finalActions.map(a => a.content).join(' ');
+        const textContent = actions.map(a => a ? a.content : '').join(' ');
         if (textContent.includes('一起听歌') || textContent.includes('听首歌') || textContent.includes('分享一首歌')) {
             console.log("拦截到 AI 听歌暗示，自动补全邀请卡片指令");
-            finalActions.push({
+            actions.push({
                 type: 'music_invite_user',
                 songName: '随机推荐',
                 content: '' // 文本已经在前面的气泡里了，这里留空防止重复
@@ -5147,9 +5120,6 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         }
     }
     // 👆 兜底逻辑结束 👆
-
-    actions = finalActions;
-    // 👆 去重逻辑结束 👆
 
     for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
@@ -9643,7 +9613,10 @@ async function wcSimTriggerAI() {
             prompt += `【要求】：返回 JSON 数组，格式示例：[{"content":"好的"}]\n`;
         }
         
-        prompt += `\n【当前时间】：${timeString}\n`;
+        const isTimePerceptionEnabled = char.chatConfig && char.chatConfig.timePerceptionEnabled !== false;
+        if (isTimePerceptionEnabled) {
+            prompt += `\n【当前时间】：${timeString}\n`;
+        }
         
         if (char.chatConfig && char.chatConfig.bilingualEnabled) {
             const sourceLang = char.chatConfig.bilingualSource || '英语';
@@ -10357,6 +10330,12 @@ function wcOpenChatSettings() {
     document.getElementById('wc-setting-bilingual-source').value = char.chatConfig.bilingualSource || '英语';
     document.getElementById('wc-setting-bilingual-target').value = char.chatConfig.bilingualTarget || '中文';
     
+    // 新增：读取时间感知设置
+    const timePerceptionToggle = document.getElementById('wc-setting-time-perception-toggle');
+    if (timePerceptionToggle) {
+        timePerceptionToggle.checked = char.chatConfig.timePerceptionEnabled !== false; // 默认开启
+    }
+
     document.getElementById('wc-setting-proactive-toggle').checked = char.chatConfig.proactiveEnabled || false;
     document.getElementById('wc-setting-proactive-interval').value = char.chatConfig.proactiveInterval || 60;
     document.getElementById('wc-setting-moment-freq').value = char.chatConfig.momentFreq || 0;
@@ -10511,6 +10490,12 @@ async function wcSaveChatSettings() {
     char.chatConfig.bilingualSource = document.getElementById('wc-setting-bilingual-source').value.trim();
     char.chatConfig.bilingualTarget = document.getElementById('wc-setting-bilingual-target').value.trim();
     
+    // 新增：保存时间感知设置
+    const timePerceptionToggle = document.getElementById('wc-setting-time-perception-toggle');
+    if (timePerceptionToggle) {
+        char.chatConfig.timePerceptionEnabled = timePerceptionToggle.checked;
+    }
+
     char.chatConfig.proactiveEnabled = document.getElementById('wc-setting-proactive-toggle').checked;
     char.chatConfig.proactiveInterval = parseInt(document.getElementById('wc-setting-proactive-interval').value) || 60;
     char.chatConfig.momentFreq = parseInt(document.getElementById('wc-setting-moment-freq').value) || 0;
@@ -10991,7 +10976,11 @@ function checkProactiveMessages() {
 
                 const nowStr = new Date().toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
                 
-                const proactivePrompt = `[系统通知：距离上次互动已过去 ${timeGapStr}。话题可能已中断。
+                const isTimePerceptionEnabled = char.chatConfig && char.chatConfig.timePerceptionEnabled !== false;
+                let proactivePrompt = "";
+                
+                if (isTimePerceptionEnabled) {
+                    proactivePrompt = `[系统通知：距离上次互动已过去 ${timeGapStr}。话题可能已中断。
 请以 ${char.name} 的身份主动发起新话题，或自然地延续之前的对话，对时间流逝做出反应。
 
 【行动前请在内部逻辑中进行深度考量】：
@@ -10999,6 +10988,15 @@ function checkProactiveMessages() {
 2. 动机分析：你为什么会突然给 User 发消息？
 3. 绝对防 OOC：语气必须 100% 符合人设，像真人一样自然切入，拒绝AI味。
 考量完毕后，直接输出符合你人设的 JSON 消息数组！]`;
+                } else {
+                    proactivePrompt = `[系统通知：话题可能已中断。
+请以 ${char.name} 的身份主动发起新话题，或自然地延续之前的对话。
+
+【行动前请在内部逻辑中进行深度考量】：
+1. 动机分析：你为什么会突然给 User 发消息？
+2. 绝对防 OOC：语气必须 100% 符合人设，像真人一样自然切入，拒绝AI味。
+考量完毕后，直接输出符合你人设的 JSON 消息数组！]`;
+                }
                 
                 wcAddMessage(char.id, 'system', 'system', proactivePrompt, { hidden: true });
                 wcTriggerAI(char.id);
@@ -11698,7 +11696,13 @@ async function lsTriggerNpcMessage() {
             prompt += `示例：[{"type":"text", "content":"在吗？"}, {"type":"text", "content":"有个事想跟你说"}]\n`;
         }
         
-        prompt += `\n【现实感知】：当前时间是 ${timeString} ${dayString}。你的发言必须符合这个时间点的常理（如深夜不要说刚起床）。\n`;
+        const isTimePerceptionEnabled = chatConfig.timePerceptionEnabled !== false;
+        if (isTimePerceptionEnabled) {
+            prompt += `\n【现实感知】：当前时间是 ${timeString} ${dayString}。你的发言必须符合这个时间点的常理（如深夜不要说刚起床）。\n`;
+        } else {
+            prompt += `\n【现实感知】：你当前处于一个模糊的时间维度，不需要关注具体的时间流逝。\n`;
+        }
+        
         prompt += `【${char.name} 的人设】：${char.prompt}\n`;
         prompt += `${wbInfo}\n`;
         prompt += `【防OOC要求】：你是一个拥有独立生活的真人。发言必须极度口语化、生活化，完全符合你(${npc.name})的人设。绝对拒绝油腻、做作和AI味。不要像客服一样说话！\n`;
@@ -14531,10 +14535,24 @@ function wcBuyCharCartItem(index) {
             100% { transform: rotate(0deg); }
         }
         #home-edit-bar {
-            position: fixed; top: 0; left: 0; width: 100%; height: 60px;
-            background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);
-            z-index: 9999; display: none; justify-content: space-between; align-items: center;
-            padding: 0 20px; box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+            position: fixed; 
+            bottom: calc(env(safe-area-inset-bottom) + 15px); 
+            top: auto;
+            left: 50%; 
+            transform: translateX(-50%);
+            width: calc(100% - 30px); 
+            max-width: 400px;
+            height: 70px;
+            background: rgba(255,255,255,0.85); 
+            backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+            z-index: 9999; 
+            display: none; 
+            justify-content: space-between; 
+            align-items: center;
+            padding: 0 20px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            border-radius: 35px;
+            border: 1px solid rgba(255,255,255,0.5);
         }
         .edit-btn {
             padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; cursor: pointer;
