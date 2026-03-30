@@ -8084,9 +8084,15 @@ function readTavernPNG(file) {
                         const textData = new Uint8Array(buffer, dataOffset + i + 1, length - i - 1);
                         const text = new TextDecoder('utf-8').decode(textData);
                         try {
-                            return resolve(JSON.parse(atob(text)));
+                            // 修复：使用 decodeURIComponent 和 escape 正确处理 UTF-8 中文 Base64 解码
+                            const decodedText = decodeURIComponent(escape(atob(text)));
+                            return resolve(JSON.parse(decodedText));
                         } catch (err) {
-                            try { return resolve(JSON.parse(text)); } catch(e) { return reject(new Error("解析角色数据失败")); }
+                            try { 
+                                return resolve(JSON.parse(text)); 
+                            } catch(e) { 
+                                return reject(new Error("解析角色数据失败")); 
+                            }
                         }
                     }
                 }
