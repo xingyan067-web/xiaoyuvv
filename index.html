@@ -4454,9 +4454,11 @@
                     <input type="text" id="dream-ext-name" placeholder="Name / 预设名称" class="dream-ext-name-input">
                     <label class="dream-ext-import-btn">
                         导入文件
-                        <input type="file" id="dream-ext-file" style="display: none;" onchange="handleDreamExtImport(event)">
+                        <input type="file" id="dream-ext-file" accept=".txt,.json,.docx" style="display: none;" onchange="handleDreamExtImport(event)">
                     </label>
                 </div>
+                <!-- 新增：状态栏专属 Prompt 输入框 -->
+                <textarea id="dream-ext-prompt" placeholder="在此输入给AI的提示词（仅状态栏可用，告诉AI如何输出状态栏）..." style="display:none; height: 60px; margin-bottom: 10px; background: transparent; border: none; border-bottom: 1px dashed #CCC; font-size: 13px; color: #333; resize: none; outline: none; font-family: 'Courier New', Courier, monospace;"></textarea>
                 <textarea id="dream-ext-content" placeholder="在此粘贴代码...&#10;[正则格式提示]：&#10;/匹配词/g===替换词&#10;例如：/你/g===Ta"></textarea>
                 <button class="dream-btn-primary" style="height: 40px; margin-top: 10px; border-radius: 8px;" onclick="saveDreamExt()">SAVE PRESET</button>
             </div>
@@ -4498,6 +4500,16 @@
         </div>
     </div>
 </div>
+<!-- 状态栏预览弹窗 -->
+<div id="dream-html-preview-modal" class="dream-modal-overlay" style="align-items: center;" onclick="closeDreamHtmlPreview()">
+    <div id="dream-html-preview-content" style="background: #FFF; padding: 20px; border-radius: 16px; max-width: 90%; max-height: 90%; overflow: auto; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.15);" onclick="event.stopPropagation()">
+        <div id="dream-html-preview-inner"></div>
+        <div style="margin-top: 20px; text-align: center;">
+            <button class="dream-btn-secondary" style="height: 36px; font-size: 13px; padding: 0 20px; border-radius: 18px;" onclick="closeDreamHtmlPreview()">关闭预览</button>
+        </div>
+    </div>
+</div>
+
 <!-- 6. 梦境长按菜单 & 编辑弹窗 -->
 <div id="dream-context-menu" class="dream-context-menu">
     <div class="dream-ctx-item" onclick="editDreamMsg()">EDIT / 编辑</div>

@@ -9166,3 +9166,48 @@ input::-webkit-inner-spin-button {
 .rn-tool-btn:active { color: #111; transform: scale(0.9); }
 .rn-tool-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; }
 .rn-tool-btn span { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+
+/* ========================================== */
+/* 梦境状态栏 100x50 卡片样式 */
+/* ========================================== */
+.dream-ext-html-card {
+    width: 100px;
+    height: 50px;
+    background: #FFF;
+    border: 1px solid #E5E5EA;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 6px;
+    box-sizing: border-box;
+    position: relative;
+    transition: all 0.2s;
+}
+.dream-ext-html-card.active {
+    border-color: #111;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    background: #FAFAFA;
+}
+.html-card-name {
+    font-size: 12px;
+    font-weight: bold;
+    color: #111;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    padding-right: 14px; /* 防止被右上角编辑按钮遮挡 */
+}
+.html-card-actions {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #888;
+}
+.html-card-actions span {
+    cursor: pointer;
+    transition: color 0.2s;
+}
+.html-card-actions span:active { color: #111; }

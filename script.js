@@ -12180,12 +12180,19 @@ async function wcGenerateSummary() {
     const char = wcState.characters.find(c => c.id === charId);
     if (!char) return;
 
-    const startIdx = parseInt(document.getElementById('wc-mem-start-idx').value);
-    const endIdx = parseInt(document.getElementById('wc-mem-end-idx').value);
+    const startInput = parseInt(document.getElementById('wc-mem-start-idx').value);
+    const endInput = parseInt(document.getElementById('wc-mem-end-idx').value);
     const msgs = wcState.chats[charId] || [];
 
-    if (isNaN(startIdx) || isNaN(endIdx)) return alert("请输入有效的起始和结束层数");
-    if (startIdx < 0 || endIdx >= msgs.length || startIdx > endIdx) return alert("层数范围无效");
+    if (isNaN(startInput) || isNaN(endInput)) return alert("请输入有效的起始和结束层数");
+
+    // 将用户输入的层数 (1~N) 转换为程序的数组索引 (0~N-1)
+    const startIdx = startInput - 1;
+    const endIdx = endInput - 1;
+
+    if (startIdx < 0 || endIdx >= msgs.length || startIdx > endIdx) {
+        return alert(`层数范围无效！当前有效层数范围是 1 到 ${msgs.length}`);
+    }
 
     const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
@@ -12230,6 +12237,16 @@ async function wcGenerateSummary() {
         });
 
         const data = await response.json();
+        
+        // 👇 核心修复：拦截并显示真实的 API 错误原因 👇
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。详细报错：" + JSON.stringify(data));
+        }
+        // 👆 修复结束 👆
+
         let summary = data.choices[0].message.content;
         summary = summary.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
 
@@ -17202,7 +17219,11 @@ async function triggerDreamAI() {
     if (dreamState.ext.activeHtmlId) {
         const activeHtml = dreamState.ext.html.find(h => h.id === dreamState.ext.activeHtmlId);
         if (activeHtml && activeHtml.content) {
-            systemPrompt += `【强制指令：动态状态栏】：\n你必须在回复的最末尾，输出以下 HTML 状态栏代码，并根据当前梦境的剧情发展，更新里面的数值或状态文本（不要修改 HTML 标签结构，只修改里面的内容）。\n请务必将状态栏代码包裹在 \`\`\`html 和 \`\`\` 之间！\n\n状态栏模板如下：\n${activeHtml.content}\n\n`;
+            systemPrompt += `【强制指令：动态状态栏】：\n`;
+            if (activeHtml.prompt) {
+                systemPrompt += `${activeHtml.prompt}\n`;
+            }
+            systemPrompt += `你必须在回复的最末尾，输出以下 HTML 状态栏代码，并根据当前梦境的剧情发展，更新里面的数值或状态文本（不要修改 HTML 标签结构，只修改里面的内容）。\n请务必将状态栏代码包裹在 \`\`\`html 和 \`\`\` 之间！\n\n状态栏模板如下：\n${activeHtml.content}\n\n`;
         }
     }
 
@@ -17509,8 +17530,11 @@ function closeDreamExtModal() {
     document.getElementById('dream-ext-modal').classList.remove('active');
 }
 
+let currentEditingExtId = null; // 新增：记录当前正在编辑的组件ID
+
 function switchDreamExtTab(tab) {
     dreamState.ext.currentTab = tab;
+    currentEditingExtId = null; // 切换 Tab 时清空编辑状态
     
     // UI 切换
     document.querySelectorAll('.dream-ext-tab').forEach(el => el.classList.remove('active'));
@@ -17520,42 +17544,95 @@ function switchDreamExtTab(tab) {
     document.getElementById('dream-ext-name').value = '';
     document.getElementById('dream-ext-content').value = '';
     
+    const promptInput = document.getElementById('dream-ext-prompt');
+    if (tab === 'html') {
+        promptInput.style.display = 'block';
+        promptInput.value = '';
+    } else {
+        promptInput.style.display = 'none';
+    }
+    
     // 渲染列表
     renderDreamExtList();
 }
 
-// 处理文件导入
-function handleDreamExtImport(event) {
+// 处理文件导入 (支持 JSON/TXT/DOCX)
+async function handleDreamExtImport(event) {
     const file = event.target.files[0];
     if (!file) return;
     
-    // 自动提取文件名作为预设名（去掉后缀）
     const fileName = file.name.replace(/\.[^/.]+$/, "");
+    const ext = file.name.split('.').pop().toLowerCase();
     document.getElementById('dream-ext-name').value = fileName;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        document.getElementById('dream-ext-content').value = e.target.result;
-    };
-    reader.readAsText(file);
-    event.target.value = ''; // 清空 input
+    try {
+        let content = '';
+        if (ext === 'txt' || ext === 'json') {
+            content = await file.text();
+            if (ext === 'json') {
+                try {
+                    const jsonObj = JSON.parse(content);
+                    if (jsonObj.html || jsonObj.content) {
+                        content = jsonObj.html || jsonObj.content;
+                    }
+                    if (jsonObj.prompt && document.getElementById('dream-ext-prompt')) {
+                        document.getElementById('dream-ext-prompt').value = jsonObj.prompt;
+                    }
+                } catch(e) {}
+            }
+        } else if (ext === 'docx') {
+            content = await readDocxFile(file);
+        }
+        document.getElementById('dream-ext-content').value = content;
+    } catch (e) {
+        alert("导入失败: " + e.message);
+    }
+    event.target.value = ''; 
 }
 
-// 保存预设
+// 新增：点击编辑按钮，将数据回填到输入框
+function editDreamExt(id) {
+    const tab = dreamState.ext.currentTab;
+    const item = dreamState.ext[tab].find(i => i.id === id);
+    if (!item) return;
+
+    currentEditingExtId = id;
+    document.getElementById('dream-ext-name').value = item.name;
+    document.getElementById('dream-ext-content').value = item.content;
+    
+    if (tab === 'html' && document.getElementById('dream-ext-prompt')) {
+        document.getElementById('dream-ext-prompt').value = item.prompt || '';
+    }
+}
+
+// 保存预设 (支持新增和修改)
 function saveDreamExt() {
     const tab = dreamState.ext.currentTab;
     const name = document.getElementById('dream-ext-name').value.trim();
     const content = document.getElementById('dream-ext-content').value.trim();
+    const prompt = document.getElementById('dream-ext-prompt') ? document.getElementById('dream-ext-prompt').value.trim() : '';
     
     if (!name || !content) return alert("名称和内容不能为空");
     
-    const newExt = { id: Date.now(), name, content };
-    dreamState.ext[tab].unshift(newExt); // 插入到最前面
-    
-    // 自动启用刚保存的预设
-    if (tab === 'css') dreamState.ext.activeCssId = newExt.id;
-    if (tab === 'html') dreamState.ext.activeHtmlId = newExt.id;
-    if (tab === 'regex') dreamState.ext.activeRegexId = newExt.id;
+    if (currentEditingExtId) {
+        // 编辑模式：更新已有数据
+        const item = dreamState.ext[tab].find(i => i.id === currentEditingExtId);
+        if (item) {
+            item.name = name;
+            item.content = content;
+            item.prompt = prompt;
+        }
+        currentEditingExtId = null; // 保存后清空编辑状态
+    } else {
+        // 新增模式：插入到最前面
+        const newExt = { id: Date.now(), name, content, prompt };
+        dreamState.ext[tab].unshift(newExt); 
+        
+        // 自动启用刚保存的预设
+        if (tab === 'css') dreamState.ext.activeCssId = newExt.id;
+        if (tab === 'html') dreamState.ext.activeHtmlId = newExt.id;
+        if (tab === 'regex') dreamState.ext.activeRegexId = newExt.id;
+    }
     
     dreamSaveData();
     
@@ -17563,10 +17640,11 @@ function saveDreamExt() {
     
     document.getElementById('dream-ext-name').value = '';
     document.getElementById('dream-ext-content').value = '';
+    if (document.getElementById('dream-ext-prompt')) document.getElementById('dream-ext-prompt').value = '';
     renderDreamExtList();
 }
 
-// 渲染列表
+// 渲染列表 (HTML 渲染为 100x50 卡片，并增加编辑按钮)
 function renderDreamExtList() {
     const tab = dreamState.ext.currentTab;
     const list = dreamState.ext[tab];
@@ -17575,6 +17653,7 @@ function renderDreamExtList() {
     
     if (list.length === 0) {
         container.innerHTML = '<div style="text-align:center; color:#999; font-size:12px; margin-top:20px;">暂无保存的预设</div>';
+        container.style.display = 'block';
         return;
     }
     
@@ -17583,22 +17662,75 @@ function renderDreamExtList() {
     if (tab === 'html') activeId = dreamState.ext.activeHtmlId;
     if (tab === 'regex') activeId = dreamState.ext.activeRegexId;
 
-    list.forEach(item => {
-        const isActive = item.id === activeId;
-        const div = document.createElement('div');
-        div.className = `dream-ext-item ${isActive ? 'active' : ''}`;
+    if (tab === 'html') {
+        container.style.display = 'flex';
+        container.style.flexWrap = 'wrap';
+        container.style.gap = '10px';
         
-        div.innerHTML = `
-            <div class="dream-ext-item-info" onclick="toggleDreamExtActive(${item.id})">
-                <div class="dream-ext-item-name">${item.name} ${isActive ? '<span style="color:#34C759; font-size:10px;">(已启用)</span>' : ''}</div>
-                <div class="dream-ext-item-preview">${item.content.replace(/\n/g, ' ')}</div>
-            </div>
-            <div class="dream-ext-item-actions">
-                <svg onclick="deleteDreamExt(${item.id})" viewBox="0 0 24 24" style="width:18px; height:18px; fill:none; stroke:#FF3B30; stroke-width:2; cursor:pointer;"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-            </div>
-        `;
-        container.appendChild(div);
-    });
+        list.forEach(item => {
+            const isActive = item.id === activeId;
+            const div = document.createElement('div');
+            div.className = `dream-ext-html-card ${isActive ? 'active' : ''}`;
+            div.innerHTML = `
+                <div class="html-card-name" onclick="previewDreamHtml(${item.id})" title="点击预览状态栏">${item.name}</div>
+                <div class="html-card-actions">
+                    <span onclick="toggleDreamExtActive(${item.id})" style="color: ${isActive ? '#34C759' : '#888'}; font-weight: ${isActive ? 'bold' : 'normal'};">${isActive ? '已启用' : '启用'}</span>
+                    <span onclick="deleteDreamExt(${item.id})" style="color:#FF3B30;">删除</span>
+                </div>
+                <!-- 新增：右上角编辑按钮 -->
+                <div onclick="editDreamExt(${item.id})" style="position: absolute; top: 4px; right: 4px; cursor: pointer; color: #888; padding: 2px;" title="编辑">
+                    <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    } else {
+        container.style.display = 'block';
+        list.forEach(item => {
+            const isActive = item.id === activeId;
+            const div = document.createElement('div');
+            div.className = `dream-ext-item ${isActive ? 'active' : ''}`;
+            
+            div.innerHTML = `
+                <div class="dream-ext-item-info" onclick="toggleDreamExtActive(${item.id})">
+                    <div class="dream-ext-item-name">${item.name} ${isActive ? '<span style="color:#34C759; font-size:10px;">(已启用)</span>' : ''}</div>
+                    <div class="dream-ext-item-preview">${item.content.replace(/\n/g, ' ')}</div>
+                </div>
+                <div class="dream-ext-item-actions">
+                    <!-- 新增：编辑按钮 -->
+                    <svg onclick="editDreamExt(${item.id})" viewBox="0 0 24 24" style="width:16px; height:16px; fill:none; stroke:#007AFF; stroke-width:2; cursor:pointer;" title="编辑"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    <svg onclick="deleteDreamExt(${item.id})" viewBox="0 0 24 24" style="width:18px; height:18px; fill:none; stroke:#FF3B30; stroke-width:2; cursor:pointer;"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    }
+}
+
+// 预览 HTML 状态栏
+function previewDreamHtml(id) {
+    const item = dreamState.ext.html.find(h => h.id === id);
+    if (item) {
+        document.getElementById('dream-html-preview-inner').innerHTML = item.content;
+        document.getElementById('dream-html-preview-modal').classList.add('active');
+    }
+}
+
+function closeDreamHtmlPreview() {
+    document.getElementById('dream-html-preview-modal').classList.remove('active');
+}
+
+// 预览 HTML 状态栏
+function previewDreamHtml(id) {
+    const item = dreamState.ext.html.find(h => h.id === id);
+    if (item) {
+        document.getElementById('dream-html-preview-inner').innerHTML = item.content;
+        document.getElementById('dream-html-preview-modal').classList.add('active');
+    }
+}
+
+function closeDreamHtmlPreview() {
+    document.getElementById('dream-html-preview-modal').classList.remove('active');
 }
 
 // 启用/取消启用
