@@ -2583,8 +2583,61 @@ function applyFont(url) {
 }
 
 function changeFontSize(val) {
+    // 1. 更新桌面图标的字体大小
     document.documentElement.style.setProperty('--app-font-size', val + 'px');
     document.getElementById('fontSizeDisplay').innerText = val + 'px';
+    
+    // 2. 计算缩放比例 (以默认的 11px 为基准)
+    const scale = val / 11;
+    
+    // 3. 动态生成全局字体缩放样式
+    let styleTag = document.getElementById('global-font-size-style');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'global-font-size-style';
+        document.head.appendChild(styleTag);
+    }
+    
+    // 覆盖所有核心文本区域的字体大小
+    styleTag.innerHTML = `
+        .wc-bubble { font-size: ${16 * scale}px !important; }
+        .wc-moment-text { font-size: ${15 * scale}px !important; }
+        .ins-forum-post-text { font-size: ${16 * scale}px !important; }
+        .ins-forum-story-text { font-size: ${17 * scale}px !important; }
+        .reader-content { font-size: ${20 * scale}px !important; }
+        .dream-msg { font-size: ${15 * scale}px !important; }
+        .dream-narrative-text { font-size: ${14 * scale}px !important; }
+        .dream-dialogue-bubble { font-size: ${15 * scale}px !important; }
+        .ls-feed-text { font-size: ${11 * scale}px !important; }
+        .ls-widget-note-text { font-size: ${16 * scale}px !important; }
+        .wb-item-desc { font-size: ${13 * scale}px !important; }
+        .ins-paper-read-text { font-size: ${16 * scale}px !important; }
+        .wc-item-subtitle { font-size: ${14 * scale}px !important; }
+        .wc-item-title { font-size: ${16 * scale}px !important; }
+        .forum-pm-bubble { font-size: ${15 * scale}px !important; }
+        .ins-music-lyric-line { font-size: ${14 * scale}px !important; }
+        .ins-music-lyric-line.active { font-size: ${16 * scale}px !important; }
+        .desc-card-body { font-size: ${15 * scale}px !important; }
+        .blocked-msg-text { font-size: ${14 * scale}px !important; }
+        .ins-status-value { font-size: ${15 * scale}px !important; }
+        .ins-timeline-content { font-size: ${13 * scale}px !important; }
+        .rm-text-normal { font-size: ${14 * scale}px !important; }
+        .rm-text-new { font-size: ${14 * scale}px !important; }
+        .qa-question-text { font-size: ${16 * scale}px !important; }
+        .qa-option { font-size: ${14 * scale}px !important; }
+        .qa-archive-q-text { font-size: ${14 * scale}px !important; }
+        .tarot-desc { font-size: ${12 * scale}px !important; }
+        .book-name { font-size: ${13 * scale}px !important; }
+        .chapter-item { font-size: ${14 * scale}px !important; }
+        .wc-system-msg-text { font-size: ${12 * scale}px !important; }
+        .ins-music-song-title { font-size: ${15 * scale}px !important; }
+        .ins-music-song-artist { font-size: ${12 * scale}px !important; }
+        .ins-music-fp-song { font-size: ${24 * scale}px !important; }
+        .ins-music-fp-artist { font-size: ${15 * scale}px !important; }
+        .ins-forum-comment-text { font-size: ${15 * scale}px !important; }
+        .fav-text { font-size: ${14 * scale}px !important; }
+    `;
+    
     saveThemeSettings();
 }
 
