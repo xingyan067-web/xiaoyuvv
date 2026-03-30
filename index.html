@@ -3214,7 +3214,10 @@
                                     <div class="wc-form-group">
                                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                             <label class="wc-form-label" style="margin-bottom: 0;">自定义 CSS</label>
-                                            <button class="wc-ios-btn-block wc-btn-secondary" style="width: auto; padding: 4px 10px; font-size: 12px; margin: 0; border-radius: 6px;" onclick="document.getElementById('wc-import-css-input').click()">导入 (TXT/DOCX)</button>
+                                            <div style="display: flex; gap: 8px;">
+                                                <button class="wc-ios-btn-block wc-btn-secondary" style="width: auto; padding: 4px 10px; font-size: 12px; margin: 0; border-radius: 6px;" onclick="wcExportCss()">导出 (TXT)</button>
+                                                <button class="wc-ios-btn-block wc-btn-secondary" style="width: auto; padding: 4px 10px; font-size: 12px; margin: 0; border-radius: 6px;" onclick="document.getElementById('wc-import-css-input').click()">导入 (TXT/DOCX)</button>
+                                            </div>
                                         </div>
                                         <textarea id="wc-setting-custom-css" class="wc-form-textarea" style="height: 150px; font-family: monospace; font-size: 12px;" placeholder="/* 输入 CSS 代码 */"></textarea>
                                     </div>
@@ -3754,11 +3757,11 @@
                             </svg>
 
                             <!-- 首页生成按钮 (默认显示) -->
-                            <svg id="forum-top-btn-generate" viewBox="0 0 24 24" onclick="forumGenerateAIPosts('home')" style="cursor: pointer;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                            <svg id="forum-top-btn-generate" viewBox="0 0 24 24" onclick="forumOpenGenCountModal('home')" style="cursor: pointer;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
                           
                             <!-- 新增：同人文专属按键 (默认隐藏，切换到同人区时显示) -->
                             <svg id="forum-top-btn-custom-fanfic" onclick="forumOpenGenFanficModal()" viewBox="0 0 24 24" style="cursor: pointer; display: none;" title="自定义同人文"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="15"></line></svg>
-                            <svg id="forum-top-btn-gen-fanfic" onclick="forumDirectGenFanfic()" viewBox="0 0 24 24" style="cursor: pointer; display: none;" title="一键生成同人文"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                            <svg id="forum-top-btn-gen-fanfic" onclick="forumOpenGenCountModal('fanfic')" viewBox="0 0 24 24" style="cursor: pointer; display: none;" title="一键生成同人文"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
 
                             <!-- 设置按钮 (默认隐藏，仅在个人主页显示) -->
                             <svg id="forum-top-btn-settings" onclick="forumOpenSettings()" viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: none; stroke: #111; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; display: none;"><path d="M12 3v18"></path><path d="M3 12h18"></path><path d="M16.5 7.5l-9 9"></path><path d="M7.5 7.5l9 9"></path></svg>
@@ -4135,6 +4138,28 @@
                         </div>
                         <div style="padding: 15px 20px; background: #FFF; border-top: 1px solid #F0F0F0;">
                             <button class="wc-btn-primary" style="background: #111; color: #FFF; margin: 0;" onclick="forumSaveFanficSettings()">保存设定</button>
+                        </div>
+                    </div>
+                </div>
+                <!-- 生成数量设置弹窗 (居中范围版) -->
+                <div id="forum-modal-gen-count" class="wc-modal hidden" style="z-index: 3800; align-items: center; justify-content: center;">
+                    <div class="wc-modal-content" style="width: 85%; max-width: 320px; border-radius: 20px; background: #FFF; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.15);">
+                        <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                            <h3 style="color: #111; font-size: 18px; font-weight: 700; text-align: center; width: 100%;" id="forum-gen-count-title">生成设置</h3>
+                            <button class="wc-close-btn" onclick="wcCloseModal('forum-modal-gen-count')" style="position: absolute; right: 20px;">&times;</button>
+                        </div>
+                        <div class="wc-modal-body" style="padding: 24px 20px; background: #FAFAFA;">
+                            <label class="wc-form-label" style="font-weight: bold; color: #111; margin-bottom: 12px; display: block;">生成数量范围</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="number" id="forum-gen-count-min" class="wc-form-input" value="6" min="1" style="background: #FFF; border: 1px solid #E5E5EA; text-align: center; padding: 12px 8px;">
+                                <span style="color: #888; font-weight: bold;">至</span>
+                                <input type="number" id="forum-gen-count-max" class="wc-form-input" value="10" min="1" style="background: #FFF; border: 1px solid #E5E5EA; text-align: center; padding: 12px 8px;">
+                            </div>
+                            <div style="font-size: 12px; color: #888; margin-top: 12px; line-height: 1.5;">* 建议主页贴设置在 6-10 之间，同人文设置在 1-3 之间。数量过多可能导致 AI 截断。</div>
+                        </div>
+                        <div style="padding: 15px 20px; background: #FFF; border-top: 1px solid #F0F0F0; display: flex; gap: 10px;">
+                            <button class="wc-btn-secondary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; font-weight: bold;" onclick="wcCloseModal('forum-modal-gen-count')">取消</button>
+                            <button class="wc-btn-primary" style="flex: 1; background: #111; color: #FFF; margin: 0; border-radius: 12px; padding: 12px; font-weight: bold;" id="forum-gen-count-confirm">确认生成</button>
                         </div>
                     </div>
                 </div>

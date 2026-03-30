@@ -7845,6 +7845,41 @@ async function wcHandleCssImport(event) {
 }
 
 // ==========================================
+// 新增：导出 CSS 美化 (TXT)
+// ==========================================
+function wcExportCss() {
+    const cssText = document.getElementById('wc-setting-custom-css').value;
+    if (!cssText || cssText.trim() === '') {
+        alert("当前没有 CSS 代码可以导出哦~");
+        return;
+    }
+    
+    // 弹出输入框让用户自定义文件名
+    let fileName = prompt("请输入导出的文件名：", "custom_css");
+    if (fileName === null) {
+        return; // 用户点击了取消
+    }
+    
+    // 如果用户没输入内容，给个默认名
+    fileName = fileName.trim() || "custom_css";
+    
+    // 将 CSS 文本转换为 Blob 对象
+    const blob = new Blob([cssText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    
+    // 创建一个隐藏的 a 标签触发下载
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${fileName}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // 清理内存
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// ==========================================
 // 强化：角色卡 (JSON/PNG/TXT/DOCX) 一键导入逻辑
 // ==========================================
 async function wcHandleCharImport(event) {
@@ -20415,7 +20450,8 @@ function forumSwitchTab(tab) {
             setBtn.style.display = 'block';
         } else if (tab === 'home') {
             genBtn.style.display = 'block';
-            genBtn.setAttribute('onclick', `forumGenerateAIPosts('home')`);
+            // 👇 核心修改：把直接生成，改成打开我们刚刚写好的弹窗
+            genBtn.setAttribute('onclick', `forumOpenGenCountModal('home')`);
         } else if (tab === 'fanfic') {
             // 同人区显示专属的两个按键
             customFanficBtn.style.display = 'block';
@@ -21592,7 +21628,7 @@ function forumSaveSettings() {
 }
 
 // --- 核心：高强度活人感 AI 生成 (8帖 + 6评 + 绝对禁止生成User + 覆盖未收藏的旧帖) ---
-async function forumGenerateAIPosts(type) {
+async function forumGenerateAIPosts(type, min = 6, max = 10) {
     const apiConfig = await getActiveApiConfig('forum');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
@@ -21660,7 +21696,7 @@ async function forumGenerateAIPosts(type) {
         prompt += `\n${contextInfo}`;
         
         prompt += `【核心强制要求（最高优先级）】：\n`;
-        prompt += `1. 数量要求：必须一次性生成 6 到 10 条帖子！每条帖子必须包含至少 8 到 10 条评论！(减少数量防止截断)\n`;
+        prompt += `1. 数量要求：必须一次性生成 ${min} 到 ${max} 条帖子！每条帖子必须包含至少 8 到 10 条评论！(减少数量防止截断)\n`;
         prompt += `2. 角色穿插：发帖人和评论人中，必须穿插出现【你认识的熟人(NPC)】（如果有的话：${npcNames.join(', ')}），以及大量虚构的网友。请严格根据【全局角色关系网设定】来决定他们之间的互动态度（如：情侣会秀恩爱，仇人会互怼）。\n`;
         prompt += `3. 活人感：语气要极度口语化、有网感（如：笑死、救命、谁懂啊、破防了）。评论区要有互动感（网友互相回复、楼主回复网友）。\n`;
         prompt += `4. 【绝对禁止扮演用户】：上面提供的【关于我(User)的设定/马甲】仅供你作为背景参考（NPC可以发关于User的帖子或吐槽User）。但是，你绝对不能以 User（${userNames.join('、')}）的身份发帖或评论！User 会自己操作，不需要你代劳！所有发帖人和评论人只能是 NPC 或 虚构网友！\n`;                
@@ -21856,7 +21892,7 @@ function forumSaveFanficSettings() {
 }
 
 // --- 一键生成同人文 ---
-function forumDirectGenFanfic() {
+function forumDirectGenFanfic(min = 2, max = 3) {
     const charA = forumState.config.fanficCharA || '随机角色A';
     const charB = forumState.config.fanficCharB || '随机角色B';
     const trope = forumState.config.fanficTrope || '随机日常/发疯脑洞';
@@ -21894,11 +21930,11 @@ function forumDirectGenFanfic() {
         basePrompt += `\n${contextInfo}`;
     }
 
-    _executeGenFanfic(basePrompt);
+    _executeGenFanfic(basePrompt, min, max);
 }
 
 // 内部核心：执行同人文 API 请求 (覆盖未收藏的旧文)
-async function _executeGenFanfic(basePrompt) {
+async function _executeGenFanfic(basePrompt, min = 2, max = 3) {
     const apiConfig = await getActiveApiConfig('forum');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
@@ -21922,7 +21958,7 @@ async function _executeGenFanfic(basePrompt) {
 
         let prompt = basePrompt;
         prompt += `\n【核心强制要求（最高优先级）】：\n`;
-        prompt += `1. 数量与长度：必须一次性生成 2至3 篇不同视角的同人文！为了防止输出截断，每篇字数控制在 500-800 字左右，但必须保证故事结构完整！\n`;
+        prompt += `1. 数量与长度：必须一次性生成 ${min} 至 ${max} 篇不同视角的同人文！为了防止输出截断，每篇字数控制在 500-800 字左右，但必须保证故事结构完整！\n`;
         prompt += `2. 评论互动：每篇小说必须附带 3-5 条读者评论（虚构的网友名字），评论要像真实的追更读者（如：太太饿饿饭饭、神仙绝美爱情、刀死我了等）。\n`;
         prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
         prompt += `4. 返回纯 JSON 数组，格式如下：\n`;
@@ -22038,6 +22074,47 @@ async function _executeGenFanfic(basePrompt) {
         else wcShowError("生成失败，可能是字数太多导致截断");
     }
 }
+// ==========================================
+// 论坛新增：生成数量弹窗逻辑 (范围版)
+// ==========================================
+let forumPendingGenType = '';
+
+function forumOpenGenCountModal(type) {
+    forumPendingGenType = type;
+    const titleEl = document.getElementById('forum-gen-count-title');
+    const minInput = document.getElementById('forum-gen-count-min');
+    const maxInput = document.getElementById('forum-gen-count-max');
+    
+    if (type === 'home') {
+        titleEl.innerText = '生成主页帖子';
+        minInput.value = 6;
+        maxInput.value = 10;
+    } else if (type === 'fanfic') {
+        titleEl.innerText = '生成同人文';
+        minInput.value = 2;
+        maxInput.value = 3;
+    }
+    
+    document.getElementById('forum-gen-count-confirm').onclick = function() {
+        const min = parseInt(minInput.value) || (type === 'home' ? 6 : 2);
+        const max = parseInt(maxInput.value) || (type === 'home' ? 10 : 3);
+        
+        if (min > max) {
+            alert("最小值不能大于最大值哦~");
+            return;
+        }
+        
+        wcCloseModal('forum-modal-gen-count');
+        if (type === 'home') {
+            forumGenerateAIPosts('home', min, max);
+        } else if (type === 'fanfic') {
+            forumDirectGenFanfic(min, max);
+        }
+    };
+    
+    wcOpenModal('forum-modal-gen-count');
+}
+
 // ==========================================
 // 论坛私信系统 (会话列表 + 聊天界面)
 // ==========================================
