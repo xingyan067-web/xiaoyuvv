@@ -1619,26 +1619,46 @@
         <!-- 新增：音乐接口切换弹窗 -->
         <div id="music-modal-api-toggle" class="wc-modal hidden" style="z-index: 3900; align-items: center; justify-content: center;">
             <div class="wc-modal-content" style="width: 80%; max-width: 300px; border-radius: 16px; padding: 20px; background: #FFF; display: flex; flex-direction: column; align-items: center;">
-                <h3 style="margin-top: 0; margin-bottom: 20px; font-size: 18px; color: #111;">选择音乐接口</h3>
-                <div class="wc-ios-list-group" style="width: 100%; margin: 0; border-radius: 12px; overflow: hidden; border: 1px solid #EAEAEA;">
-                    <div class="wc-list-item center-content" onclick="musicSetApi('primary')" style="height: 50px; border-bottom: 1px solid #EAEAEA;">
-                        <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-primary-text">O.o汪汪源</span>
+                <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 18px; color: #111;">选择音乐接口</h3>
+                
+                <div class="wc-segmented-control" style="width: 100%; margin-bottom: 15px; background: #F5F5F5;">
+                    <div class="wc-segment-btn active" id="music-seg-search-api" onclick="musicToggleApiTab('search')">搜索接口</div>
+                    <div class="wc-segment-btn" id="music-seg-play-api" onclick="musicToggleApiTab('play')">播放源</div>
+                </div>
+
+                <!-- 搜索接口列表 -->
+                <div id="music-area-search-api" style="width: 100%;">
+                    <div class="wc-ios-list-group" style="width: 100%; margin: 0; border-radius: 12px; overflow: hidden; border: 1px solid #EAEAEA;">
+                        <div class="wc-list-item center-content" onclick="musicSetApi('primary')" style="height: 50px; border-bottom: 1px solid #EAEAEA;">
+                            <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-primary-text">O.o汪汪源</span>
+                        </div>
+                        <div class="wc-list-item center-content" onclick="musicSetApi('secondary')" style="height: 50px; border-bottom: 1px solid #EAEAEA;">
+                            <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-secondary-text">TvT喵喵源</span>
+                        </div>
+                        <div class="wc-list-item center-content" onclick="musicSetApi('tertiary')" style="height: 50px; border-bottom: 1px solid #EAEAEA;">
+                            <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-tertiary-text">ovo元元源</span>
+                        </div>
+                        <div class="wc-list-item center-content" onclick="musicSetApi('api4')" style="height: 50px; border-bottom: 1px solid #EAEAEA;">
+                            <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-api4-text">⁃ ω ⁃兔兔源</span>
+                        </div>
+                        <div class="wc-list-item center-content" onclick="musicSetApi('api5')" style="height: 50px;">
+                            <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-api5-text">˃ 𖥦 ˂鱼鱼源</span>
+                        </div>
                     </div>
-                    <div class="wc-list-item center-content" onclick="musicSetApi('secondary')" style="height: 50px; border-bottom: 1px solid #EAEAEA;">
-                        <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-secondary-text">TvT喵喵源</span>
+                </div>
+
+                <!-- 播放源列表 -->
+                <div id="music-area-play-api" style="width: 100%; display: none;">
+                    <div class="wc-ios-list-group" style="width: 100%; margin: 0; border-radius: 12px; overflow: hidden; border: 1px solid #EAEAEA;">
+                        <div class="wc-list-item center-content" onclick="musicSetPlayApi('miemie')" style="height: 50px; border-bottom: 1px solid #EAEAEA;">
+                            <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-play-api-miemie-text">咩咩源</span>
+                        </div>
+                        <div class="wc-list-item center-content" onclick="musicSetPlayApi('zhizhi')" style="height: 50px;">
+                            <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-play-api-zhizhi-text">吱吱源</span>
+                        </div>
                     </div>
-                    <div class="wc-list-item center-content" onclick="musicSetApi('tertiary')" style="height: 50px; border-bottom: 1px solid #EAEAEA;">
-                        <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-tertiary-text">ovo元元源</span>
-                    </div>
-                    <!-- 👇 新增的第四个接口按钮 👇 -->
-                    <div class="wc-list-item center-content" onclick="musicSetApi('api4')" style="height: 50px; border-bottom: 1px solid #EAEAEA;">
-                        <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-api4-text">⁃ ω ⁃兔兔源</span>
-                    </div>
-                    <!-- 👇 新增的第五个接口按钮 👇 -->
-                    <div class="wc-list-item center-content" onclick="musicSetApi('api5')" style="height: 50px;">
-                        <span style="font-size: 16px; color: #111; font-weight: 600;" id="music-api-api5-text">˃ 𖥦 ˂鱼鱼源</span>
-                    </div>
-                </div>                
+                </div>
+
                 <button class="wc-btn-secondary" style="width: 100%; margin-top: 15px; border-radius: 12px; padding: 12px; font-weight: bold; border: none;" onclick="wcCloseModal('music-modal-api-toggle')">取消</button>
             </div>
         </div>
@@ -4053,6 +4073,7 @@
                                 <label class="wc-form-label" style="color: #111; font-weight: bold;">关联面具 (提供你的马甲设定)</label>
                                 <div id="forum-setting-mask-list" class="wc-checkbox-list" style="max-height: 150px; background: #F9F9F9; border: 1px solid #F0F0F0;"></div>
                             </div>
+
                             <button class="wc-btn-primary" style="background: #111; color: #FFF;" onclick="forumSaveSettings()">保存设定</button>
                         </div>
                     </div>
@@ -4098,7 +4119,7 @@
 
                             <div class="wc-form-group">
                                 <label class="wc-form-label" style="font-weight: bold; color: #111;">扮演的角色 (面具)</label>
-                                <select id="forum-edit-mask-select" class="ios-select" style="background: #F5F5F5; border: 1px solid #EAEAEA;">
+                                <select id="forum-edit-mask-select" class="ios-select" style="background: #F5F5F5; border: 1px solid #EAEAEA;" onchange="forumHandleMaskChange(this.value)">
                                     <!-- JS 动态注入 -->
                                 </select>
                             </div>
@@ -4158,13 +4179,20 @@
                             <button class="wc-close-btn" onclick="wcCloseModal('forum-modal-gen-count')" style="position: absolute; right: 20px;">&times;</button>
                         </div>
                         <div class="wc-modal-body" style="padding: 24px 20px; background: #FAFAFA;">
-                            <label class="wc-form-label" style="font-weight: bold; color: #111; margin-bottom: 12px; display: block;">生成数量范围</label>
+                            <label class="wc-form-label" style="font-weight: bold; color: #111; margin-bottom: 12px; display: block;">生成帖子数量范围</label>
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <input type="number" id="forum-gen-count-min" class="wc-form-input" value="6" min="1" style="background: #FFF; border: 1px solid #E5E5EA; text-align: center; padding: 12px 8px;">
                                 <span style="color: #888; font-weight: bold;">至</span>
                                 <input type="number" id="forum-gen-count-max" class="wc-form-input" value="10" min="1" style="background: #FFF; border: 1px solid #E5E5EA; text-align: center; padding: 12px 8px;">
                             </div>
-                            <div style="font-size: 12px; color: #888; margin-top: 12px; line-height: 1.5;">* 建议主页贴设置在 6-10 之间，同人文设置在 1-3 之间。数量过多可能导致 AI 截断。</div>
+                            <div style="font-size: 12px; color: #888; margin-top: 12px; margin-bottom: 20px; line-height: 1.5;">* 建议主页贴设置在 6-10 之间，同人文设置在 1-3 之间。数量过多可能导致 AI 截断。</div>
+                            
+                            <label class="wc-form-label" style="font-weight: bold; color: #111; margin-bottom: 12px; display: block;">生成评论数量范围</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="number" id="forum-setting-comment-min" class="wc-form-input" placeholder="最少" value="3" style="background: #FFF; border: 1px solid #E5E5EA; text-align: center; padding: 12px 8px;">
+                                <span style="color: #888; font-weight: bold;">至</span>
+                                <input type="number" id="forum-setting-comment-max" class="wc-form-input" placeholder="最多" value="8" style="background: #FFF; border: 1px solid #E5E5EA; text-align: center; padding: 12px 8px;">
+                            </div>
                         </div>
                         <div style="padding: 15px 20px; background: #FFF; border-top: 1px solid #F0F0F0; display: flex; gap: 10px;">
                             <button class="wc-btn-secondary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; font-weight: bold;" onclick="wcCloseModal('forum-modal-gen-count')">取消</button>

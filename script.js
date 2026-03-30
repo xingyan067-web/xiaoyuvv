@@ -15521,9 +15521,10 @@ async function musicPlaySong(id, title, artist, cover) {
         musicUpdatePlayerUI();
         
         let songUrl = '';
+        const playBaseUrl = getMusicPlayApiBaseUrl();
         
         // 统一使用主接口获取播放链接
-        const res = await fetch(`https://api.qijieya.cn/meting/?server=netease&type=song&id=${id}`);
+        const res = await fetch(`${playBaseUrl}/?server=netease&type=song&id=${id}`);
         const data = await res.json();
         if (data && data.length > 0) {
             if (data[0].url) songUrl = data[0].url;
@@ -15577,9 +15578,10 @@ async function musicFetchLyrics(id) {
     
     try {
         let rawLyric = '';
+        const playBaseUrl = getMusicPlayApiBaseUrl();
         
         // 统一使用主接口获取歌词
-        const res = await fetch(`https://api.qijieya.cn/meting/?server=netease&type=lrc&id=${id}`);
+        const res = await fetch(`${playBaseUrl}/?server=netease&type=lrc&id=${id}`);
         const textData = await res.text();
         try {
             const jsonData = JSON.parse(textData);
@@ -16759,6 +16761,7 @@ if (capArtist) capArtist.innerText = musicState.currentSong.artist;
 }
 // 1. 定义全局变量记录当前使用的接口 (使用 localStorage 保存，刷新不重置)
 let currentMusicApi = localStorage.getItem('ins_music_api_preference') || 'primary'; // 'primary', 'secondary' 或 'tertiary'
+let currentMusicPlayApi = localStorage.getItem('ins_music_play_api_preference') || 'miemie';
 
 // 获取当前音乐接口的 BaseUrl
 function getMusicApiBaseUrl() {
@@ -16769,9 +16772,34 @@ function getMusicApiBaseUrl() {
     return 'https://zm.armoe.cn'; // primary
 }
 
+function getMusicPlayApiBaseUrl() {
+    if (currentMusicPlayApi === 'zhizhi') return 'https://api.msls1441.com';
+    return 'https://api.qijieya.cn/meting'; // miemie
+}
+
+function musicToggleApiTab(tab) {
+    document.getElementById('music-seg-search-api').classList.toggle('active', tab === 'search');
+    document.getElementById('music-seg-play-api').classList.toggle('active', tab === 'play');
+    document.getElementById('music-area-search-api').style.display = tab === 'search' ? 'block' : 'none';
+    document.getElementById('music-area-play-api').style.display = tab === 'play' ? 'block' : 'none';
+}
+
+function musicSetPlayApi(apiType) {
+    currentMusicPlayApi = apiType;
+    localStorage.setItem('ins_music_play_api_preference', apiType);
+    wcCloseModal('music-modal-api-toggle');
+    
+    let apiName = apiType === 'zhizhi' ? '吱吱源' : '咩咩源';
+    if(typeof showIosNotification === 'function') {
+        showIosNotification('播放源已切换', `当前正在使用: ${apiName}`);
+    } else {
+        alert(`已切换播放源至: ${apiName}`);
+    }
+}
+
 // 2. 打开切换弹窗
 function musicOpenApiToggleModal() {
-    // 更新选中状态的颜色
+    // 更新搜索接口选中状态
     document.getElementById('music-api-primary-text').style.color = currentMusicApi === 'primary' ? '#007AFF' : '#111';
     document.getElementById('music-api-secondary-text').style.color = currentMusicApi === 'secondary' ? '#007AFF' : '#111';
     
@@ -16784,6 +16812,15 @@ function musicOpenApiToggleModal() {
     const api5Text = document.getElementById('music-api-api5-text');
     if (api5Text) api5Text.style.color = currentMusicApi === 'api5' ? '#007AFF' : '#111';
     
+    // 更新播放源选中状态
+    const miemieText = document.getElementById('music-play-api-miemie-text');
+    if (miemieText) miemieText.style.color = currentMusicPlayApi === 'miemie' ? '#007AFF' : '#111';
+    const zhizhiText = document.getElementById('music-play-api-zhizhi-text');
+    if (zhizhiText) zhizhiText.style.color = currentMusicPlayApi === 'zhizhi' ? '#007AFF' : '#111';
+    
+    // 默认显示搜索接口 tab
+    musicToggleApiTab('search');
+    
     wcOpenModal('music-modal-api-toggle');
 }
 
@@ -16794,11 +16831,11 @@ function musicSetApi(apiType) {
     wcCloseModal('music-modal-api-toggle');
     
     // 提示用户
-    let apiName = '主接口';
-    if (apiType === 'secondary') apiName = '副接口';
-    if (apiType === 'tertiary') apiName = '第三接口';
-    if (apiType === 'api4') apiName = '第四接口';
-    if (apiType === 'api5') apiName = '第五接口';
+    let apiName = '小狗源';
+    if (apiType === 'secondary') apiName = '小猫源';
+    if (apiType === 'tertiary') apiName = '小元源';
+    if (apiType === 'api4') apiName = '小兔源';
+    if (apiType === 'api5') apiName = '小鱼源';
     
     if(typeof showIosNotification === 'function') {
         showIosNotification('音乐接口已切换', `当前正在使用: ${apiName}`);
@@ -21747,6 +21784,18 @@ function forumHandleImageUploadForProfile(input, type) {
     }
 }
 
+// 新增：切换面具时自动同步名称到输入框
+function forumHandleMaskChange(maskId) {
+    if (!maskId) {
+        document.getElementById('forum-edit-name').value = wcState.user.name;
+    } else {
+        const mask = wcState.masks.find(m => m.id == maskId);
+        if (mask) {
+            document.getElementById('forum-edit-name').value = mask.name;
+        }
+    }
+}
+
 function forumSaveProfile() {
     const name = document.getElementById('forum-edit-name').value.trim();
     const handle = document.getElementById('forum-edit-handle').value.trim();
@@ -21768,7 +21817,8 @@ function forumSaveProfile() {
         const mask = wcState.masks.find(m => m.id == maskId);
         if (mask) {
             forumState.profile.boundMaskId = mask.id;
-            forumState.profile.name = mask.name;
+            // 【修改点】：优先使用输入框的 name，如果为空才使用面具的 name
+            forumState.profile.name = name || mask.name;
             // 如果没有填新的头像，才使用面具头像
             if (!avatarUrl && !forumState.tempAvatar) {
                 forumState.profile.avatar = mask.avatar;
@@ -21777,7 +21827,8 @@ function forumSaveProfile() {
     }
 
     // 2. 处理手动修改的名称和签名
-    if (name && !maskId) forumState.profile.name = name;
+    // 【修改点】：去掉了 !maskId 的限制，让选择面具时也能修改名称
+    if (name) forumState.profile.name = name;
     if (handle) forumState.profile.handle = handle.startsWith('@') ? handle : '@' + handle;
     if (bio) forumState.profile.bio = bio;
     
@@ -25026,7 +25077,7 @@ function wcGenerateContactsHeaderHTML() {
             </div>
             <!-- 修改：让分组和关系网图标在同一行，且图标无背景包裹 -->
             <div class="contacts-tabs-row" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                <div style="display: flex; gap: 24px; overflow-x: auto; scrollbar-width: none; flex: 1;">
+                <div style="display: flex; gap: 24px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; -webkit-overflow-scrolling: touch;">
                     ${tabsHtml}
                 </div>
                 <div onclick="wcOpenRelationNetwork()" style="cursor: pointer; display: flex; align-items: center; justify-content: center; padding-left: 15px; flex-shrink: 0; color: #111;" title="角色关系网">
@@ -25090,7 +25141,7 @@ function wcGenerateChatHeaderHTML() {
     let tabsHtml = `<div class="new-tab ${wcState.activeChatGroup === 'All' ? 'active' : ''}" onclick="wcSwitchChatGroup('All')">All</div>`;
     
     (wcState.chatGroups || []).forEach(g => {
-        tabsHtml += `<div class="new-tab ${wcState.activeChatGroup === g ? 'active' : ''}" onclick="wcSwitchChatGroup('${g}')" ontouchstart="wcGroupTouchStart(event, '${g}')" ontouchend="wcGroupTouchEnd()">${g}</div>`;
+        tabsHtml += `<div class="new-tab ${wcState.activeChatGroup === g ? 'active' : ''}" onclick="wcSwitchChatGroup('${g}')" ontouchstart="wcGroupTouchStart(event, '${g}')" ontouchmove="wcGroupTouchEnd()" ontouchend="wcGroupTouchEnd()">${g}</div>`;
     });
     
     return `
