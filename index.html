@@ -1078,11 +1078,20 @@
 
                 <div class="settings-title">完整数据管理</div>
                 <div class="ios-list-group">
+                    <!-- 👇 新增：防清理保护 👇 -->
+                    <div class="ios-list-item" onclick="checkAndRequestPersistence()">
+                        <div class="ios-item-content">
+                            <span class="ios-item-label">防清理保护 (持久化存储)</span>
+                            <div class="ios-item-right" id="storage-persist-status" style="font-size: 14px;">检查中...</div>
+                        </div>
+                    </div>
+                    <!-- 👆 新增结束 👆 -->
                     <div class="ios-list-item" onclick="exportAllData()">
                         <div class="ios-item-content">
                             <span class="ios-item-label" style="color:var(--blue)">一键备份所有数据 (含WeChat)</span>
                         </div>
                     </div>
+
                     <div class="ios-list-item" onclick="document.getElementById('backupImportInput').click()">
                         <div class="ios-item-content">
                             <span class="ios-item-label" style="color:var(--blue)">恢复所有数据 (导入)</span>
@@ -4283,6 +4292,52 @@
                 }
             });
         }
+
+        // 👇 新增：请求浏览器持久化存储，防止数据被清空 👇
+        async function requestPersistentStorage() {
+            if (navigator.storage && navigator.storage.persist) {
+                const isPersisted = await navigator.storage.persisted();
+                if (!isPersisted) {
+                    const result = await navigator.storage.persist();
+                    console.log(`持久化存储请求结果: ${result}`);
+                    return result;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        async function checkAndRequestPersistence() {
+            const statusEl = document.getElementById('storage-persist-status');
+            if (navigator.storage && navigator.storage.persist) {
+                let isPersisted = await navigator.storage.persisted();
+                if (!isPersisted) {
+                    isPersisted = await navigator.storage.persist();
+                }
+                if (statusEl) {
+                    statusEl.innerText = isPersisted ? "已开启" : "未开启(点击重试)";
+                    statusEl.style.color = isPersisted ? "var(--green)" : "var(--red)";
+                }
+                if(isPersisted) {
+                    alert("✅ 已成功开启防清理保护！\n浏览器在空间不足时将不会自动清空您的数据。");
+                } else {
+                    alert("❌ 开启失败。\n\n【强烈建议】：请点击浏览器底部的「分享」按钮，选择「添加到主屏幕」。从桌面图标打开本应用，即可获得永久存储权限，数据绝不丢失！");
+                }
+            } else {
+                if (statusEl) statusEl.innerText = "浏览器不支持";
+                alert("您的浏览器不支持持久化存储 API。\n建议将本网页「添加到主屏幕」以防数据丢失。");
+            }
+        }
+
+        window.addEventListener('load', async () => {
+            const isPersisted = await requestPersistentStorage();
+            const statusEl = document.getElementById('storage-persist-status');
+            if(statusEl) {
+                statusEl.innerText = isPersisted ? "已开启" : "未开启(点击开启)";
+                statusEl.style.color = isPersisted ? "var(--green)" : "#8e8e93";
+            }
+        });
+        // 👆 新增结束 👆
     </script>
     <!-- ================= 梦境系统 UI ================= -->
 <!-- 1. 梦境主页面 -->
