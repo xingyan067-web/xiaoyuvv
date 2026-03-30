@@ -488,7 +488,11 @@ updateAppViewportVars();
     const generalConfirmBtn = document.getElementById('wc-general-input-confirm');
     if (generalConfirmBtn) {
         generalConfirmBtn.onclick = function() {
-            const val = document.getElementById('wc-general-input-field').value;
+            const textInput = document.getElementById('wc-general-input-field');
+            const passInput = document.getElementById('wc-general-password-field');
+            // 动态判断当前显示的是哪个输入框，就取哪个的值
+            const val = (passInput && passInput.style.display === 'block') ? passInput.value : textInput.value;
+            
             if (wcState.generalInputCallback) {
                 wcState.generalInputCallback(val);
             }
@@ -6891,12 +6895,28 @@ function wcSaveMemorySettings() {
 // --- WeChat General Input ---
 function wcOpenGeneralInput(title, callback, isPassword = false) {
     document.getElementById('wc-general-input-title').innerText = title;
-    const input = document.getElementById('wc-general-input-field');
-    input.value = '';
-    input.type = isPassword ? 'password' : 'text';
+    const textInput = document.getElementById('wc-general-input-field');
+    const passInput = document.getElementById('wc-general-password-field');
+    
+    // 根据是否为密码模式，分别控制两个独立输入框的显隐
+    if (isPassword) {
+        if (textInput) textInput.style.display = 'none';
+        if (passInput) {
+            passInput.style.display = 'block';
+            passInput.value = '';
+            passInput.focus();
+        }
+    } else {
+        if (passInput) passInput.style.display = 'none';
+        if (textInput) {
+            textInput.style.display = 'block';
+            textInput.value = '';
+            textInput.focus();
+        }
+    }
+    
     wcState.generalInputCallback = callback;
     wcOpenModal('wc-modal-general-input');
-    input.focus();
 }
 
 // --- WeChat Transfer ---
