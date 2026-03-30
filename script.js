@@ -402,13 +402,15 @@ window.onload = async function() {
         }
     });
 
-// iOS / PWA 全屏与键盘自适应最终版
+// iOS / PWA 全屏与键盘自适应最终版 (兼容安卓防黑屏)
 function updateAppViewportVars() {
     const docStyle = document.documentElement.style;
+    // 👇 新增：精准判断是否为 iOS 设备
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     
-    if (window.visualViewport) {
+    if (isIOS && window.visualViewport) {
+        // 🍎 iOS 专属逻辑：绝对保留，绝不破坏你的完美适配！
         // 🔪 终极修复：用 screen.height 减去 visualViewport.height 来精准判断键盘！
-        // 之前用 innerHeight 减，在 iOS 上差值往往是 0，导致系统根本不知道键盘弹起了，所以弹窗死死卡在下面！
         const isKeyboardOpen = (window.screen.height - window.visualViewport.height) > 150;
         
         if (isKeyboardOpen) {
@@ -432,7 +434,9 @@ function updateAppViewportVars() {
         window.scrollTo(0, 0);
         document.body.scrollTop = 0;
     } else {
-        const fallbackHeight = Math.max(window.innerHeight, document.documentElement.clientHeight);
+        // 🤖 安卓及其他设备逻辑：安卓键盘弹出时会自动调整 innerHeight，直接使用即可
+        // 彻底解决安卓因为 screen.height 差值误判导致的底部大片黑屏！
+        const fallbackHeight = window.innerHeight;
         docStyle.setProperty('--app-height', `${fallbackHeight}px`);
     }
     
@@ -457,8 +461,12 @@ if (window.visualViewport) {
     
     // 恢复防滚动机制，配合正确的键盘高度计算，实现原生 App 体验
     window.visualViewport.addEventListener('scroll', () => {
-        window.scrollTo(0, 0);
-        document.body.scrollTop = 0;
+        // 👇 新增：仅在 iOS 上执行防滚动，安卓不需要，防止安卓滑动卡顿
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (isIOS) {
+            window.scrollTo(0, 0);
+            document.body.scrollTop = 0;
+        }
     });
 } else {
     window.addEventListener('resize', updateAppViewportVars);
@@ -3554,7 +3562,7 @@ function wcOpenChat(charId) {
 
     wcApplyChatConfig(char);
     wcRenderMessages(charId);
-    wcScrollToBottom();
+    wcScrollToBottom(true);
 }
 
 function wcApplyChatConfig(char) {
@@ -4658,9 +4666,9 @@ ${worldBookContent}
     -   **语义完整**: 确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。
 # 对话开始 (Conversation Start)
 // ...
-你现在将开始角色扮演。用户的消息在下方。请遵循以上所有规则，以你的角色身份进行回应。
-
-JSON 数组中的每个元素代表一条消息、表情包或动作指令。请严格遵守以下结构：
+你现在将开始角色扮演。用户的消息在下方。请遵循以上所有规则，以你的角色身份进行回应
+。
+JSON 数组中的每个元素代表一条消息、表情包或动作指令，请严格遵守以下结构：
 1. **文本消息**
    {"type":"text", "content":"完整的一句话或一段话。", "quote":"(可选)如果你想针对性地回复对方的某句话，可以在这里填入你要引用的内容，例如：User: 吃饭了吗"}
 2. **表情包**
@@ -4687,7 +4695,6 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令。请
    如果你想念User 或者你觉得当前氛围极佳，又或者有非常重要/暧昧的话想对 User 说，你可以主动向 User 发起语音通话！
    {"type":"call_invite", "content":"(这里写你发起通话时的内心OS，必须根据当前情境现编)"}
 9. **食谱互动** (按需使用)
-   如果你们聊到了吃饭、饿了，你可以发送你的今日食谱，或者修改User的食谱（比如觉得User吃得太少，强行加上肉）。
    发送你的食谱：{"type":"recipe_send", "b":"(具体的早餐)", "l":"(具体的午餐)", "d":"(具体的晚餐)", "content":"(发给User的话)"}
    修改User的食谱：{"type":"recipe_edit", "meal":"b/l/d", "newText":"(你修改后的内容)", "content":"(发给User的话)"}
 10. **主动点外卖** (按需使用)
@@ -8137,10 +8144,16 @@ function readTavernPNG(file) {
                         const textData = new Uint8Array(buffer, dataOffset + i + 1, length - i - 1);
                         const text = new TextDecoder('utf-8').decode(textData);
                         try {
-                            // 修复：使用 decodeURIComponent 和 escape 正确处理 UTF-8 中文 Base64 解码
-                            const decodedText = decodeURIComponent(escape(atob(text)));
+                            // 终极修复：将 Base64 转换为字节数组，再用 UTF-8 解码，完美兼容 Emoji 和中文
+                            const binaryStr = atob(text);
+                            const bytes = new Uint8Array(binaryStr.length);
+                            for (let j = 0; j < binaryStr.length; j++) {
+                                bytes[j] = binaryStr.charCodeAt(j);
+                            }
+                            const decodedText = new TextDecoder('utf-8').decode(bytes);
                             return resolve(JSON.parse(decodedText));
                         } catch (err) {
+                            // 兜底：如果不是 Base64 格式，直接尝试解析原文本
                             try { 
                                 return resolve(JSON.parse(text)); 
                             } catch(e) { 

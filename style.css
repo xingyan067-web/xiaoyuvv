@@ -679,14 +679,17 @@ input::-webkit-inner-spin-button {
 
 /* --- 模态框通用 --- */
 .settings-modal {
-    position: absolute; 
-    top: 0; left: 0; width: 100%; height: var(--app-height, 100vh); min-height: var(--app-height, 100vh);
+    position: fixed; /* 👈 核心修复1：从 absolute 改为 fixed，死死钉在屏幕上 */
+    top: 0; left: 0; right: 0; bottom: 0; /* 👈 核心修复2：锁定四个方向边界 */
+    width: 100vw; max-width: 100vw; /* 👈 核心修复3：严格限制宽度等于屏幕宽度 */
+    height: var(--app-height, 100vh); min-height: var(--app-height, 100vh);
     background-color: var(--bg-color); z-index: 1000;
     display: none; 
     opacity: 0;
     transform: scale(0.95);
     transition: opacity 0.2s ease, transform 0.2s ease;
     flex-direction: column; padding-top: env(safe-area-inset-top, 20px);
+    overflow-x: hidden;
 }
 .settings-modal.open { 
     display: flex; 
@@ -699,8 +702,14 @@ input::-webkit-inner-spin-button {
     transform: translateX(100%); 
     z-index: 1100; 
     opacity: 1; 
+    visibility: hidden; /* 👈 核心修复：关闭时彻底隐藏，防止浏览器原生全选时强行横向抓取 */
+    pointer-events: none;
 }
-.settings-modal.sub-page.open { transform: translateX(0); }
+.settings-modal.sub-page.open { 
+    transform: translateX(0); 
+    visibility: visible; /* 👈 核心修复：打开时恢复可见 */
+    pointer-events: auto;
+}
 
 .settings-header {
     padding: 0 15px; background: #fff; display: flex; justify-content: space-between; align-items: center;
@@ -715,6 +724,7 @@ input::-webkit-inner-spin-button {
 .settings-content { 
     flex: 1; 
     overflow-y: auto; 
+    overflow-x: hidden;
     padding: 20px; 
     padding-bottom: calc(100px + env(safe-area-inset-bottom)); 
     position: relative; 
