@@ -20353,7 +20353,9 @@ const forumState = {
         fanficStyle: '',
         fanficCharA: '',
         fanficCharB: '',
-        fanficTrope: ''
+        fanficTrope: '',
+        commentMin: 3,
+        commentMax: 8
     },
     posts: [], 
     privateChats: [], // 👈 修改这里：改为 privateChats，存储会话列表
@@ -21180,11 +21182,16 @@ window.forumTriggerReactionToUser = async function(postId, userCommentText) {
 
         let prompt = `你现在是一个社交论坛的后台引擎。用户（${forumState.profile.name}）刚刚在帖子里发表了一条评论。\n`;
         prompt += `【原帖发帖人】：${post.author.name}\n`;
+        prompt += `【原帖标题】：${post.title || '无题'}\n`;
         prompt += `【原帖内容】：\n${post.content}\n\n`;
         prompt += `【用户的评论】：\n${userCommentText}\n\n`;
         prompt += `${contextInfo}`;
         prompt += `【要求】：\n`;
-        prompt += `1. 请生成 5 到 10 条其他网友或 NPC 针对用户这条评论的【回复】。\n`;
+        
+        const cMin = forumState.config.commentMin !== undefined ? forumState.config.commentMin : 3;
+        const cMax = forumState.config.commentMax !== undefined ? forumState.config.commentMax : 8;
+        
+        prompt += `1. 请生成 ${cMin} 到 ${cMax} 条其他网友或 NPC 针对用户这条评论的【回复】。\n`;
         prompt += `2. 语气要极度口语化、有网感（如：确实、笑死、抱抱楼主等）。请注意【原帖发帖人】、评论人（User）和回复人之间的身份关系，绝对不要认错人！\n`;
         prompt += `3. 【私信掉落机制】：你有 35% 的概率生成一条发给用户的【私信】（比如有人想私下认识用户、或者 NPC 私下吐槽）。如果不生成私信，请将 privateMessage 设为 null。\n`;
         prompt += `4. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）发表评论！所有评论人和私信发送人只能是 NPC 或 虚构网友！\n`;
@@ -21328,8 +21335,12 @@ window.forumGenerateInteractions = async function(postId) {
         }
         contextInfo += wcGenerateRelationshipPrompt(forumState.config.charIds); // 注入关系网
 
-        let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子生成 8 到 15 条极具“活人感”的评论。\n`;
+        const cMin = forumState.config.commentMin !== undefined ? forumState.config.commentMin : 3;
+        const cMax = forumState.config.commentMax !== undefined ? forumState.config.commentMax : 8;
+
+        let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子生成 ${cMin} 到 ${cMax} 条极具“活人感”的评论。\n`;
         prompt += `【原帖发帖人】：${post.author.name}\n`;
+        prompt += `【帖子标题】：${post.title || '无题'}\n`;
         prompt += `【帖子内容】：\n${post.content}\n\n`;
         prompt += `${contextInfo}`;
         prompt += `【要求】：\n`;
@@ -21465,8 +21476,12 @@ window.forumGenerateMoreComments = async function(postId) {
 
         const existingComments = (post.comments || []).slice(-10).map(c => `${c.name}: ${c.content}`).join('\n');
 
-        let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子继续生成 5 到 10 条后续评论。\n`;
+        const cMin = forumState.config.commentMin !== undefined ? forumState.config.commentMin : 3;
+        const cMax = forumState.config.commentMax !== undefined ? forumState.config.commentMax : 8;
+
+        let prompt = `你现在是一个社交论坛的后台引擎。请为以下帖子继续生成 ${cMin} 到 ${cMax} 条后续评论。\n`;
         prompt += `【原帖发帖人】：${post.author.name}\n`;
+        prompt += `【帖子标题】：${post.title || '无题'}\n`;
         prompt += `【帖子内容】：\n${post.content}\n\n`;
         if (existingComments) {
             prompt += `【已有评论上下文】：\n${existingComments}\n\n`;
@@ -21902,8 +21917,11 @@ async function forumGenerateAIPosts(type, min = 6, max = 10) {
         
         prompt += `\n${contextInfo}`;
         
+        const cMin = forumState.config.commentMin !== undefined ? forumState.config.commentMin : 3;
+        const cMax = forumState.config.commentMax !== undefined ? forumState.config.commentMax : 8;
+
         prompt += `【核心强制要求（最高优先级）】：\n`;
-        prompt += `1. 数量要求：必须一次性生成 ${min} 到 ${max} 条帖子！每条帖子必须包含至少 8 到 10 条评论！(减少数量防止截断)\n`;
+        prompt += `1. 数量要求：必须一次性生成 ${min} 到 ${max} 条帖子！每条帖子必须包含 ${cMin} 到 ${cMax} 条评论！(减少数量防止截断)\n`;
         prompt += `2. 角色穿插：发帖人和评论人中，必须穿插出现【你认识的熟人(NPC)】（如果有的话：${npcNames.join(', ')}），以及大量虚构的网友。请严格根据【全局角色关系网设定】来决定他们之间的互动态度（如：情侣会秀恩爱，仇人会互怼）。\n`;
         prompt += `3. 活人感：语气要极度口语化、有网感（如：笑死、救命、谁懂啊、破防了）。评论区要有互动感（网友互相回复、楼主回复网友）。\n`;
         prompt += `4. 【绝对禁止扮演用户】：上面提供的【关于我(User)的设定/马甲】仅供你作为背景参考（NPC可以发关于User的帖子或吐槽User）。但是，你绝对不能以 User（${userNames.join('、')}）的身份发帖或评论！User 会自己操作，不需要你代劳！所有发帖人和评论人只能是 NPC 或 虚构网友！\n`;                
@@ -22163,10 +22181,13 @@ async function _executeGenFanfic(basePrompt, min = 2, max = 3) {
             return false;
         });
 
+        const cMin = forumState.config.commentMin !== undefined ? forumState.config.commentMin : 3;
+        const cMax = forumState.config.commentMax !== undefined ? forumState.config.commentMax : 8;
+
         let prompt = basePrompt;
         prompt += `\n【核心强制要求（最高优先级）】：\n`;
         prompt += `1. 数量与长度：必须一次性生成 ${min} 至 ${max} 篇不同视角的同人文！为了防止输出截断，每篇字数控制在 500-800 字左右，但必须保证故事结构完整！\n`;
-        prompt += `2. 评论互动：每篇小说必须附带 3-5 条读者评论（虚构的网友名字），评论要像真实的追更读者（如：太太饿饿饭饭、神仙绝美爱情、刀死我了等）。\n`;
+        prompt += `2. 评论互动：每篇小说必须附带 ${cMin} 到 ${cMax} 条读者评论（虚构的网友名字），评论要像真实的追更读者（如：太太饿饿饭饭、神仙绝美爱情、刀死我了等）。\n`;
         prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
         prompt += `4. 返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
@@ -22302,6 +22323,10 @@ function forumOpenGenCountModal(type) {
         maxInput.value = 3;
     }
     
+    // 读取评论数量设置
+    document.getElementById('forum-setting-comment-min').value = forumState.config.commentMin !== undefined ? forumState.config.commentMin : 3;
+    document.getElementById('forum-setting-comment-max').value = forumState.config.commentMax !== undefined ? forumState.config.commentMax : 8;
+    
     document.getElementById('forum-gen-count-confirm').onclick = function() {
         const min = parseInt(minInput.value) || (type === 'home' ? 6 : 2);
         const max = parseInt(maxInput.value) || (type === 'home' ? 10 : 3);
@@ -22310,6 +22335,11 @@ function forumOpenGenCountModal(type) {
             alert("最小值不能大于最大值哦~");
             return;
         }
+        
+        // 保存评论数量设置
+        forumState.config.commentMin = parseInt(document.getElementById('forum-setting-comment-min').value) || 3;
+        forumState.config.commentMax = parseInt(document.getElementById('forum-setting-comment-max').value) || 8;
+        forumSaveData();
         
         wcCloseModal('forum-modal-gen-count');
         if (type === 'home') {
