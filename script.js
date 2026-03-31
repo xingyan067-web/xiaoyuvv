@@ -8272,36 +8272,99 @@ function wcShowPhoneContactDetail(contact) {
     document.getElementById('wc-card-contact-name').innerText = contact.name;
     
     const descEl = document.getElementById('wc-card-contact-desc');
-    // 增加编辑提示图标和点击事件
     descEl.innerHTML = `${contact.desc || "暂无介绍"} <svg class="wc-icon" style="width:14px;height:14px;vertical-align:middle;margin-left:4px;color:#007AFF;cursor:pointer;" viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
     descEl.style.cursor = 'pointer';
-    
-    // 核心修改：限制最大高度，允许滚动，防止简介过长把底部按钮挤出屏幕
     descEl.style.maxHeight = '120px';
     descEl.style.overflowY = 'auto';
     descEl.style.display = 'block';
     descEl.style.wordBreak = 'break-word';
-    
     descEl.onclick = () => wcOpenContactDescEdit();
     
     const avatarEl = document.getElementById('wc-card-contact-avatar');
     avatarEl.style.background = 'transparent'; 
     
+    const actionsContainer = document.getElementById('wc-card-contact-actions');
+    actionsContainer.innerHTML = ''; // 清空旧按钮
+    
     if (contact.isUser) {
         const char = wcState.characters.find(c => c.id === wcState.editingCharId);
         const userAvatar = (char.chatConfig && char.chatConfig.userAvatar) ? char.chatConfig.userAvatar : wcState.user.avatar;
         avatarEl.innerHTML = `<img src="${userAvatar}" style="width:100%;height:100%;object-fit:cover;">`;
-        document.getElementById('wc-card-contact-actions').style.display = 'none';
+        actionsContainer.style.display = 'none';
     } else {
         let avatarUrl = contact.avatar || getRandomNpcAvatar();
         avatarEl.innerHTML = `<img src="${avatarUrl}" style="width:100%;height:100%;object-fit:cover;">`;
-        document.getElementById('wc-card-contact-actions').style.display = 'flex';
+        actionsContainer.style.display = 'flex';
+        
+        // 判断是否为真实角色 (通过 realCharId 或 名字匹配)
+        const isRealChar = contact.realCharId || wcState.characters.some(c => c.name === contact.name && !c.isGroup);
+        
+        // 发消息按钮
+        actionsContainer.innerHTML += `<button class="wc-ios-btn-block" style="background: #07C160; color: white; height: 40px; font-size: 14px;" onclick="wcInitiateSimChat('${contact.id}')">发消息</button>`;
+        
+        // 只有纯 NPC 才显示“添加至列表”
+        if (!isRealChar) {
+            actionsContainer.innerHTML += `<button class="wc-ios-btn-block" style="background: #fff; color: #000; border: 1px solid #ddd; height: 40px; font-size: 14px;" onclick="wcShareContactToMain()">添加至列表</button>`;
+        }
+        
+        actionsContainer.innerHTML += `<button class="wc-ios-btn-block" style="background: #fff; color: #000; border: 1px solid #ddd; height: 40px; font-size: 14px;" onclick="wcOpenShareCardModal()">分享名片</button>`;
+        actionsContainer.innerHTML += `<button class="wc-ios-btn-block" style="background: transparent; color: #FA5151; height: 30px; font-size: 14px; margin-top: 5px;" onclick="wcDeletePhoneContact()">删除好友</button>`;
     }
     
     const modal = document.getElementById('wc-modal-phone-contact-card');
+    
+    // 👇 核心修复：解除卡片的高度限制，让它根据按钮数量自动拉伸，防止按钮被挤出屏幕外 👇
+    const modalContent = modal.querySelector('.wc-modal-content');
+    if (modalContent) {
+        modalContent.style.height = 'auto';
+        modalContent.style.minHeight = '360px';
+    }
+    // 👆 修复结束 👆
+
     modal.style.display = 'flex'; 
     wcOpenModal('wc-modal-phone-contact-card');
 }
+
+// ==========================================
+// 新增：从通讯录主动发起聊天
+// ==========================================
+window.wcInitiateSimChat = function(contactId) {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.contacts) return;
+    
+    const contact = char.phoneData.contacts.find(c => c.id == contactId);
+    if (!contact) return;
+    
+    // 关闭联系人卡片弹窗
+    wcCloseModal('wc-modal-phone-contact-card');
+    
+    // 查找是否已经有和这个人的聊天记录
+    if (!char.phoneData.chats) char.phoneData.chats = [];
+    let chat = char.phoneData.chats.find(c => c.name === contact.name);
+    
+    // 如果没有，就当场新建一个会话
+    if (!chat) {
+        chat = {
+            id: Date.now() + Math.random(),
+            name: contact.name,
+            realCharId: contact.realCharId || null,
+            avatar: contact.avatar,
+            lastMsg: "",
+            time: "",
+            isGroup: contact.type === 'group',
+            history: []
+        };
+        char.phoneData.chats.unshift(chat); // 放到聊天列表最前面
+        wcSaveData();
+        wcRenderPhoneChats(); // 刷新聊天列表 UI
+    }
+    
+    // 切换到底部的“微信”Tab
+    wcSwitchPhoneTab('chat');
+    
+    // 直接打开这个聊天窗口
+    wcOpenSimChatDetailSaved(chat);
+};
 
 function wcOpenContactDescEdit() {
     if (!currentPhoneContact) return;
@@ -9603,8 +9666,13 @@ function wcRenderPhoneChats() {
             let avatarUrl = chat.avatar;
             if (!avatarUrl) {
                 const contact = char.phoneData.contacts ? char.phoneData.contacts.find(c => c.name === chat.name) : null;
+                // 👇 新增：直接去真实角色库里找，防止通讯录里没这个人但聊天列表里有 👇
+                const realChar = wcState.characters.find(c => c.name === chat.name && !c.isGroup);
+                
                 if (contact && contact.avatar) {
                     avatarUrl = contact.avatar;
+                } else if (realChar) {
+                    avatarUrl = realChar.avatar; // 强制使用真实头像
                 } else {
                     avatarUrl = getRandomNpcAvatar();
                 }
@@ -9691,6 +9759,43 @@ function wcSimSendMsg() {
         { hidden: true }
     );
 
+    // 👇 新增：跨角色消息同步逻辑 (蝴蝶效应) 👇
+    // 尝试寻找目标联系人是否为真实角色 (通过 realCharId 或 名字匹配)
+    const targetRealChar = wcState.characters.find(c => (chat.realCharId && c.id === chat.realCharId) || (c.name === chat.name && !c.isGroup));
+    
+    if (targetRealChar) {
+        // 1. 在目标角色的手机里，生成/更新与当前角色(char)的聊天记录
+        if (!targetRealChar.phoneData) targetRealChar.phoneData = {};
+        if (!targetRealChar.phoneData.chats) targetRealChar.phoneData.chats = [];
+        
+        let targetPhoneChat = targetRealChar.phoneData.chats.find(c => c.name === char.name);
+        if (!targetPhoneChat) {
+            targetPhoneChat = {
+                id: Date.now() + Math.random(),
+                name: char.name,
+                realCharId: char.id,
+                avatar: char.avatar,
+                lastMsg: "",
+                time: "",
+                isGroup: false,
+                history: []
+            };
+            targetRealChar.phoneData.chats.push(targetPhoneChat);
+        }
+        
+        // 写入消息 (在目标角色的手机里，这条消息是 'them' 发来的)
+        targetPhoneChat.history.push({ sender: 'them', content: text });
+        targetPhoneChat.lastMsg = text;
+        targetPhoneChat.time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        // 2. 给目标角色注入主聊天记忆，引发蝴蝶效应
+        wcAddMessage(targetRealChar.id, 'system', 'system', 
+            `[系统内部信息(仅AI可见)：你的朋通讯录好友"${char.name}" 刚刚在微信上给你发了一条消息: "${text}"。请在接下来和 User 的聊天中，自然地提及这件事，或者向 User 吐槽/分享 "${char.name}" 给你发的消息。]`, 
+            { hidden: true }
+        );
+    }
+    // 👆 新增结束 👆
+
     wcSaveData();
     
     const meAvatar = char.avatar;
@@ -9739,6 +9844,9 @@ async function wcSimTriggerAI() {
 
         let prompt = "";
         
+        // 👇 新增：查找对方是否为真实角色 👇
+        const targetRealChar = wcState.characters.find(c => (chat.realCharId && c.id === chat.realCharId) || (c.name === chat.name && !c.isGroup));
+
         if (chat.isGroup) {
             prompt += `你正在模拟一个名为【${chat.name}】的微信群聊。\n`;
             prompt += `群聊背景/简介：${chat.desc || '无'}\n`;
@@ -9750,12 +9858,41 @@ async function wcSimTriggerAI() {
             prompt += `3. 格式示例：[{"senderName":"张三", "content":"哈哈哈哈"}, {"senderName":"李四", "content":"确实"}]\n`;
         } else {
             // 单聊逻辑 - 史诗级强化防OOC
-            prompt += `【最高指令】：你现在的唯一身份是【${chat.name}】！\n`;
-            prompt += `【绝对禁止】：绝对禁止以【${char.name}】(手机主人) 或【User】(玩家) 的口吻回复！绝对禁止套用他们的人设和面具！\n`;
-            prompt += `【你的核心人设/简介】：${chat.desc || '普通朋友'}\n`;
-            prompt += wcGenerateRelationshipPrompt(); // 注入关系网
+            if (targetRealChar) {
+                // 🌟 对方是真实角色！读取 B 的完整设定，但对 A 的设定进行“降维/截断”以节省 Token 🌟
+                prompt += `【最高指令】：你现在的唯一身份是【${targetRealChar.name}】！\n`;
+                prompt += `【绝对禁止】：绝对禁止以【${char.name}】(手机主人) 或【User】(玩家) 的口吻回复！绝对禁止套用他们的人设和面具！\n`;
+                
+                // 1. 注入 B (回复方) 的完整设定
+                prompt += `\n=== 你的设定 (${targetRealChar.name}) ===\n`;
+                prompt += `【你的核心人设】：${targetRealChar.prompt}\n`;
+                const targetConfig = targetRealChar.chatConfig || {};
+                if (worldbookEntries.length > 0 && targetConfig.worldbookEntries && targetConfig.worldbookEntries.length > 0) {
+                    const linkedEntries = worldbookEntries.filter(e => targetConfig.worldbookEntries.includes(e.id.toString()));
+                    if (linkedEntries.length > 0) {
+                        prompt += "【你的世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n";
+                    }
+                }
 
-            prompt += `【任务】：请重点读取你的【核心人设/简介】和【最近聊天记录】，作为【${chat.name}】本人，回复 ${char.name} 的消息。必须符合你的人设口吻，严禁OOC！\n`;
+                // 2. 注入 A (手机主人) 的极简设定 (省 Token 核心杀招！)
+                // 截取 A 的人设前 200 个字符，足够让 AI 知道 A 是个什么性格的人，同时彻底丢弃 A 的世界书
+                const shortCharPrompt = char.prompt ? char.prompt.substring(0, 200).replace(/\n/g, ' ') + '...' : '未知';
+                prompt += `\n=== 你正在交谈的对象 (${char.name}) ===\n`;
+                prompt += `【对方的性格印象】：${shortCharPrompt}\n`;
+
+                // 3. 注入双方的关系网 (字数极少，性价比极高)
+                prompt += `\n=== 你们的关系 ===\n`;
+                prompt += wcGenerateRelationshipPrompt([targetRealChar.id.toString(), char.id.toString()]); 
+                
+                prompt += `【任务】：请作为【${targetRealChar.name}】本人，回复 ${char.name} 的消息。请结合你的设定和你们的关系给出真实反应，严禁OOC！\n`;
+            } else {
+                // 对方是纯 NPC，使用简短描述
+                prompt += `【最高指令】：你现在的唯一身份是【${chat.name}】！\n`;
+                prompt += `【绝对禁止】：绝对禁止以【${char.name}】(手机主人) 或【User】(玩家) 的口吻回复！绝对禁止套用他们的人设和面具！\n`;
+                prompt += `【你的核心人设/简介】：${chat.desc || '普通朋友'}\n`;
+                prompt += wcGenerateRelationshipPrompt(); // 注入全局关系网
+                prompt += `【任务】：请重点读取你的【核心人设/简介】和【最近聊天记录】，作为【${chat.name}】本人，回复 ${char.name} 的消息。必须符合你的人设口吻，严禁OOC！\n`;
+            }
             prompt += `【要求】：返回 JSON 数组，格式示例：[{"content":"好的"}]\n`;
         }
         
@@ -9867,6 +10004,33 @@ async function wcSimTriggerAI() {
                 
                 chat.history.push(newMsg);
                 
+                // 👇 新增：跨角色消息同步 (AI回复同步) 👇
+                if (targetRealChar && !chat.isGroup) {
+                    if (!targetRealChar.phoneData) targetRealChar.phoneData = {};
+                    if (!targetRealChar.phoneData.chats) targetRealChar.phoneData.chats = [];
+                    
+                    let targetPhoneChat = targetRealChar.phoneData.chats.find(c => c.name === char.name);
+                    if (!targetPhoneChat) {
+                        targetPhoneChat = {
+                            id: Date.now() + Math.random(),
+                            name: char.name,
+                            realCharId: char.id,
+                            avatar: char.avatar,
+                            lastMsg: "",
+                            time: "",
+                            isGroup: false,
+                            history: []
+                        };
+                        targetRealChar.phoneData.chats.push(targetPhoneChat);
+                    }
+                    
+                    // 写入消息 (在目标角色的手机里，这条消息是 'me' 发出的)
+                    targetPhoneChat.history.push({ sender: 'me', content: reply.content });
+                    targetPhoneChat.lastMsg = reply.content;
+                    targetPhoneChat.time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                }
+                // 👆 新增结束 👆
+
                 // 更新最后一条消息预览
                 let preview = reply.content;
                 if (chat.isGroup && reply.senderName) {
@@ -10031,7 +10195,7 @@ async function wcGeneratePhoneContacts() {
         const userName = chatConfig.userName || wcState.user.name;
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
 
-        // 核心修复：只读取关联的世界书
+        // 读取关联的世界书
         let wbInfo = "";
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
@@ -10040,9 +10204,32 @@ async function wcGeneratePhoneContacts() {
             }
         }
 
+        // 👇👇👇 核心杀招 1：提取同分组 + 关系网中的真实角色 👇👇👇
+        const relCharIds = new Set();
+        if (wcState.relationships) {
+            wcState.relationships.forEach(r => {
+                if (r.source === char.id && r.target !== 'user') relCharIds.add(r.target);
+                if (r.target === char.id && r.source !== 'user') relCharIds.add(r.source);
+            });
+        }
+
+        const realFriends = wcState.characters.filter(c => 
+            c.id !== char.id && !c.isGroup && 
+            (c.groupName === char.groupName || relCharIds.has(c.id)) && 
+            c.groupName !== 'All'
+        );
+
+        let groupCharsPrompt = "";
+        if (realFriends.length > 0) {
+            const friendInfo = realFriends.map(c => c.name).join('、');
+            groupCharsPrompt = `【最高强制指令：真实社交圈】\n你必须将以下真实好友加入到 'contacts' 列表中：[${friendInfo}]。\n你可以根据你的人设和你们的关系，给他们起一个符合你性格的【备注名】（填在 name 字段），但必须在 originalName 字段中填入他们的真实原名！在包含他们之后，你才可以自由发挥生成其他路人NPC凑够人数。\n`;
+        }
+        // 👆👆👆 提取结束 👆👆👆
+
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【重要：用户身份】\n用户(User)的名字是：${userName}。\n用户在你的生活中的角色/人设是：${userPersona}。\n`;
+        prompt += groupCharsPrompt; // 注入强指令
         
         prompt += `请生成你的微信通讯录数据。总人数在 ${min} 到 ${max} 之间。\n`;
         prompt += `【要求】：\n`;
@@ -10055,8 +10242,9 @@ async function wcGeneratePhoneContacts() {
         prompt += `{
   "userRemark": "给用户的备注",
   "contacts": [
-    {"name": "张三", "type": "friend", "desc": "童年玩伴"},
-    {"name": "冒险团", "type": "group", "desc": "工作群"}
+    {"name": "狗蛋(这是你给起的备注名)", "originalName": "李四(这是真实原名)", "type": "friend", "desc": "童年玩伴"},
+    {"name": "王五", "originalName": null, "type": "friend", "desc": "大学同学(如果是虚构NPC，originalName填null)"},
+    {"name": "冒险团", "originalName": null, "type": "group", "desc": "工作群"}
   ],
   "requests": [
     {"name": "神秘人", "desc": "在酒馆遇到的陌生人"}
@@ -10081,7 +10269,6 @@ async function wcGeneratePhoneContacts() {
         const result = JSON.parse(content);
 
         if (!char.phoneData) char.phoneData = {};
-        
         char.phoneData.userRemark = result.userRemark || userName;
 
         const userContact = {
@@ -10092,16 +10279,59 @@ async function wcGeneratePhoneContacts() {
             isUser: true 
         };
 
-        const newContacts = (result.contacts || []).map(c => ({ 
-            ...c, 
-            id: Date.now() + Math.random(),
-            avatar: getRandomNpcAvatar() 
-        }));
+        // 👇👇👇 核心杀招 2：实体纠正与严格去重 (支持备注名) 👇👇👇
+        let newContacts = [];
+        const usedRealCharIds = new Set();
+
+        (result.contacts || []).forEach(c => {
+            // 优先通过 originalName 匹配，其次通过 name 匹配
+            const realChar = realFriends.find(rc => 
+                (c.originalName && (c.originalName.includes(rc.name) || rc.name.includes(c.originalName))) || 
+                (c.name && (c.name.includes(rc.name) || rc.name.includes(c.name)))
+            );
+            
+            if (realChar) {
+                if (!usedRealCharIds.has(realChar.id)) {
+                    newContacts.push({
+                        ...c,
+                        id: Date.now() + Math.random(),
+                        name: c.name || realChar.name, // 保留 AI 生成的备注名作为显示名称
+                        realCharId: realChar.id, // 牢牢绑定真实 ID
+                        avatar: realChar.avatar
+                    });
+                    usedRealCharIds.add(realChar.id);
+                }
+            } else {
+                // 纯纯的 NPC
+                newContacts.push({
+                    ...c,
+                    id: Date.now() + Math.random(),
+                    realCharId: null,
+                    avatar: getRandomNpcAvatar()
+                });
+            }
+        });
+
+        // 终极兜底：如果 AI 漏掉了某些真实好友，强行塞进去！
+        realFriends.forEach(rc => {
+            if (!usedRealCharIds.has(rc.id)) {
+                newContacts.unshift({
+                    id: Date.now() + Math.random(),
+                    name: rc.name, // 没起备注就用原名
+                    desc: rc.note || "我的好友",
+                    type: 'friend',
+                    realCharId: rc.id,
+                    avatar: rc.avatar
+                });
+                usedRealCharIds.add(rc.id);
+            }
+        });
+        // 👆👆👆 兜底结束 👆👆👆
+
         char.phoneData.contacts = [userContact, ...newContacts];
 
         const newRequests = (result.requests || []).map(r => ({ ...r, id: Date.now() + Math.random(), status: 'pending' }));
         char.phoneData.friendRequests = newRequests;
-
         wcSaveData();
         wcCloseModal('wc-modal-gen-contacts');
         wcRenderPhoneContacts();
