@@ -9524,7 +9524,7 @@ async function wcGeneratePhoneChats() {
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
                 temperature: parseFloat(apiConfig.temp) || 0.8,
-                max_tokens: 4000
+                max_tokens: 6000
             })
         });
 
@@ -12490,7 +12490,7 @@ async function wcGeneratePrivacyAndFavorites() {
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
                 temperature: parseFloat(apiConfig.temp) || 0.8,
-                max_tokens: 4000
+                max_tokens: 10000
             })
         });
 
@@ -12923,7 +12923,7 @@ async function wcGeneratePhoneFavorites() {
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
                 temperature: parseFloat(apiConfig.temp) || 0.8,
-                max_tokens: 4000
+                max_tokens: 10000
             })
         });
 
@@ -13164,7 +13164,7 @@ async function wcGeneratePhoneBrowser() {
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
                 temperature: parseFloat(apiConfig.temp) || 0.8,
-                max_tokens: 4000
+                max_tokens: 6000
             })
         });
 
@@ -22299,7 +22299,7 @@ async function _executeGenFanfic(basePrompt, min = 2, max = 3) {
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
                 temperature: parseFloat(apiConfig.temp) || 0.8,
-                max_tokens: 4000 
+                max_tokens: 10000 
             })
         });
 
@@ -23856,6 +23856,13 @@ window.wcCloseMapView = function() {
 // 新增：API 报错弹窗控制逻辑
 // ==========================================
 window.showApiErrorModal = function(errorMsg) {
+    // 👇 新增：在弹出报错卡片时，强制隐藏底层的转圈 loading 动画
+    const loadingOverlay = document.getElementById('wc-ios-loading-overlay');
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+    }
+    // 👆 新增结束
+
     const modal = document.getElementById('api-error-modal');
     const textContainer = document.getElementById('api-error-text');
     const btnText = document.getElementById('copy-btn-text');
@@ -24804,7 +24811,7 @@ async function forumSubmitUrge() {
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
                 temperature: 0.8,
-                max_tokens: 4000
+                max_tokens: 10000
             })
         });
 
