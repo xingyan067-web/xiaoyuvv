@@ -4716,7 +4716,7 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令，请
    修改User的食谱：{"type":"recipe_edit", "meal":"b/l/d", "newText":"(你修改后的内容)", "content":"(发给User的话)"}
 10. **主动点外卖** (按需使用)
    如果你觉得User饿了，或者想给User一个惊喜，你可以主动给User点外卖！
-   {"type":"order_delivery", "foodName":"(这里写具体的外卖名称，必须根据当前情境现编，绝对不要照抄示例)", "price":"(合理的价格)", "msg":"(这里写你的外卖备注留言，必须根据当前情境现编，绝对不要照抄示例)"}
+   {"type":"order_delivery", "foodName":"(这里写具体的外卖名称，必须根据当前情境现编，绝对不要照抄示例)", "price":"(合理的价格)", "msg":"(这里写你的外卖备注留言，必须根据当前情境现编，绝对不要照抄示例)", "content":"(发给User的话，符合你的人设)"}
 `;
 
         // 注入 User 的食谱让 AI 感知
@@ -5484,7 +5484,7 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             
         // 👇 新增：解析 AI 主动点外卖 👇
         } else if (action.type === 'order_delivery') {
-            wcAddMessage(charId, 'them', 'text', "给你点了个外卖，注意接电话哦~", extra);
+            wcAddMessage(charId, 'them', 'text', action.content || "给你点了个外卖，注意接电话哦~", extra);
             
             const receiptData = {
                 logo: "FOOD DELIVERY",
