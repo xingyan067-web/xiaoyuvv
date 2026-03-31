@@ -1078,15 +1078,29 @@
 
                 <div class="settings-title">完整数据管理</div>
                 <div class="ios-list-group">
-                    <!-- 👇 新增：防清理保护 👇 -->
+                    <!-- 防清理保护 -->
                     <div class="ios-list-item" onclick="checkAndRequestPersistence()">
                         <div class="ios-item-content">
                             <span class="ios-item-label">防清理保护 (持久化存储)</span>
                             <div class="ios-item-right" id="storage-persist-status" style="font-size: 14px;">检查中...</div>
                         </div>
                     </div>
-                    <!-- 👆 新增结束 👆 -->
-                    <div class="ios-list-item" onclick="exportAllData()">
+                    <!-- 👇 新增：上次备份时间 👇 -->
+                    <div class="ios-list-item">
+                        <div class="ios-item-content">
+                            <span class="ios-item-label">上次备份时间</span>
+                            <div class="ios-item-right" id="last-backup-time-display" style="font-size: 13px;">无记录</div>
+                        </div>
+                    </div>
+                    <!-- 👇 新增：定时提醒备份 👇 -->
+                    <div class="ios-list-item" onclick="openBackupReminderSettings()">
+                        <div class="ios-item-content">
+                            <span class="ios-item-label">定时提醒备份</span>
+                            <div class="ios-item-right" id="backup-reminder-status" style="font-size: 14px;">未开启<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
+                        </div>
+                    </div>
+                    <!-- 修改：将 exportAllData 改为 exportAllDataWrapper 以便记录时间 -->
+                    <div class="ios-list-item" onclick="exportAllDataWrapper()">
                         <div class="ios-item-content">
                             <span class="ios-item-label" style="color:var(--blue)">一键备份所有数据 (含WeChat)</span>
                         </div>
@@ -4369,6 +4383,168 @@
             }
         });
         // 👆 新增结束 👆
+                // ==========================================
+        // 👇 新增：定时备份提醒逻辑 👇
+        // ==========================================
+        
+        // 包装原有的导出函数，用于记录备份时间
+        async function exportAllDataWrapper() {
+            if(typeof exportAllData === 'function') {
+                const result = await exportAllData();
+                // 只有当用户没有点击取消时，才更新备份时间
+                if (result !== false) {
+                    const now = new Date().getTime();
+                    localStorage.setItem('last_backup_time', now);
+                    updateLastBackupDisplay();
+                }
+            } else {
+                alert("未找到导出函数，请检查 script.js");
+            }
+        }
+
+        // 更新上次备份时间显示
+        function updateLastBackupDisplay() {
+            const lastTime = localStorage.getItem('last_backup_time');
+            const display = document.getElementById('last-backup-time-display');
+            if(display) {
+                if(lastTime) {
+                    const d = new Date(parseInt(lastTime));
+                    // 格式化为：YYYY/MM/DD HH:mm
+                    display.innerText = d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate() + ' ' + 
+                                      d.getHours().toString().padStart(2, '0') + ':' + 
+                                      d.getMinutes().toString().padStart(2, '0');
+                } else {
+                    display.innerText = "无记录";
+                }
+            }
+        }
+
+        // 打开设置弹窗并加载当前设置
+        function openBackupReminderSettings() {
+            const settingsStr = localStorage.getItem('backup_reminder_settings');
+            const settings = settingsStr ? JSON.parse(settingsStr) : { enabled: false, type: 'interval', days: 3, time: '20:00' };
+            
+            document.getElementById('toggle-backup-reminder').checked = settings.enabled;
+            document.getElementById('backup-reminder-type').value = settings.type;
+            document.getElementById('backup-reminder-days').value = settings.days;
+            document.getElementById('backup-reminder-time').value = settings.time;
+            
+            toggleBackupReminderInputs();
+            document.getElementById('modal-backup-reminder-settings').classList.remove('hidden');
+        }
+
+        // 切换输入框显示
+        function toggleBackupReminderInputs() {
+            const type = document.getElementById('backup-reminder-type').value;
+            document.getElementById('backup-reminder-interval-input').style.display = type === 'interval' ? 'block' : 'none';
+            document.getElementById('backup-reminder-daily-input').style.display = type === 'daily' ? 'block' : 'none';
+        }
+
+        // 保存设置
+        function saveBackupReminderSettings() {
+            const settings = {
+                enabled: document.getElementById('toggle-backup-reminder').checked,
+                type: document.getElementById('backup-reminder-type').value,
+                days: document.getElementById('backup-reminder-days').value || 3,
+                time: document.getElementById('backup-reminder-time').value || '20:00'
+            };
+            localStorage.setItem('backup_reminder_settings', JSON.stringify(settings));
+            updateBackupReminderStatus();
+            document.getElementById('modal-backup-reminder-settings').classList.add('hidden');
+            alert("备份提醒设置已保存！");
+        }
+
+        // 更新设置项的文字状态
+        function updateBackupReminderStatus() {
+            const statusEl = document.getElementById('backup-reminder-status');
+            if(!statusEl) return;
+            const settingsStr = localStorage.getItem('backup_reminder_settings');
+            if(!settingsStr) {
+                statusEl.innerHTML = '未开启<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>';
+                return;
+            }
+            const settings = JSON.parse(settingsStr);
+            if(settings.enabled) {
+                statusEl.innerHTML = (settings.type === 'interval' ? `每 ${settings.days} 天` : `每天 ${settings.time}`) + '<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>';
+                statusEl.style.color = "var(--blue)";
+            } else {
+                statusEl.innerHTML = '未开启<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>';
+                statusEl.style.color = "#8e8e93";
+            }
+        }
+
+        // 检查是否需要提醒
+        function checkBackupReminder() {
+            const settingsStr = localStorage.getItem('backup_reminder_settings');
+            if(!settingsStr) return;
+            const settings = JSON.parse(settingsStr);
+            if(!settings.enabled) return;
+
+            const lastTime = parseInt(localStorage.getItem('last_backup_time') || '0');
+            const now = new Date();
+            const nowTime = now.getTime();
+
+            // 检查是否在稍后提醒的冷却期内 (4小时)
+            const snoozeTime = parseInt(localStorage.getItem('backup_snooze_time') || '0');
+            if(nowTime < snoozeTime) return;
+
+            let shouldRemind = false;
+
+            if(settings.type === 'interval') {
+                const days = parseInt(settings.days || 3);
+                const intervalMs = days * 24 * 60 * 60 * 1000;
+                // 如果距离上次备份超过了设定的天数
+                if(nowTime - lastTime > intervalMs) {
+                    shouldRemind = true;
+                }
+            } else if (settings.type === 'daily') {
+                const lastRemindDay = localStorage.getItem('last_remind_day');
+                const todayStr = now.toLocaleDateString();
+                
+                // 如果今天还没提醒过
+                if(lastRemindDay !== todayStr) {
+                    const [targetH, targetM] = (settings.time || "20:00").split(':').map(Number);
+                    // 如果当前时间超过了设定的时间
+                    if(now.getHours() > targetH || (now.getHours() === targetH && now.getMinutes() >= targetM)) {
+                        shouldRemind = true;
+                    }
+                }
+            }
+
+            if(shouldRemind) {
+                document.getElementById('modal-backup-alert').classList.remove('hidden');
+            }
+        }
+
+        // 弹窗：立即备份
+        function executeBackupFromReminder() {
+            document.getElementById('modal-backup-alert').classList.add('hidden');
+            // 记录今天已经提醒过 (针对每日提醒)
+            localStorage.setItem('last_remind_day', new Date().toLocaleDateString());
+            // 执行备份
+            exportAllDataWrapper();
+        }
+
+        // 弹窗：稍后提醒
+        function snoozeBackupReminder() {
+            document.getElementById('modal-backup-alert').classList.add('hidden');
+            // 记录今天已经提醒过 (针对每日提醒)
+            localStorage.setItem('last_remind_day', new Date().toLocaleDateString());
+            // 设置 4 小时后再次提醒
+            const snoozeUntil = new Date().getTime() + (4 * 60 * 60 * 1000);
+            localStorage.setItem('backup_snooze_time', snoozeUntil);
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', () => {
+            updateLastBackupDisplay();
+            updateBackupReminderStatus();
+            // 延迟 3 秒检查提醒，避免一打开页面就弹窗影响体验
+            setTimeout(checkBackupReminder, 3000);
+            // 每分钟检查一次
+            setInterval(checkBackupReminder, 60000);
+        });
+
     </script>
     <!-- ================= 梦境系统 UI ================= -->
 <!-- 1. 梦境主页面 -->
@@ -5019,6 +5195,57 @@
                 <!-- 动态渲染分组列表 -->
             </div>
         </div>
+    </div>
+</div>
+<!-- ========================================== -->
+<!-- 新增：备份提醒相关弹窗 -->
+<!-- ========================================== -->
+<!-- 备份提醒设置弹窗 -->
+<div id="modal-backup-reminder-settings" class="wc-modal hidden" style="z-index: 30000;">
+    <div class="wc-modal-content" style="background: #FFF; padding: 20px; border-radius: 16px; width: 85%; max-width: 320px;">
+        <h3 style="margin-top: 0; text-align: center; font-size: 18px; margin-bottom: 15px; color: #111;">备份提醒设置</h3>
+        
+        <div class="wc-form-group" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <label class="wc-form-label" style="margin: 0; color: #111; font-weight: bold;">开启提醒</label>
+            <input type="checkbox" id="toggle-backup-reminder" class="ls-toggle" style="width: 40px; height: 24px; margin: 0;">
+        </div>
+
+        <div class="wc-form-group" style="margin-bottom: 15px;">
+            <label class="wc-form-label" style="color: #888; font-size: 12px;">提醒方式</label>
+            <select id="backup-reminder-type" class="ios-select" style="background: #F5F5F5; border: 1px solid #EAEAEA;" onchange="toggleBackupReminderInputs()">
+                <option value="interval">按时间间隔 (如每3天)</option>
+                <option value="daily">每天固定时间</option>
+            </select>
+        </div>
+
+        <div id="backup-reminder-interval-input" class="wc-form-group">
+            <label class="wc-form-label" style="color: #888; font-size: 12px;">间隔天数</label>
+            <input type="number" id="backup-reminder-days" class="wc-form-input" placeholder="例如: 3" style="background: #F5F5F5; border: 1px solid #EAEAEA;">
+        </div>
+
+        <div id="backup-reminder-daily-input" class="wc-form-group" style="display: none;">
+            <label class="wc-form-label" style="color: #888; font-size: 12px;">提醒时间</label>
+            <input type="time" id="backup-reminder-time" class="wc-form-input" style="background: #F5F5F5; border: 1px solid #EAEAEA;">
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="wc-btn-secondary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; font-weight: bold;" onclick="document.getElementById('modal-backup-reminder-settings').classList.add('hidden')">取消</button>
+            <button class="wc-btn-primary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; background: #111; font-weight: bold;" onclick="saveBackupReminderSettings()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 备份提醒触发弹窗 -->
+<div id="modal-backup-alert" class="wc-modal hidden" style="z-index: 35000;">
+    <div class="wc-modal-content" style="background: #FFF; padding: 24px; border-radius: 20px; width: 85%; max-width: 320px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.2);">
+        <div style="width: 60px; height: 60px; background: #FFF0F0; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: #FF3B30;">
+            <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; stroke: currentColor; fill: none; stroke-width: 2;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        </div>
+        <h3 style="margin: 0 0 10px 0; font-size: 18px; color: #111;">小元提醒你该备份数据啦！</h3>
+        <p style="font-size: 14px; color: #666; line-height: 1.5; margin-bottom: 20px;">为了防止浏览器清空数据，这里提醒你需要备份一下！备份后请妥善保管下载的 JSON 文件哦！</p>
+        
+        <button class="wc-btn-primary" style="width: 100%; margin: 0 0 10px 0; border-radius: 12px; padding: 14px; background: #007AFF; font-weight: bold;" onclick="executeBackupFromReminder()">立即备份</button>
+        <button class="wc-btn-secondary" style="width: 100%; margin: 0; border-radius: 12px; padding: 14px; font-weight: bold; background: #F5F5F5; color: #888; border: none;" onclick="snoozeBackupReminder()">稍后提醒 (4小时后)</button>
     </div>
 </div>
 

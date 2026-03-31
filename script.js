@@ -1089,7 +1089,13 @@ async function exportThemeOnly() {
     const blob = new Blob([JSON.stringify(exportObj)], {type: 'application/json'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `theme_backup_${new Date().toISOString().slice(0,10)}.json`;
+    
+    let defaultName = `theme_backup_${new Date().toISOString().slice(0,10)}`;
+    let fileName = prompt("请输入备份文件名称：", defaultName);
+    if (fileName === null) return; // 用户点击取消，中止下载
+    fileName = fileName.trim() || defaultName; // 如果输入为空，使用默认名
+    
+    a.href = url; a.download = `${fileName}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
@@ -1200,9 +1206,16 @@ async function exportAllData() {
         const blob = new Blob([jsonString], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = `full_backup_${new Date().toISOString().slice(0,10)}.json`;
+        
+        let defaultName = `full_backup_${new Date().toISOString().slice(0,10)}`;
+        let fileName = prompt("请输入备份文件名称：", defaultName);
+        if (fileName === null) return false; // 【修改】：返回 false 告诉系统取消了
+        fileName = fileName.trim() || defaultName; 
+        
+        a.href = url; a.download = `${fileName}.json`;
         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
         
+        return true; // 【新增】：告诉系统备份成功
     } catch (error) {
         console.error("全局备份失败:", error);
         alert("全局备份失败: " + error.message);
@@ -7176,7 +7189,13 @@ async function wcExportData() {
         const blob = new Blob([jsonString], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = `wechat_backup_${new Date().toISOString().slice(0,10)}.json`;
+        
+        let defaultName = `wechat_backup_${new Date().toISOString().slice(0,10)}`;
+        let fileName = prompt("请输入备份文件名称：", defaultName);
+        if (fileName === null) return; // 用户点击取消，中止下载
+        fileName = fileName.trim() || defaultName; // 如果输入为空，使用默认名
+        
+        a.href = url; a.download = `${fileName}.json`;
         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
         
     } catch (error) {
