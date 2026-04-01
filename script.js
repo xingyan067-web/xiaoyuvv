@@ -3425,6 +3425,9 @@ function wcSwitchTab(tabId) {
                 }
             }
             wcOpenModal('wc-modal-post-moment');
+            // 👇 新增：设置发布页面的头像
+            const postAvatar = document.getElementById('ins-post-user-avatar');
+            if (postAvatar) postAvatar.src = wcState.user.avatar;
         };
         rightContainer.appendChild(btn);
         
@@ -3725,14 +3728,16 @@ function wcRenderMessages(charId, preserveScroll = false) {
     msgs.forEach((msg) => {
         if (msg.hidden) return;
 
-        if (msg.time - lastTime > 5 * 60 * 1000) {
+        // 判断与上一条消息的时间差是否大于 10 分钟 (10 * 60 * 1000)
+        if (lastTime !== 0 && (msg.time - lastTime > 10 * 60 * 1000)) {
             const timeDiv = document.createElement('div');
             timeDiv.className = 'wc-message-row system';
-            // 👇 这里把 wcFormatTime 改成了我们刚刚新建的 wcFormatSystemTime
             timeDiv.innerHTML = `<div class="wc-system-msg-text transparent">${wcFormatSystemTime(msg.time)}</div>`;
             container.insertBefore(timeDiv, anchor);
-            lastTime = msg.time;
         }
+        
+        // 🔪 核心修复：无论是否渲染居中时间戳，都将 lastTime 更新为当前消息的时间
+        lastTime = msg.time;
 
         const row = document.createElement('div');
         
@@ -4591,7 +4596,7 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
                 songListPrompt = `你**必须且只能**从以下你们的歌单中挑选一首歌：[${sampleSongs}]。绝对不可以随机编造歌曲！`;
             }
 
-            musicContextPrompt = `\n【主动邀请听歌特权 (强烈建议使用)】\n如果你觉得当前氛围很好，或者你想分享一首歌给User，你**必须**主动邀请User一起听歌！
+            musicContextPrompt = `\n【主动邀请听歌特权 (按需使用)】\n如果你觉得当前氛围很好，或者你想分享一首歌给User，你可以选择主动邀请User一起听歌！
 请在JSON数组中加入指令：{"type":"music_invite_user", "songName":"你想听的歌曲名", "content":"邀请的话语"}
 注意：
 1. 只要你提到了“一起听歌”，就必须带上这个 JSON 指令，否则 User 看不到邀请卡片！
@@ -7574,8 +7579,7 @@ async function wcHandleFileSelect(event, type) {
             wcRenderMoments();
         } else if (type === 'moment') {
             document.getElementById('wc-preview-moment-img').src = base64;
-            document.getElementById('wc-preview-moment-img').style.display = 'block';
-            document.getElementById('wc-icon-moment-upload').style.display = 'none';
+            document.getElementById('wc-area-local-img-box').style.display = 'block';
         } else if (type === 'mask') {
             document.getElementById('wc-preview-mask-avatar').src = base64;
         } else if (type === 'chat-img') {
@@ -11058,11 +11062,25 @@ function wcCloseModal(id) {
 
 function wcToggleMomentType(type) {
     wcState.momentType = type;
-    document.getElementById('wc-seg-local').className = type === 'local' ? 'wc-segment-btn active' : 'wc-segment-btn';
-    document.getElementById('wc-seg-desc').className = type === 'desc' ? 'wc-segment-btn active' : 'wc-segment-btn';
-    document.getElementById('wc-area-local-img').style.display = type === 'local' ? 'block' : 'none';
-    document.getElementById('wc-area-desc-img').style.display = type === 'desc' ? 'block' : 'none';
+    const descArea = document.getElementById('wc-area-desc-img');
+    const localImgBox = document.getElementById('wc-area-local-img-box');
+    
+    if (descArea) descArea.style.display = type === 'desc' ? 'block' : 'none';
+    
+    if (type === 'desc') {
+        if (localImgBox) localImgBox.style.display = 'none';
+    } else {
+        if (localImgBox && wcState.tempImage) localImgBox.style.display = 'block';
+    }
 }
+
+window.wcClearMomentImage = function() {
+    wcState.tempImage = '';
+    const previewImg = document.getElementById('wc-preview-moment-img');
+    const imgBox = document.getElementById('wc-area-local-img-box');
+    if (previewImg) previewImg.src = '';
+    if (imgBox) imgBox.style.display = 'none';
+};
 
 // ==========================================
 // 新增：朋友圈 AI 互动逻辑 (单条触发版)
@@ -13935,11 +13953,21 @@ async function wcGenerateShopItems() {
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
                 temperature: parseFloat(apiConfig.temp) || 0.8,
-                max_tokens: 4000
+                max_tokens: 10000
             })
         });
 
         const data = await response.json();
+        
+        // 👇👇👇 新增：核心修复，拦截并显示真实的 API 错误原因 👇👇👇
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。详细报错：" + JSON.stringify(data));
+        }
+        // 👆👆👆 新增结束 👆👆👆
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -15043,11 +15071,13 @@ function updateNotifUI() {
     const notifToggle = document.getElementById('toggle-real-notif');
     const alwaysNotifToggle = document.getElementById('toggle-always-real-notif');
     const keepAliveToggle = document.getElementById('toggle-keep-alive');
+    const autoKeepAliveToggle = document.getElementById('toggle-auto-keep-alive'); // 👈 新增
     const mainStatus = document.getElementById('main-notif-status');
 
     if (notifToggle) notifToggle.checked = isRealNotifEnabled;
     if (alwaysNotifToggle) alwaysNotifToggle.checked = isAlwaysRealNotifEnabled;
     if (keepAliveToggle) keepAliveToggle.checked = isKeepAliveEnabled;
+    if (autoKeepAliveToggle) autoKeepAliveToggle.checked = isAutoKeepAliveEnabled; // 👈 新增
 
     if (mainStatus) {
         let statusText = '未开启';
@@ -15190,13 +15220,20 @@ function testRealNotification() {
 // ==========================================
 let isKeepAliveEnabled = false;
 let keepAliveAudio = null;
+let isAutoKeepAliveEnabled = localStorage.getItem('ios_theme_auto_keep_alive') === 'true';
+let hasAttemptedAutoKeepAlive = false;
+
+function handleAutoKeepAliveToggle(checkbox) {
+    isAutoKeepAliveEnabled = checkbox.checked;
+    localStorage.setItem('ios_theme_auto_keep_alive', isAutoKeepAliveEnabled);
+}
 
 function handleKeepAliveToggle() {
     const keepAliveToggle = document.getElementById('toggle-keep-alive');
 
     if (isKeepAliveEnabled) {
         // --- 当前是开启状态，现在需要关闭 ---
-        isKeepAliveEnabled = false; // 先设置标志位，防止触发 pause 监听
+        isKeepAliveEnabled = false; 
         if (keepAliveAudio) {
             keepAliveAudio.pause();
         }
@@ -15205,13 +15242,12 @@ function handleKeepAliveToggle() {
     } else {
         // --- 当前是关闭状态，现在需要开启 ---
         if (!keepAliveAudio) {
-            // 【修复】：改用 Audio 对象，避免 video 标签在手机后台被系统强制暂停
             keepAliveAudio = new Audio();
             keepAliveAudio.src = "https://img.heliar.top/file/1772516513350_30min-osbvow_2.mp4";
             keepAliveAudio.loop = true;
-            keepAliveAudio.volume = 0.1; // 极低音量，不打扰用户
+            keepAliveAudio.volume = 0.1; 
             
-            // 【核心】：监听意外暂停（如切后台被系统暂停），强制恢复播放
+            // 监听意外暂停，强制恢复播放
             keepAliveAudio.addEventListener('pause', () => {
                 if (isKeepAliveEnabled) {
                     keepAliveAudio.play().catch(e => console.log("保活音频恢复失败:", e));
@@ -15219,35 +15255,51 @@ function handleKeepAliveToggle() {
             });
         }
 
-        // 强制触发网络加载
         keepAliveAudio.load();
-
-        // 尝试播放
         const playPromise = keepAliveAudio.play();
 
         if (playPromise !== undefined) {
             playPromise.then(() => {
-                // 播放成功！
                 isKeepAliveEnabled = true;
                 console.log("后台保活已成功开启。");
+                
+                // 【核心防杀补丁】：利用 MediaSession 欺骗系统这是一个音乐播放器，极大提升后台存活率
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: '小元机后台运行中',
+                        artist: '保持连接',
+                        album: 'Theme Studio',
+                        artwork: [
+                            { src: 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg', sizes: '512x512', type: 'image/jpeg' }
+                        ]
+                    });
+                }
+                
+                if (keepAliveToggle) keepAliveToggle.checked = true;
                 updateNotifUI();
             }).catch(error => {
-                // 播放失败 (通常是因为网络慢或浏览器严格限制)
                 console.error("后台保活开启失败:", error);
-                alert("开启保活失败！音频正在缓冲或被浏览器拦截，请稍等两秒后再次点击开关。");
-                
-                // 重置状态和UI
-                isKeepAliveEnabled = false;
-                if (keepAliveToggle) {
-                    keepAliveToggle.checked = false;
+                // 如果是用户手动点击失败才弹窗，自动触发失败不打扰用户
+                if (hasAttemptedAutoKeepAlive && event && event.type === 'click' && event.target.id === 'toggle-keep-alive') {
+                    alert("开启保活失败！音频正在缓冲或被浏览器拦截，请稍等两秒后再次点击开关。");
                 }
+                isKeepAliveEnabled = false;
+                if (keepAliveToggle) keepAliveToggle.checked = false;
                 updateNotifUI();
             });
         }
     }
 }
 
-// 【新增】：额外增加 visibilitychange 监听，确保切后台时继续播放
+// 【新增】：全局点击监听，用于自动开启保活（绕过浏览器自动播放限制）
+document.body.addEventListener('click', () => {
+    if (isAutoKeepAliveEnabled && !isKeepAliveEnabled && !hasAttemptedAutoKeepAlive) {
+        hasAttemptedAutoKeepAlive = true; // 标记已尝试，避免每次点击都触发
+        console.log("检测到用户交互，尝试自动开启后台保活...");
+        handleKeepAliveToggle();
+    }
+}, { capture: true });
+
 document.addEventListener('visibilitychange', () => {
     if (document.hidden && isKeepAliveEnabled && keepAliveAudio) {
         keepAliveAudio.play().catch(e => console.log("切后台恢复播放失败", e));
@@ -15703,7 +15755,11 @@ window.musicStopListenTogether = function() {
 // --- 搜索功能 ---
 function musicOpenSearch() {
     document.getElementById('music-search-overlay').classList.add('active');
-    document.getElementById('music-search-input').focus();
+    
+    // 延迟 300 毫秒，等待搜索面板的 CSS 滑动动画完全结束后，再弹出键盘
+    setTimeout(() => {
+        document.getElementById('music-search-input').focus();
+    }, 300);
 }
 
 function musicCloseSearch() {
@@ -25751,7 +25807,9 @@ document.addEventListener('click', (e) => {
 // 覆盖 wcPostMoment 函数以支持分组
 window.wcPostMoment = function() {
     const text = document.getElementById('wc-input-moment-text').value.trim();
-    const imageDesc = document.getElementById('wc-input-moment-image-desc').value.trim();
+    // 修复：使用正确的 ID
+    const descInput = document.getElementById('wc-input-moment-desc');
+    const imageDesc = descInput ? descInput.value.trim() : '';
     const groupSelect = document.getElementById('wc-input-moment-group');
     const visibleGroup = groupSelect ? groupSelect.value : 'All';
 
@@ -25777,13 +25835,10 @@ window.wcPostMoment = function() {
     wcSaveData();
     wcRenderMoments();
     
+    // 清空状态
     document.getElementById('wc-input-moment-text').value = '';
-    document.getElementById('wc-input-moment-image-desc').value = '';
-    const previewImg = document.getElementById('wc-preview-moment-img');
-    if(previewImg) previewImg.style.display = 'none';
-    const uploadIcon = document.getElementById('wc-icon-moment-upload');
-    if(uploadIcon) uploadIcon.style.display = 'flex';
-    wcState.tempImage = '';
+    if (descInput) descInput.value = '';
+    if (typeof wcClearMomentImage === 'function') wcClearMomentImage();
     
     wcCloseModal('wc-modal-post-moment');
 };

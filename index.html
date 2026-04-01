@@ -889,10 +889,20 @@
                                 <span class="ios-item-label">后台持续运行</span>
                                 <span style="font-size:11px; color:#8e8e93; margin-top:4px;">播放静音音频防止浏览器休眠</span>
                             </div>
-<input type="checkbox" id="toggle-keep-alive" onclick="handleKeepAliveToggle()">
-
+                            <input type="checkbox" id="toggle-keep-alive" onclick="handleKeepAliveToggle()">
                         </div>
                     </div>
+                    <!-- 👇 新增：自动开启保活开关 👇 -->
+                    <div class="ios-list-item">
+                        <div class="ios-item-content">
+                            <div style="display:flex; flex-direction:column;">
+                                <span class="ios-item-label">自动开启保活</span>
+                                <span style="font-size:11px; color:#8e8e93; margin-top:4px;">打开网页点击任意处自动启动保活</span>
+                            </div>
+                            <input type="checkbox" id="toggle-auto-keep-alive" onchange="handleAutoKeepAliveToggle(this)">
+                        </div>
+                    </div>
+                    <!-- 👆 新增结束 👆 -->
                 </div>
                 <div style="padding: 0 16px; font-size: 12px; color: #8e8e93; margin-top: 10px; line-height: 1.5;">
                     注：如果通知无法弹出，请检查浏览器或手机系统的通知权限是否已手动打开。部分手机系统可能会强杀后台，建议同时开启保活功能。
@@ -2622,36 +2632,68 @@
                         </div>
                     </div>
                 </div>
-                <!-- Post Moment Modal -->
-                <div id="wc-modal-post-moment" class="wc-modal-overlay">
-                    <div class="wc-modal-content" style="border-radius: 14px; margin: auto; position: relative; bottom: auto;">
-                        <h3>发布动态</h3>
-                        <div class="wc-form-group">
-                            <textarea id="wc-input-moment-text" class="wc-form-textarea" placeholder="这一刻的想法..."></textarea>
+                <!-- Post Moment Modal (INS 全屏风) -->
+                <div id="wc-modal-post-moment" class="wc-modal hidden" style="z-index: 3500; align-items: flex-end;">
+                    <div class="wc-modal-content ins-post-fullscreen-view" style="max-width: 100%; margin: 0;">
+                        <!-- 顶部导航 -->
+                        <div class="ins-post-header">
+                            <button class="ins-post-btn btn-cancel" onclick="wcCloseModal('wc-modal-post-moment')">取消</button>
+                            <div class="ins-post-title">新建动态</div>
+                            <button class="ins-post-btn btn-share" onclick="wcPostMoment()">发布</button>
                         </div>
-                        <div class="wc-segmented-control">
-                            <div class="wc-segment-btn active" id="wc-seg-local" onclick="wcToggleMomentType('local')">本地图片</div>
-                            <div class="wc-segment-btn" id="wc-seg-desc" onclick="wcToggleMomentType('desc')">图片描述</div>
-                        </div>
-                        <div id="wc-area-local-img" class="wc-form-group">
-                            <div class="wc-upload-rect-placeholder" onclick="wcTriggerUpload('moment')">
-                                <img id="wc-preview-moment-img" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
-                                <svg id="wc-icon-moment-upload" class="wc-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        
+                        <!-- 内容区 -->
+                        <div class="ins-post-content">
+                            <!-- 文本输入 -->
+                            <div class="ins-text-area">
+                                <img id="ins-post-user-avatar" src="" class="ins-avatar" alt="avatar">
+                                <div class="ins-textarea-wrapper">
+                                    <textarea id="wc-input-moment-text" class="ins-textarea" placeholder="分享这一刻的想法..."></textarea>
+                                </div>
                             </div>
-                            <label class="wc-form-label" style="text-align: center; font-size: 12px;">点击上传 (自动压缩)</label>
+                            
+                            <!-- 图片添加区 (横向滚动) -->
+                            <div class="ins-image-area">
+                                <!-- 本地图片预览 -->
+                                <div class="ins-image-box" id="wc-area-local-img-box" style="display: none;">
+                                    <img id="wc-preview-moment-img" src="" alt="preview">
+                                    <div class="ins-image-delete" onclick="wcClearMomentImage()">×</div>
+                                </div>
+                                
+                                <!-- 添加本地图片按钮 -->
+                                <div class="ins-add-image-btn" id="wc-icon-moment-upload" onclick="wcToggleMomentType('local'); wcTriggerUpload('moment');">
+                                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                    <span>添加图片</span>
+                                </div>
+                                
+                                <!-- 文字描述图片按钮 -->
+                                <div class="ins-add-image-btn" style="border-style: solid; background: #F9F9F9;" onclick="wcToggleMomentType('desc'); document.getElementById('wc-input-moment-desc').focus();">
+                                    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                    <span>文字描述</span>
+                                </div>
+                            </div>
+
+                            <!-- 文字描述输入框 (默认隐藏) -->
+                            <div id="wc-area-desc-img" style="display: none; padding: 15px 20px; border-bottom: 1px solid #F0F0F0; background: #FAFAFA;">
+                                <input type="text" id="wc-input-moment-desc" class="wc-form-input" placeholder="例如：一张在海边看日落的照片" style="background: #FFF; border: 1px solid #EAEAEA;">
+                                <div style="font-size: 11px; color: #888; margin-top: 6px;">AI 将根据描述生成图片占位符</div>
+                            </div>
+                            
+                            <!-- 选项列表 -->
+                            <div class="ins-options-list">
+                                <div class="ins-option-item">
+                                    <div class="ins-option-left">
+                                        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                                        可见范围
+                                    </div>
+                                    <div class="ins-option-right">
+                                        <select id="wc-input-moment-group" class="ios-select-clean" style="background: transparent; padding: 0; width: auto; text-align: right; color: #8E8E93; font-size: 14px; padding-right: 20px; background-position: right center;">
+                                            <option value="All">所有人可见</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div id="wc-area-desc-img" class="wc-form-group" style="display: none;">
-                            <input type="text" id="wc-input-moment-desc" class="wc-form-input" placeholder="例如：一张在海边看日落的照片">
-                            <label class="wc-form-label" style="text-align: center; font-size: 12px; margin-top: 5px;">将生成图片占位符</label>
-                        </div>
-                                    <div class="wc-form-group">
-                <label class="wc-form-label">可见分组</label>
-                <select id="wc-input-moment-group" class="ios-select-clean">
-                    <option value="All">所有人可见</option>
-                </select>
-            </div>
-                        <button class="wc-btn-primary" onclick="wcSaveMoment()">发布</button>
-                        <button class="wc-btn-primary wc-btn-secondary" onclick="wcCloseModal('wc-modal-post-moment')">取消</button>
                     </div>
                 </div>
 
