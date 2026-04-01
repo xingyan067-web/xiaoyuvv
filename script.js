@@ -3728,15 +3728,15 @@ function wcRenderMessages(charId, preserveScroll = false) {
     msgs.forEach((msg) => {
         if (msg.hidden) return;
 
-        // 判断与上一条消息的时间差是否大于 10 分钟 (10 * 60 * 1000)
-        if (lastTime !== 0 && (msg.time - lastTime > 10 * 60 * 1000)) {
+        // 🔪 修复：如果是第一条消息 (lastTime === 0) 或者 距离上一条超过 10 分钟，都显示时间戳
+        if (lastTime === 0 || (msg.time - lastTime > 10 * 60 * 1000)) {
             const timeDiv = document.createElement('div');
             timeDiv.className = 'wc-message-row system';
             timeDiv.innerHTML = `<div class="wc-system-msg-text transparent">${wcFormatSystemTime(msg.time)}</div>`;
             container.insertBefore(timeDiv, anchor);
         }
         
-        // 🔪 核心修复：无论是否渲染居中时间戳，都将 lastTime 更新为当前消息的时间
+        // 更新 lastTime 为当前消息的时间
         lastTime = msg.time;
 
         const row = document.createElement('div');
@@ -15247,12 +15247,8 @@ function handleKeepAliveToggle() {
             keepAliveAudio.loop = true;
             keepAliveAudio.volume = 0.1; 
             
-            // 监听意外暂停，强制恢复播放
-            keepAliveAudio.addEventListener('pause', () => {
-                if (isKeepAliveEnabled) {
-                    keepAliveAudio.play().catch(e => console.log("保活音频恢复失败:", e));
-                }
-            });
+            // 【已修改】：删除了强制抢夺音频焦点的流氓逻辑
+            // 这样打开抖音等其他媒体软件时，系统会自动暂停这里的保活音频，而不会互相打架暂停了。
         }
 
         keepAliveAudio.load();
