@@ -37,7 +37,7 @@ html, body {
     padding: 0;
     overflow: hidden;
     /* 🔪 核心修复：将透明改为黑色，防止 iOS 全屏模式下露出白色/黑色系统背景 */
-    background-color: #000000;
+    background-color: #FFFFFF;
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
     touch-action: manipulation;
