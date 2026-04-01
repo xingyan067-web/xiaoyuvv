@@ -1241,7 +1241,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 
 .wc-message-row { display: flex; align-items: flex-start; gap: 8px; max-width: 100%; position: relative; }
 .wc-message-row.me { flex-direction: row-reverse; }
-.wc-message-row.system { justify-content: center; flex-direction: row; align-items: center; margin: 10px 0; }
+.wc-message-row.system { justify-content: center; flex-direction: row; align-items: center; margin: 0; }
 .wc-chat-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 0.5px solid rgba(0,0,0,0.1); }
 
 .wc-msg-checkbox { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #C6C6C8; margin-right: 10px; display: none; flex-shrink: 0; align-self: center; }

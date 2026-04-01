@@ -3786,10 +3786,10 @@ function wcRenderMessages(charId, preserveScroll = false) {
         if (lastTime === 0 || (msg.time - lastTime > 10 * 60 * 1000)) {
             const timeDiv = document.createElement('div');
             timeDiv.className = 'wc-message-row system';
+            timeDiv.style.margin = '12px 0'; // 👈 单独给时间戳补偿上下间距
             timeDiv.innerHTML = `<div class="wc-system-msg-text transparent">${wcFormatSystemTime(msg.time)}</div>`;
             container.insertBefore(timeDiv, anchor);
-        }
-        
+        }        
         // 更新 lastTime 为当前消息的时间
         lastTime = msg.time;
 
