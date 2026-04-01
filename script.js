@@ -132,17 +132,28 @@ function loginWithDiscord() {
 /**
  * 验证用户输入的激活码
  */
+// 获取或生成当前设备的唯一 ID
+function getDeviceId() {
+    let deviceId = localStorage.getItem('ios_theme_device_id');
+    if (!deviceId) {
+        deviceId = 'dev_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        localStorage.setItem('ios_theme_device_id', deviceId);
+    }
+    return deviceId;
+}
+
+// 替换原来的 verifyActivation 函数
 function verifyActivation() {
     const btn = document.querySelector('.bingo-btn');
     const originalText = btn.innerText;
     btn.innerText = "验证中...";
     btn.disabled = true;
 
-    // 使用 setTimeout 让 UI 有时间渲染 "验证中..." 的文字
     setTimeout(async () => {
         try {
             const qq = document.getElementById('qq-input').value.trim();
             const userCode = document.getElementById('code-input').value.trim();
+            const deviceId = getDeviceId();
 
             if (!qq || !userCode) {
                 alert('请输入QQ号和激活码。');
@@ -150,37 +161,41 @@ function verifyActivation() {
                 return;
             }
 
-            // 计算期望的激活码
-            const expectedCode = generateCodeForQQ(qq);
+            // 👇 把这里的网址替换成你刚才在 Cloudflare 部署成功后得到的网址 👇
+            const API_URL = 'https://activation-api.xingyan067.workers.dev/verify';
 
-            if (userCode.toUpperCase() === expectedCode.toUpperCase()) {
-                
-                // 1. 立即写入 localStorage (改用 V2 的 Key)
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ qq: qq, code: userCode, deviceId: deviceId })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // 验证通过，且设备未超限
                 localStorage.setItem('ios_theme_activation_v2_fallback', 'true');
+                localStorage.setItem('current_bound_qq', qq); // 记录当前QQ，解绑时用
                 
-                // 2. 立即隐藏激活页面
                 const overlay = document.getElementById('activation-overlay');
                 if (overlay) overlay.style.display = 'none';
                 
-                alert('激活成功！欢迎使用。');
+                alert(data.message || '激活成功！欢迎使用。');
 
-                // 3. 异步后台保存 (改用 V2 的 Key)
                 try {
                     await idb.set('ios_theme_activation_v2_status', {
                         activated: true,
                         qq: qq,
                         activationTime: new Date().toISOString()
                     });
-                } catch (dbError) {
-                    console.warn("后台保存数据库失败，但不影响使用", dbError);
-                }
-
+                } catch (dbError) {}
             } else {
-                alert('激活失败！激活码或QQ号错误。');
+                // 验证失败（码错，或者设备超限）
+                alert(data.message || '激活失败！');
                 resetBtn();
             }
         } catch (error) {
-            alert("发生未知错误: " + error.message);
+            alert("网络连接失败，请检查网络或稍后再试。");
             resetBtn();
         }
     }, 100);
@@ -189,6 +204,45 @@ function verifyActivation() {
         btn.innerText = originalText;
         btn.disabled = false;
     }
+}
+
+// 新增：退出登录与解绑函数 (已修复无法退出的Bug)
+async function unbindDevice() {
+    const qq = localStorage.getItem('current_bound_qq');
+    const deviceId = getDeviceId();
+
+    if (!confirm("确定要退出登录并解绑当前设备吗？\n解绑后将腾出一个设备名额。")) {
+        return;
+    }
+
+    if (qq) {
+        try {
+            // 你的专属解绑接口
+            const UNBIND_URL = 'https://activation-api.xingyan067.workers.dev/unbind';
+            
+            await fetch(UNBIND_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ qq: qq, deviceId: deviceId })
+            });
+        } catch (e) {
+            console.warn("通知服务器解绑失败，但本地仍会退出", e);
+        }
+    }
+
+    // 1. 清除浅层缓存
+    localStorage.removeItem('ios_theme_activation_v2_fallback');
+    localStorage.removeItem('current_bound_qq');
+    
+    // 2. 核心修复：用覆盖的方式清除深层数据库缓存！
+    try {
+        await idb.set('ios_theme_activation_v2_status', { activated: false });
+    } catch(e) {
+        console.error("清除深层缓存失败", e);
+    }
+    
+    alert("设备已解绑并退出登录！");
+    location.reload(); // 刷新页面，这次一定会回到激活界面了
 }
 
 /**
