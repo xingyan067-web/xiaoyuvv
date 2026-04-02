@@ -18315,6 +18315,28 @@ async function handleDreamExtImport(event) {
             if (ext === 'json') {
                 try {
                     const jsonObj = JSON.parse(content);
+                    
+                    // 👇 新增：判断是否是我们导出的备份文件
+                    if (jsonObj.signature && jsonObj.signature.startsWith('dream_ext_')) {
+                        if (confirm("检测到这是梦境扩展组件的备份文件，是否直接导入并合并到现有列表中？")) {
+                            if (jsonObj.signature === 'dream_ext_all') {
+                                if (jsonObj.data.css) dreamState.ext.css.push(...jsonObj.data.css);
+                                if (jsonObj.data.html) dreamState.ext.html.push(...jsonObj.data.html);
+                                if (jsonObj.data.regex) dreamState.ext.regex.push(...jsonObj.data.regex);
+                            } else {
+                                const tab = jsonObj.signature.replace('dream_ext_', '');
+                                if (dreamState.ext[tab] && jsonObj.data) {
+                                    dreamState.ext[tab].push(...jsonObj.data);
+                                }
+                            }
+                            dreamSaveData();
+                            renderDreamExtList();
+                            alert("导入成功！");
+                            event.target.value = '';
+                            return;
+                        }
+                    }
+                    
                     if (jsonObj.html || jsonObj.content) {
                         content = jsonObj.html || jsonObj.content;
                     }
@@ -18331,6 +18353,72 @@ async function handleDreamExtImport(event) {
         alert("导入失败: " + e.message);
     }
     event.target.value = ''; 
+}
+
+// 👇 新增：导出当前 Tab 的扩展组件 (分别导出)
+function exportDreamExtCurrent() {
+    const tab = dreamState.ext.currentTab;
+    const data = dreamState.ext[tab];
+    if (!data || data.length === 0) {
+        return alert("当前分类下没有可导出的数据哦~");
+    }
+    
+    const exportObj = {
+        signature: `dream_ext_${tab}`,
+        timestamp: Date.now(),
+        data: data
+    };
+    
+    const blob = new Blob([JSON.stringify(exportObj, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    
+    let defaultName = `dream_${tab}_backup_${new Date().toISOString().slice(0,10)}`;
+    let fileName = prompt(`请输入导出的 ${tab.toUpperCase()} 备份文件名称：`, defaultName);
+    if (fileName === null) return;
+    fileName = fileName.trim() || defaultName;
+    
+    a.href = url; 
+    a.download = `${fileName}.json`;
+    document.body.appendChild(a); 
+    a.click(); 
+    document.body.removeChild(a); 
+    URL.revokeObjectURL(url);
+}
+
+// 👇 新增：导出所有扩展组件 (CSS + HTML + Regex 一键导出)
+function exportDreamExtAll() {
+    const data = {
+        css: dreamState.ext.css,
+        html: dreamState.ext.html,
+        regex: dreamState.ext.regex
+    };
+    
+    if (data.css.length === 0 && data.html.length === 0 && data.regex.length === 0) {
+        return alert("没有任何可导出的数据哦~");
+    }
+    
+    const exportObj = {
+        signature: 'dream_ext_all',
+        timestamp: Date.now(),
+        data: data
+    };
+    
+    const blob = new Blob([JSON.stringify(exportObj, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    
+    let defaultName = `dream_ext_all_backup_${new Date().toISOString().slice(0,10)}`;
+    let fileName = prompt("请输入导出的全部备份文件名称：", defaultName);
+    if (fileName === null) return;
+    fileName = fileName.trim() || defaultName;
+    
+    a.href = url; 
+    a.download = `${fileName}.json`;
+    document.body.appendChild(a); 
+    a.click(); 
+    document.body.removeChild(a); 
+    URL.revokeObjectURL(url);
 }
 
 // 新增：点击编辑按钮，将数据回填到输入框

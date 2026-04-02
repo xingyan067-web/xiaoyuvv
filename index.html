@@ -4720,7 +4720,13 @@
 <div id="dream-ext-modal" class="dream-modal-overlay">
     <div class="dream-modal-box" style="height: 85vh; display: flex; flex-direction: column;">
         <div class="dream-modal-header">
-            <span>EXTENSIONS</span>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span>EXTENSIONS</span>
+                <!-- 👇 新增：导出全部 SVG 按钮 (放在标题右边一点点) 👇 -->
+                <div class="dream-icon-btn" style="width: 24px; height: 24px; color: #888;" onclick="exportDreamExtAll()" title="一键导出全部预设">
+                    <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </div>
+            </div>
             <div class="dream-icon-btn" onclick="closeDreamExtModal()">
                 <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </div>
@@ -4736,12 +4742,21 @@
         <div class="dream-ext-content-area">
             <!-- 输入区 -->
             <div class="dream-ext-input-box">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                    <input type="text" id="dream-ext-name" placeholder="Name / 预设名称" class="dream-ext-name-input">
-                    <label class="dream-ext-import-btn">
-                        导入文件
-                        <input type="file" id="dream-ext-file" accept=".txt,.json,.docx" style="display: none;" onchange="handleDreamExtImport(event)">
-                    </label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 10px;">
+                    <input type="text" id="dream-ext-name" placeholder="Name / 预设名称" class="dream-ext-name-input" style="flex: 1;">
+                    
+                    <!-- 👇 新增：导入和导出当前的 SVG 按钮组 👇 -->
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <!-- 导入 SVG 按钮 (向上箭头) -->
+                        <label class="dream-icon-btn" style="width: 28px; height: 28px; cursor: pointer; background: #F0F0F0; border-radius: 8px;" title="导入预设">
+                            <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; stroke: #111; fill: none; stroke-width: 2;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            <input type="file" id="dream-ext-file" accept=".txt,.json,.docx" style="display: none;" onchange="handleDreamExtImport(event)">
+                        </label>
+                        <!-- 导出当前 SVG 按钮 (向下箭头) -->
+                        <div class="dream-icon-btn" style="width: 28px; height: 28px; cursor: pointer; background: #F0F0F0; border-radius: 8px;" onclick="exportDreamExtCurrent()" title="导出当前分类">
+                            <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; stroke: #111; fill: none; stroke-width: 2;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        </div>
+                    </div>
                 </div>
                 <!-- 新增：状态栏专属 Prompt 输入框 -->
                 <textarea id="dream-ext-prompt" placeholder="在此输入给AI的提示词（仅状态栏可用，告诉AI如何输出状态栏）..." style="display:none; height: 60px; margin-bottom: 10px; background: transparent; border: none; border-bottom: 1px dashed #CCC; font-size: 13px; color: #333; resize: none; outline: none; font-family: 'Courier New', Courier, monospace;"></textarea>
