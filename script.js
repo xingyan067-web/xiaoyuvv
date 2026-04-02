@@ -43,11 +43,11 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
-// 注册离线托管任务 (纯前端完美打包版，终极时间感知增强)
+// 注册离线托管任务 (纯前端打包版)
 async function registerOfflineProactiveTask(char) {
     try {
         if (!('Notification' in window)) {
-            alert("当前浏览器不支持系统通知！如果是苹果手机，请务必使用自带的 Safari 浏览器，点击底部「分享」-「添加到主屏幕」，从桌面打开本应用！");
+            alert("当前浏览器不支持系统通知！如果是苹果手机，请点击底部「分享」-「添加到主屏幕」，从桌面打开本应用！");
             return;
         }
         if (Notification.permission !== 'granted') {
@@ -64,67 +64,32 @@ async function registerOfflineProactiveTask(char) {
         const apiConfig = await getActiveApiConfig('chat');
         const chatConfig = char.chatConfig || {};
 
-        // 1. 读取上下文条数
+        // 1. 完美提取上下文 (根据设置的条数)
         let limit = chatConfig.contextLimit > 0 ? chatConfig.contextLimit : 30;
-        const allMsgs = wcState.chats[char.id] || [];
-        const recentMsgs = allMsgs.slice(-limit).map(m => {
+        const recentMsgs = (wcState.chats[char.id] || []).slice(-limit).map(m => {
             if (m.isError || m.type === 'system') return null;
-            let content = m.content;
-            if (m.type !== 'text') content = `[${m.type}]`;
-            return { sender: m.sender, content: content };
+            return { sender: m.sender, content: m.type !== 'text' ? `[${m.type}]` : m.content };
         }).filter(Boolean);
 
-        // 2. 智能计算距离上次聊天的时间差
-        const now = Date.now();
-        let lastTime = now;
-        for (let i = allMsgs.length - 1; i >= 0; i--) {
-            if (!allMsgs[i].isError && allMsgs[i].type !== 'system') {
-                lastTime = allMsgs[i].time;
-                break;
-            }
-        }
-        const gapMs = now - lastTime;
-        const gapMinutes = Math.floor(gapMs / 60000);
-        const gapHours = Math.floor(gapMinutes / 60);
-        const gapDays = Math.floor(gapHours / 24);
-        const remainHours = gapHours % 24;
-        const remainMinutes = gapMinutes % 60;
-
-        let timeGapStr = "";
-        if (gapDays > 0) timeGapStr += `${gapDays}天`;
-        if (remainHours > 0) timeGapStr += `${remainHours}小时`;
-        if (remainMinutes > 0 || timeGapStr === "") timeGapStr += `${remainMinutes}分钟`;
-
-        // 3. 读取世界书
+        // 2. 读取世界书
         let wbInfo = "";
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
-            if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
-            }
+            if (linkedEntries.length > 0) wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
         }
 
-        // 4. 读取回忆总结记忆条数
+        // 3. 读取回忆总结
         let memoryText = "暂无特殊记忆。";
         if (char.memories && char.memories.length > 0) {
             const readCount = chatConfig.aiMemoryCount !== undefined ? chatConfig.aiMemoryCount : 5;
-            if (readCount > 0) {
-                memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content.replace(/^\[.*?\]\s*/, '')}`).join('\n');
-            }
+            if (readCount > 0) memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content.replace(/^\[.*?\]\s*/, '')}`).join('\n');
         }
 
-        // 5. 组装终极 System Prompt (完美融合你的神级提示词)
+        // 4. 组装基础 System Prompt
         let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         systemPrompt += `【用户(User)设定】：${chatConfig.userPersona || wcState.user.persona || "无"}\n`;
         systemPrompt += `【你们的共同记忆（潜意识）】：\n${memoryText}\n\n`;
         
-        if (chatConfig.timePerceptionEnabled !== false) {
-            systemPrompt += `【系统通知：时间感知】\n`;
-            systemPrompt += `> 距离上次互动已过去 ${timeGapStr}。话题可能已中断，请以 ${char.name} 的身份自然地开启新话题或自然地延续之前的对话。\n`;
-            // 👇 完美融入大少爷的增强时间感知指令 👇
-            systemPrompt += `> 系统会在最后告诉你当前的现实时间。你应知晓当前时间，但除非对话内容明确相关，否则不要主动提及或评论时间，你的作息、行为、对话内容都必须符合当前的具体时间点和星期。\n`;
-        }
-
         systemPrompt += `【角色活人运转规则】\n`;
         systemPrompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
         systemPrompt += `> 绝对禁止长文本：你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息，禁止把所有短消息融合成一个长文本发送！\n`;
@@ -132,7 +97,6 @@ async function registerOfflineProactiveTask(char) {
         systemPrompt += `> 防重复：严禁输出重复的句子或重复的对话序列！\n`;
         systemPrompt += `> 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n`;
         systemPrompt += `> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！\n`;
-        systemPrompt += `返回格式示例：\n[\n  {"type":"text", "content":"第一句话"},\n  {"type":"text", "content":"第二句话"}\n]\n`;
 
         const payload = {
             deviceId: getDeviceId(),
@@ -141,9 +105,10 @@ async function registerOfflineProactiveTask(char) {
             charAvatar: char.avatar,
             systemPrompt: systemPrompt, 
             apiConfig: apiConfig,
-            context: recentMsgs, 
+            context: recentMsgs, // 完美的上下文数组
             intervalMinutes: chatConfig.proactiveInterval || 60,
-            subscription: subscription
+            subscription: subscription,
+            timePerceptionEnabled: chatConfig.timePerceptionEnabled !== false // 告诉云端是否开启时间感知
         };
 
         await fetch('https://honey-offline-brain.xingyan067.workers.dev/register', {
@@ -151,12 +116,12 @@ async function registerOfflineProactiveTask(char) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
         console.log("✅ 已成功将角色托管至云端大脑！");
     } catch (e) {
         console.error("❌ 托管至云端失败:", e);
     }
 }
+
 
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
