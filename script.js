@@ -71,43 +71,48 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
-// 注册离线托管任务 (OneSignal 优雅授权版)
-async function registerOfflineProactiveTask(char) {
-    try {
-        if (!window.OneSignal) {
+// 👇 新增：当用户点击开关时，瞬间请求通知权限（破解苹果拦截）
+async function handleOfflineToggle(checkbox) {
+    if (checkbox.checked) {
+        // 1. 检查 OneSignal 是否加载成功
+        if (!window.OneSignal || !window.OneSignal.Notifications) {
             alert("推送组件还在加载中，请稍等几秒钟再试哦~");
-            // 把开关自动拨回去
-            const toggle = document.getElementById('wc-setting-offline-proactive-toggle');
-            if (toggle) toggle.checked = false;
+            checkbox.checked = false;
             return;
         }
 
-        // 1. 检查是否已经有订阅 ID
-        let subscriptionId = window.OneSignal.User.PushSubscription.id;
+        // 2. 检查是否已经有权限
+        const hasPermission = window.OneSignal.Notifications.permission === "granted";
         
-        // 2. 如果没有 ID，说明还没授权，主动弹出系统授权框！
-        if (!subscriptionId) {
-            // 唤起 OneSignal 的授权弹窗
-            await window.OneSignal.Slidedown.promptPush();
-            
-            // 等待用户点击允许 (给2秒钟缓冲时间)
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            // 再次尝试获取 ID
-            subscriptionId = window.OneSignal.User.PushSubscription.id;
-            
-            if (!subscriptionId) {
-                alert("需要允许通知权限才能开启离线托管哦！请在手机设置中允许本网页发送通知。");
-                const toggle = document.getElementById('wc-setting-offline-proactive-toggle');
-                if (toggle) toggle.checked = false;
-                return;
+        if (!hasPermission) {
+            // 3. 瞬间请求原生系统权限！
+            const permission = await window.OneSignal.Notifications.requestPermission();
+            if (permission !== "granted") {
+                alert("需要允许通知权限才能开启离线托管哦！请在手机设置中允许本应用发送通知。");
+                checkbox.checked = false;
+            } else {
+                alert("✅ 通知权限已获取！请点击右上角保存设置生效。");
             }
+        }
+    }
+}
+
+// 👇 替换：精简版的注册离线托管任务
+async function registerOfflineProactiveTask(char) {
+    try {
+        if (!window.OneSignal || !window.OneSignal.User) return;
+
+        // 1. 获取 OneSignal 的订阅 ID
+        const subscriptionId = window.OneSignal.User.PushSubscription.id;
+        if (!subscriptionId) {
+            console.warn("未获取到订阅ID，可能未授权");
+            return;
         }
 
         const apiConfig = await getActiveApiConfig('chat');
         const chatConfig = char.chatConfig || {};
 
-        // 2. 完美提取上下文
+        // 2. 提取上下文
         let limit = chatConfig.contextLimit > 0 ? chatConfig.contextLimit : 30;
         const recentMsgs = (wcState.chats[char.id] || []).slice(-limit).map(m => {
             if (m.isError || m.type === 'system') return null;
@@ -132,14 +137,7 @@ async function registerOfflineProactiveTask(char) {
         let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         systemPrompt += `【用户(User)设定】：${chatConfig.userPersona || wcState.user.persona || "无"}\n`;
         systemPrompt += `【你们的共同记忆（潜意识）】：\n${memoryText}\n\n`;
-        
-        systemPrompt += `【角色活人运转规则】\n`;
-        systemPrompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
-        systemPrompt += `> 绝对禁止长文本：你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息，禁止把所有短消息融合成一个长文本发送！\n`;
-        systemPrompt += `> 关键规则：请保持回复消息数量的随机性和多样性，并且每一条消息都是数组中的一个独立对象。\n`;
-        systemPrompt += `> 防重复：严禁输出重复的句子或重复的对话序列！\n`;
-        systemPrompt += `> 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n`;
-        systemPrompt += `> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！\n`;
+        systemPrompt += `【角色活人运转规则】\n> 必须像真人一样聊天，拒绝机械回复。\n> 绝对禁止长文本：你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息，禁止把所有短消息融合成一个长文本发送！\n> 关键规则：请保持回复消息数量的随机性和多样性，并且每一条消息都是数组中的一个独立对象。\n> 防重复：严禁输出重复的句子或重复的对话序列！\n> 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！\n`;
 
         const payload = {
             deviceId: getDeviceId(),
@@ -150,7 +148,7 @@ async function registerOfflineProactiveTask(char) {
             apiConfig: apiConfig,
             context: recentMsgs, 
             intervalMinutes: chatConfig.proactiveInterval || 60,
-            subscriptionId: subscriptionId, // 🔪 核心修改：传 OneSignal ID
+            subscriptionId: subscriptionId, // 传 OneSignal ID
             timePerceptionEnabled: chatConfig.timePerceptionEnabled !== false
         };
 
@@ -160,12 +158,8 @@ async function registerOfflineProactiveTask(char) {
             body: JSON.stringify(payload)
         });
         console.log("✅ 已成功将角色托管至云端大脑！");
-        alert("✅ 离线托管已开启！杀掉后台也能收到消息啦！");
     } catch (e) {
         console.error("❌ 托管至云端失败:", e);
-        alert("开启失败，请检查网络或 API 设置。");
-        const toggle = document.getElementById('wc-setting-offline-proactive-toggle');
-        if (toggle) toggle.checked = false;
     }
 }
 
