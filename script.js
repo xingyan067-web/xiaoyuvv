@@ -1,17 +1,22 @@
 // 🔪 新增：OneSignal 初始化与页面切回监听
+// 🔪 新增：OneSignal 初始化与页面切回监听 (无铃铛纯净版)
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.init({
         appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
-        // 🔪 核心修复：适配你的 GitHub Pages 子目录路径
         serviceWorkerParam: { scope: "/xiaoyuvv/" },
-        serviceWorkerPath: "sw.js",
-        notifyButton: { 
-            enable: true,
-            displayPredicate: () => true // 强制显示铃铛
-        }
+        serviceWorkerPath: "sw.js"
     });
 });
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        if (typeof syncOfflineMessages === 'function') {
+            syncOfflineMessages();
+        }
+    }
+});
+
 
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
@@ -66,19 +71,37 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
-// 注册离线托管任务 (OneSignal 版)
+// 注册离线托管任务 (OneSignal 优雅授权版)
 async function registerOfflineProactiveTask(char) {
     try {
-        // 1. 获取 OneSignal 的订阅 ID (🔪 核心修复：增加安全检查)
-        if (!window.OneSignal || !window.OneSignal.User) {
+        if (!window.OneSignal) {
             alert("推送组件还在加载中，请稍等几秒钟再试哦~");
+            // 把开关自动拨回去
+            const toggle = document.getElementById('wc-setting-offline-proactive-toggle');
+            if (toggle) toggle.checked = false;
             return;
         }
 
-        const subscriptionId = window.OneSignal.User.PushSubscription.id;
+        // 1. 检查是否已经有订阅 ID
+        let subscriptionId = window.OneSignal.User.PushSubscription.id;
+        
+        // 2. 如果没有 ID，说明还没授权，主动弹出系统授权框！
         if (!subscriptionId) {
-            alert("请先点击右下角的小铃铛，允许通知权限哦！");
-            return;
+            // 唤起 OneSignal 的授权弹窗
+            await window.OneSignal.Slidedown.promptPush();
+            
+            // 等待用户点击允许 (给2秒钟缓冲时间)
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // 再次尝试获取 ID
+            subscriptionId = window.OneSignal.User.PushSubscription.id;
+            
+            if (!subscriptionId) {
+                alert("需要允许通知权限才能开启离线托管哦！请在手机设置中允许本网页发送通知。");
+                const toggle = document.getElementById('wc-setting-offline-proactive-toggle');
+                if (toggle) toggle.checked = false;
+                return;
+            }
         }
 
         const apiConfig = await getActiveApiConfig('chat');
@@ -137,11 +160,14 @@ async function registerOfflineProactiveTask(char) {
             body: JSON.stringify(payload)
         });
         console.log("✅ 已成功将角色托管至云端大脑！");
+        alert("✅ 离线托管已开启！杀掉后台也能收到消息啦！");
     } catch (e) {
         console.error("❌ 托管至云端失败:", e);
+        alert("开启失败，请检查网络或 API 设置。");
+        const toggle = document.getElementById('wc-setting-offline-proactive-toggle');
+        if (toggle) toggle.checked = false;
     }
 }
-
 
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
