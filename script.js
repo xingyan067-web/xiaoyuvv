@@ -1,11 +1,11 @@
-// 🔪 新增：OneSignal 初始化与页面切回监听
 // 🔪 新增：OneSignal 初始化与页面切回监听 (无铃铛纯净版)
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.init({
         appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
         serviceWorkerParam: { scope: "/xiaoyuvv/" },
-        serviceWorkerPath: "sw.js"
+        // 🔪 修复 1：必须使用绝对路径，否则 GitHub Pages 会报 404
+        serviceWorkerPath: "/xiaoyuvv/sw.js" 
     });
 });
 
@@ -17,32 +17,20 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
-
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-        if (typeof syncOfflineMessages === 'function') {
-            syncOfflineMessages(); // 切回前台立刻拉取消息
-        }
-    }
-});
-
 // ==========================================
 // 新增：iOS Standalone (全屏) 模式检测与防缩放
 // ==========================================
 function initStandaloneMode() {
-    // 1. 检测是否在添加到主屏幕的全屏模式下运行
     const isIosStandalone = window.navigator.standalone === true;
     const isMatchMediaStandalone = window.matchMedia('(display-mode: standalone)').matches;
 
     if (isIosStandalone || isMatchMediaStandalone) {
-        // 给 body 添加 class，方便 CSS 单独做刘海屏适配
         document.body.classList.add('ios-standalone');
         console.log("✅ 当前运行在 Standalone 全屏模式");
     } else {
         console.log("⚠️ 当前运行在普通浏览器模式，请添加到主屏幕体验全屏");
     }
 
-    // 2. 彻底禁止双指缩放 (Pinch-to-zoom)
     document.addEventListener('touchmove', function(event) {
         if (event.touches.length > 1) {
             event.preventDefault();
@@ -50,50 +38,40 @@ function initStandaloneMode() {
     }, { passive: false });
 }
 
-// 立即执行检测
 initStandaloneMode();
 
 // ==========================================
 // 真实离线主动消息核心逻辑
 // ==========================================
-// 填入你刚刚生成的公钥
-const PUBLIC_VAPID_KEY = 'BB2oiwNrgIbzyM2A0sognVlj8gIquNgowasnpEVycOSYiEhgMBS2FxzwMCKQhDJQJb8ijILPIYPUqJ1k87CAegc';
 
-// 辅助函数：转换密钥格式
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-}
-
-// 👇 新增：当用户点击开关时，瞬间请求通知权限（破解苹果拦截）
-async function handleOfflineToggle(checkbox) {
+// 👇 修复 2：直接调用苹果原生 API 弹窗，绝不使用 await 阻挡！
+function handleOfflineToggle(checkbox) {
     if (checkbox.checked) {
-        // 1. 检查 OneSignal 是否加载成功
-        if (!window.OneSignal || !window.OneSignal.Notifications) {
-            alert("推送组件还在加载中，请稍等几秒钟再试哦~");
+        // 1. 检查浏览器是否支持原生通知
+        if (!('Notification' in window)) {
+            alert("当前浏览器不支持通知功能，请确保已将网页「添加到主屏幕」！");
             checkbox.checked = false;
             return;
         }
 
-        // 2. 检查是否已经有权限
-        const hasPermission = window.OneSignal.Notifications.permission === "granted";
-        
-        if (!hasPermission) {
-            // 3. 瞬间请求原生系统权限！
-            const permission = await window.OneSignal.Notifications.requestPermission();
-            if (permission !== "granted") {
+        // 2. 检查当前权限状态
+        if (Notification.permission === 'granted') {
+            return; // 已经有权限了，什么都不用做
+        }
+
+        // 3. 瞬间请求原生系统权限！(破解苹果拦截的核心)
+        Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+                alert("✅ 通知权限已获取！请点击右上角保存设置生效。");
+            } else {
                 alert("需要允许通知权限才能开启离线托管哦！请在手机设置中允许本应用发送通知。");
                 checkbox.checked = false;
-            } else {
-                alert("✅ 通知权限已获取！请点击右上角保存设置生效。");
             }
-        }
+        }).catch(err => {
+            console.error(err);
+            alert("请求权限失败，请确保从桌面图标打开本应用！");
+            checkbox.checked = false;
+        });
     }
 }
 
@@ -105,7 +83,10 @@ async function registerOfflineProactiveTask(char) {
         // 1. 获取 OneSignal 的订阅 ID
         const subscriptionId = window.OneSignal.User.PushSubscription.id;
         if (!subscriptionId) {
-            console.warn("未获取到订阅ID，可能未授权");
+            // 🔪 修复 3：如果刚点完授权马上点保存，网络可能还没把 ID 拿回来，给个提示
+            alert("推送服务正在注册中，请稍等 3 秒钟再点击保存哦~");
+            const toggle = document.getElementById('wc-setting-offline-proactive-toggle');
+            if (toggle) toggle.checked = false;
             return;
         }
 
@@ -162,6 +143,17 @@ async function registerOfflineProactiveTask(char) {
         console.error("❌ 托管至云端失败:", e);
     }
 }
+// 监听网页从后台切回前台
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        console.log("网页切回前台，正在拉取离线消息...");
+        // 只要切回网页，立刻去云端拉取消息
+        if (typeof syncOfflineMessages === 'function') {
+            syncOfflineMessages();
+        }
+    }
+});
+
 
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
