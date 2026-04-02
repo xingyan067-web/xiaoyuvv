@@ -25,6 +25,139 @@ function initStandaloneMode() {
 // 立即执行检测
 initStandaloneMode();
 
+// ==========================================
+// 真实离线主动消息核心逻辑
+// ==========================================
+// 填入你刚刚生成的公钥
+const PUBLIC_VAPID_KEY = 'BB2oiwNrgIbzyM2A0sognVlj8gIquNgowasnpEVycOSYiEhgMBS2FxzwMCKQhDJQJb8ijILPIYPUqJ1k87CAegc';
+
+// 辅助函数：转换密钥格式
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+// 注册离线托管任务 (纯前端完美打包版，终极时间感知增强)
+async function registerOfflineProactiveTask(char) {
+    try {
+        if (!('Notification' in window)) {
+            alert("当前浏览器不支持系统通知！如果是苹果手机，请务必使用自带的 Safari 浏览器，点击底部「分享」-「添加到主屏幕」，从桌面打开本应用！");
+            return;
+        }
+        if (Notification.permission !== 'granted') {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') return;
+        }
+
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+        });
+
+        const apiConfig = await getActiveApiConfig('chat');
+        const chatConfig = char.chatConfig || {};
+
+        // 1. 读取上下文条数
+        let limit = chatConfig.contextLimit > 0 ? chatConfig.contextLimit : 30;
+        const allMsgs = wcState.chats[char.id] || [];
+        const recentMsgs = allMsgs.slice(-limit).map(m => {
+            if (m.isError || m.type === 'system') return null;
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return { sender: m.sender, content: content };
+        }).filter(Boolean);
+
+        // 2. 智能计算距离上次聊天的时间差
+        const now = Date.now();
+        let lastTime = now;
+        for (let i = allMsgs.length - 1; i >= 0; i--) {
+            if (!allMsgs[i].isError && allMsgs[i].type !== 'system') {
+                lastTime = allMsgs[i].time;
+                break;
+            }
+        }
+        const gapMs = now - lastTime;
+        const gapMinutes = Math.floor(gapMs / 60000);
+        const gapHours = Math.floor(gapMinutes / 60);
+        const gapDays = Math.floor(gapHours / 24);
+        const remainHours = gapHours % 24;
+        const remainMinutes = gapMinutes % 60;
+
+        let timeGapStr = "";
+        if (gapDays > 0) timeGapStr += `${gapDays}天`;
+        if (remainHours > 0) timeGapStr += `${remainHours}小时`;
+        if (remainMinutes > 0 || timeGapStr === "") timeGapStr += `${remainMinutes}分钟`;
+
+        // 3. 读取世界书
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 4. 读取回忆总结记忆条数
+        let memoryText = "暂无特殊记忆。";
+        if (char.memories && char.memories.length > 0) {
+            const readCount = chatConfig.aiMemoryCount !== undefined ? chatConfig.aiMemoryCount : 5;
+            if (readCount > 0) {
+                memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content.replace(/^\[.*?\]\s*/, '')}`).join('\n');
+            }
+        }
+
+        // 5. 组装终极 System Prompt (完美融合你的神级提示词)
+        let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        systemPrompt += `【用户(User)设定】：${chatConfig.userPersona || wcState.user.persona || "无"}\n`;
+        systemPrompt += `【你们的共同记忆（潜意识）】：\n${memoryText}\n\n`;
+        
+        if (chatConfig.timePerceptionEnabled !== false) {
+            systemPrompt += `【系统通知：时间感知】\n`;
+            systemPrompt += `> 距离上次互动已过去 ${timeGapStr}。话题可能已中断，请以 ${char.name} 的身份自然地开启新话题或自然地延续之前的对话。\n`;
+            // 👇 完美融入大少爷的增强时间感知指令 👇
+            systemPrompt += `> 系统会在最后告诉你当前的现实时间。你应知晓当前时间，但除非对话内容明确相关，否则不要主动提及或评论时间，你的作息、行为、对话内容都必须符合当前的具体时间点和星期。\n`;
+        }
+
+        systemPrompt += `【角色活人运转规则】\n`;
+        systemPrompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
+        systemPrompt += `> 绝对禁止长文本：你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息，禁止把所有短消息融合成一个长文本发送！\n`;
+        systemPrompt += `> 关键规则：请保持回复消息数量的随机性和多样性，并且每一条消息都是数组中的一个独立对象。\n`;
+        systemPrompt += `> 防重复：严禁输出重复的句子或重复的对话序列！\n`;
+        systemPrompt += `> 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n`;
+        systemPrompt += `> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！\n`;
+        systemPrompt += `返回格式示例：\n[\n  {"type":"text", "content":"第一句话"},\n  {"type":"text", "content":"第二句话"}\n]\n`;
+
+        const payload = {
+            deviceId: getDeviceId(),
+            charId: char.id,
+            charName: char.name,
+            charAvatar: char.avatar,
+            systemPrompt: systemPrompt, 
+            apiConfig: apiConfig,
+            context: recentMsgs, 
+            intervalMinutes: chatConfig.proactiveInterval || 60,
+            subscription: subscription
+        };
+
+        await fetch('https://honey-offline-brain.xingyan067.workers.dev/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        console.log("✅ 已成功将角色托管至云端大脑！");
+    } catch (e) {
+        console.error("❌ 托管至云端失败:", e);
+    }
+}
+
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
 // ==========================================
@@ -444,7 +577,9 @@ window.onload = async function() {
         
         // 【新增】：恢复一起听歌状态
         await musicInitState();
-        
+                // 👇 新增：拉取离线期间云端大脑代发的消息 👇
+        syncOfflineMessages();
+
     } catch (e) {
         console.error("WeChat Data bootstrap failed", e);
     }
@@ -10691,12 +10826,13 @@ function wcOpenChatSettings() {
     document.getElementById('wc-setting-char-prompt').value = char.prompt || "";
     document.getElementById('wc-setting-life-status-toggle').checked = char.chatConfig.lifeStatusEnabled !== false; // 默认开启
     // 读取拉黑状态并更新按钮
-    // 获取需要隐藏的元素容器
-    const nameRow = document.getElementById('wc-setting-char-name').closest('.wc-avatar-row');
-    const noteRow = document.getElementById('wc-setting-char-note').closest('.wc-form-group');
-    const promptRow = document.getElementById('wc-setting-char-prompt').closest('.wc-form-group');
-    const proactiveSection = document.getElementById('wc-setting-proactive-toggle').closest('.wc-settings-section');
-    const stickerSection = document.getElementById('wc-setting-sticker-group-list').closest('.wc-form-group');
+    // 获取需要隐藏的元素容器 (加入防空保护)
+    const nameRow = document.getElementById('wc-setting-char-name') ? document.getElementById('wc-setting-char-name').closest('.wc-avatar-row') : null;
+    const noteRow = document.getElementById('wc-setting-char-note') ? document.getElementById('wc-setting-char-note').closest('.wc-form-group') : null;
+    const promptRow = document.getElementById('wc-setting-char-prompt') ? document.getElementById('wc-setting-char-prompt').closest('.wc-form-group') : null;
+    const proactiveToggle = document.getElementById('wc-setting-proactive-toggle');
+    const proactiveSection = proactiveToggle ? proactiveToggle.closest('.wc-settings-section') : null;
+    const stickerSection = document.getElementById('wc-setting-sticker-group-list') ? document.getElementById('wc-setting-sticker-group-list').closest('.wc-form-group') : null;
 
     const blockBtn = document.getElementById('wc-setting-block-btn');
     const groupMembersSection = document.getElementById('wc-setting-group-members-section');
@@ -10771,6 +10907,9 @@ function wcOpenChatSettings() {
     }
 
     document.getElementById('wc-setting-proactive-toggle').checked = char.chatConfig.proactiveEnabled || false;
+        const offlineToggle = document.getElementById('wc-setting-offline-proactive-toggle');
+    if (offlineToggle) offlineToggle.checked = char.chatConfig.offlineProactiveEnabled || false;
+
     document.getElementById('wc-setting-proactive-interval').value = char.chatConfig.proactiveInterval || 60;
     document.getElementById('wc-setting-moment-freq').value = char.chatConfig.momentFreq || 0;
     
@@ -10931,6 +11070,9 @@ async function wcSaveChatSettings() {
     }
 
     char.chatConfig.proactiveEnabled = document.getElementById('wc-setting-proactive-toggle').checked;
+        const offlineToggle = document.getElementById('wc-setting-offline-proactive-toggle');
+    if (offlineToggle) char.chatConfig.offlineProactiveEnabled = offlineToggle.checked;
+
     char.chatConfig.proactiveInterval = parseInt(document.getElementById('wc-setting-proactive-interval').value) || 60;
     char.chatConfig.momentFreq = parseInt(document.getElementById('wc-setting-moment-freq').value) || 0;
     // 👇 新增：保存后台小动作概率 👇
@@ -10969,7 +11111,15 @@ async function wcSaveChatSettings() {
     wcApplyChatConfig(char);
     wcRenderMessages(char.id); 
     wcRenderChats(); 
-    
+        // 👇 修改：如果同时开启了主动发消息和离线托管，才交给云端 👇
+    if (char.chatConfig.proactiveEnabled && char.chatConfig.offlineProactiveEnabled) {
+        registerOfflineProactiveTask(char);
+    } else {
+        // 如果关了离线开关，告诉云端取消托管
+        unregisterOfflineProactiveTask(char);
+    }
+    // 👆 新增结束 👆
+
     if (char.chatConfig.stickerGroupIds.length > 0 && !char.chatConfig.stickerGroupIds.includes(wcState.activeStickerCategoryIndex)) {
         wcState.activeStickerCategoryIndex = char.chatConfig.stickerGroupIds[0];
     } else if (char.chatConfig.stickerGroupIds.length === 0) {
@@ -12917,10 +13067,20 @@ async function wcTriggerBackgroundPhoneUpdate(charId) {
             })
         });
 
-        const data = await response.json();
+                const data = await response.json();
+        
+        // 👇 核心修复：拦截并显示真实的 API 错误原因 👇
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error(data.error?.message || "API 返回数据异常：" + JSON.stringify(data));
+        }
+        // 👆 修复结束 👆
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
-        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+
         const result = JSON.parse(content);
 
         if (!char.phoneData) char.phoneData = {};
@@ -14758,11 +14918,13 @@ function wcRenderPhoneCartContent() {
             // 新增：如果是购物车页面，显示买单按钮
             let actionHtml = '';
             if (wcState.phoneCartTab === 'cart') {
-                actionHtml = `<div style="background: #111; color: #fff; font-size: 12px; padding: 6px 12px; border-radius: 12px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2);" onclick="wcBuyCharCartItem(${index})">帮Ta买单</div>`;
+                // 🔪 核心修改：加上 event.stopPropagation() 防止点击买单时触发卡片详情
+                actionHtml = `<div style="background: #111; color: #fff; font-size: 12px; padding: 6px 12px; border-radius: 12px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2);" onclick="event.stopPropagation(); wcBuyCharCartItem(${index})">帮Ta买单</div>`;
             }
 
             html += `
-                <div class="phone-cart-item-card">
+                <!-- 🔪 核心修改：给整个卡片加上 onclick 事件，打开详情弹窗 -->
+                <div class="phone-cart-item-card" onclick="wcOpenCartItemDetail(${index}, '${wcState.phoneCartTab}')">
                     <div class="phone-cart-img-box" style="background: ${imgBg};">${icon}</div>
                     <div class="phone-cart-info">
                         <div class="phone-cart-title">${item.name}</div>
@@ -14887,6 +15049,53 @@ async function wcGeneratePhoneCart() {
         }
     }
 }
+// ==========================================
+// 新增：购物车商品详情弹窗逻辑
+// ==========================================
+window.wcOpenCartItemDetail = function(index, tab) {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.cartApp) return;
+
+    const list = tab === 'cart' ? char.phoneData.cartApp.cart : char.phoneData.cartApp.history;
+    const item = list[index];
+    if (!item) return;
+
+    // 填充数据
+    document.getElementById('cart-detail-tag').innerText = tab === 'cart' ? 'IN CART / 购物车' : 'PURCHASED / 已购买';
+    document.getElementById('cart-detail-icon').innerText = tab === 'cart' ? '🛒' : '📦';
+    
+    // 随机生成一个柔和的背景色
+    const hue = Math.floor(Math.random() * 360);
+    document.getElementById('cart-detail-icon').style.background = `hsl(${hue}, 20%, 95%)`;
+
+    document.getElementById('cart-detail-title').innerText = item.name;
+    document.getElementById('cart-detail-os').innerText = item.desc;
+    document.getElementById('cart-detail-price').innerText = `¥${item.price}`;
+
+    // 底部操作区：购物车显示买单按钮，历史记录显示日期
+    const actionContainer = document.getElementById('cart-detail-action');
+    if (tab === 'cart') {
+        actionContainer.innerHTML = `<button class="cart-detail-buy-btn" onclick="wcBuyCharCartItem(${index}); wcCloseCartItemDetail();">帮 Ta 买单</button>`;
+    } else {
+        actionContainer.innerHTML = `<span class="cart-detail-date">${item.date || '未知时间'}</span>`;
+    }
+
+    // 显示弹窗
+    const modal = document.getElementById('wc-modal-cart-item-detail');
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.wcCloseCartItemDetail = function() {
+    const modal = document.getElementById('wc-modal-cart-item-detail');
+    modal.classList.remove('active');
+    setTimeout(() => {
+        modal.style.display = 'none';
+        modal.classList.add('hidden');
+    }, 300);
+};
+
 // ==========================================================================
 // 新增：帮 Char 清空购物车的支付逻辑
 // ==========================================================================
@@ -17224,6 +17433,7 @@ function musicSetApi(apiType) {
    ========================================================================== */
 
 const dreamState = {
+    currentMode: 'dream', // 新增：记录当前是梦境还是线下
     cards: [], 
     presets: [], 
     selectedWbIds: [], 
@@ -17338,7 +17548,7 @@ function viewDreamChatHistory(id) {
     }
 }
 
-// --- 醒来并总结梦境 (修复卡死 Bug) ---
+// --- 醒来并总结梦境/线下 (修复卡死 Bug + 线下记忆互通) ---
 async function endDreamAndSummarize() {
     if (dreamState.currentChat.length <= 1) {
         document.getElementById('dream-chat-page').classList.remove('active');
@@ -17348,17 +17558,51 @@ async function endDreamAndSummarize() {
     const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
-    // 修复：使用正确的 ID 获取按钮
     const btn = document.getElementById('dream-btn-summarize');
     if (btn) btn.innerText = "总结中...";
 
     try {
-        let chatText = dreamState.currentChat
+        let prompt = "";
+        let summaryPrefix = "";
+
+        // 提取当前的梦境/线下交互记录
+        let currentChatText = dreamState.currentChat
             .filter(m => m.role === 'user' || m.role === 'assistant')
-            .map(m => `${m.role === 'user' ? '我' : '梦境'}: ${m.content}`)
+            .map(m => `${m.role === 'user' ? '我' : 'Ta'}: ${m.content}`)
             .join('\n');
 
-        let prompt = `请将以下梦境交互记录，总结成一段极具高级感、意识流、文艺且带有一丝忧郁或唯美气息的散文诗（字数100-200字）。不要出现“总结”、“梦境记录”等字眼，直接输出这段散文。\n\n【记录】：\n${chatText}`;
+        if (dreamState.currentMode === 'offline') {
+            // ==========================================
+            // 线下模式：结合微信聊天记录进行综合总结
+            // ==========================================
+            const charId = wcState.activeChatId;
+            const char = wcState.characters.find(c => c.id === charId);
+            
+            // 提取最近 20 条微信聊天记录作为前情提要
+            let recentWechatMsgs = "无";
+            if (char && wcState.chats[charId]) {
+                recentWechatMsgs = wcState.chats[charId]
+                    .filter(m => !m.isError && m.type !== 'system')
+                    .slice(-20)
+                    .map(m => `${m.sender === 'me' ? '我' : char.name}: ${m.content}`)
+                    .join('\n');
+            }
+
+            prompt = `你现在需要以【${char ? char.name : 'Ta'}】的第一人称视角，写一段私密的回忆日记（字数150-300字）。\n`;
+            prompt += `请将以下【微信上的聊天记录】和【线下见面的互动记录】结合起来，梳理出事情的起因和经过，重点表达你在线下见面时的情感波动和内心OS。\n\n`;
+            prompt += `【微信上的聊天记录（起因/前情提要）】：\n${recentWechatMsgs}\n\n`;
+            prompt += `【线下见面的互动记录（经过/高潮）】：\n${currentChatText}\n\n`;
+            prompt += `要求：不要出现“总结”、“记录”等字眼，直接输出这段充满感情的回忆日记。`;
+            
+            summaryPrefix = "[线下见面]";
+
+        } else {
+            // ==========================================
+            // 梦境模式：保持原有的散文诗总结
+            // ==========================================
+            prompt = `请将以下梦境交互记录，总结成一段极具高级感、意识流、文艺且带有一丝忧郁或唯美气息的散文诗（字数100-200字）。不要出现“总结”、“梦境记录”等字眼，直接输出这段散文。\n\n【记录】：\n${currentChatText}`;
+            summaryPrefix = "[梦境残影]";
+        }
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -17375,33 +17619,50 @@ async function endDreamAndSummarize() {
         let summary = data.choices[0].message.content;
         summary = summary.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
 
+        // 1. 保存到卡片列表 (梦境和线下都保存，方便回看聊天记录)
         dreamState.cards.push({
             id: Date.now(),
             time: Date.now(),
-            content: summary,
-            chatHistory: JSON.parse(JSON.stringify(dreamState.currentChat)) // 保存当时的聊天记录
+            content: `${summaryPrefix} ${summary}`,
+            chatHistory: JSON.parse(JSON.stringify(dreamState.currentChat))
         });
         await dreamSaveData();
+
+        // 2. 如果是线下模式，直接强行注入到微信的“回忆总结”中！
+        if (dreamState.currentMode === 'offline') {
+            const charId = wcState.activeChatId;
+            const char = wcState.characters.find(c => c.id === charId);
+            if (char) {
+                if (!char.memories) char.memories = [];
+                char.memories.unshift({
+                    id: Date.now(),
+                    type: 'summary',
+                    content: `[线下约会记忆] ${summary}`,
+                    time: Date.now()
+                });
+                wcSaveData();
+                
+                // 顺便在微信聊天界面插入一条系统提示，让 AI 知道刚见过面
+                wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 你们刚刚结束了一次线下见面。请在接下来的聊天中，自然地提及刚才见面的细节或表达见面后的心情。]`, { hidden: true });
+            }
+        }
 
         document.getElementById('dream-chat-page').classList.remove('active');
         dreamRenderCards();
 
+        if (dreamState.currentMode === 'offline') {
+            alert("线下见面已结束。这段珍贵的记忆已自动存入 Ta 的【回忆总结】中！");
+        }
+
     } catch (e) {
         console.error(e);
-        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[梦境总结失败] ${e.message}`);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[总结失败] ${e.message}`);
         else alert("总结失败：" + e.message);
     } finally {
         if (btn) btn.innerText = "醒来(总结)";
     }
 }
 
-function dreamDeleteCard(id) {
-    if (confirm("确定要删除这条梦境记录吗？")) {
-        dreamState.cards = dreamState.cards.filter(c => c.id !== id);
-        dreamSaveData();
-        dreamRenderCards();
-    }
-}
 
 // --- 设置弹窗 (世界书与预设) ---
 function openDreamSettings() {
@@ -17601,15 +17862,75 @@ async function triggerDreamAI() {
     const apiConfig = await getActiveApiConfig('chat');
     if (!apiConfig || !apiConfig.key) return alert("请先在主设置中配置 API");
 
-    // 1. 基础设定
-    let systemPrompt = "你现在处于一个梦境文字交互游戏中（作为独立的小番外）。请根据用户的输入（User），推动梦境的发展。回复要充满画面感、意识流、或者诡异/唯美的梦境氛围。不要输出JSON，直接输出纯文本回复。请使用中文双引号（“”）或单引号（「」）来包裹角色说出的话。\n\n";
-    
-    // 2. 核心：读取当前角色和用户的人设
+    // 1. 基础设定 (根据模式分流)
+    let systemPrompt = "";
     const char = wcState.characters.find(c => c.id === wcState.activeChatId);
     const charName = char ? char.name : "未知角色";
     const charPersona = char ? char.prompt : "无";
     const userPersona = (char && char.chatConfig && char.chatConfig.userPersona) ? char.chatConfig.userPersona : wcState.user.persona;
 
+    if (dreamState.currentMode === 'offline') {
+        // 👇 新增：获取当前时间与时段氛围 👇
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const date = now.getDate();
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        const timeString = `${year}年${month}月${date}日 ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
+
+        let timeSlotVibe = "";
+        if (hours >= 5 && hours < 8) timeSlotVibe = "清晨：可能带着慵懒、柔软或起床气。";
+        else if (hours >= 8 && hours < 12) timeSlotVibe = "上午：清醒、有活力，适合外出或工作。";
+        else if (hours >= 12 && hours < 18) timeSlotVibe = "下午：平稳，午后可能有些懒洋洋，适合喝下午茶或散步。";
+        else if (hours >= 18 && hours < 21) timeSlotVibe = "傍晚：放松，适合共进晚餐、看日落或散步。";
+        else if (hours >= 21 && hours < 24) timeSlotVibe = "夜晚：放松，更容易敞开心扉，适合私密独处或看电影。";
+        else timeSlotVibe = "深夜/凌晨：夜深人静，适合极度私密的互动、相拥入眠或吃宵夜。";
+        // 👆 新增结束 👆
+
+        systemPrompt += `你现在处于现实世界的线下互动场景中（作为独立的小番外）。你和 User 已经跨越了屏幕，正在面对面接触。\n`;
+        
+        // 👇 新增：将时间感知注入到 Prompt 中 👇
+        systemPrompt += `【当前现实时间】：${timeString} ${dayString}\n`;
+        systemPrompt += `【当前时段氛围参考】：${timeSlotVibe}\n`;
+        systemPrompt += `【时间观念要求】：请严格根据当前的时间点和氛围来描写你们的线下互动。例如：如果是深夜，你们可能在吃宵夜或在家里；如果是清晨，可能刚醒来。绝对不要出现时间逻辑错误！\n\n`;
+        // 👆 新增结束 👆
+
+        systemPrompt += `请注重描写你的肢体动作、神态、语气以及周围的现实环境。不要输出JSON，直接输出纯文本回复。请使用中文双引号（“”）或单引号（「」）来包裹角色说出的话。\n\n`;
+        
+        // 提取最近 5 条记忆
+        let memoryText = "暂无特殊记忆。";
+        if (char && char.memories && char.memories.length > 0) {
+            memoryText = char.memories.slice(0, 5).map(m => `- ${m.content.replace(/^\[.*?\]\s*/, '')}`).join('\n');
+        }
+        systemPrompt += `【你们的共同记忆（潜意识）】：\n${memoryText}\n\n`;
+
+        // 提取最近 30 条聊天记录
+        let recentMsgsText = "暂无聊天记录。";
+        if (char && wcState.chats[char.id]) {
+            const msgs = wcState.chats[char.id];
+            recentMsgsText = msgs.filter(m => !m.isError && m.type !== 'system')
+                                 .slice(-30)
+                                 .map(m => {
+                                     let content = m.content;
+                                     if (m.type !== 'text') content = `[${m.type}]`;
+                                     return `${m.sender === 'me' ? 'User' : char.name}: ${content}`;
+                                 })
+                                 .join('\n');
+        }
+        systemPrompt += `【你们刚刚在微信上的聊天记录（作为见面的前情提要）】：\n${recentMsgsText}\n\n`;
+        
+        systemPrompt += `【⚠️ 核心场景切换指令（最高优先级）⚠️】：\n`;
+        systemPrompt += `注意！上面的微信聊天已经结束！现在，你和 User 已经在【现实世界的线下】见面了！\n`;
+        systemPrompt += `请根据你们在微信上的最后对话状态和情绪，自然地开启或继续这次线下见面。\n`;
+        systemPrompt += `绝对禁止再说“我给你发微信”、“看手机”之类的话，你们现在是面对面！\n\n`;
+
+    } else {
+        systemPrompt += "你现在处于一个梦境文字交互游戏中（作为独立的小番外）。请根据用户的输入（User），推动梦境的发展。回复要充满画面感、意识流、或者诡异/唯美的梦境氛围。不要输出JSON，直接输出纯文本回复。请使用中文双引号（“”）或单引号（「」）来包裹角色说出的话。\n\n";
+    }
+    
+    // 2. 核心：读取当前角色和用户的人设
     systemPrompt += `【当前角色设定 (${charName})】：\n${charPersona}\n\n`;
     systemPrompt += `【用户设定 (User)】：\n${userPersona}\n\n`;
 
@@ -17807,10 +18128,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 // 覆盖原本的 enterDreamChat 和 sendDreamMessage，让它们调用支持 HTML 的渲染函数
-function enterDreamChat() {
+function enterDreamChat(mode = 'dream') {
+    dreamState.currentMode = mode; // 记录模式
     dreamState.currentChat = []; 
     document.getElementById('dream-chat-page').classList.add('active');
-    dreamState.currentChat.push({ role: 'system', content: '你闭上眼睛，坠入了梦境...' });
+    
+    const titleEl = document.getElementById('dream-chat-title');
+    if (mode === 'offline') {
+        if (titleEl) titleEl.innerText = 'IN REALITY...';
+        dreamState.currentChat.push({ role: 'system', content: '跨越屏幕，你们在现实中相遇了...' });
+    } else {
+        if (titleEl) titleEl.innerText = 'IN THE DREAM...';
+        dreamState.currentChat.push({ role: 'system', content: '你闭上眼睛，坠入了梦境...' });
+    }
+    
     dreamRenderChatWithHTML();
 }
 
@@ -18359,6 +18690,22 @@ function closeDreamEditModal() {
     document.getElementById('dream-edit-modal').classList.remove('active');
     dreamSelectedMsgIndex = -1;
 }
+
+// 👇 新增：保存梦境编辑消息的逻辑 👇
+function saveDreamEditMsg() {
+    if (dreamSelectedMsgIndex > -1) {
+        const newText = document.getElementById('dream-edit-textarea').value.trim();
+        if (newText) {
+            // 更新当前选中的消息内容
+            dreamState.currentChat[dreamSelectedMsgIndex].content = newText;
+            // 重新渲染聊天界面
+            dreamRenderChatWithHTML();
+        }
+    }
+    // 关闭弹窗
+    closeDreamEditModal();
+}
+// 👆 新增结束 👆
 
 // --- 梦境字体设置逻辑 ---
 function changeDreamFontSize(val) {
@@ -23176,6 +23523,9 @@ async function wcActionVoiceCall() {
         return;
     }
 
+    // 初始化额外 DOM (打字机和小窗)
+    initCallExtras();
+
     // 初始化 UI (居中状态)
     const callView = document.getElementById('wc-view-call-screen');
     callView.classList.remove('active-call'); 
@@ -23184,7 +23534,7 @@ async function wcActionVoiceCall() {
     document.getElementById('ins-call-avatar').src = char.avatar;
     document.getElementById('ins-call-name').innerText = char.name;
     document.getElementById('ins-call-status').innerText = "正在呼叫...";
-    document.getElementById('ins-call-voice-wave').classList.add('hidden'); // 隐藏音波
+    document.getElementById('ins-call-voice-wave').classList.add('hidden'); 
     
     document.getElementById('ins-call-actions-ringing').style.display = 'flex';
     document.getElementById('ins-call-actions-incoming').style.display = 'none';
@@ -23238,12 +23588,13 @@ async function wcProcessCallDecision(char) {
         prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
         prompt += `请根据你的人设、记忆、世界观以及最近的聊天氛围，决定是否接听这个电话。\n`;
         prompt += `【核心表现要求】：\n`;
-        prompt += `1. 如果接听，请给出接通后的第一句话。你可以使用括号 () 来描述你接电话时的语气、呼吸声或环境音，例如：(刚睡醒，声音沙哑) 或 (轻笑一声)。\n`;
-        prompt += `2. 语气必须像真人一样自然、口语化，不要太死板！\n`;
-        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `1. 如果接听，请给出接通后的第一句话。必须包含动作描写和语言描写，并且可以像小说一样互相穿插。\n`;
+        prompt += `2. 动作描写绝对不要使用括号！语言描写必须使用中文双引号“”包裹！\n`;
+        prompt += `3. 语气必须像真人一样自然、口语化，不要太死板！\n`;
+        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
         prompt += `如果拒接，请给出拒接的理由（内心OS）。\n`;
         prompt += `返回纯 JSON 对象，格式如下：\n`;
-        prompt += `{"accept": true, "firstSentence": "(接起电话，伴随着走路的喘息声) 喂？怎么突然打电话来了？"}\n`;
+        prompt += `{"accept": true, "content": "接起电话，伴随着走路的喘息声。“喂？怎么突然打电话来了？”"}\n`;
         prompt += `或 {"accept": false, "reason": "现在在开会，不方便接。"}\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
@@ -23264,7 +23615,16 @@ async function wcProcessCallDecision(char) {
         if (!document.getElementById('wc-view-call-screen') || document.getElementById('wc-view-call-screen').classList.contains('hidden')) return;
 
         if (decision.accept) {
-            wcStartActiveCall(decision.firstSentence);
+            wcStartActiveCall();
+            wcAddMessage(wcState.callState.charId, 'system', 'system', `[语音通话已接通] ${char.name} 说: "${decision.content}"`, { hidden: true });
+            
+            // 开启说话状态
+            wcState.callState.isSpeaking = true;
+            document.getElementById('ins-call-avatar-wrapper').classList.add('speaking');
+            document.getElementById('ins-call-status').innerText = "对方正在说话...";
+            document.getElementById('ins-call-voice-wave').classList.remove('hidden');
+            
+            playCallSequence(decision.content);
         } else {
             wcHangUpCall('rejected', decision.reason);
         }
@@ -23272,7 +23632,13 @@ async function wcProcessCallDecision(char) {
     } catch (e) {
         console.error("AI 决策失败", e);
         if (typeof showApiErrorModal === 'function') showApiErrorModal(`[语音通话决策失败] ${e.message}`);
-        wcStartActiveCall("(接通电话) 喂？");
+        
+        wcStartActiveCall();
+        wcState.callState.isSpeaking = true;
+        document.getElementById('ins-call-avatar-wrapper').classList.add('speaking');
+        document.getElementById('ins-call-status').innerText = "对方正在说话...";
+        document.getElementById('ins-call-voice-wave').classList.remove('hidden');
+        playCallSequence("接通电话。“喂？”");
     }
 }
 
@@ -23334,7 +23700,9 @@ window.wcRejectIncomingCall = function() {
 };
 
 // 6. 正式接通电话 (UI 变化)
-function wcStartActiveCall(firstSentence = null) {
+function wcStartActiveCall() {
+    initCallExtras(); // 确保特效和小窗 DOM 被初始化
+
     wcState.callState.isActive = true;
     wcState.callState.startTime = Date.now();
 
@@ -23350,16 +23718,14 @@ function wcStartActiveCall(firstSentence = null) {
         const diff = Math.floor((Date.now() - wcState.callState.startTime) / 1000);
         const m = Math.floor(diff / 60).toString().padStart(2, '0');
         const s = (diff % 60).toString().padStart(2, '0');
-        // 只有在没说话的时候才显示时间
+        
         if (!wcState.callState.isSpeaking) {
             document.getElementById('ins-call-status').innerText = `${m}:${s}`;
         }
+        // 同步更新小窗时间
+        const floatTime = document.getElementById('floatTime');
+        if(floatTime) floatTime.innerText = `${m}:${s}`;
     }, 1000);
-
-    if (firstSentence) {
-        wcAddCallMessage('them', firstSentence);
-        wcAddMessage(wcState.callState.charId, 'system', 'system', `[语音通话已接通] ${wcState.characters.find(c=>c.id===wcState.callState.charId).name} 说: "${firstSentence}"`, { hidden: true });
-    }
 }
 
 // 7. 挂断电话 (注入强力记忆)
@@ -23370,6 +23736,10 @@ window.wcHangUpCall = function(reason, aiReason = "") {
     clearInterval(wcState.callState.timerInterval);
     document.getElementById('wc-view-call-screen').classList.add('hidden');
     document.getElementById('ins-call-voice-wave').classList.add('hidden');
+    
+    // 挂断时确保小窗也关闭
+    const floatWin = document.getElementById('floatingWindow');
+    if(floatWin) floatWin.style.display = 'none';
 
     if (reason === 'cancel') {
         wcAddMessage(charId, 'me', 'call_record', '已取消', { status: 'canceled' });
@@ -23386,7 +23756,6 @@ window.wcHangUpCall = function(reason, aiReason = "") {
         
         wcAddMessage(charId, 'me', 'call_record', '通话时长', { duration: durationStr, status: 'ended' });
         
-        // 👇 核心修改：挂断时注入强力记忆，确保文字聊天能接上话题 👇
         const memoryPrompt = `[系统强制提示：你们刚刚结束了一通长达 ${durationStr} 的语音通话。在接下来的文字聊天中，请你自然地顺延刚刚电话里聊过的话题或情绪，不要表现得像刚认识一样！]`;
         wcAddMessage(charId, 'system', 'system', memoryPrompt, { hidden: true });
     }
@@ -23407,7 +23776,8 @@ window.wcSendCallMessage = function() {
     wcAddMessage(wcState.callState.charId, 'system', 'system', `[语音通话中] User 说: "${text}"`, { hidden: true });
 
     input.value = '';
-    setTimeout(wcTriggerCallAI, 500);
+    // 删除了 setTimeout(wcTriggerCallAI, 500); 
+    // 现在发送消息后不会自动触发 AI，需要手动点击左侧的魔法棒按钮
 };
 
 // 9. 通话中 AI 回复 (深度记忆互通、活人感、严禁emoji)
@@ -23422,14 +23792,13 @@ window.wcTriggerCallAI = async function() {
     // 开启说话动画和 SVG 音波
     wcState.callState.isSpeaking = true;
     document.getElementById('ins-call-avatar-wrapper').classList.add('speaking');
-    document.getElementById('ins-call-status').innerText = "对方正在说话...";
+    document.getElementById('ins-call-status').innerText = "对方正在思考...";
     document.getElementById('ins-call-voice-wave').classList.remove('hidden');
 
     try {
         const chatConfig = char.chatConfig || {};
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
         
-        // 读取世界书
         let wbInfo = "";
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
@@ -23438,14 +23807,12 @@ window.wcTriggerCallAI = async function() {
             }
         }
 
-        // 读取记忆
         let memoryText = "暂无特殊记忆。";
         if (char.memories && char.memories.length > 0) {
             const readCount = chatConfig.aiMemoryCount || 5;
             memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content}`).join('\n');
         }
 
-        // 提取最近的聊天记录（包含文字聊天和语音通话记录，实现无缝互通）
         const msgs = wcState.chats[char.id] || [];
         const recentMsgs = msgs.slice(-20).map(m => {
             if (m.type === 'system' && m.content.includes('[语音通话中]')) return m.content;
@@ -23463,9 +23830,11 @@ window.wcTriggerCallAI = async function() {
         prompt += `请根据你的人设、记忆、世界观以及上下文，回复 User 的话。\n`;
         prompt += `【核心表现要求】：\n`;
         prompt += `1. 语气要像真实的语音通话一样自然、口语化，可以带点语气词（嗯、啊、哦），绝对不要像机器或客服！不要太死板！\n`;
-        prompt += `2. 你可以使用括号 () 来描述你说话时的语气、呼吸声、微动作或环境音，例如：(轻笑)、(深吸一口气)、(翻身摩擦被子的声音)、(声音有些沙哑)。\n`;
-        prompt += `3. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
-        prompt += `返回纯 JSON 对象：{"content": "你说的话"}\n`;
+        prompt += `2. 必须包含动作描写和语言描写，并且可以像小说一样互相穿插。\n`;
+        prompt += `3. 动作描写绝对不要使用括号！语言描写必须使用中文双引号“”包裹！\n`;
+        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        prompt += `返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{"content": "微微低头，看着你的眼睛。“我一直都在这里陪着你。”轻轻握住你的手，“无论发生什么事情，都不会离开。”"}\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
@@ -23482,20 +23851,20 @@ window.wcTriggerCallAI = async function() {
         const reply = JSON.parse(content);
 
         if (wcState.callState.isActive) {
-            wcAddCallMessage('them', reply.content);
-            wcAddMessage(charId, 'system', 'system', `[语音通话中] ${char.name} 说: "${reply.content}"`, { hidden: true });
+            wcAddMessage(charId, 'system', 'system', `[语音通话中] ${char.name} 回复: ${reply.content}`, { hidden: true });
+            
+            document.getElementById('ins-call-status').innerText = "对方正在说话...";
+            playCallSequence(reply.content);
         }
 
     } catch (e) {
         console.error("通话回复失败", e);
         if (typeof showApiErrorModal === 'function') showApiErrorModal(`[语音通话回复失败] ${e.message}`);
-    } finally {
-        // 关闭说话动画和 SVG 音波
+        
+        // 发生错误时手动关闭动画
         wcState.callState.isSpeaking = false;
         document.getElementById('ins-call-avatar-wrapper').classList.remove('speaking');
         document.getElementById('ins-call-voice-wave').classList.add('hidden');
-        
-        // 恢复显示时间
         const diff = Math.floor((Date.now() - wcState.callState.startTime) / 1000);
         const m = Math.floor(diff / 60).toString().padStart(2, '0');
         const s = (diff % 60).toString().padStart(2, '0');
@@ -23503,20 +23872,300 @@ window.wcTriggerCallAI = async function() {
     }
 };
 
-// 10. 渲染单条通话消息到屏幕
-function wcAddCallMessage(sender, text) {
+// 10. 渲染单条通话消息到屏幕 (居中排版)
+window.wcAddCallMessage = function(sender, text, isAction = false) {
     const container = document.getElementById('ins-call-messages');
     const div = document.createElement('div');
-    div.className = `ins-call-msg ${sender}`;
     
-    // 简单处理一下括号，让括号里的动作文字变成灰色斜体，更有高级感
-    let formattedText = text.replace(/\((.*?)\)/g, '<span style="color: rgba(255,255,255,0.5); font-style: italic;">($1)</span>');
-    formattedText = formattedText.replace(/（(.*?)）/g, '<span style="color: rgba(255,255,255,0.5); font-style: italic;">（$1）</span>');
+    div.className = `ins-call-msg-centered ${sender} ${isAction ? 'action' : 'speech'}`;
+    div.innerText = text;
     
-    div.innerHTML = formattedText;
+    // 如果是对方发来的消息，绑定点击事件显示“重新生成”
+    if (sender === 'them') {
+        div.onclick = (e) => showCallMsgMenu(e);
+    }
+    
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
+};
+// ==========================================
+// 语音通话：打字机特效、小窗模式与重新生成逻辑
+// ==========================================
+
+// 初始化额外 DOM
+function initCallExtras() {
+    const callView = document.getElementById('wc-view-call-screen');
+    
+    // 注入缩小按钮
+    if (!document.getElementById('minimizeCallBtn')) {
+        const minBtn = document.createElement('div');
+        minBtn.id = 'minimizeCallBtn';
+        minBtn.className = 'ins-call-minimize-btn';
+        minBtn.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>';
+        minBtn.onclick = minimizeCall;
+        callView.appendChild(minBtn);
+    }
+
+    // 注入打字机遮罩
+    if (!document.getElementById('typewriterOverlay')) {
+        const overlay = document.createElement('div');
+        overlay.id = 'typewriterOverlay';
+        overlay.className = 'typewriter-overlay';
+        overlay.innerHTML = '<div class="typewriter-text" id="typewriterText"></div>';
+        document.body.appendChild(overlay);
+        overlay.addEventListener('click', handleTypewriterClick);
+    }
+
+    // 注入小窗
+    if (!document.getElementById('floatingWindow')) {
+        const floatWin = document.createElement('div');
+        floatWin.id = 'floatingWindow';
+        floatWin.className = 'floating-window';
+        floatWin.innerHTML = '<div class="float-avatar" id="floatAvatar"></div><div class="float-time" id="floatTime">00:00</div>';
+        floatWin.onclick = restoreCall;
+        document.body.appendChild(floatWin);
+        initFloatingDrag(floatWin);
+    }
 }
+
+// --- 文本解析与队列播放逻辑 (强化双引号兼容) ---
+function parseCallContent(text) {
+    // 兼容中文双引号 “” 和英文双引号 ""
+    const regex = /(["“][^"”]*["”])/g;
+    const parts = text.split(regex);
+    const result = [];
+    parts.forEach(part => {
+        let p = part.trim(); // 核心修复：去除首尾空格，防止正则误判
+        if (!p) return;
+        if (p.match(/^["“]/) && p.match(/["”]$/)) {
+            result.push({ type: 'speech', text: p });
+        } else {
+            // 清理可能残留的括号（防 AI 幻觉）
+            let cleanAction = p.replace(/[()（）]/g, '').trim();
+            if (cleanAction) {
+                result.push({ type: 'action', text: cleanAction });
+            }
+        }
+    });
+    return result;
+}
+
+window.playCallSequence = async function(content) {
+    const sequence = parseCallContent(content);
+    
+    for (const item of sequence) {
+        if (!wcState.callState.isActive) break; // 如果中途挂断了，停止播放
+        
+        if (item.type === 'action') {
+            wcAddCallMessage('them', item.text, true);
+            await new Promise(resolve => setTimeout(resolve, 500)); // 动作显示后稍微停顿
+        } else if (item.type === 'speech') {
+            await playTypewriterEffectAsync(item.text);
+        }
+    }
+    
+    // 播放完毕后恢复状态
+    if (wcState.callState.isActive) {
+        wcState.callState.isSpeaking = false;
+        document.getElementById('ins-call-avatar-wrapper').classList.remove('speaking');
+        document.getElementById('ins-call-voice-wave').classList.add('hidden');
+        
+        const diff = Math.floor((Date.now() - wcState.callState.startTime) / 1000);
+        const m = Math.floor(diff / 60).toString().padStart(2, '0');
+        const s = (diff % 60).toString().padStart(2, '0');
+        document.getElementById('ins-call-status').innerText = `${m}:${s}`;
+    }
+};
+
+// --- 异步打字机特效核心逻辑 ---
+let typewriterInterval = null;
+let typewriterTimeout = null;
+let isTyping = false;
+let currentSpeechText = "";
+let typewriterResolve = null;
+
+function playTypewriterEffectAsync(speechText) {
+    return new Promise((resolve) => {
+        currentSpeechText = speechText;
+        typewriterResolve = resolve;
+        
+        const overlay = document.getElementById('typewriterOverlay');
+        const textEl = document.getElementById('typewriterText');
+        overlay.style.display = 'flex';
+        textEl.innerText = '';
+        
+        clearInterval(typewriterInterval);
+        clearTimeout(typewriterTimeout);
+        
+        isTyping = true;
+        let i = 0;
+        
+        typewriterInterval = setInterval(() => {
+            textEl.innerText += currentSpeechText[i];
+            i++;
+            if(i >= currentSpeechText.length) {
+                finishTypingAsync();
+            }
+        }, 100);
+    });
+}
+
+function finishTypingAsync() {
+    clearInterval(typewriterInterval);
+    isTyping = false;
+    typewriterTimeout = setTimeout(() => {
+        closeTypewriterAsync();
+    }, 1500);
+}
+
+function closeTypewriterAsync() {
+    clearTimeout(typewriterTimeout);
+    const overlay = document.getElementById('typewriterOverlay');
+    if (overlay.style.display === 'none') return; 
+    
+    overlay.style.display = 'none';
+    wcAddCallMessage('them', currentSpeechText, false);
+    
+    if (typewriterResolve) {
+        typewriterResolve();
+        typewriterResolve = null;
+    }
+}
+
+window.handleTypewriterClick = function() {
+    if (isTyping) {
+        // 状态1：正在打字 -> 瞬间显示全部文字，并开始1.5秒倒计时
+        clearInterval(typewriterInterval);
+        isTyping = false;
+        document.getElementById('typewriterText').innerText = currentSpeechText;
+        clearTimeout(typewriterTimeout);
+        typewriterTimeout = setTimeout(() => {
+            closeTypewriterAsync();
+        }, 1500);
+    } else {
+        // 状态2：已经打完字在等待 -> 瞬间关闭并写入记录
+        closeTypewriterAsync();
+    }
+};
+
+// --- 重新生成逻辑 ---
+window.showCallMsgMenu = function(e) {
+    e.stopPropagation();
+    if (isTyping) return; // 打字时不允许操作
+
+    let menu = document.getElementById('callMsgMenu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'callMsgMenu';
+        menu.className = 'call-msg-menu';
+        menu.innerText = '重新生成';
+        menu.onclick = regenerateCallMsg;
+        document.body.appendChild(menu);
+    }
+    
+    // 定位菜单到点击位置附近
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = (e.clientY - 40) + 'px';
+    menu.style.display = 'block';
+    
+    // 点击其他地方隐藏菜单
+    const hideMenu = () => {
+        menu.style.display = 'none';
+        document.removeEventListener('click', hideMenu);
+    };
+    setTimeout(() => document.addEventListener('click', hideMenu), 10);
+};
+
+window.regenerateCallMsg = function(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('callMsgMenu');
+    if (menu) menu.style.display = 'none';
+
+    const container = document.getElementById('ins-call-messages');
+    
+    // 1. 从屏幕上移除最后一次 AI 的所有消息（直到遇到 User 的消息为止）
+    let lastChild = container.lastElementChild;
+    while (lastChild && lastChild.classList.contains('them')) {
+        container.removeChild(lastChild);
+        lastChild = container.lastElementChild;
+    }
+
+    // 2. 从底层数据中移除最后一次 AI 的隐藏记录
+    const charId = wcState.callState.charId;
+    if (charId && wcState.chats[charId]) {
+        const msgs = wcState.chats[charId];
+        while (msgs.length > 0) {
+            const lastMsg = msgs[msgs.length - 1];
+            // 移除 AI 在通话中产生的隐藏系统消息
+            if (lastMsg.sender === 'system' && lastMsg.content.includes('[语音通话中]')) {
+                msgs.pop();
+            } else {
+                break;
+            }
+        }
+        wcSaveData();
+    }
+
+    // 3. 重新触发 AI 回复
+    wcTriggerCallAI();
+};
+
+// --- 小窗模式逻辑 ---
+window.minimizeCall = function() {
+    document.getElementById('wc-view-call-screen').style.display = 'none';
+    const floatWin = document.getElementById('floatingWindow');
+    const char = wcState.characters.find(c => c.id === wcState.callState.charId);
+    if(char) {
+        document.getElementById('floatAvatar').style.backgroundImage = `url('${char.avatar}')`;
+    }
+    floatWin.style.display = 'flex';
+};
+
+window.restoreCall = function() {
+    document.getElementById('floatingWindow').style.display = 'none';
+    document.getElementById('wc-view-call-screen').style.display = 'flex';
+};
+
+function initFloatingDrag(floatWin) {
+    let isDragging = false, startX, startY, initialX, initialY, moved = false;
+    
+    floatWin.addEventListener('mousedown', e => {
+        isDragging = true; moved = false; startX = e.clientX; startY = e.clientY;
+        const rect = floatWin.getBoundingClientRect();
+        initialX = rect.left; initialY = rect.top;
+    });
+    window.addEventListener('mousemove', e => {
+        if(!isDragging) return;
+        moved = true;
+        const dx = e.clientX - startX; const dy = e.clientY - startY;
+        floatWin.style.left = initialX + dx + 'px';
+        floatWin.style.top = initialY + dy + 'px';
+        floatWin.style.right = 'auto';
+    });
+    window.addEventListener('mouseup', (e) => {
+        isDragging = false;
+        if(moved) e.stopPropagation();
+    });
+    
+    floatWin.addEventListener('touchstart', e => {
+        isDragging = true; moved = false; startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+        const rect = floatWin.getBoundingClientRect();
+        initialX = rect.left; initialY = rect.top;
+    }, {passive: false});
+    window.addEventListener('touchmove', e => {
+        if(!isDragging) return;
+        moved = true;
+        e.preventDefault();
+        const dx = e.touches[0].clientX - startX; const dy = e.touches[0].clientY - startY;
+        floatWin.style.left = initialX + dx + 'px';
+        floatWin.style.top = initialY + dy + 'px';
+        floatWin.style.right = 'auto';
+    }, {passive: false});
+    window.addEventListener('touchend', (e) => {
+        isDragging = false;
+    });
+}
+
 // ==========================================
 // 新增：全局高级世界书选择弹窗逻辑
 // ==========================================
@@ -26233,4 +26882,51 @@ function wcAutoLayoutRelation() {
 
     wcSaveData();
     wcUpdateRelationPositions();
+}
+// ==========================================
+// 新增：同步离线消息函数
+// ==========================================
+async function syncOfflineMessages() {
+    try {
+        // 注意：这里的网址也要换成你真实的 Worker 网址哦！
+        const workerUrl = 'https://honey-offline-brain.xingyan067.workers.dev';
+        const deviceId = getDeviceId();
+        
+        // 遍历所有开启了主动发消息的角色，去云端问问有没有新消息
+        for (const char of wcState.characters) {
+            if (char.chatConfig && char.chatConfig.proactiveEnabled) {
+                const res = await fetch(`${workerUrl}/sync?deviceId=${deviceId}&charId=${char.id}`);
+                const data = await res.json();
+                
+                if (data.messages && data.messages.length > 0) {
+                    console.log(`拉取到 ${char.name} 的离线消息:`, data.messages);
+                    data.messages.forEach(msg => {
+                        // 把云端发来的消息，悄悄塞进本地的聊天记录里
+                        wcAddMessage(char.id, 'them', 'text', msg.content, { time: msg.time });
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.error("同步离线消息失败", e);
+    }
+}
+// ==========================================
+// 新增：取消离线托管函数
+// ==========================================
+async function unregisterOfflineProactiveTask(char) {
+    try {
+        // 注意：换成你真实的 Worker 网址
+        const workerUrl = 'https://honey-offline-brain.xingyan067.workers.dev';
+        const payload = { deviceId: getDeviceId(), charId: char.id };
+        
+        await fetch(`${workerUrl}/unregister`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        console.log(`✅ 已取消 ${char.name} 的云端托管`);
+    } catch (e) {
+        console.error("❌ 取消托管失败", e);
+    }
 }

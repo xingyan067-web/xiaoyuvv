@@ -651,7 +651,29 @@
                                 </div>
                             </div>
                         </div>                     
-                    </div>                      
+                    </div>
+
+                    <!-- 👇 新增：购物车/购买记录详情弹窗 👇 -->
+                    <div id="wc-modal-cart-item-detail" class="cart-detail-overlay hidden" onclick="wcCloseCartItemDetail()">
+                        <div class="cart-detail-card" onclick="event.stopPropagation()">
+                            <div class="cart-detail-header">
+                                <span class="cart-detail-tag" id="cart-detail-tag">IN CART</span>
+                                <button class="cart-detail-close" onclick="wcCloseCartItemDetail()">&times;</button>
+                            </div>
+                            <div class="cart-detail-icon-box" id="cart-detail-icon">🛒</div>
+                            <div class="cart-detail-title" id="cart-detail-title">商品名称</div>
+                            <div class="cart-detail-os-box">
+                                <div class="os-label">Ta 的内心 OS：</div>
+                                <div class="os-content" id="cart-detail-os">内心OS内容...</div>
+                            </div>
+                            <div class="cart-detail-footer">
+                                <div class="cart-detail-price" id="cart-detail-price">¥0.00</div>
+                                <div id="cart-detail-action"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 👆 新增结束 👆 -->
+
                 </div>
                 
                 <!-- 指纹退出键 (仅在桌面显示) -->
@@ -3263,15 +3285,22 @@
                                             <!-- Checkboxes injected via JS -->
                                         </div>
                                     </div>
-                                </div>
 
-                                <!-- Proactive Settings -->
-                                <div class="wc-settings-section">
-                                    <div class="wc-settings-section-title">主动性设置</div>
-                                    <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between;">
-                                        <label class="wc-form-label" style="margin: 0;">主动发消息</label>
+                                    <!-- 👇 恢复：主动发消息开关 (网页在线时) 👇 -->
+                                    <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 15px;">
+                                        <label class="wc-form-label" style="margin: 0;">主动发消息 (网页在线时)</label>
                                         <input type="checkbox" id="wc-setting-proactive-toggle" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);">
                                     </div>
+
+                                    <!-- 👇 新增：真实离线托管开关 (杀后台时) 👇 -->
+                                    <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 15px;">
+                                        <div>
+                                            <label class="wc-form-label" style="margin: 0;">真实离线托管 (云端代发)</label>
+                                            <div style="font-size: 11px; color: #888; margin-top: 4px;">开启后，杀掉网页后台依然能收到系统推送</div>
+                                        </div>
+                                        <input type="checkbox" id="wc-setting-offline-proactive-toggle" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);">
+                                    </div>
+                                    <!-- 👆 新增结束 👆 -->
                                     <div class="wc-form-group">
                                         <label class="wc-form-label">发送间隔 (分钟)</label>
                                         <input type="number" id="wc-setting-proactive-interval" class="wc-form-input" placeholder="例如: 60">
@@ -4620,8 +4649,9 @@
         <div class="dream-empty-state">No dreams yet.</div>
     </div>
 
-    <div class="dream-bottom-bar">
-        <button class="dream-btn-primary" onclick="enterDreamChat()">ENTER DREAM</button>
+    <div class="dream-bottom-bar" style="display: flex; gap: 15px;">
+        <button class="dream-btn-secondary" style="flex: 1; width: auto;" onclick="enterDreamChat('dream')"> 入梦 (Dream)</button>
+        <button class="dream-btn-primary" style="flex: 1; width: auto;" onclick="enterDreamChat('offline')"> 见面 (Offline)</button>
     </div>
 </div>
 
@@ -4733,7 +4763,7 @@
         <div class="dream-icon-btn" onclick="exitDreamChat()">
             <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
         </div>
-        <div class="dream-title" style="font-family: sans-serif; font-size: 14px;">IN THE DREAM...</div>
+        <div class="dream-title" id="dream-chat-title" style="font-family: sans-serif; font-size: 14px;">IN THE DREAM...</div>
         <!-- 修复：加上了 id="dream-btn-summarize" -->
         <div id="dream-btn-summarize" class="dream-icon-btn" onclick="endDreamAndSummarize()" style="width: auto; padding: 0 10px; font-size: 12px; font-weight: bold;">
             醒来(总结)

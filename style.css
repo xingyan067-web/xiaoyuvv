@@ -3233,6 +3233,85 @@ input::-webkit-inner-spin-button {
     padding: 0 10px; 
 }
 /* ========================================== */
+/* 新增：购物车/购买记录 详情弹窗样式 */
+/* ========================================== */
+.cart-detail-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.5); 
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    z-index: 30000; /* 确保层级极高 */
+    display: none; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.3s ease;
+}
+.cart-detail-overlay.active { opacity: 1; }
+
+.cart-detail-card {
+    width: 85%; max-width: 320px; 
+    background: #FFFFFF; border-radius: 24px;
+    padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+    transform: scale(0.95) translateY(10px); 
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex; flex-direction: column; position: relative;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+}
+.cart-detail-overlay.active .cart-detail-card { transform: scale(1) translateY(0); }
+
+.cart-detail-header { 
+    display: flex; justify-content: space-between; align-items: center; 
+    margin-bottom: 20px; 
+}
+.cart-detail-tag { 
+    font-size: 10px; font-weight: 800; letter-spacing: 1px; 
+    color: #888; background: #F5F5F5; padding: 4px 10px; border-radius: 8px; 
+}
+.cart-detail-close { 
+    background: none; border: none; font-size: 24px; color: #CCC; 
+    cursor: pointer; line-height: 1; padding: 0; transition: color 0.2s; 
+}
+.cart-detail-close:active { color: #111; }
+
+.cart-detail-icon-box { 
+    width: 64px; height: 64px; border-radius: 16px; 
+    display: flex; align-items: center; justify-content: center; 
+    font-size: 32px; margin: 0 auto 16px auto; 
+}
+
+.cart-detail-title { 
+    font-size: 18px; font-weight: 700; color: #111; 
+    text-align: center; margin-bottom: 20px; line-height: 1.4; 
+}
+
+/* 核心：内心 OS 气泡框 */
+.cart-detail-os-box { 
+    background: #F9F9F9; border: 1px solid #F0F0F0; 
+    border-radius: 16px; padding: 16px; margin-bottom: 24px; 
+}
+.os-label { 
+    font-size: 11px; color: #999; font-weight: bold; margin-bottom: 8px; 
+}
+.os-content { 
+    font-size: 14px; color: #333; line-height: 1.6; 
+    text-align: justify; white-space: pre-wrap; word-break: break-word;
+}
+
+.cart-detail-footer { 
+    display: flex; justify-content: space-between; align-items: center; 
+    border-top: 1px solid #F0F0F0; padding-top: 16px; 
+}
+.cart-detail-price { 
+    font-family: 'Georgia', serif; font-size: 22px; font-weight: bold; color: #111; 
+}
+.cart-detail-buy-btn { 
+    background: #111; color: #FFF; border: none; padding: 10px 20px; 
+    border-radius: 16px; font-size: 14px; font-weight: bold; cursor: pointer; 
+    transition: transform 0.2s; box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+}
+.cart-detail-buy-btn:active { transform: scale(0.95); }
+.cart-detail-date { 
+    font-family: monospace; font-size: 12px; color: #888; 
+}
+
+/* ========================================== */
 /* 新增：购物卡片样式 (200x180px 高级 INS 风) */
 /* ========================================== */
 .shopping-card {
@@ -7894,6 +7973,109 @@ input::-webkit-inner-spin-button {
     0%, 100% { height: 6px; }
     50% { height: 16px; }
 }
+/* ========================================== */
+/* 语音通话系统 - 全新居中排版与小窗特效 */
+/* ========================================== */
+
+/* 1. 聊天记录居中排版 */
+.ins-call-messages {
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; /* 强制居中 */
+    gap: 15px; 
+}
+.ins-call-msg-centered {
+    max-width: 85%; 
+    text-align: center; 
+    line-height: 1.6;
+    animation: wcFadeIn 0.3s ease;
+    word-break: break-word;
+}
+.ins-call-msg-centered.action {
+    color: #888; 
+    font-size: 13px;
+}
+.ins-call-msg-centered.speech {
+    color: #FFF; 
+    font-size: 16px; 
+    font-weight: 500;
+}
+.ins-call-msg-centered.me {
+    color: #007AFF; 
+    font-size: 15px;
+}
+
+/* 2. 底部输入区重排 (AI键在左，发送键在右) */
+.ins-call-input-row {
+    display: flex; 
+    align-items: center; 
+    gap: 10px; 
+    background: rgba(255,255,255,0.1);
+    padding: 8px 12px; 
+    border-radius: 24px; 
+    border: 1px solid rgba(255,255,255,0.15);
+    backdrop-filter: blur(10px);
+}
+.ins-call-ai-btn { order: 1; }
+#ins-call-input { order: 2; }
+.ins-call-send-btn { order: 3; }
+
+/* 3. 屏幕中间打字机特效区 */
+.typewriter-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.75); backdrop-filter: blur(5px); z-index: 35000; /* 提高层级，防止被通话界面遮挡 */
+    display: none; align-items: center; justify-content: center; padding: 30px;
+    box-sizing: border-box; cursor: pointer;
+}
+.typewriter-text {
+    font-size: 22px; font-weight: bold; color: #FFF; text-align: center;
+    line-height: 1.5; text-shadow: 0 2px 15px rgba(0,0,0,0.8);
+    font-family: 'Kaiti', 'STKaiti', '楷体', serif;
+}
+
+/* 4. 仿微信小窗模式 */
+.floating-window {
+    position: fixed; top: 60px; right: 20px; width: 70px; height: 90px;
+    background: rgba(30, 30, 30, 0.9); backdrop-filter: blur(10px);
+    border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 35000; cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
+    transition: transform 0.2s;
+}
+.floating-window:active { transform: scale(0.95); }
+.float-avatar { width: 36px; height: 36px; border-radius: 50%; background-size: cover; background-position: center; margin-bottom: 8px; border: 1px solid #444; }
+.float-time { font-size: 11px; color: #34C759; font-family: monospace; font-weight: bold; }
+
+/* 5. 缩小按钮 (左上角) */
+.ins-call-minimize-btn {
+    position: absolute; top: calc(env(safe-area-inset-top, 20px) + 20px); left: 20px;
+    width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.1);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    z-index: 100; backdrop-filter: blur(5px);
+}
+.ins-call-minimize-btn svg { width: 20px; height: 20px; fill: none; stroke: #FFF; stroke-width: 2; }
+/* 重新生成菜单 */
+.call-msg-menu {
+    position: absolute;
+    background: rgba(30,30,30,0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: #FFF;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    display: none;
+    z-index: 36000;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.15);
+    transition: transform 0.1s;
+}
+.call-msg-menu:active { 
+    background: rgba(60,60,60,0.95); 
+    transform: scale(0.95); 
+}
+
 /* ========================================== */
 /* 📱 iOS Standalone 全屏模式专属安全区适配 */
 /* ========================================== */

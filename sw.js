@@ -1,27 +1,46 @@
-// sw.js - Service Worker 用于处理后台通知
-self.addEventListener('install', (event) => {
-    self.skipWaiting(); // 强制立即激活
-});
+// sw.js - 离线邮递员 (终极拉取版)
 
-self.addEventListener('activate', (event) => {
-    event.waitUntil(self.clients.claim()); // 立即接管所有页面
-});
-
-// 监听通知点击事件
-self.addEventListener('notificationclick', (event) => {
-    event.notification.close(); // 点击后关闭通知
-
-    // 点击通知后，尝试唤醒或打开我们的网页
+self.addEventListener('push', function(event) {
+    // 核心逻辑：收到云端的唤醒信号后，强制保持后台运行，去拉取真实消息
     event.waitUntil(
-        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-            // 如果网页已经打开，就聚焦到那个网页
+        fetch('https://honey-offline-brain.xingyan067.workers.dev/get-latest-push')
+        .then(res => res.json())
+        .then(data => {
+            const options = {
+                body: data.body || "你有一条新消息",
+                icon: data.icon || "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg",
+                badge: data.icon || "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg",
+                vibrate: [200, 100, 200],
+                tag: 'offline-msg-' + Date.now(), // 确保每次通知独立显示
+                data: { url: '/' }
+            };
+            // 拿到真实内容后，呼叫手机系统弹出横幅！
+            return self.registration.showNotification(data.title || "小元机", options);
+        })
+        .catch(err => {
+            // 兜底保护：如果网络卡了拉不到消息，也要强行弹个横幅，防止苹果系统判定我们不干活而杀掉进程
+            return self.registration.showNotification("小元机", { 
+                body: "收到一条新消息",
+                icon: "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg",
+                tag: 'offline-msg-fallback',
+                data: { url: '/' }
+            });
+        })
+    );
+});
+
+// 监听用户点击通知的动作，点击后打开网页
+self.addEventListener('notificationclick', function(event) {
+    event.notification.close(); 
+    
+    event.waitUntil(
+        clients.matchAll({ type: 'window' }).then(windowClients => {
             for (let i = 0; i < windowClients.length; i++) {
-                let client = windowClients[i];
-                if (client.url && 'focus' in client) {
+                const client = windowClients[i];
+                if (client.url === '/' && 'focus' in client) {
                     return client.focus();
                 }
             }
-            // 如果网页没打开，就新开一个窗口
             if (clients.openWindow) {
                 return clients.openWindow('/');
             }
