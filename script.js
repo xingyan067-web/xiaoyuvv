@@ -3,9 +3,13 @@ window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.init({
         appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
-        serviceWorkerParam: { scope: "/" },
+        // 🔪 核心修复：适配你的 GitHub Pages 子目录路径
+        serviceWorkerParam: { scope: "/xiaoyuvv/" },
         serviceWorkerPath: "sw.js",
-        notifyButton: { enable: true } // 右下角显示订阅小铃铛
+        notifyButton: { 
+            enable: true,
+            displayPredicate: () => true // 强制显示铃铛
+        }
     });
 });
 
@@ -65,8 +69,13 @@ function urlBase64ToUint8Array(base64String) {
 // 注册离线托管任务 (OneSignal 版)
 async function registerOfflineProactiveTask(char) {
     try {
-        // 1. 获取 OneSignal 的订阅 ID
-        const subscriptionId = OneSignal.User.PushSubscription.id;
+        // 1. 获取 OneSignal 的订阅 ID (🔪 核心修复：增加安全检查)
+        if (!window.OneSignal || !window.OneSignal.User) {
+            alert("推送组件还在加载中，请稍等几秒钟再试哦~");
+            return;
+        }
+
+        const subscriptionId = window.OneSignal.User.PushSubscription.id;
         if (!subscriptionId) {
             alert("请先点击右下角的小铃铛，允许通知权限哦！");
             return;
