@@ -1,3 +1,22 @@
+// 🔪 新增：OneSignal 初始化与页面切回监听
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+        appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
+        serviceWorkerParam: { scope: "/" },
+        serviceWorkerPath: "sw.js",
+        notifyButton: { enable: true } // 右下角显示订阅小铃铛
+    });
+});
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        if (typeof syncOfflineMessages === 'function') {
+            syncOfflineMessages(); // 切回前台立刻拉取消息
+        }
+    }
+});
+
 // ==========================================
 // 新增：iOS Standalone (全屏) 模式检测与防缩放
 // ==========================================
@@ -43,49 +62,41 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
-// 注册离线托管任务 (纯前端打包版)
+// 注册离线托管任务 (OneSignal 版)
 async function registerOfflineProactiveTask(char) {
     try {
-        if (!('Notification' in window)) {
-            alert("当前浏览器不支持系统通知！如果是苹果手机，请点击底部「分享」-「添加到主屏幕」，从桌面打开本应用！");
+        // 1. 获取 OneSignal 的订阅 ID
+        const subscriptionId = OneSignal.User.PushSubscription.id;
+        if (!subscriptionId) {
+            alert("请先点击右下角的小铃铛，允许通知权限哦！");
             return;
         }
-        if (Notification.permission !== 'granted') {
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') return;
-        }
-
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
-        });
 
         const apiConfig = await getActiveApiConfig('chat');
         const chatConfig = char.chatConfig || {};
 
-        // 1. 完美提取上下文 (根据设置的条数)
+        // 2. 完美提取上下文
         let limit = chatConfig.contextLimit > 0 ? chatConfig.contextLimit : 30;
         const recentMsgs = (wcState.chats[char.id] || []).slice(-limit).map(m => {
             if (m.isError || m.type === 'system') return null;
             return { sender: m.sender, content: m.type !== 'text' ? `[${m.type}]` : m.content };
         }).filter(Boolean);
 
-        // 2. 读取世界书
+        // 3. 读取世界书
         let wbInfo = "";
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
         }
 
-        // 3. 读取回忆总结
+        // 4. 读取回忆总结
         let memoryText = "暂无特殊记忆。";
         if (char.memories && char.memories.length > 0) {
             const readCount = chatConfig.aiMemoryCount !== undefined ? chatConfig.aiMemoryCount : 5;
             if (readCount > 0) memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content.replace(/^\[.*?\]\s*/, '')}`).join('\n');
         }
 
-        // 4. 组装基础 System Prompt
+        // 5. 组装基础 System Prompt
         let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         systemPrompt += `【用户(User)设定】：${chatConfig.userPersona || wcState.user.persona || "无"}\n`;
         systemPrompt += `【你们的共同记忆（潜意识）】：\n${memoryText}\n\n`;
@@ -105,10 +116,10 @@ async function registerOfflineProactiveTask(char) {
             charAvatar: char.avatar,
             systemPrompt: systemPrompt, 
             apiConfig: apiConfig,
-            context: recentMsgs, // 完美的上下文数组
+            context: recentMsgs, 
             intervalMinutes: chatConfig.proactiveInterval || 60,
-            subscription: subscription,
-            timePerceptionEnabled: chatConfig.timePerceptionEnabled !== false // 告诉云端是否开启时间感知
+            subscriptionId: subscriptionId, // 🔪 核心修改：传 OneSignal ID
+            timePerceptionEnabled: chatConfig.timePerceptionEnabled !== false
         };
 
         await fetch('https://honey-offline-brain.xingyan067.workers.dev/register', {
