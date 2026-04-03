@@ -23860,10 +23860,11 @@ async function forumTriggerPMAI(chatId) {
     }
 }
 // ==========================================
-// 论坛私信长按菜单 (编辑/删除/重Roll)
+// 论坛私信长按菜单 (编辑/删除/重Roll) - 修复闪退版
 // ==========================================
 let forumPMLongPressTimer = null;
 let forumPMSelectedMsgId = null;
+let forumPMMenuOpenTime = 0; // 👈 新增：记录菜单打开的时间，防止幽灵点击
 
 window.handleForumPMTouchStart = function(e, msgId) {
     forumPMLongPressTimer = setTimeout(() => {
@@ -23872,7 +23873,7 @@ window.handleForumPMTouchStart = function(e, msgId) {
     }, 500);
 };
 
-window.handleForumPMTouchEnd = function() {
+window.handleForumPMTouchEnd = function(e) {
     if (forumPMLongPressTimer) {
         clearTimeout(forumPMLongPressTimer);
         forumPMLongPressTimer = null;
@@ -23899,7 +23900,7 @@ window.showForumPMContextMenu = function(eOrX, yOrMsgId, msgIdIfTouch) {
     if (!menu) {
         menu = document.createElement('div');
         menu.id = 'forum-pm-context-menu';
-        menu.className = 'dream-context-menu'; // 复用梦境的横向菜单样式
+        menu.className = 'dream-context-menu'; 
         document.body.appendChild(menu);
     }
     
@@ -23908,19 +23909,20 @@ window.showForumPMContextMenu = function(eOrX, yOrMsgId, msgIdIfTouch) {
     const msg = chat.messages.find(m => m.id === msgId);
     const isAI = msg && msg.sender === 'them';
 
+    // 👇 修复：给按钮加上 event 参数，方便阻止冒泡
     let menuHtml = '';
     if (isAI) {
         menuHtml += `
-            <div class="dream-ctx-item" onclick="forumPMActionRoll()">
+            <div class="dream-ctx-item" onclick="forumPMActionRoll(event)">
                 <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
             </div>
         `;
     }
     menuHtml += `
-        <div class="dream-ctx-item" onclick="forumPMActionEdit()">
+        <div class="dream-ctx-item" onclick="forumPMActionEdit(event)">
             <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
         </div>
-        <div class="dream-ctx-item" onclick="forumPMActionDelete()">
+        <div class="dream-ctx-item" onclick="forumPMActionDelete(event)">
             <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </div>
     `;
@@ -23950,29 +23952,34 @@ window.showForumPMContextMenu = function(eOrX, yOrMsgId, msgIdIfTouch) {
     menu.style.left = leftPos + 'px';
     menu.style.top = topPos + 'px';
     menu.style.display = 'flex';
+    
+    forumPMMenuOpenTime = Date.now(); // 👈 记录菜单打开的时间
 };
 
-document.addEventListener('touchstart', (e) => {
+// 👇 核心修复：统一的全局点击拦截器 👇
+const hideForumPMMenu = (e) => {
     const menu = document.getElementById('forum-pm-context-menu');
-    if (menu && menu.style.display === 'flex' && !e.target.closest('#forum-pm-context-menu')) {
+    if (menu && menu.style.display === 'flex') {
+        // 如果点击的是菜单内部，不隐藏（交给按钮自己的 onclick 处理）
+        if (e.target.closest('#forum-pm-context-menu')) return;
+        
+        // 核心修复：如果菜单刚打开不到 300ms，忽略此次点击（防止长按松手时的幽灵点击关闭菜单）
+        if (Date.now() - forumPMMenuOpenTime < 300) return;
+
         menu.style.display = 'none';
         forumPMSelectedMsgId = null;
     }
-}, { passive: true });
+};
 
-document.addEventListener('mousedown', (e) => {
-    const menu = document.getElementById('forum-pm-context-menu');
-    if (menu && menu.style.display === 'flex' && !e.target.closest('#forum-pm-context-menu')) {
-        menu.style.display = 'none';
-        forumPMSelectedMsgId = null;
-    }
-});
+// 替换掉原来的 document.addEventListener
+document.addEventListener('touchstart', hideForumPMMenu, { passive: true });
+document.addEventListener('mousedown', hideForumPMMenu);
 
-window.forumPMActionEdit = function() {
+window.forumPMActionEdit = function(e) {
+    if (e) e.stopPropagation(); // 阻止冒泡
     const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
     if (!chat) return;
-    // 👇 核心修复：使用 toString() 进行比对
-    const msg = chat.messages.find(m => m.id.toString() === forumPMSelectedMsgId.toString());
+    const msg = chat.messages.find(m => m.id === forumPMSelectedMsgId);
     if (!msg) return;
 
     document.getElementById('forum-pm-context-menu').style.display = 'none';
@@ -23986,28 +23993,28 @@ window.forumPMActionEdit = function() {
     });
 };
 
-window.forumPMActionDelete = function() {
+window.forumPMActionDelete = function(e) {
+    if (e) e.stopPropagation(); // 阻止冒泡
     const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
     if (!chat) return;
 
     document.getElementById('forum-pm-context-menu').style.display = 'none';
 
     if (confirm("确定删除这条私信吗？")) {
-        // 👇 核心修复：使用 toString() 进行比对
-        chat.messages = chat.messages.filter(m => m.id.toString() !== forumPMSelectedMsgId.toString());
+        chat.messages = chat.messages.filter(m => m.id !== forumPMSelectedMsgId);
         forumSaveData();
         forumRenderPMChatHistory();
     }
 };
 
-window.forumPMActionRoll = function() {
+window.forumPMActionRoll = function(e) {
+    if (e) e.stopPropagation(); // 阻止冒泡
     const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
     if (!chat) return;
 
     document.getElementById('forum-pm-context-menu').style.display = 'none';
 
-    // 👇 核心修复：使用 toString() 进行比对
-    const msgIndex = chat.messages.findIndex(m => m.id.toString() === forumPMSelectedMsgId.toString());
+    const msgIndex = chat.messages.findIndex(m => m.id === forumPMSelectedMsgId);
     if (msgIndex > -1) {
         const isLastMsg = msgIndex === chat.messages.length - 1;
         if (!isLastMsg) {
