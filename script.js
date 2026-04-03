@@ -1,12 +1,12 @@
-// ✅ OneSignal 终极修复版 (适配 GitHub Pages 子目录)
+// ✅ OneSignal 终极修复版 (绝对路径防丢版)
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {
     try {
         await OneSignal.init({
             appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
-            // 核心修复：GitHub Pages 子目录必须用这个写法
             serviceWorkerParam: { scope: "/xiaoyuvv/" },
-            serviceWorkerPath: "/xiaoyuvv/sw.js", // ✅ 加上完整的子目录路径！
+            // 🔪 核心修复：直接写死绝对路径，绝不迷路！
+            serviceWorkerPath: "https://xingyan067-web.github.io/xiaoyuvv/sw.js", 
             allowLocalhostAsSecureOrigin: true
         });
         console.log("✅ OneSignal 初始化成功！");
@@ -14,6 +14,7 @@ OneSignalDeferred.push(async function(OneSignal) {
         console.error("❌ OneSignal 初始化失败:", e);
     }
 });
+
 
 // 切回前台时拉取离线消息（只绑定一次）
 document.addEventListener('visibilitychange', () => {
@@ -101,7 +102,11 @@ async function handleOfflineToggle(checkbox) {
                 alert("需要允许通知权限才能开启离线托管哦！\n\n如果弹窗没出现，请前往：手机设置 → Safari/浏览器 → 通知 → 手动开启。");
                 checkbox.checked = false;
             } else {
-                alert("✅ 通知权限已获取！请点击右上角保存设置生效。");
+                // 🔪 核心修复：拿到权限后，强制要求 OneSignal 立即注册设备！
+                if (window.OneSignal.User && window.OneSignal.User.PushSubscription) {
+                    await window.OneSignal.User.PushSubscription.optIn();
+                }
+                alert("✅ 通知权限已获取！\n系统正在为您分配专属推送通道，请在心里默数 3 秒钟，然后再点击右上角的【保存】按钮！");
             }
         } catch(e) {
             console.error("请求通知权限失败:", e);
@@ -123,14 +128,23 @@ async function registerOfflineProactiveTask(char) {
             return;
         }
 
-        // 1. 获取 OneSignal 的订阅 ID
-        let subscriptionId = null;
+        // 🔪 核心修复：强制 Opt-in 一次，以防万一
         if (window.OneSignal.User && window.OneSignal.User.PushSubscription) {
-            subscriptionId = window.OneSignal.User.PushSubscription.id;
+            window.OneSignal.User.PushSubscription.optIn();
+        }
+
+        // 🔪 核心修复：循环等待获取 ID (最多等 5 秒钟)
+        let subscriptionId = null;
+        for (let i = 0; i < 10; i++) {
+            if (window.OneSignal.User && window.OneSignal.User.PushSubscription) {
+                subscriptionId = window.OneSignal.User.PushSubscription.id;
+            }
+            if (subscriptionId) break; // 拿到了就跳出循环
+            await new Promise(resolve => setTimeout(resolve, 500)); // 没拿到就等 0.5 秒再试
         }
         
         if (!subscriptionId) {
-            alert("❌ 托管失败：未获取到推送 ID！\n可能原因：网络延迟还没拿到 ID。请等待 3 秒钟后，再点一次右上角的【保存】按钮！");
+            alert("❌ 托管失败：获取推送 ID 超时！\n\n可能原因：\n1. 你的网络连接 OneSignal 服务器较慢。\n2. 苹果系统尚未返回设备 Token。\n\n请再点一次右上角的【保存】重试！");
             return;
         }
 
