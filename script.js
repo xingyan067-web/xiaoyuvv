@@ -1,28 +1,26 @@
-// ✅ OneSignal 终极修复版 (三重保险防 404 版)
+// ✅ OneSignal 终极修复版 (官方标准子目录写法 + 精准报错)
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {
     try {
-        // 第一重保险：我们自己手动帮它注册，把路铺好！
-        if ('serviceWorker' in navigator) {
-            await navigator.serviceWorker.register('/xiaoyuvv/sw.js', { scope: '/xiaoyuvv/' });
-        }
-
-        // 第二重保险：初始化 OneSignal，同时写上新旧两种版本的路径配置，绝不让它乱跑！
         await OneSignal.init({
             appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
-            // 旧版配置写法
-            serviceWorkerPath: "sw.js",
+            // 🔪 核心修复：严格按照官方要求的子目录格式，不加前导斜杠
             serviceWorkerParam: { scope: "/xiaoyuvv/" },
-            // 新版 v16 配置写法
-            serviceWorker: {
-                path: "sw.js",
-                scope: "/xiaoyuvv/"
-            }
+            serviceWorkerPath: "xiaoyuvv/sw.js" 
         });
         console.log("✅ OneSignal 初始化成功！");
     } catch(e) {
-        console.error("❌ OneSignal 初始化失败:", e);
-        alert("推送组件加载失败，请检查网络或清除缓存重试！");
+        // 🔪 核心修复：把真正的系统报错信息弹出来！
+        alert("❌ OneSignal 致命报错:\n" + e.message + "\n\n请把这个弹窗截图发给我！");
+    }
+});
+
+// 切回前台时拉取离线消息
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        if (typeof syncOfflineMessages === 'function') {
+            syncOfflineMessages();
+        }
     }
 });
 
