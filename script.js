@@ -26986,7 +26986,7 @@ function wcAutoLayoutRelation() {
     wcUpdateRelationPositions();
 }
 // ==========================================
-// 新增：同步离线消息函数 (带 ACK 确认机制)
+// 新增：同步离线消息与自动续期函数 (防僵尸任务版)
 // ==========================================
 async function syncOfflineMessages() {
     try {
@@ -27000,9 +27000,11 @@ async function syncOfflineMessages() {
             await cache.put('/current-device-id', new Response(deviceId));
         }
         
-        // 遍历所有开启了主动发消息的角色，去云端问问有没有新消息
+        // 遍历所有角色
         for (const char of wcState.characters) {
-            if (char.chatConfig && char.chatConfig.proactiveEnabled) {
+            if (char.chatConfig && char.chatConfig.proactiveEnabled && char.chatConfig.offlineProactiveEnabled) {
+                
+                // 1. 拉取离线消息
                 const res = await fetch(`${workerUrl}/sync?deviceId=${deviceId}&charId=${char.id}`);
                 const data = await res.json();
                 
@@ -27010,14 +27012,13 @@ async function syncOfflineMessages() {
                     console.log(`拉取到 ${char.name} 的离线消息:`, data.messages);
                     let addedCount = 0;
                     data.messages.forEach(msg => {
-                        // 把云端发来的消息，悄悄塞进本地的聊天记录里
                         wcAddMessage(char.id, 'them', 'text', msg.content, { time: msg.time });
                         addedCount++;
                     });
                     
-                    // 核心修复：只有成功存入本地后，才通知云端删除消息 (ACK)
+                    // 只有成功存入本地后，才通知云端删除消息 (ACK)
                     if (addedCount > 0) {
-                        await wcSaveData(); // 确保保存到 IndexedDB
+                        await wcSaveData(); 
                         await fetch(`${workerUrl}/ack`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -27026,12 +27027,20 @@ async function syncOfflineMessages() {
                         console.log(`✅ 已确认接收并清空云端 ${char.name} 的离线消息`);
                     }
                 }
+
+                // 2. 强制重新注册 (自动续期，防止变成僵尸任务)
+                // 延迟 2 秒执行，避免阻塞页面加载
+                setTimeout(() => {
+                    console.log(`🔄 正在为 ${char.name} 自动续期云端托管...`);
+                    registerOfflineProactiveTask(char);
+                }, 2000);
             }
         }
     } catch (e) {
         console.error("同步离线消息失败", e);
     }
 }
+
 // ==========================================
 // 新增：取消离线托管函数
 // ==========================================
