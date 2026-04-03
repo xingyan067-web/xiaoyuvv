@@ -23689,8 +23689,7 @@ function forumRenderPMChatHistory() {
             bubbleContentHtml = `<div style="word-break: break-word; width: 100%;">${originalText}</div><div id="${transId}" style="display: none; width: 100%; margin-top: 8px;"><div style="height: 1px; width: 100%; background-color: ${isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)'}; margin-bottom: 8px;"></div><div style="font-size: 13px; word-break: break-word; color: ${isMe ? '#CCCCCC' : '#888888'};">${translatedText}</div></div>`;
         }
 
-        // 👇 核心修复：给 msg.id 加上单引号 '${msg.id}'，作为字符串传递，防止精度丢失
-        const touchEvents = `ontouchstart="handleForumPMTouchStart(event, '${msg.id}')" ontouchend="handleForumPMTouchEnd()" oncontextmenu="showForumPMContextMenu(event, '${msg.id}')"`;
+        const touchEvents = `ontouchstart="handleForumPMTouchStart(event, ${msg.id})" ontouchend="handleForumPMTouchEnd()" oncontextmenu="showForumPMContextMenu(event, ${msg.id})"`;
 
         div.innerHTML = `
             ${avatarHtml}
@@ -23734,7 +23733,7 @@ function forumSendPM() {
     forumRenderPMChatHistory();
 }
 
-// 6. 专属的私信 AI 回复逻辑
+// 6. 专属的私信 AI 回复逻辑 (终极增强版：精准读取帖子、评论与私信上下文)
 async function forumTriggerPMAI(chatId) {
     const chat = forumState.privateChats.find(c => c.id === chatId);
     if (!chat) return;
@@ -23752,17 +23751,17 @@ async function forumTriggerPMAI(chatId) {
     container.scrollTop = container.scrollHeight;
 
     try {
-        // 提取最近的聊天记录
-        const recentMsgs = chat.messages.slice(-15).map(m => {
+        // 提取最近的私信聊天记录 (上下文)
+        const recentMsgs = chat.messages.slice(-20).map(m => {
             const speaker = m.sender === 'me' ? forumState.profile.name : chat.targetName;
             return `${speaker}: ${m.content}`;
         }).join('\n');
 
-        // 👇 修改：查找对方是否是已知的 NPC，如果不是，赋予路人设定
+        // 查找对方是否是已知的 NPC，如果不是，赋予路人设定
         const npc = wcState.characters.find(c => c.name === chat.targetName);
         let npcPersona = npc ? npc.prompt : "一个在论坛上关注你的热心网友/路人。请根据你们的聊天记录推断你的性格，语气要像真实的活人网友。";
 
-        // 👇 新增：提取微信主聊天记录作为参考 👇
+        // 提取微信主聊天记录作为参考
         let mainChatHistory = "";
         if (npc) {
             const msgs = wcState.chats[npc.id] || [];
@@ -23774,21 +23773,68 @@ async function forumTriggerPMAI(chatId) {
             }).filter(Boolean).join('\n');
         }
 
+        // 读取世界书和窗口设定
+        let wbInfo = "";
+        if (forumState.config.worldbookIds && forumState.config.worldbookIds.length > 0) {
+            const wbs = worldbookEntries.filter(e => forumState.config.worldbookIds.includes(e.id.toString()));
+            if (wbs.length > 0) {
+                wbInfo = "【世界观背景参考】:\n" + wbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+            }
+        }
+
+        let windowInfo = "";
+        const currentWin = forumState.windows.find(w => w.id === chat.windowId);
+        if (currentWin && currentWin.prompt) {
+            windowInfo = `【当前论坛板块专属背景设定 (${currentWin.name})】:\n${currentWin.prompt}\n\n`;
+        }
+
+        // 👇 强化：精准读取 User 参与过的帖子及评论，作为私信的直接触发背景 👇
+        let userActivePostsInfo = "";
+        const userPosts = forumState.posts.filter(p => 
+            p.windowId === chat.windowId && 
+            (p.author.name === forumState.profile.name || (p.comments && p.comments.some(c => c.name === forumState.profile.name)))
+        ).slice(0, 3);
+        
+        if (userPosts.length > 0) {
+            userActivePostsInfo = "【User 最近参与的论坛帖子（你极有可能是因为看了这些帖子或评论，才来找 User 私聊的）】:\n";
+            userPosts.forEach(p => {
+                userActivePostsInfo += `发帖人：${p.author.name} | 标题：${p.title || '无题'} | 帖子内容：${p.content.substring(0, 200)}...\n`;
+                const userComments = (p.comments || []).filter(c => c.name === forumState.profile.name);
+                if (userComments.length > 0) {
+                    userActivePostsInfo += `User 在此帖的评论：${userComments.map(c => c.content).join(' | ')}\n`;
+                }
+                userActivePostsInfo += "\n";
+            });
+        } else {
+            // 如果 User 没发帖也没评论，就随便取最近的帖子作为大背景
+            const recentPosts = forumState.posts.filter(p => p.windowId === chat.windowId).slice(0, 3);
+            if (recentPosts.length > 0) {
+                userActivePostsInfo = "【当前论坛最近的热门帖子（作为论坛大背景）】:\n";
+                recentPosts.forEach(p => {
+                    userActivePostsInfo += `发帖人：${p.author.name} | 标题：${p.title || '无题'} | 内容摘要：${p.content.substring(0, 100)}...\n`;
+                });
+                userActivePostsInfo += "\n";
+            }
+        }
+
         let prompt = `你现在正在一个社交论坛的私信界面里，和用户（${forumState.profile.name}）进行一对一私聊。\n`;
         prompt += `【你的身份】：${chat.targetName}\n`;
         prompt += `【你的人设】：${npcPersona}\n\n`;
+        prompt += windowInfo;
+        prompt += wbInfo;
+        prompt += userActivePostsInfo;
         prompt += wcGenerateRelationshipPrompt(forumState.config.charIds); // 注入关系网
         if (mainChatHistory) {
             prompt += `【你们在微信上的最近聊天记录（作为参考）】：\n${mainChatHistory}\n\n`;
         }
-        prompt += `【最近的私信聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `【最近的私信聊天记录（这是你们当前的对话上下文，请顺着这个话题继续聊）】：\n${recentMsgs}\n\n`;
         prompt += `【要求】：\n`;
-        prompt += `1. 请根据你的人设和聊天记录，回复用户的最后一条消息。\n`;
-        prompt += `2. 语气要符合论坛私聊的氛围（可以是网感、暧昧、吐槽等，取决于你的人设）。\n`;
-        // 👇 修改：强制要求碎片化输出，并保证语义完整 👇
-        prompt += `3. 【碎片化口语化强制指令】：必须像真人聊天一样，将长回复拆分成 2-4 条短消息！严禁把所有话挤在一个气泡里！确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n`;
-        prompt += `4. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）说话！你只能扮演 ${chat.targetName}！\n`;
-        prompt += `5. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `1. 请根据你的人设、世界观背景、论坛帖子/评论内容以及私信上下文，回复用户的最后一条消息。\n`;
+        prompt += `2. 如果私信刚开始，请结合上面的【User 最近参与的论坛帖子】作为开场白（比如吐槽帖子内容、回应 User 的评论等）。如果私信已经聊起来了，请重点顺着【最近的私信聊天记录】继续聊。\n`;
+        prompt += `3. 语气要符合论坛私聊的氛围（可以是网感、暧昧、吐槽等，取决于你的人设）。\n`;
+        prompt += `4. 【碎片化口语化强制指令】：必须像真人聊天一样，将长回复拆分成 2-4 条短消息！严禁把所有话挤在一个气泡里！确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n`;
+        prompt += `5. 【最高防OOC指令】：你绝对不能以用户的身份（${forumState.profile.name}）说话！你只能扮演 ${chat.targetName}！\n`;
+        prompt += `6. 返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
   {"content": "第一句短消息"},
   {"content": "第二句短消息"}
@@ -23839,7 +23885,7 @@ async function forumTriggerPMAI(chatId) {
             }
         }
         
-        // 👇 新增：同步 AI 的回复到主聊天记忆 👇
+        // 同步 AI 的回复到主聊天记忆
         if (npc && combinedReply) {
             wcAddMessage(npc.id, 'system', 'system', `[系统内部信息(仅AI可见): 你刚刚在论坛私信里回复了 User: "${combinedReply.trim()}"]`, { hidden: true });
         }
@@ -23859,12 +23905,12 @@ async function forumTriggerPMAI(chatId) {
         if (typeof showApiErrorModal === 'function') showApiErrorModal(`[论坛私信回复失败] ${e.message}`);
     }
 }
+
 // ==========================================
-// 论坛私信长按菜单 (编辑/删除/重Roll) - 修复闪退版
+// 论坛私信长按菜单 (编辑/删除/重Roll)
 // ==========================================
 let forumPMLongPressTimer = null;
 let forumPMSelectedMsgId = null;
-let forumPMMenuOpenTime = 0; // 👈 新增：记录菜单打开的时间，防止幽灵点击
 
 window.handleForumPMTouchStart = function(e, msgId) {
     forumPMLongPressTimer = setTimeout(() => {
@@ -23873,7 +23919,7 @@ window.handleForumPMTouchStart = function(e, msgId) {
     }, 500);
 };
 
-window.handleForumPMTouchEnd = function(e) {
+window.handleForumPMTouchEnd = function() {
     if (forumPMLongPressTimer) {
         clearTimeout(forumPMLongPressTimer);
         forumPMLongPressTimer = null;
@@ -23900,7 +23946,7 @@ window.showForumPMContextMenu = function(eOrX, yOrMsgId, msgIdIfTouch) {
     if (!menu) {
         menu = document.createElement('div');
         menu.id = 'forum-pm-context-menu';
-        menu.className = 'dream-context-menu'; 
+        menu.className = 'dream-context-menu'; // 复用梦境的横向菜单样式
         document.body.appendChild(menu);
     }
     
@@ -23909,20 +23955,19 @@ window.showForumPMContextMenu = function(eOrX, yOrMsgId, msgIdIfTouch) {
     const msg = chat.messages.find(m => m.id === msgId);
     const isAI = msg && msg.sender === 'them';
 
-    // 👇 修复：给按钮加上 event 参数，方便阻止冒泡
     let menuHtml = '';
     if (isAI) {
         menuHtml += `
-            <div class="dream-ctx-item" onclick="forumPMActionRoll(event)">
+            <div class="dream-ctx-item" onclick="forumPMActionRoll()">
                 <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
             </div>
         `;
     }
     menuHtml += `
-        <div class="dream-ctx-item" onclick="forumPMActionEdit(event)">
+        <div class="dream-ctx-item" onclick="forumPMActionEdit()">
             <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
         </div>
-        <div class="dream-ctx-item" onclick="forumPMActionDelete(event)">
+        <div class="dream-ctx-item" onclick="forumPMActionDelete()">
             <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </div>
     `;
@@ -23952,31 +23997,20 @@ window.showForumPMContextMenu = function(eOrX, yOrMsgId, msgIdIfTouch) {
     menu.style.left = leftPos + 'px';
     menu.style.top = topPos + 'px';
     menu.style.display = 'flex';
-    
-    forumPMMenuOpenTime = Date.now(); // 👈 记录菜单打开的时间
 };
 
-// 👇 核心修复：统一的全局点击拦截器 👇
-const hideForumPMMenu = (e) => {
+// 修复：改用 click 监听，并排除气泡本身的点击，防止长按松手时触发隐藏
+document.addEventListener('click', (e) => {
     const menu = document.getElementById('forum-pm-context-menu');
     if (menu && menu.style.display === 'flex') {
-        // 如果点击的是菜单内部，不隐藏（交给按钮自己的 onclick 处理）
-        if (e.target.closest('#forum-pm-context-menu')) return;
-        
-        // 核心修复：如果菜单刚打开不到 300ms，忽略此次点击（防止长按松手时的幽灵点击关闭菜单）
-        if (Date.now() - forumPMMenuOpenTime < 300) return;
-
-        menu.style.display = 'none';
-        forumPMSelectedMsgId = null;
+        if (!e.target.closest('#forum-pm-context-menu') && !e.target.closest('.forum-pm-bubble')) {
+            menu.style.display = 'none';
+            forumPMSelectedMsgId = null;
+        }
     }
-};
+});
 
-// 替换掉原来的 document.addEventListener
-document.addEventListener('touchstart', hideForumPMMenu, { passive: true });
-document.addEventListener('mousedown', hideForumPMMenu);
-
-window.forumPMActionEdit = function(e) {
-    if (e) e.stopPropagation(); // 阻止冒泡
+window.forumPMActionEdit = function() {
     const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
     if (!chat) return;
     const msg = chat.messages.find(m => m.id === forumPMSelectedMsgId);
@@ -23993,8 +24027,7 @@ window.forumPMActionEdit = function(e) {
     });
 };
 
-window.forumPMActionDelete = function(e) {
-    if (e) e.stopPropagation(); // 阻止冒泡
+window.forumPMActionDelete = function() {
     const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
     if (!chat) return;
 
@@ -24007,8 +24040,7 @@ window.forumPMActionDelete = function(e) {
     }
 };
 
-window.forumPMActionRoll = function(e) {
-    if (e) e.stopPropagation(); // 阻止冒泡
+window.forumPMActionRoll = function() {
     const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
     if (!chat) return;
 
@@ -24031,7 +24063,6 @@ window.forumPMActionRoll = function(e) {
         forumTriggerPMAI(forumState.activePMChatId);
     }
 };
-
 
 /* ==========================================================================
    语音通话系统 (Voice Call Logic - 沉浸互通版)
