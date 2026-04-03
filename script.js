@@ -23666,14 +23666,13 @@ function forumRenderPMChatHistory() {
         const div = document.createElement('div');
         div.className = `forum-pm-bubble-row ${msg.sender === 'me' ? 'me' : 'them'}`;
         
-// 找到这段代码（大约在 17730 行左右）：
         let avatarHtml = '';
         if (msg.sender === 'them') {
             avatarHtml = `<img src="${chat.targetAvatar}" class="forum-pm-bubble-avatar">`;
         } else {
             avatarHtml = `<img src="${forumState.profile.avatar}" class="forum-pm-bubble-avatar">`;
         }
-        // 👇👇👇 将下面的 div.innerHTML 替换掉 👇👇👇
+        
         const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
         const match = msg.content.match(bilingualRegex);
         
@@ -23687,15 +23686,16 @@ function forumRenderPMChatHistory() {
             const transId = 'pm-trans-' + Math.random().toString(36).substr(2, 9);
             
             onClickAttr = `onclick="const el = document.getElementById('${transId}'); if(el.style.display==='none'){el.style.display='block';}else{el.style.display='none';}" style="cursor: pointer; -webkit-tap-highlight-color: transparent;"`;
-            // 核心修复：压缩为单行
             bubbleContentHtml = `<div style="word-break: break-word; width: 100%;">${originalText}</div><div id="${transId}" style="display: none; width: 100%; margin-top: 8px;"><div style="height: 1px; width: 100%; background-color: ${isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)'}; margin-bottom: 8px;"></div><div style="font-size: 13px; word-break: break-word; color: ${isMe ? '#CCCCCC' : '#888888'};">${translatedText}</div></div>`;
         }
 
+        // 👇 核心修复：给 msg.id 加上单引号 '${msg.id}'，作为字符串传递，防止精度丢失
+        const touchEvents = `ontouchstart="handleForumPMTouchStart(event, '${msg.id}')" ontouchend="handleForumPMTouchEnd()" oncontextmenu="showForumPMContextMenu(event, '${msg.id}')"`;
+
         div.innerHTML = `
             ${avatarHtml}
-            <div class="forum-pm-bubble" ${onClickAttr}>${bubbleContentHtml}</div>
+            <div class="forum-pm-bubble" ${onClickAttr} ${touchEvents}>${bubbleContentHtml}</div>
         `;
-        // 👆👆👆 替换结束 👆👆👆
         
         container.appendChild(div);
     });
@@ -23859,6 +23859,173 @@ async function forumTriggerPMAI(chatId) {
         if (typeof showApiErrorModal === 'function') showApiErrorModal(`[论坛私信回复失败] ${e.message}`);
     }
 }
+// ==========================================
+// 论坛私信长按菜单 (编辑/删除/重Roll)
+// ==========================================
+let forumPMLongPressTimer = null;
+let forumPMSelectedMsgId = null;
+
+window.handleForumPMTouchStart = function(e, msgId) {
+    forumPMLongPressTimer = setTimeout(() => {
+        const touch = e.touches[0];
+        showForumPMContextMenu(touch.clientX, touch.clientY, msgId);
+    }, 500);
+};
+
+window.handleForumPMTouchEnd = function() {
+    if (forumPMLongPressTimer) {
+        clearTimeout(forumPMLongPressTimer);
+        forumPMLongPressTimer = null;
+    }
+};
+
+window.showForumPMContextMenu = function(eOrX, yOrMsgId, msgIdIfTouch) {
+    let x, y, msgId;
+    if (typeof eOrX === 'object') {
+        eOrX.preventDefault();
+        eOrX.stopPropagation();
+        x = eOrX.pageX || eOrX.clientX;
+        y = eOrX.pageY || eOrX.clientY;
+        msgId = yOrMsgId;
+    } else {
+        x = eOrX;
+        y = yOrMsgId;
+        msgId = msgIdIfTouch;
+    }
+
+    forumPMSelectedMsgId = msgId;
+    
+    let menu = document.getElementById('forum-pm-context-menu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'forum-pm-context-menu';
+        menu.className = 'dream-context-menu'; // 复用梦境的横向菜单样式
+        document.body.appendChild(menu);
+    }
+    
+    const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
+    if (!chat) return;
+    const msg = chat.messages.find(m => m.id === msgId);
+    const isAI = msg && msg.sender === 'them';
+
+    let menuHtml = '';
+    if (isAI) {
+        menuHtml += `
+            <div class="dream-ctx-item" onclick="forumPMActionRoll()">
+                <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            </div>
+        `;
+    }
+    menuHtml += `
+        <div class="dream-ctx-item" onclick="forumPMActionEdit()">
+            <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        </div>
+        <div class="dream-ctx-item" onclick="forumPMActionDelete()">
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </div>
+    `;
+    menu.innerHTML = menuHtml;
+
+    const menuWidth = isAI ? 180 : 120;
+    const menuHeight = 44; 
+    const screenW = window.innerWidth;
+    
+    let leftPos = x - (menuWidth / 2);
+    let topPos = y - menuHeight - 20;
+
+    if (leftPos < 10) leftPos = 10;
+    if (leftPos + menuWidth > screenW - 10) leftPos = screenW - menuWidth - 10;
+
+    if (topPos < 10) {
+        topPos = y + 30;
+        menu.style.setProperty('--triangle-top', '-7px');
+        menu.style.setProperty('--triangle-bottom', 'auto');
+        menu.style.setProperty('--triangle-rotate', '180deg');
+    } else {
+        menu.style.setProperty('--triangle-top', '100%');
+        menu.style.setProperty('--triangle-bottom', 'auto');
+        menu.style.setProperty('--triangle-rotate', '0deg');
+    }
+
+    menu.style.left = leftPos + 'px';
+    menu.style.top = topPos + 'px';
+    menu.style.display = 'flex';
+};
+
+document.addEventListener('touchstart', (e) => {
+    const menu = document.getElementById('forum-pm-context-menu');
+    if (menu && menu.style.display === 'flex' && !e.target.closest('#forum-pm-context-menu')) {
+        menu.style.display = 'none';
+        forumPMSelectedMsgId = null;
+    }
+}, { passive: true });
+
+document.addEventListener('mousedown', (e) => {
+    const menu = document.getElementById('forum-pm-context-menu');
+    if (menu && menu.style.display === 'flex' && !e.target.closest('#forum-pm-context-menu')) {
+        menu.style.display = 'none';
+        forumPMSelectedMsgId = null;
+    }
+});
+
+window.forumPMActionEdit = function() {
+    const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
+    if (!chat) return;
+    // 👇 核心修复：使用 toString() 进行比对
+    const msg = chat.messages.find(m => m.id.toString() === forumPMSelectedMsgId.toString());
+    if (!msg) return;
+
+    document.getElementById('forum-pm-context-menu').style.display = 'none';
+
+    openIosTextEditModal("编辑私信", msg.content, (newText) => {
+        if (newText) {
+            msg.content = newText;
+            forumSaveData();
+            forumRenderPMChatHistory();
+        }
+    });
+};
+
+window.forumPMActionDelete = function() {
+    const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
+    if (!chat) return;
+
+    document.getElementById('forum-pm-context-menu').style.display = 'none';
+
+    if (confirm("确定删除这条私信吗？")) {
+        // 👇 核心修复：使用 toString() 进行比对
+        chat.messages = chat.messages.filter(m => m.id.toString() !== forumPMSelectedMsgId.toString());
+        forumSaveData();
+        forumRenderPMChatHistory();
+    }
+};
+
+window.forumPMActionRoll = function() {
+    const chat = forumState.privateChats.find(c => c.id === forumState.activePMChatId);
+    if (!chat) return;
+
+    document.getElementById('forum-pm-context-menu').style.display = 'none';
+
+    // 👇 核心修复：使用 toString() 进行比对
+    const msgIndex = chat.messages.findIndex(m => m.id.toString() === forumPMSelectedMsgId.toString());
+    if (msgIndex > -1) {
+        const isLastMsg = msgIndex === chat.messages.length - 1;
+        if (!isLastMsg) {
+            if (!confirm("重生成此条消息，将会删除它之后的所有对话记录，确定要继续吗？")) {
+                return;
+            }
+        }
+        // 截断数组
+        chat.messages = chat.messages.slice(0, msgIndex);
+        forumSaveData();
+        forumRenderPMChatHistory();
+        
+        // 重新触发 AI
+        forumTriggerPMAI(forumState.activePMChatId);
+    }
+};
+
+
 /* ==========================================================================
    语音通话系统 (Voice Call Logic - 沉浸互通版)
    ========================================================================== */
