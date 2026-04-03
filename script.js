@@ -115,40 +115,31 @@ async function handleOfflineToggle(checkbox) {
         }
     }
 }
-// 👇 替换：精简版的注册离线托管任务
+// 注册离线托管任务 (带强力报错提示版)
 async function registerOfflineProactiveTask(char) {
     try {
         if (!window.OneSignal) {
-            console.warn("OneSignal 未加载");
+            alert("❌ 托管失败：OneSignal 推送组件未加载！");
             return;
         }
 
-        // ✅ 兼容多种获取订阅ID的方式
+        // 1. 获取 OneSignal 的订阅 ID
         let subscriptionId = null;
-        try {
-            // 方式一：新版 SDK
-            if (window.OneSignal.User && window.OneSignal.User.PushSubscription) {
-                subscriptionId = window.OneSignal.User.PushSubscription.id;
-            }
-            // 方式二：如果新版拿不到，等 1 秒后重试一次
-            if (!subscriptionId) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                if (window.OneSignal.User && window.OneSignal.User.PushSubscription) {
-                    subscriptionId = window.OneSignal.User.PushSubscription.id;
-                }
-            }
-        } catch(e) {
-            console.warn("获取订阅ID失败:", e);
+        if (window.OneSignal.User && window.OneSignal.User.PushSubscription) {
+            subscriptionId = window.OneSignal.User.PushSubscription.id;
         }
-
+        
         if (!subscriptionId) {
-            console.warn("未获取到订阅ID，可能未授权或 OneSignal 还未就绪");
+            alert("❌ 托管失败：未获取到推送 ID！\n可能原因：网络延迟还没拿到 ID。请等待 3 秒钟后，再点一次右上角的【保存】按钮！");
             return;
         }
-
-        console.log("✅ 获取到订阅ID:", subscriptionId);
 
         const apiConfig = await getActiveApiConfig('chat');
+        if (!apiConfig || !apiConfig.key) {
+            alert("❌ 托管失败：请先在设置里配置好 API 密钥！");
+            return;
+        }
+
         const chatConfig = char.chatConfig || {};
 
         // 2. 提取上下文
@@ -158,25 +149,9 @@ async function registerOfflineProactiveTask(char) {
             return { sender: m.sender, content: m.type !== 'text' ? `[${m.type}]` : m.content };
         }).filter(Boolean);
 
-        // 3. 读取世界书
-        let wbInfo = "";
-        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
-            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
-            if (linkedEntries.length > 0) wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
-        }
-
-        // 4. 读取回忆总结
-        let memoryText = "暂无特殊记忆。";
-        if (char.memories && char.memories.length > 0) {
-            const readCount = chatConfig.aiMemoryCount !== undefined ? chatConfig.aiMemoryCount : 5;
-            if (readCount > 0) memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content.replace(/^\[.*?\]\s*/, '')}`).join('\n');
-        }
-
-        // 5. 组装基础 System Prompt
-        let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
-        systemPrompt += `【用户(User)设定】：${chatConfig.userPersona || wcState.user.persona || "无"}\n`;
-        systemPrompt += `【你们的共同记忆（潜意识）】：\n${memoryText}\n\n`;
-        systemPrompt += `【角色活人运转规则】\n> 必须像真人一样聊天，拒绝机械回复。\n> 绝对禁止长文本：你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息，禁止把所有短消息融合成一个长文本发送！\n> 关键规则：请保持回复消息数量的随机性和多样性，并且每一条消息都是数组中的一个独立对象。\n> 防重复：严禁输出重复的句子或重复的对话序列！\n> 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！\n`;
+        // 3. 组装基础 System Prompt
+        let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
+        systemPrompt += `【角色活人运转规则】\n> 必须像真人一样聊天，拒绝机械回复。\n> 绝对禁止长文本：你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息，禁止把所有短消息融合成一个长文本发送！\n> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！\n`;
 
         const payload = {
             deviceId: getDeviceId(),
@@ -187,20 +162,24 @@ async function registerOfflineProactiveTask(char) {
             apiConfig: apiConfig,
             context: recentMsgs, 
             intervalMinutes: chatConfig.proactiveInterval || 60,
-            subscriptionId: subscriptionId, // 传 OneSignal ID
+            subscriptionId: subscriptionId, 
             timePerceptionEnabled: chatConfig.timePerceptionEnabled !== false
         };
 
-        await fetch('https://honey-offline-brain.xingyan067.workers.dev/register', {
+        const response = await fetch('https://honey-offline-brain.xingyan067.workers.dev/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        console.log("✅ 已成功将角色托管至云端大脑！");
-        alert("✅ 云端大脑连接成功！\n请杀掉网页后台，等待设定的时间后查看是否有推送！"); // 👈 加上这行弹窗
+        
+        if (response.ok) {
+            alert(`✅ 成功！\n角色 [${char.name}] 已托管至云端！\n\n请杀掉网页后台，等待 ${chatConfig.proactiveInterval || 60} 分钟后查看推送！`);
+        } else {
+            alert(`❌ 云端拒绝了请求，状态码: ${response.status}`);
+        }
     } catch (e) {
         console.error("❌ 托管至云端失败:", e);
-        alert("❌ 连接云端失败，请检查网络或 Worker 地址是否正确！"); // 👈 加上这行弹窗
+        alert(`❌ 托管至云端失败: ${e.message}\n请检查你的 Worker 网址是否正确！`);
     }
 }
 
