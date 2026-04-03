@@ -5275,8 +5275,15 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令，请
    修改User的食谱：{"type":"recipe_edit", "meal":"b/l/d", "newText":"(你修改后的内容)", "content":"(发给User的话)"}
 10. **主动点外卖** (按需使用)
    如果你觉得User饿了，或者想给User一个惊喜，你可以主动给User点外卖！
-   {"type":"order_delivery", "foodName":"(这里写具体的外卖名称，必须根据当前情境现编，绝对不要照抄示例)", "price":"(合理的价格)", "msg":"(这里写你的外卖备注留言，必须根据当前情境现编，绝对不要照抄示例)", "content":"(发给User的话，符合你的人设)"}
-`;
+   {"type":"order_delivery", "foodName":"(这里写具体的外卖名称，必须根据当前情境现编，绝对不要照抄示例)", "price":"(合理的价格)", "msg":"(这里写你的外卖备注留言，必须根据当前情境现编，绝对不要照抄示例)", "content":"(发给User的话，符合你的人设)"}\n`;
+
+        // 👇 核心修改：只有绑定了恋人空间的角色，才拥有存图到时光相册的特权
+        if (typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId) {
+            systemPrompt += `11. **保存图片到时光相册** (按需使用)
+   如果User刚刚发了一张图片，且你觉得非常有纪念意义、很好看，你可以决定把它存入你们的专属时光相册。
+   {"type":"save_to_album", "content":"(这里写你存图时的内心OS或评价，不超过50字)"}\n`;
+        }
+        // 👆 修改结束
 
         // 注入 User 的食谱让 AI 感知
         if (char.phoneData && char.phoneData.recipe && char.phoneData.recipe.my) {
@@ -6043,6 +6050,23 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             });
         // 👆 新增结束 👆
 
+        // 👇 新增：解析 AI 保存图片到相册 👇
+        } else if (action.type === 'save_to_album') {
+            // 往前找最近的一张 User 发的图片
+            const msgs = wcState.chats[charId] || [];
+            let targetImgBase64 = null;
+            for (let k = msgs.length - 1; k >= 0; k--) {
+                if (msgs[k].sender === 'me' && msgs[k].type === 'image') {
+                    targetImgBase64 = msgs[k].content;
+                    break;
+                }
+            }
+            if (targetImgBase64 && typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId) {
+                lsSaveImageToAlbum(targetImgBase64, action.content || "偷偷存下来啦~");
+                wcAddMessage(charId, 'system', 'system', `[系统内部信息: 你已将User刚才发的图片存入了专属时光相册，并写下批注：“${action.content}”]`, { hidden: true });
+            }
+        // 👆 新增结束 👆
+
         } else if (action.type === 'invite_accept') {
             // AI 明确同意邀请
             wcAddMessage(charId, 'them', 'text', action.content, extra);
@@ -6387,27 +6411,12 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
     };
     wcState.chats[charId].push(msg);
 
-    // 👇 新增：如果发送的是图片，且绑定了恋人空间，自动存入时光相册并触发 AI 评价
-    if (type === 'image' && sender === 'me' && typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId) {
-        const now = new Date();
-        const dateStr = `${now.getMonth()+1}.${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        const newEntry = {
-            id: Date.now() + Math.random(),
-            type: 'chat_saved',
-            img: content,
-            date: dateStr,
-            userText: '',
-            charComment: null
-        };
-        if (!lsState.timeAlbum) lsState.timeAlbum = [];
-        lsState.timeAlbum.unshift(newEntry);
-        lsSaveData();
-        // 延迟触发 AI 评价
-        setTimeout(() => lsTriggerDiaryAIComment(newEntry.id), 2000);
-    }
-    // 👆 新增结束
+    // 👇 核心修改：不再单独触发评估，交由正常的聊天 AI 统一处理，节省额度
+    // (此处已移除单独的 lsEvaluateAndSaveImage 调用)
+    // 👆 修改结束
     
     if (sender === 'them' && type !== 'system') {
+
         const isChatOpen = document.getElementById('wc-view-chat-detail').classList.contains('active');
         const isSameChat = wcState.activeChatId === charId;
         
@@ -22081,7 +22090,7 @@ async function lsStartDecoration() {
 
         prompt += `【任务要求】：\n`;
         prompt += `1. 挑选 1 张壁纸索引（wallpaperIndex）。\n`;
-        prompt += `2. 写一句简短留言（message），体现你的性格或对User的关心。\n`;
+        prompt += `2. 写一句对壁纸和图标，对桌面装修的简短留言（message）或者评价，需要体现你的性格。\n`;
         prompt += `3. 为 7 个常用APP（微信, 相册, 音乐, 论坛, 主题, 设置, 世界书）分别起一个符合你性格的昵称（每个不超过4个字），并为它们分别挑选一张图标索引（iconIndex）。\n`;
         prompt += `返回纯JSON格式：\n`;
         prompt += `{
@@ -22089,7 +22098,7 @@ async function lsStartDecoration() {
   "message": "留言内容",
   "apps": [
     {"name": "微信的新名字", "iconIndex": 1},
-    {"name": "相册的新名字", "iconIndex": 2},
+    {"name": "恋人空间的新名字", "iconIndex": 2},
     {"name": "音乐的新名字", "iconIndex": 3},
     {"name": "论坛的新名字", "iconIndex": 4},
     {"name": "主题的新名字", "iconIndex": 5},
@@ -22170,7 +22179,7 @@ function lsApplyDecorationAI(aiResult) {
     // 2. 7 个 APP
     const appNames = [];
     const appIcons = [];
-    const defaultNames = ["聊天", "空间", "音乐", "论坛", "主题", "设置", "世界书"];
+    const defaultNames = ["聊天", "恋人空间", "音乐", "论坛", "主题", "设置", "世界书"];
     
     for (let i = 0; i < 7; i++) {
         const appData = (aiResult.apps && aiResult.apps[i]) ? aiResult.apps[i] : {};
@@ -22208,7 +22217,7 @@ function lsApplyDecorationFallback() {
     bubble.innerText = "照片很好看，我帮你换上啦~";
     bubble.style.opacity = '1';
 
-    const names = ["聊天", "空间", "音乐", "论坛", "主题", "设置", "世界书"];
+    const names = ["聊天", "恋人空间", "音乐", "论坛", "主题", "设置", "世界书"];
     const appIcons = [];
     
     for (let i = 0; i < 7; i++) {
@@ -22272,7 +22281,32 @@ lsLoadData = async function() {
         lsSaveData();
     }
 };
-
+// ==========================================
+// 辅助函数：将图片和评价写入时光相册
+// ==========================================
+function lsSaveImageToAlbum(imgBase64, comment) {
+    const now = new Date();
+    const dateStr = `${now.getMonth()+1}.${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    
+    const newEntry = {
+        id: Date.now() + Math.random(),
+        type: 'chat_saved',
+        img: imgBase64,
+        date: dateStr,
+        userText: '',
+        charComment: comment
+    };
+    
+    if (!lsState.timeAlbum) lsState.timeAlbum = [];
+    lsState.timeAlbum.unshift(newEntry);
+    lsSaveData();
+    
+    // 如果当前正停留在时光相册页面，实时刷新 UI
+    const diaryView = document.getElementById('ta-view-diary');
+    if (diaryView && diaryView.classList.contains('active')) {
+        lsRenderTimeDiary();
+    }
+}
 
 /* ==========================================================================
    APP 4: INS FORUM LOGIC (Advanced iOS Style - Twitter/INS Clone)
