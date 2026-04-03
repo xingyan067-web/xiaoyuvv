@@ -57,7 +57,16 @@ async function registerOfflineProactiveTask(char) {
         }
 
         const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.subscribe({
+        
+        // 👇 核心修复：强制退订旧的推送通道，防止密钥不匹配导致云端推送被拦截 👇
+        let subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+            await subscription.unsubscribe();
+            console.log("已清理旧的推送订阅通道");
+        }
+        
+        // 重新申请全新的推送通道
+        subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
         });
