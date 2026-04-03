@@ -1,12 +1,12 @@
-// ✅ OneSignal 终极修复版 (v16 专属子目录写法)
+// ✅ OneSignal 终极修复版 (顺从官方流氓命名规则)
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {
     try {
         await OneSignal.init({
             appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
-            // 🔪 核心修复：v16 版本必须把路径写在 serviceWorker 对象里面！
+            // 🔪 核心绝杀：直接使用它强制要求的名字！
             serviceWorker: {
-                path: "/xiaoyuvv/sw.js",
+                path: "/xiaoyuvv/OneSignalSDKWorker.js",
                 scope: "/xiaoyuvv/"
             }
         });
