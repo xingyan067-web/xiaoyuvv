@@ -17483,6 +17483,21 @@ const dreamState = {
     }
 };
 
+// 👇 新增：记录当前打开的卡片ID和同步保存函数 👇
+let currentDreamCardId = null;
+
+function syncDreamChatHistory() {
+    if (currentDreamCardId) {
+        const card = dreamState.cards.find(c => c.id === currentDreamCardId);
+        if (card) {
+            // 将当前屏幕上的聊天记录深拷贝回卡片中
+            card.chatHistory = JSON.parse(JSON.stringify(dreamState.currentChat));
+            dreamSaveData(); // 保存到数据库
+        }
+    }
+}
+// 👆 新增结束 👆
+
 async function dreamLoadData() {
     const data = await idb.get('dream_space_data');
     if (data) {
@@ -17567,11 +17582,25 @@ function dreamEditCard(id) {
         }
     });
 }
+// 👇 新增：补全缺失的梦境卡片删除函数 👇
+function dreamDeleteCard(id) {
+    if (confirm("确定要将这段梦境化作尘埃吗？")) {
+        // 从数组中过滤掉要删除的卡片
+        dreamState.cards = dreamState.cards.filter(c => c.id !== id);
+        // 保存数据
+        dreamSaveData();
+        // 重新渲染卡片列表
+        dreamRenderCards();
+    }
+}
+// 👆 新增结束 👆
+
 function viewDreamChatHistory(id) {
     const card = dreamState.cards.find(c => c.id === id);
     if (!card) return;
     
     if (card.chatHistory && card.chatHistory.length > 0) {
+        currentDreamCardId = id; // 👇 新增：记录当前打开的卡片ID
         // 恢复当时的聊天记录
         dreamState.currentChat = JSON.parse(JSON.stringify(card.chatHistory));
         // 打开梦境聊天界面
@@ -18075,6 +18104,7 @@ async function triggerDreamAI() {
         });
         
         dreamRenderChatWithHTML();
+        syncDreamChatHistory(); // 👇 新增：AI回复后同步保存
 
     } catch (e) {
         dreamState.currentChat.pop(); 
@@ -18163,6 +18193,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 // 覆盖原本的 enterDreamChat 和 sendDreamMessage，让它们调用支持 HTML 的渲染函数
 function enterDreamChat(mode = 'dream') {
+    currentDreamCardId = null; // 👇 新增：新建梦境时清空卡片ID，防止覆盖旧卡片
     dreamState.currentMode = mode; // 记录模式
     dreamState.currentChat = []; 
     document.getElementById('dream-chat-page').classList.add('active');
@@ -18187,6 +18218,7 @@ function sendDreamMessage() {
     dreamState.currentChat.push({ role: 'user', content: text });
     input.value = '';
     dreamRenderChatWithHTML();
+    syncDreamChatHistory(); // 👇 新增：用户发送消息后同步保存
 }
 
 // --- 梦境预设卡片编辑与保存逻辑 ---
@@ -18782,6 +18814,7 @@ function regenerateDreamMsg() {
         // 截断数组：保留到这条 AI 消息之前的所有内容（即删除这条 AI 消息及之后的所有消息）
         dreamState.currentChat = dreamState.currentChat.slice(0, dreamSelectedMsgIndex);
         dreamRenderChatWithHTML();
+        syncDreamChatHistory(); // 👇 新增：截断后同步保存到数据库
         document.getElementById('dream-context-menu').style.display = 'none';
         
         // 重新触发 AI
@@ -18794,6 +18827,7 @@ function deleteDreamMsg() {
         if (confirm("确定删除这条记录吗？")) {
             dreamState.currentChat.splice(dreamSelectedMsgIndex, 1);
             dreamRenderChatWithHTML();
+            syncDreamChatHistory(); // 👇 新增：同步保存到数据库
         }
     }
     document.getElementById('dream-context-menu').style.display = 'none';
@@ -18822,6 +18856,7 @@ function saveDreamEditMsg() {
             dreamState.currentChat[dreamSelectedMsgIndex].content = newText;
             // 重新渲染聊天界面
             dreamRenderChatWithHTML();
+            syncDreamChatHistory(); // 👇 新增：同步保存到数据库
         }
     }
     // 关闭弹窗
