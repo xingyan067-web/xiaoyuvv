@@ -1,17 +1,18 @@
-// ✅ OneSignal 终极修复版 (官方标准子目录写法 + 精准报错)
+// ✅ OneSignal 终极修复版 (v16 专属子目录写法)
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {
     try {
         await OneSignal.init({
             appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
-            // 🔪 核心修复：严格按照官方要求的子目录格式，不加前导斜杠
-            serviceWorkerParam: { scope: "/xiaoyuvv/" },
-            serviceWorkerPath: "xiaoyuvv/sw.js" 
+            // 🔪 核心修复：v16 版本必须把路径写在 serviceWorker 对象里面！
+            serviceWorker: {
+                path: "/xiaoyuvv/sw.js",
+                scope: "/xiaoyuvv/"
+            }
         });
         console.log("✅ OneSignal 初始化成功！");
     } catch(e) {
-        // 🔪 核心修复：把真正的系统报错信息弹出来！
-        alert("❌ OneSignal 致命报错:\n" + e.message + "\n\n请把这个弹窗截图发给我！");
+        alert("❌ OneSignal 致命报错:\n" + e.message);
     }
 });
 
@@ -23,6 +24,7 @@ document.addEventListener('visibilitychange', () => {
         }
     }
 });
+
 
 // 切回前台时拉取离线消息（只绑定一次）
 document.addEventListener('visibilitychange', () => {
