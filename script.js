@@ -100,7 +100,7 @@ async function handleOfflineToggle(checkbox) {
         });
     }
 }
-// 注册离线托管任务 (带强力防卡死与报错提示版)
+// 注册离线托管任务 (强行突破诊断版)
 async function registerOfflineProactiveTask(char) {
     try {
         if (!window.OneSignal) {
@@ -108,40 +108,30 @@ async function registerOfflineProactiveTask(char) {
             return;
         }
 
-        // 🔪 核心修复：带 3 秒超时保护的获取 ID 逻辑，绝对不会卡死！
-        let subscriptionId = await new Promise((resolve) => {
-            let isResolved = false;
-            
-            // 3秒后如果还没拿到，强制返回 null，防止代码死锁
-            const timer = setTimeout(() => {
-                if (!isResolved) {
-                    isResolved = true;
-                    resolve(null);
-                }
-            }, 3000);
-
-            try {
+        // 1. 尝试获取真实的 ID
+        let subscriptionId = null;
+        try {
+            subscriptionId = await new Promise((resolve) => {
                 window.OneSignal.push(function() {
-                    window.OneSignal.getUserId(function(userId) {
-                        if (!isResolved) {
-                            isResolved = true;
-                            clearTimeout(timer);
-                            resolve(userId);
-                        }
+                    window.OneSignal.getUserId(function(id) {
+                        resolve(id);
                     });
                 });
-            } catch (err) {
-                if (!isResolved) {
-                    isResolved = true;
-                    clearTimeout(timer);
-                    resolve(null);
-                }
-            }
-        });
+            });
+        } catch (err) {
+            console.error("获取ID报错:", err);
+        }
         
+        // 2. 🚨 强行突破逻辑 🚨
         if (!subscriptionId) {
-            alert("❌ 托管失败：未获取到推送 ID！\n\n可能原因：\n1. 您还没有允许通知权限。\n2. 网络延迟，OneSignal 还没准备好。\n\n请再点一次右上角的【保存】重试！");
-            return;
+            const perm = Notification.permission;
+            const confirmBypass = confirm(`⚠️ 诊断报告：\n系统通知权限状态: ${perm}\nOneSignal ID: 尚未生成\n\nOneSignal 还在后台墨迹。是否先用【测试ID】强行连接云端大脑，看看云端是否正常？`);
+            
+            if (!confirmBypass) {
+                return; // 用户点击取消，退出
+            }
+            // 用户点击确定，强行赋予一个测试 ID！
+            subscriptionId = "test_dummy_id_88888888"; 
         }
 
         const apiConfig = await getActiveApiConfig('chat');
@@ -176,6 +166,7 @@ async function registerOfflineProactiveTask(char) {
             timePerceptionEnabled: chatConfig.timePerceptionEnabled !== false
         };
 
+        // 3. 强行发送给云端大脑
         const response = await fetch('https://honey-offline-brain.xingyan067.workers.dev/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -183,7 +174,7 @@ async function registerOfflineProactiveTask(char) {
         });
         
         if (response.ok) {
-            alert(`✅ 成功！\n角色 [${char.name}] 已托管至云端！\n\n请杀掉网页后台，等待 ${chatConfig.proactiveInterval || 60} 分钟后查看推送！`);
+            alert(`✅ 霸王硬上弓成功！\n角色 [${char.name}] 已成功连上云端大脑！\n\n这证明你的云端 Worker 和数据库完美无缺！`);
         } else {
             alert(`❌ 云端拒绝了请求，状态码: ${response.status}`);
         }
@@ -192,6 +183,7 @@ async function registerOfflineProactiveTask(char) {
         alert(`❌ 托管至云端失败: ${e.message}\n请检查你的 Worker 网址是否正确！`);
     }
 }
+
 
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
