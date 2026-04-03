@@ -1,18 +1,17 @@
-// ✅ OneSignal 终极修复版 (顺从官方流氓命名规则)
-window.OneSignalDeferred = window.OneSignalDeferred || [];
-OneSignalDeferred.push(async function(OneSignal) {
+// ✅ OneSignal 终极降级稳定版 (v15)
+window.OneSignal = window.OneSignal || [];
+OneSignal.push(function() {
     try {
-        await OneSignal.init({
+        OneSignal.init({
             appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
-            // 🔪 核心绝杀：直接使用它强制要求的名字！
-            serviceWorker: {
-                path: "/xiaoyuvv/OneSignalSDKWorker.js",
-                scope: "/xiaoyuvv/"
-            }
+            // 🔪 核心绝杀：v15 专属参数，强行锁定子目录！
+            path: "/xiaoyuvv/", 
+            serviceWorkerPath: "OneSignalSDKWorker.js",
+            serviceWorkerParam: { scope: "/xiaoyuvv/" }
         });
-        console.log("✅ OneSignal 初始化成功！");
+        console.log("✅ OneSignal v15 初始化成功！");
     } catch(e) {
-        alert("❌ OneSignal 致命报错:\n" + e.message);
+        alert("❌ 初始化报错:\n" + e.message);
     }
 });
 
@@ -24,7 +23,6 @@ document.addEventListener('visibilitychange', () => {
         }
     }
 });
-
 
 // 切回前台时拉取离线消息（只绑定一次）
 document.addEventListener('visibilitychange', () => {
