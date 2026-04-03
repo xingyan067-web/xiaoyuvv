@@ -78,57 +78,29 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
-// 👇 新增：当用户点击开关时，瞬间请求通知权限（破解苹果拦截）
+// 👇 适配 v15 版本的权限请求
 async function handleOfflineToggle(checkbox) {
     if (checkbox.checked) {
-        // ✅ 加入更完善的 OneSignal 加载检测
         if (!window.OneSignal) {
             alert("推送组件还在加载中，请稍等 2-3 秒再试哦~");
             checkbox.checked = false;
             return;
         }
         
-        // ✅ 兼容写法：同时检测新旧两种 API
-        const notificationAPI = window.OneSignal.Notifications || window.OneSignal.User?.PushSubscription;
-        if (!notificationAPI) {
-            alert("推送组件初始化失败，请确认你是从【主屏幕图标】打开本应用，而不是从 Safari 浏览器直接打开哦！");
-            checkbox.checked = false;
-            return;
-        }
-
-        // ✅ 请求原生系统通知权限
-        try {
-            let permission;
-            if (window.OneSignal.Notifications) {
-                permission = await window.OneSignal.Notifications.requestPermission();
-            } else {
-                // 兜底：使用浏览器原生 API
-                permission = await Notification.requestPermission();
-            }
-            
-            if (permission !== "granted" && permission !== true) {
-                alert("需要允许通知权限才能开启离线托管哦！\n\n如果弹窗没出现，请前往：手机设置 → Safari/浏览器 → 通知 → 手动开启。");
-                checkbox.checked = false;
-            } else {
-                // 🔪 核心修复：拿到权限后，强制要求 OneSignal 立即注册设备！
-                if (window.OneSignal.User && window.OneSignal.User.PushSubscription) {
-                    await window.OneSignal.User.PushSubscription.optIn();
+        window.OneSignal.push(function() {
+            window.OneSignal.isPushNotificationsEnabled(function(isEnabled) {
+                if (isEnabled) {
+                    alert("✅ 通知权限已获取！请点击右上角保存设置生效。");
+                } else {
+                    // 唤起原生授权弹窗
+                    window.OneSignal.registerForPushNotifications();
+                    alert("请在弹出的窗口中允许通知权限哦~");
                 }
-                alert("✅ 通知权限已获取！\n系统正在为您分配专属推送通道，请在心里默数 3 秒钟，然后再点击右上角的【保存】按钮！");
-            }
-        } catch(e) {
-            console.error("请求通知权限失败:", e);
-            // 兜底：直接用浏览器原生弹窗
-            const nativePermission = await Notification.requestPermission();
-            if (nativePermission !== "granted") {
-                checkbox.checked = false;
-            } else {
-                alert("✅ 通知权限已获取！请点击右上角保存设置生效。");
-            }
-        }
+            });
+        });
     }
 }
-// 注册离线托管任务 (带强力报错提示版)
+// 👇 适配 v15 版本的获取 ID 逻辑
 async function registerOfflineProactiveTask(char) {
     try {
         if (!window.OneSignal) {
@@ -136,23 +108,17 @@ async function registerOfflineProactiveTask(char) {
             return;
         }
 
-        // 🔪 核心修复：强制 Opt-in 一次，以防万一
-        if (window.OneSignal.User && window.OneSignal.User.PushSubscription) {
-            window.OneSignal.User.PushSubscription.optIn();
-        }
-
-        // 🔪 核心修复：循环等待获取 ID (最多等 5 秒钟)
-        let subscriptionId = null;
-        for (let i = 0; i < 10; i++) {
-            if (window.OneSignal.User && window.OneSignal.User.PushSubscription) {
-                subscriptionId = window.OneSignal.User.PushSubscription.id;
-            }
-            if (subscriptionId) break; // 拿到了就跳出循环
-            await new Promise(resolve => setTimeout(resolve, 500)); // 没拿到就等 0.5 秒再试
-        }
+        // 🔪 核心修复：使用 v15 专属的异步方法获取 ID
+        let subscriptionId = await new Promise((resolve) => {
+            window.OneSignal.push(function() {
+                window.OneSignal.getUserId(function(userId) {
+                    resolve(userId);
+                });
+            });
+        });
         
         if (!subscriptionId) {
-            alert("❌ 托管失败：获取推送 ID 超时！\n\n可能原因：\n1. 你的网络连接 OneSignal 服务器较慢。\n2. 苹果系统尚未返回设备 Token。\n\n请再点一次右上角的【保存】重试！");
+            alert("❌ 托管失败：未获取到推送 ID！\n请确保您已允许通知权限，或者稍等几秒再点保存。");
             return;
         }
 
@@ -164,14 +130,14 @@ async function registerOfflineProactiveTask(char) {
 
         const chatConfig = char.chatConfig || {};
 
-        // 2. 提取上下文
+        // 提取上下文
         let limit = chatConfig.contextLimit > 0 ? chatConfig.contextLimit : 30;
         const recentMsgs = (wcState.chats[char.id] || []).slice(-limit).map(m => {
             if (m.isError || m.type === 'system') return null;
             return { sender: m.sender, content: m.type !== 'text' ? `[${m.type}]` : m.content };
         }).filter(Boolean);
 
-        // 3. 组装基础 System Prompt
+        // 组装基础 System Prompt
         let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
         systemPrompt += `【角色活人运转规则】\n> 必须像真人一样聊天，拒绝机械回复。\n> 绝对禁止长文本：你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息，禁止把所有短消息融合成一个长文本发送！\n> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！\n`;
 
