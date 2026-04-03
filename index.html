@@ -261,8 +261,8 @@
                                 <div class="ls-album-card-title">默契大挑战</div>
                                 <div class="ls-album-card-desc">Telepathy Challenge</div>
                             </div>
-                            <!-- 卡片 2：时光相册 (占位) -->
-                            <div class="ls-album-card">
+                            <!-- 卡片 2：时光相册 -->
+                            <div class="ls-album-card" onclick="lsOpenTimeAlbum()">
                                 <div class="ls-album-card-icon">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                                 </div>
@@ -451,6 +451,91 @@
                 </div>
 <div class="ls-content" id="ls-qa-archive-list" style="padding: 20px; display: block;">
                     <!-- 历史记录将在这里生成 -->
+                </div>
+            </div>
+              <!-- 6. 时光相册全屏页 (黑白灰 INS 风) -->
+            <div id="ls-view-time-album" class="ls-view" style="z-index: 5500; position: absolute; top: 0; left: 0; background: #F9F9F9;">
+                
+                <!-- 全新：顶部胶囊导航栏 -->
+                <div class="ta-header-capsule-container">
+                    <div class="ta-back-btn" onclick="lsCloseTimeAlbum()">
+                        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        <span>Back</span>
+                    </div>
+                    <div class="ta-capsule-tabs">
+                        <div class="ta-cap-tab active" id="ta-tab-diary" onclick="lsSwitchAlbumTab('diary')">时光纪要</div>
+                        <div class="ta-cap-tab" id="ta-tab-decor" onclick="lsSwitchAlbumTab('decor')">桌面装修</div>
+                    </div>
+                </div>
+
+                <!-- 视图 1：时光纪要 -->
+                <div class="ta-content-view active" id="ta-view-diary">
+                    <div class="ta-timeline-wrapper">
+                        <div class="ta-timeline-line"></div>
+                        <div id="ta-timeline-container">
+                            <!-- 动态渲染时间轴内容 -->
+                        </div>
+                    </div>
+                    <!-- 悬浮上传按钮 -->
+                    <div class="ta-upload-fab" onclick="document.getElementById('ta-diary-upload').click()">
+                        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </div>
+                    <input type="file" id="ta-diary-upload" accept="image/*" class="hidden-file-input" onchange="lsHandleDiaryUpload(event)">
+                </div>
+
+                <!-- 视图 2：桌面装修 -->
+                <div class="ta-content-view" id="ta-view-decor">
+                    <input type="file" id="ta-decor-upload" multiple accept="image/*" class="hidden-file-input" onchange="lsHandleDecorUpload(event)">
+                    
+                    <div class="ta-upload-section">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <div class="ta-section-title" style="margin: 0;">本地图库 (<span id="ta-img-count">0</span>)</div>
+                            <button style="background:none; border:none; color:#888; font-size:12px; font-weight:bold; cursor:pointer;" onclick="document.getElementById('ta-decor-upload').click()">+ 添加</button>
+                        </div>
+                        <div class="ta-image-grid" id="ta-upload-preview">
+                            <div class="ta-empty-text">上传一些照片，让 Ta 帮你布置桌面吧</div>
+                        </div>
+                    </div>
+
+                    <button class="ta-action-btn" id="ta-decorate-btn" onclick="lsStartDecoration()" disabled>
+                        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+                        让 Ta 帮忙装修桌面
+                    </button>
+
+                    <div class="ta-desktop-preview-section">
+                        <div class="ta-desktop-bg"></div>
+                        
+                        <div class="ta-loading-overlay" id="ta-loading-overlay">
+                            <div class="ta-spinner"></div>
+                            <div style="font-size: 12px; font-weight: bold; color: #111; letter-spacing: 1px;">Ta 正在为你搭配...</div>
+                        </div>
+
+                        <div class="ta-section-title" style="position:relative; z-index:1; width:100%; text-align:left;">MY SCREEN</div>
+                        
+                        <div class="ta-widget-box">
+                            <img src="" class="ta-widget-img" id="ta-widget-img" style="opacity: 0;">
+                            <div class="ta-widget-text-area">
+                                <div class="ta-widget-text" id="ta-widget-text">等待 Ta 的留言...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 同步 7 个 APP -->
+                        <div class="ta-app-grid">
+                            <div class="ta-app-item"><img src="" class="ta-app-icon" id="ta-app-icon-0" style="opacity: 0;"><div class="ta-app-name" id="ta-app-name-0">App 1</div></div>
+                            <div class="ta-app-item"><img src="" class="ta-app-icon" id="ta-app-icon-1" style="opacity: 0;"><div class="ta-app-name" id="ta-app-name-1">App 2</div></div>
+                            <div class="ta-app-item"><img src="" class="ta-app-icon" id="ta-app-icon-2" style="opacity: 0;"><div class="ta-app-name" id="ta-app-name-2">App 3</div></div>
+                            <div class="ta-app-item"><img src="" class="ta-app-icon" id="ta-app-icon-3" style="opacity: 0;"><div class="ta-app-name" id="ta-app-name-3">App 4</div></div>
+                            <div class="ta-app-item"><img src="" class="ta-app-icon" id="ta-app-icon-4" style="opacity: 0;"><div class="ta-app-name" id="ta-app-name-4">Theme</div></div>
+                            <div class="ta-app-item"><img src="" class="ta-app-icon" id="ta-app-icon-5" style="opacity: 0;"><div class="ta-app-name" id="ta-app-name-5">Settings</div></div>
+                            <div class="ta-app-item"><img src="" class="ta-app-icon" id="ta-app-icon-6" style="opacity: 0;"><div class="ta-app-name" id="ta-app-name-6">世界书</div></div>
+                        </div>
+                    </div>
+
+                    <!-- 新增：应用到真实桌面按钮 -->
+                    <button class="ta-action-btn" id="ta-apply-btn" onclick="lsApplyDecorationToRealDesktop()" style="background: #34C759; margin-top: 10px; display: none;">
+                        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        应用到我的桌面
+                    </button>
                 </div>
             </div>
 
@@ -818,6 +903,19 @@
                             <div class="ios-item-right">API 配置<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
                         </div>
                     </div>
+                    
+                    <!-- 👇 新增：API 日志与报错控制台入口 👇 -->
+                    <div class="ios-list-item" onclick="openApiLogConsole()">
+                        <div class="ios-icon-box" style="background:#111111">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        </div>
+                        <div class="ios-item-content">
+                            <span class="ios-item-label">控制台</span>
+                            <div class="ios-item-right">API 日志与报错<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
+                        </div>
+                    </div>
+                    <!-- 👆 新增结束 👆 -->
+
                       <!-- 新增：声音与触感 -->
                     <div class="ios-list-item" onclick="openSoundSettings()">
                         <div class="ios-icon-box" style="background:#ff2d55">
@@ -1160,6 +1258,34 @@
                 </div>
             </div>
         </div>
+
+        <!-- 👇 新增：API 日志与报错控制台页面 👇 -->
+        <div class="settings-modal sub-page" id="apiLogConsoleModal" style="background: #F2F2F7; padding: 0;">
+            <!-- 极简头部：左上角大标题兼退出按钮 -->
+            <div style="padding: calc(env(safe-area-inset-top, 40px) + 10px) 20px 10px; display: flex; justify-content: space-between; align-items: flex-end; flex-shrink: 0;">
+                <div onclick="closeApiLogConsole()" style="font-size: 28px; font-weight: 800; color: #000; letter-spacing: 0.5px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                    API日志
+                </div>
+                <div onclick="clearCurrentLogs()" style="font-size: 14px; font-weight: 600; color: #007AFF; cursor: pointer; padding-bottom: 4px;">清空</div>
+            </div>
+
+            <!-- 分段选择器 -->
+            <div style="padding: 10px 20px 20px; flex-shrink: 0;">
+                <div style="display: flex; background: #E3E3E8; border-radius: 8px; padding: 2px; position: relative;">
+                    <div class="log-segment-btn active" id="btn-log-api" onclick="switchApiLogTab('api')">API 记录</div>
+                    <div class="log-segment-btn" id="btn-log-console" onclick="switchApiLogTab('console')">网页报错</div>
+                </div>
+            </div>
+
+            <!-- 列表容器 -->
+            <div style="flex: 1; overflow-y: auto; padding: 0 20px 40px; display: flex; flex-direction: column; gap: 16px;">
+                <!-- API 记录视图 (动态渲染) -->
+                <div class="log-list-view active" id="view-log-api"></div>
+                <!-- 网页报错视图 (动态渲染) -->
+                <div class="log-list-view" id="view-log-console"></div>
+            </div>
+        </div>
+        <!-- 👆 新增结束 👆 -->
 
         <!-- API 设置页面 (极简黑白灰 iOS 风 + 底部额度查询) -->
         <div class="settings-modal sub-page" id="apiSettingsModal" style="background: #F2F2F7;">
@@ -2863,21 +2989,39 @@
                     </div>
                 </div>
 
-                <!-- 【新增】编辑消息专用弹窗 -->
+                <!-- 【新增】编辑消息与修复格式专用弹窗 -->
                 <div id="wc-modal-edit-message" class="wc-modal hidden" style="z-index: 2800;">
-                    <div class="wc-modal-content" style="width: 90%; max-width: 340px; border-radius: 14px;">
-                        <div style="padding: 20px;">
-                            <h3 style="margin-top: 0; text-align: center;">编辑消息</h3>
-                            <div class="wc-form-group" style="margin-top: 15px;">
-                                <textarea id="wc-edit-message-textarea" class="wc-form-textarea" style="height: 150px; font-size: 15px;"></textarea>
+                    <div class="wc-modal-content" style="width: 90%; max-width: 360px; border-radius: 16px; background: #FFFFFF; box-shadow: 0 20px 40px rgba(0,0,0,0.1);">
+                        <div style="padding: 24px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #111;">编辑消息</h3>
+                                <button class="wc-close-btn" onclick="wcCloseModal('wc-modal-edit-message')">&times;</button>
                             </div>
-                            <div style="display: flex; gap: 10px; margin-top: 15px;">
-                                <button class="wc-ios-btn-block wc-btn-secondary" style="flex: 1; margin: 0;" onclick="wcCloseModal('wc-modal-edit-message')">取消</button>
-                                <button class="wc-ios-btn-block" style="flex: 1; margin: 0;" id="wc-edit-message-confirm">确认</button>
+                            
+                            <div style="font-size: 13px; font-weight: 600; color: #888; margin-bottom: 8px;">消息内容：</div>
+                            <textarea id="wc-edit-message-textarea" class="wc-form-textarea" style="height: 120px; font-size: 15px; background: #F9F9F9; border: 1px solid #EAEAEA; border-radius: 12px; padding: 12px; color: #111; line-height: 1.5;"></textarea>
+                            
+                            <div style="background: #FAFAFA; border: 1px solid #F0F0F0; border-radius: 12px; padding: 16px; margin-top: 16px;">
+                                <div style="font-size: 12px; font-weight: 600; color: #999; margin-bottom: 12px;">修复：</div>
+                                <div style="display: flex; flex-wrap: wrap; gap: 10px;" id="wc-edit-format-btns">
+                                    <div class="format-btn active" data-type="text">文本</div>
+                                    <div class="format-btn" data-type="image_desc">图片</div>
+                                    <div class="format-btn" data-type="voice">语音</div>
+                                    <div class="format-btn" data-type="sticker">表情包</div>
+                                    <div class="format-btn" data-type="transfer">转账</div>
+                                    <div class="format-btn" data-type="location">定位</div>
+                                    <div class="format-btn" data-type="translate">翻译</div>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; justify-content: center; gap: 12px; margin-top: 24px;">
+                                <button class="wc-btn-secondary" style="width: 120px; padding: 12px 0; margin: 0; border-radius: 20px; font-size: 15px; font-weight: 600; background: #F5F5F5; color: #888; border: none;" onclick="wcCloseModal('wc-modal-edit-message')">取消</button>
+                                <button class="wc-btn-primary" style="width: 120px; padding: 12px 0; margin: 0; border-radius: 20px; font-size: 15px; font-weight: 600; background: #111; color: #FFF; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" id="wc-edit-message-confirm">保存</button>
                             </div>
                         </div>
                     </div>
                 </div>
+
 
                 <!-- Transfer Input Modal -->
                 <div id="wc-modal-transfer-input" class="wc-modal hidden" style="z-index: 2300;">
@@ -4288,6 +4432,21 @@
                                 <span style="color: #888; font-weight: bold;">至</span>
                                 <input type="number" id="forum-setting-comment-max" class="wc-form-input" placeholder="最多" value="8" style="background: #FFF; border: 1px solid #E5E5EA; text-align: center; padding: 12px 8px;">
                             </div>
+
+                            <!-- 👇 新增：关联特定帖子与保留选项 👇 -->
+                            <div style="margin-top: 20px; border-top: 1px solid #EAEAEA; padding-top: 15px;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                    <label class="wc-form-label" style="margin: 0; font-weight: bold; color: #111;">关联特定帖子作为上下文</label>
+                                </div>
+                                <div id="forum-gen-post-select-list" class="wc-checkbox-list" style="max-height: 120px; margin-bottom: 12px; background: #FFF; border: 1px solid #E5E5EA;">
+                                    <!-- JS 动态注入帖子列表 -->
+                                </div>
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <label class="wc-form-label" style="margin: 0; font-weight: bold; color: #111;">保留原有帖子 (不覆盖)</label>
+                                    <input type="checkbox" id="forum-gen-keep-posts" style="width: 20px; height: 20px; accent-color: #111;">
+                                </div>
+                            </div>
+                            <!-- 👆 新增结束 👆 -->
                         </div>
                         <div style="padding: 15px 20px; background: #FFF; border-top: 1px solid #F0F0F0; display: flex; gap: 10px;">
                             <button class="wc-btn-secondary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; font-weight: bold;" onclick="wcCloseModal('forum-modal-gen-count')">取消</button>
@@ -5342,6 +5501,13 @@
         <button class="wc-btn-secondary" style="width: 100%; margin: 0; border-radius: 12px; padding: 14px; font-weight: bold; background: #F5F5F5; color: #888; border: none;" onclick="snoozeBackupReminder()">稍后提醒 (4小时后)</button>
     </div>
 </div>
+    <!-- 全局图片预览弹窗 (高级毛玻璃风) -->
+    <div id="global-image-preview-overlay" onclick="closeGlobalImagePreview()" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); z-index: 999999; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s ease;">
+        <div style="position: absolute; top: calc(env(safe-area-inset-top, 20px) + 15px); right: 20px; width: 36px; height: 36px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FFF; cursor: pointer; z-index: 2; transition: background 0.2s;">
+            <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </div>
+        <img id="global-image-preview-img" src="" style="max-width: 95%; max-height: 85%; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); object-fit: contain;" onclick="event.stopPropagation()">
+    </div>
 
 </body>
 </html>

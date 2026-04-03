@@ -4621,16 +4621,12 @@ function wcShowContextMenu(x, y, msgId) {
     const editBtn = menu.querySelector('.wc-ctx-item[onclick="wcHandleEdit()"]');
 
     if (msg && editBtn) {
-        // 判断消息类型，只有纯文本消息才显示“编辑”按钮
-        if (msg.type === 'text' && !msg.content.includes('<div')) {
-            editBtn.style.display = 'flex'; // 显示编辑按钮
-        } else {
-            editBtn.style.display = 'none'; // 隐藏编辑按钮
-        }
+        // 允许编辑所有类型的消息，以便进行格式修复
+        editBtn.style.display = 'flex'; 
     }
 
     const menuWidth = 150;
-    const menuHeight = 180;
+    const menuHeight = 180; // 恢复原来的高度
     const screenW = window.innerWidth;
     const screenH = window.innerHeight;
 
@@ -4682,28 +4678,140 @@ function wcCancelQuote() {
 function wcHandleEdit() {
     const msgs = wcState.chats[wcState.activeChatId];
     const msg = msgs.find(m => m.id === wcState.selectedMsgId);
+    if (!msg) return;
     
-    if (msg && msg.type === 'text') {
-        const modal = document.getElementById('wc-modal-edit-message');
-        const textarea = document.getElementById('wc-edit-message-textarea');
-        const confirmBtn = document.getElementById('wc-edit-message-confirm');
+    const modal = document.getElementById('wc-modal-edit-message');
+    const textarea = document.getElementById('wc-edit-message-textarea');
+    const confirmBtn = document.getElementById('wc-edit-message-confirm');
+    const formatBtns = document.querySelectorAll('#wc-edit-format-btns .format-btn');
 
-        textarea.value = msg.content;
-        
-        confirmBtn.onclick = () => {
-            const newText = textarea.value.trim();
-            if (newText) {
-                msg.content = newText;
-                wcSaveData();
-                wcRenderMessages(wcState.activeChatId);
-            }
-            wcCloseModal('wc-modal-edit-message');
-        };
-        
-        wcOpenModal('wc-modal-edit-message');
-        textarea.focus();
+    // 初始化文本框内容和当前类型
+    let initialText = msg.content;
+    let currentType = 'text';
+
+    // 根据消息原本的类型，反向解析出文本供用户编辑
+    if (msg.type === 'transfer') {
+        currentType = 'transfer';
+        initialText = `${msg.amount || 0} ${msg.note || "转账"}`; // 简化为纯文本
+    } else if (msg.type === 'voice') {
+        currentType = 'voice';
+    } else if (msg.type === 'sticker') {
+        currentType = 'sticker';
+        const desc = wcFindStickerDescByUrl(msg.content);
+        initialText = desc || msg.content;
+    } else if (msg.type === 'text' && msg.content.startsWith('[图片描述]')) {
+        currentType = 'image_desc';
+        initialText = msg.content.replace(/^\[图片描述\]\s*/, '');
+    } else if (msg.type === 'receipt' && msg.content.includes('wc-bubble-location-card')) {
+        currentType = 'location';
+        const titleMatch = msg.content.match(/<div class="wc-bubble-location-title">(.*?)<\/div>/);
+        initialText = titleMatch ? titleMatch[1] : "未知地点";
+    } else {
+        // 检测是否为双语翻译格式
+        const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
+        const match = msg.content.match(bilingualRegex);
+        if (match) {
+            currentType = 'translate';
+            const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+            const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+            initialText = `${originalText}\n${translatedText}`; // 用换行分隔
+        }
     }
+
+    textarea.value = initialText;
+
+    // 更新按钮高亮状态的辅助函数
+    const updateBtns = (type) => {
+        formatBtns.forEach(btn => {
+            if (btn.dataset.type === type) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+    };
+    updateBtns(currentType);
+
+    // 绑定格式按钮点击事件 (移除自动修改 textarea.value 的逻辑)
+    formatBtns.forEach(btn => {
+        btn.onclick = () => {
+            currentType = btn.dataset.type;
+            updateBtns(currentType);
+        };
+    });
+
+    // 确认保存逻辑
+    confirmBtn.onclick = () => {
+        const newText = textarea.value.trim();
+        if (!newText) return alert("内容不能为空");
+
+        const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+        const stickerGroupIds = char && char.chatConfig ? char.chatConfig.stickerGroupIds : [];
+
+        // 根据选中的格式，重新构造消息
+        if (currentType === 'text') {
+            msg.type = 'text';
+            msg.content = newText;
+        } else if (currentType === 'image_desc') {
+            msg.type = 'text';
+            msg.content = `[图片描述] ${newText}`;
+        } else if (currentType === 'voice') {
+            msg.type = 'voice';
+            msg.content = newText;
+        } else if (currentType === 'sticker') {
+            const url = wcFindStickerUrlMulti(stickerGroupIds, newText);
+            if (url) {
+                msg.type = 'sticker';
+                msg.content = url;
+            } else {
+                msg.type = 'text';
+                msg.content = `[表情: ${newText}]`;
+            }
+        } else if (currentType === 'transfer') {
+            msg.type = 'transfer';
+            // 智能提取数字作为金额，剩下的作为备注
+            const match = newText.match(/(\d+(\.\d+)?)/);
+            msg.amount = match ? match[1] : "100";
+            msg.note = newText.replace(msg.amount, '').trim() || "转账";
+            msg.status = 'pending';
+        } else if (currentType === 'location') {
+            msg.type = 'receipt';
+            const locTitle = newText;
+            const locDesc = "定位";
+            
+            // 👇 新增：安全转义
+            const safeLocTitle = locTitle.replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, " ");
+            
+            // 👇 修改：onclick 里面使用 safeLocTitle
+            msg.content = `
+                <div class="wc-bubble-location-card" onclick="window.wcOpenMapView(true, '${safeLocTitle}', '${locDesc}', 0, 0)">
+                    <div class="wc-bubble-location-map virtual">
+                        <div class="ins-loc-marker virtual-marker"></div>
+                    </div>
+                    <div class="wc-bubble-location-info">
+                        <div class="wc-bubble-location-title">${locTitle}</div>
+                        <div class="wc-bubble-location-desc">${locDesc}</div>
+                    </div>
+                </div>
+            `;
+        } else if (currentType === 'translate') {
+            msg.type = 'text';
+            // 尝试按换行符分割原文和译文
+            const lines = newText.split('\n').filter(line => line.trim() !== '');
+            if (lines.length >= 2) {
+                const originalText = lines[0].trim();
+                const translatedText = lines.slice(1).join(' ').trim();
+                msg.content = `${originalText}<br><span style='font-size: 0.85em; opacity: 0.7;'>${translatedText}</span>`;
+            } else {
+                // 如果没有换行，默认当成原文，译文留空提示
+                msg.content = `${newText}<br><span style='font-size: 0.85em; opacity: 0.7;'>[译文]</span>`;
+            }
+        }
+
+        wcSaveData();
+        wcRenderMessages(wcState.activeChatId);
+        wcCloseModal('wc-modal-edit-message');
+    };
     
+    wcOpenModal('wc-modal-edit-message');
+    textarea.focus();
     wcHideContextMenu();
 }
 
@@ -5559,45 +5667,53 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         console.error("JSON Parse Error:", e);
         console.log("Raw Text:", text);
         
-        // 降级处理
+        // 👇【核心修复】：史诗级降级处理，彻底解决掉格式和爆 JSON 代码的问题
         let cleanText = text.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
-        if (!cleanText.includes('{"type"')) {
-            const lines = cleanText.split('\n');
-            actions = lines.map(line => {
-                if(line.trim()) return { type: 'text', content: line.trim() };
-            }).filter(Boolean);
-        } else {
-            // 改进的降级正则提取，尝试保留 type 和 senderName
-            const blockRegex = /\{[^{}]*\}/g;
-            const blocks = cleanText.match(blockRegex);
-            if (blocks) {
-                blocks.forEach(block => {
-                    const typeMatch = block.match(/"type"\s*:\s*"([^"]+)"/);
-                    const contentMatch = block.match(/"content"\s*:\s*"([^"]+)"/);
-                    const senderMatch = block.match(/"senderName"\s*:\s*"([^"]+)"/);
-                    
-                    if (contentMatch) {
-                        let actionObj = {
-                            type: typeMatch ? typeMatch[1] : 'text',
-                            content: contentMatch[1]
-                        };
-                        if (senderMatch) {
-                            actionObj.senderName = senderMatch[1];
-                        }
-                        actions.push(actionObj);
+        
+        // 改进的降级正则提取，无视换行、空格和属性顺序
+        const blockRegex = /\{[^{}]*\}/g;
+        const blocks = cleanText.match(blockRegex);
+        
+        if (blocks && blocks.length > 0) {
+            blocks.forEach(block => {
+                // 增强正则，支持转义引号和内部包含任意字符
+                const typeMatch = block.match(/"type"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                const contentMatch = block.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                const senderMatch = block.match(/"senderName"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                
+                if (contentMatch) {
+                    let actionObj = {
+                        type: typeMatch ? typeMatch[1].replace(/\\"/g, '"') : 'text',
+                        content: contentMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n')
+                    };
+                    if (senderMatch) {
+                        actionObj.senderName = senderMatch[1].replace(/\\"/g, '"');
                     }
-                });
-            }
-            
-            // 如果还是没提取到，用最基础的 content 提取
-            if (actions.length === 0) {
-                const contentRegex = /"content":\s*"([^"]+)"/g;
-                let match;
-                while ((match = contentRegex.exec(cleanText)) !== null) {
-                    actions.push({ type: 'text', content: match[1] });
+                    actions.push(actionObj);
                 }
+            });
+        }
+        
+        // 如果还是没提取到，用最基础的 content 提取
+        if (actions.length === 0) {
+            const contentRegex = /"content"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+            let match;
+            while ((match = contentRegex.exec(cleanText)) !== null) {
+                actions.push({ type: 'text', content: match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') });
             }
         }
+        
+        // 如果连 content 都没提取到，说明 AI 完全没按 JSON 格式输出，直接按行拆分为文本
+        if (actions.length === 0) {
+            const lines = cleanText.split('\n');
+            actions = lines.map(line => {
+                // 过滤掉只有大括号或中括号的行，防止爆出残缺的 JSON 代码
+                if(line.trim() && !/^[[\]{}]+$/.test(line.trim())) {
+                    return { type: 'text', content: line.trim() };
+                }
+            }).filter(Boolean);
+        }
+        // 👆 修复结束 👆
     }
 
     // 移除强制拆分逻辑，完全信任 AI 的 JSON 结构，防止一句话被错误切断
@@ -6264,6 +6380,26 @@ function wcAddMessage(charId, sender, type, content, extra = {}) {
         sender, type, content, time: Date.now(), ...extra
     };
     wcState.chats[charId].push(msg);
+
+    // 👇 新增：如果发送的是图片，且绑定了恋人空间，自动存入时光相册并触发 AI 评价
+    if (type === 'image' && sender === 'me' && typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId) {
+        const now = new Date();
+        const dateStr = `${now.getMonth()+1}.${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        const newEntry = {
+            id: Date.now() + Math.random(),
+            type: 'chat_saved',
+            img: content,
+            date: dateStr,
+            userText: '',
+            charComment: null
+        };
+        if (!lsState.timeAlbum) lsState.timeAlbum = [];
+        lsState.timeAlbum.unshift(newEntry);
+        lsSaveData();
+        // 延迟触发 AI 评价
+        setTimeout(() => lsTriggerDiaryAIComment(newEntry.id), 2000);
+    }
+    // 👆 新增结束
     
     if (sender === 'them' && type !== 'system') {
         const isChatOpen = document.getElementById('wc-view-chat-detail').classList.contains('active');
@@ -6870,10 +7006,27 @@ function wcActionImageDesc() {
     if (desc) wcAddMessage(wcState.activeChatId, 'me', 'text', `[图片描述] ${desc}`);
 }
 
-// --- 预览图片 ---
+// --- 预览图片 (高级弹窗版) ---
 function wcPreviewImage(src) {
-    const win = window.open("", "_blank");
-    win.document.write(`<img src="${src}" style="width:100%">`);
+    const overlay = document.getElementById('global-image-preview-overlay');
+    const img = document.getElementById('global-image-preview-img');
+    if (!overlay || !img) return;
+    
+    img.src = src;
+    overlay.style.display = 'flex';
+    // 延迟触发动画
+    setTimeout(() => overlay.style.opacity = '1', 10);
+}
+
+function closeGlobalImagePreview() {
+    const overlay = document.getElementById('global-image-preview-overlay');
+    if (!overlay) return;
+    
+    overlay.style.opacity = '0';
+    setTimeout(() => {
+        overlay.style.display = 'none';
+        document.getElementById('global-image-preview-img').src = '';
+    }, 300);
 }
 
 // --- WeChat Memory ---
@@ -11853,6 +12006,8 @@ function wcHandleTouchEndSwipe(evt) { wcXDown = null; wcYDown = null; }
 
 // --- Lovers Space State ---
 const lsState = {
+    timeAlbum: [], // 新增：时光相册日记数据
+    decorImages: [], // 新增：桌面装修图库
     boundCharId: null, 
     pendingCharId: null, 
     startDate: null, 
@@ -11913,6 +12068,8 @@ async function lsLoadData() {
         lsState.letters = data.letters || [];
         // 👇 新增这一行
         if (data.lettersConfig) lsState.lettersConfig = data.lettersConfig;
+        if (data.timeAlbum) lsState.timeAlbum = data.timeAlbum;
+        if (data.decorImages) lsState.decorImages = data.decorImages;
     }
 }
 
@@ -11935,7 +12092,9 @@ async function lsSaveData() {
         qaHistory: lsState.qaHistory,
         letters: lsState.letters,
         // 👇 新增这一行
-        lettersConfig: lsState.lettersConfig
+        lettersConfig: lsState.lettersConfig,
+        timeAlbum: lsState.timeAlbum,
+        decorImages: lsState.decorImages
     });
 }
 
@@ -18144,7 +18303,7 @@ async function triggerDreamAI() {
         else timeSlotVibe = "深夜/凌晨：夜深人静，适合极度私密的互动、相拥入眠或吃宵夜。";
         // 👆 新增结束 👆
 
-        systemPrompt += `你现在处于现实世界的线下互动场景中（作为独立的小番外）。你和 User 已经跨越了屏幕，正在面对面接触。\n`;
+        systemPrompt += `你现在处于现实世界的线下互动场景中。你和 User 已经跨越了屏幕，正在面对面接触。\n`;
         
         // 👇 新增：将时间感知注入到 Prompt 中 👇
         systemPrompt += `【当前现实时间】：${timeString} ${dayString}\n`;
@@ -21428,6 +21587,389 @@ async function lsRequestReply() {
         replyBtn.style.opacity = '1';
     }
 }
+/* ========================================== */
+/* 恋人空间：时光相册 (Time Album) 核心逻辑 */
+/* ========================================== */
+
+function lsOpenTimeAlbum() {
+    if (!lsState.boundCharId) return alert("请先在首页绑定一位恋人哦~");
+    document.getElementById('ls-view-main').classList.remove('active');
+    document.getElementById('ls-view-time-album').classList.add('active');
+    lsSwitchAlbumTab('diary');
+}
+
+function lsCloseTimeAlbum() {
+    document.getElementById('ls-view-time-album').classList.remove('active');
+    document.getElementById('ls-view-main').classList.add('active');
+}
+
+function lsSwitchAlbumTab(tabId) {
+    document.querySelectorAll('.ta-cap-tab').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.ta-content-view').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById(`ta-tab-${tabId}`).classList.add('active');
+    document.getElementById(`ta-view-${tabId}`).classList.add('active');
+
+    if (tabId === 'diary') lsRenderTimeDiary();
+    if (tabId === 'decor') lsRenderDecorPreview();
+}
+
+// --- 时光纪要 (日记) ---
+function lsRenderTimeDiary() {
+    const container = document.getElementById('ta-timeline-container');
+    container.innerHTML = '';
+
+    if (!lsState.timeAlbum || lsState.timeAlbum.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px; font-style:italic;">暂无照片记录，快去上传或在聊天中发送图片吧~</div>';
+        return;
+    }
+
+    lsState.timeAlbum.forEach(entry => {
+        const tagText = entry.type === 'chat_saved' ? 'SAVED FROM CHAT' : 'DAILY MEMO';
+        
+        let userTextHtml = '';
+        if (entry.userText) {
+            userTextHtml = `<div class="ta-diary-user-text">${entry.userText}</div>`;
+        }
+
+        let charCommentHtml = '';
+        if (entry.charComment) {
+            charCommentHtml = `
+                <div class="ta-char-comment-box">
+                    <div class="ta-char-name">Ta's Reply</div>
+                    <div class="ta-char-text">“${entry.charComment}”</div>
+                </div>
+            `;
+        } else {
+            charCommentHtml = `
+                <div class="ta-char-comment-box" style="opacity: 0.6;">
+                    <div class="ta-char-name">Ta's Reply</div>
+                    <div class="ta-char-text" style="font-size: 12px;">Ta 正在认真看照片...</div>
+                </div>
+            `;
+        }
+
+        const html = `
+            <div class="ta-timeline-item">
+                <div class="ta-timeline-dot"></div>
+                <div class="ta-diary-date">${entry.date}</div>
+                <div class="ta-diary-card">
+                    <!-- 新增：删除按钮 -->
+                    <div class="ta-diary-delete-btn" onclick="lsDeleteTimeDiary(${entry.id})" title="删除此记录">
+                        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </div>
+                    <div class="ta-diary-tag">${tagText}</div>
+                    <img src="${entry.img}" class="ta-diary-img" onclick="wcPreviewImage('${entry.img}')">
+                    ${userTextHtml}
+                    ${charCommentHtml}
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', html);
+    });
+}
+
+// 新增：删除时光纪要记录
+function lsDeleteTimeDiary(id) {
+    if (confirm("确定要删除这条时光纪要吗？")) {
+        lsState.timeAlbum = lsState.timeAlbum.filter(e => e.id !== id);
+        lsSaveData();
+        lsRenderTimeDiary();
+    }
+}
+
+// 修复：使用 wcCompressImage 压缩图片，防止上传失败
+async function lsHandleDiaryUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        const base64 = await wcCompressImage(file);
+        const userText = prompt("给这张照片写点备忘录吧 (选填)：") || "";
+        
+        const now = new Date();
+        const dateStr = `${now.getMonth()+1}.${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+        const newEntry = {
+            id: Date.now(),
+            type: 'upload',
+            img: base64,
+            date: dateStr,
+            userText: userText,
+            charComment: null
+        };
+
+        if (!lsState.timeAlbum) lsState.timeAlbum = [];
+        lsState.timeAlbum.unshift(newEntry);
+        lsSaveData();
+        lsRenderTimeDiary();
+
+        // 触发 AI 评价
+        lsTriggerDiaryAIComment(newEntry.id);
+    } catch (e) {
+        console.error("图片处理失败", e);
+        alert("图片处理失败，请重试");
+    }
+    event.target.value = '';
+}
+
+async function lsTriggerDiaryAIComment(entryId) {
+    const char = wcState.characters.find(c => c.id === lsState.boundCharId);
+    if (!char) return;
+
+    const entry = lsState.timeAlbum.find(e => e.id === entryId);
+    if (!entry) return;
+
+    const apiConfig = await getActiveApiConfig('npc');
+    if (!apiConfig || !apiConfig.key) return;
+
+    try {
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
+        if (entry.type === 'chat_saved') {
+            prompt += `User 刚刚在微信聊天里发了一张图片，你偷偷把它存到了你们的专属相册里。\n`;
+        } else {
+            prompt += `User 刚刚在你们的专属相册里上传了一张日常照片，并配文：“${entry.userText || '无'}”。\n`;
+        }
+        prompt += `请根据你的人设，给这张照片写一条简短的评论（就像在朋友圈或备忘录里的留言）。\n`;
+        prompt += `要求：语气自然，符合人设，不要超过50字。直接输出评论内容，不要任何多余格式和引号。`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        
+        entry.charComment = content;
+        lsSaveData();
+        
+        if (document.getElementById('ta-view-diary').classList.contains('active')) {
+            lsRenderTimeDiary();
+        }
+    } catch (e) {
+        console.error("AI 评价照片失败", e);
+        entry.charComment = "照片很好看哦~"; // 兜底
+        lsSaveData();
+        lsRenderTimeDiary();
+    }
+}
+
+// --- 桌面装修 ---
+// 终极修复：使用 for...of 严格等待异步压缩完成，防止 input 被提前清空导致文件丢失
+async function lsHandleDecorUpload(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    if (!lsState.decorImages) lsState.decorImages = [];
+
+    // 提取为数组，防止 files 对象丢失
+    const fileArray = Array.from(files);
+    
+    // 开启 loading 动画，防止用户在处理大图时以为卡住了
+    const loading = document.getElementById('ta-loading-overlay');
+    if (loading) {
+        loading.querySelector('.ta-spinner').nextElementSibling.innerText = "正在处理图片...";
+        loading.classList.add('active');
+    }
+
+    try {
+        // 严格排队处理每一张图片，确保压缩完毕再进行下一张
+        for (let file of fileArray) {
+            const base64 = await wcCompressImage(file);
+            lsState.decorImages.push(base64);
+        }
+        
+        lsSaveData();
+        lsRenderDecorPreview();
+    } catch (e) {
+        console.error("图片处理失败", e);
+        alert("部分图片处理失败，请重试");
+    } finally {
+        if (loading) {
+            loading.classList.remove('active');
+            loading.querySelector('.ta-spinner').nextElementSibling.innerText = "Ta 正在为你搭配..."; // 恢复文字
+        }
+        // 必须在所有图片都处理完之后，才能清空 input！
+        event.target.value = '';
+    }
+}
+
+function lsRenderDecorPreview() {
+    const previewContainer = document.getElementById('ta-upload-preview');
+    const countSpan = document.getElementById('ta-img-count');
+    const decorateBtn = document.getElementById('ta-decorate-btn');
+
+    if (!lsState.decorImages) lsState.decorImages = [];
+    countSpan.innerText = lsState.decorImages.length;
+
+    if (lsState.decorImages.length === 0) {
+        previewContainer.innerHTML = '<div class="ta-empty-text">上传一些照片，让 Ta 帮你布置桌面吧</div>';
+        decorateBtn.disabled = true;
+        return;
+    }
+
+    previewContainer.innerHTML = '';
+    lsState.decorImages.forEach((imgSrc, idx) => {
+        const img = document.createElement('img');
+        img.src = imgSrc;
+        img.className = 'ta-image-item';
+        // 长按删除图片
+        img.oncontextmenu = (e) => {
+            e.preventDefault();
+            if (confirm("删除这张图片？")) {
+                lsState.decorImages.splice(idx, 1);
+                lsSaveData();
+                lsRenderDecorPreview();
+            }
+        };
+        previewContainer.appendChild(img);
+    });
+
+    decorateBtn.disabled = false;
+}
+
+// 记录 AI 生成的装修结果，用于应用到真实桌面
+let tempDecorResult = null;
+
+async function lsStartDecoration() {
+    if (!lsState.decorImages || lsState.decorImages.length === 0) return;
+
+    const char = wcState.characters.find(c => c.id === lsState.boundCharId);
+    if (!char) return;
+
+    const loading = document.getElementById('ta-loading-overlay');
+    loading.classList.add('active');
+    document.getElementById('ta-apply-btn').style.display = 'none'; // 隐藏应用按钮
+
+    const apiConfig = await getActiveApiConfig('npc');
+    if (!apiConfig || !apiConfig.key) {
+        // 降级：如果没有配置 API，使用随机兜底
+        setTimeout(() => {
+            loading.classList.remove('active');
+            lsApplyDecoration({
+                widgetText: "今天也要开心哦！",
+                appNames: ["聊天", "空间", "音乐", "论坛", "主题", "设置", "世界书"]
+            });
+        }, 1500);
+        return;
+    }
+
+    try {
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
+        prompt += `User 让你帮忙“装修”Ta的手机桌面。\n`;
+        prompt += `请根据你的人设，为 User 的桌面生成：\n`;
+        prompt += `1. 一句留在桌面大组件上的简短留言（如：记得按时吃饭、今天也要开心等，体现你的性格）。\n`;
+        prompt += `2. 7个常用APP的自定义名称（分别是：聊天, 空间, 音乐, 论坛, 主题, 设置, 世界书。请改成符合你性格的昵称，如把聊天改成“找我”，相册改成“回忆”等，每个不超过4个字）。\n`;
+        prompt += `返回纯JSON格式：\n`;
+        prompt += `{"widgetText": "留言内容", "appNames": ["APP1", "APP2", "APP3", "APP4", "APP5", "APP6", "APP7"]}`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        loading.classList.remove('active');
+        lsApplyDecoration(result);
+
+    } catch (e) {
+        console.error("AI 装修失败", e);
+        loading.classList.remove('active');
+        lsApplyDecoration({
+            widgetText: "照片很好看，我帮你换上啦~",
+            appNames: ["聊天", "空间", "音乐", "论坛", "主题", "设置", "世界书"]
+        });
+    }
+}
+
+function lsApplyDecoration(aiResult) {
+    const getRandomImage = () => lsState.decorImages[Math.floor(Math.random() * lsState.decorImages.length)];
+
+    // 1. 更换桌面组件图片和文字
+    const widgetImg = document.getElementById('ta-widget-img');
+    const widgetImgSrc = getRandomImage();
+    widgetImg.src = widgetImgSrc;
+    widgetImg.style.opacity = '1';
+    
+    const widgetText = aiResult.widgetText || "今天也要开心哦！";
+    document.getElementById('ta-widget-text').innerText = widgetText;
+
+    // 2. 更换 7 个 APP 图标和名称
+    const names = aiResult.appNames || ["聊天", "空间", "音乐", "论坛", "主题", "设置", "世界书"];
+    const appIcons = [];
+    
+    for (let i = 0; i < 7; i++) {
+        const appIcon = document.getElementById(`ta-app-icon-${i}`);
+        const appName = document.getElementById(`ta-app-name-${i}`);
+        
+        const iconSrc = getRandomImage();
+        appIcons.push(iconSrc);
+        
+        if (appIcon) {
+            appIcon.src = iconSrc;
+            appIcon.style.opacity = '1';
+        }
+        if (appName) {
+            appName.innerText = names[i] || "APP";
+        }
+    }
+
+    // 3. 保存临时结果，显示“应用到桌面”按钮
+    tempDecorResult = {
+        widgetImg: widgetImgSrc,
+        widgetText: widgetText,
+        appNames: names,
+        appIcons: appIcons
+    };
+    document.getElementById('ta-apply-btn').style.display = 'flex';
+}
+
+// 新增：将预览结果应用到真实的手机桌面
+function lsApplyDecorationToRealDesktop() {
+    if (!tempDecorResult) return alert("请先让 Ta 帮忙装修哦~");
+    
+    // 1. 更新真实大组件 (恋人空间组件)
+    lsState.widgetData.customPhoto = tempDecorResult.widgetImg;
+    lsState.widgetData.noteText = tempDecorResult.widgetText;
+    lsState.widgetData.currentMode = 'photo'; // 默认翻到照片面
+    lsSaveData();
+    lsRenderWidget(); // 刷新真实桌面组件
+
+    // 2. 更新真实 7 个 APP
+    for (let i = 0; i < 7; i++) {
+        const realIcon = document.getElementById(`icon-${i}`);
+        const realName = document.getElementById(`name-${i}`);
+        
+        if (realIcon) {
+            realIcon.style.backgroundImage = `url('${tempDecorResult.appIcons[i]}')`;
+            realIcon.style.backgroundColor = 'transparent';
+        }
+        if (realName) {
+            realName.innerText = tempDecorResult.appNames[i];
+        }
+    }
+    saveAppsData(); // 保存真实 APP 数据
+    renderAppEditors(); // 刷新设置里的编辑器
+    
+    alert("装修已成功应用到你的真实桌面！");
+    lsCloseTimeAlbum();
+}
+
 /* ==========================================================================
    APP 4: INS FORUM LOGIC (Advanced iOS Style - Twitter/INS Clone)
    ========================================================================== */
@@ -22975,7 +23517,7 @@ function forumSaveSettings() {
 }
 
 // --- 核心：高强度活人感 AI 生成 (8帖 + 6评 + 绝对禁止生成User + 覆盖未收藏的旧帖) ---
-async function forumGenerateAIPosts(type, min = 6, max = 10) {
+async function forumGenerateAIPosts(type, min = 6, max = 10, selectedPostIds = [], keepPosts = false) {
     const apiConfig = await getActiveApiConfig('forum');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
@@ -22989,13 +23531,16 @@ async function forumGenerateAIPosts(type, min = 6, max = 10) {
     wcShowLoading("正在刷新高浓度活人动态...");
 
     try {
-        forumState.posts = forumState.posts.filter(p => {
-            if (p.type !== type) return true;
-            if (p.author.name === forumState.profile.name) return true;
-            if (Array.isArray(p.likes) && p.likes.includes(forumState.profile.name)) return true;
-            if (Array.isArray(p.saves) && p.saves.includes(forumState.profile.name)) return true;
-            return false;
-        });
+        if (!keepPosts) {
+            forumState.posts = forumState.posts.filter(p => {
+                if (p.type !== type) return true;
+                if (p.windowId !== forumState.activeWindowId) return true; // 修复：只清理当前窗口的帖子
+                if (p.author.name === forumState.profile.name) return true;
+                if (Array.isArray(p.likes) && p.likes.includes(forumState.profile.name)) return true;
+                if (Array.isArray(p.saves) && p.saves.includes(forumState.profile.name)) return true;
+                return false;
+            });
+        }
 
         let contextInfo = "";
         const currentWin = forumState.windows.find(w => w.id === forumState.activeWindowId);
@@ -23032,6 +23577,23 @@ async function forumGenerateAIPosts(type, min = 6, max = 10) {
                 }).join('\n') + "\n\n";
             }
         }
+
+        // 👇 新增：注入选中的特定帖子作为上下文 (包含评论) 👇
+        if (selectedPostIds && selectedPostIds.length > 0) {
+            const associatedPosts = forumState.posts.filter(p => selectedPostIds.includes(p.id));
+            if (associatedPosts.length > 0) {
+                contextInfo += "【当前频道已有帖子参考（请根据这些帖子的话题、氛围或评论区的讨论进行延伸或互动）】:\n";
+                associatedPosts.forEach(p => {
+                    let commentsStr = "无";
+                    if (p.comments && p.comments.length > 0) {
+                        // 提取前 10 条评论，防止 Token 爆炸
+                        commentsStr = p.comments.slice(0, 10).map(c => `${c.name}: ${c.content}`).join(' | ');
+                    }
+                    contextInfo += `标题: ${p.title || '无题'}\n内容: ${p.content.substring(0, 200)}...\n评论区: [${commentsStr}]\n\n`;
+                });
+            }
+        }
+        // 👆 新增结束 👆
 
         let prompt = `你现在是一个社交论坛的后台引擎。请生成一批极具“活人感”的论坛帖子和评论。\n`;
         if (type === 'home') {
@@ -23242,7 +23804,7 @@ function forumSaveFanficSettings() {
 }
 
 // --- 一键生成同人文 ---
-function forumDirectGenFanfic(min = 2, max = 3) {
+function forumDirectGenFanfic(min = 2, max = 3, selectedPostIds = [], keepPosts = false) {
     const charA = forumState.config.fanficCharA || '随机角色A';
     const charB = forumState.config.fanficCharB || '随机角色B';
     const trope = forumState.config.fanficTrope || '随机日常/发疯脑洞';
@@ -23276,15 +23838,33 @@ function forumDirectGenFanfic(min = 2, max = 3) {
             contextInfo += "【角色性格参考】:\n" + chars.map(c => `${c.name}: ${c.prompt}`).join('\n') + "\n\n";
         }
     }
+
+    // 👇 新增：注入选中的特定同人文作为上下文 (包含评论) 👇
+    if (selectedPostIds && selectedPostIds.length > 0) {
+        const associatedPosts = forumState.posts.filter(p => selectedPostIds.includes(p.id));
+        if (associatedPosts.length > 0) {
+            contextInfo += "【当前频道已有同人文参考（请根据这些文章的剧情、设定或读者评论进行续写或延伸）】:\n";
+            associatedPosts.forEach(p => {
+                let commentsStr = "无";
+                if (p.comments && p.comments.length > 0) {
+                    // 提取前 10 条评论，防止 Token 爆炸
+                    commentsStr = p.comments.slice(0, 10).map(c => `${c.name}: ${c.content}`).join(' | ');
+                }
+                contextInfo += `标题: ${p.title || '无题'}\n内容: ${p.content.substring(0, 200)}...\n读者评论: [${commentsStr}]\n\n`;
+            });
+        }
+    }
+    // 👆 新增结束 👆
+
     if (contextInfo) {
         basePrompt += `\n${contextInfo}`;
     }
 
-    _executeGenFanfic(basePrompt, min, max);
+    _executeGenFanfic(basePrompt, min, max, keepPosts);
 }
 
 // 内部核心：执行同人文 API 请求 (覆盖未收藏的旧文)
-async function _executeGenFanfic(basePrompt, min = 2, max = 3) {
+async function _executeGenFanfic(basePrompt, min = 2, max = 3, keepPosts = false) {
     const apiConfig = await getActiveApiConfig('forum');
     if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
 
@@ -23298,13 +23878,16 @@ async function _executeGenFanfic(basePrompt, min = 2, max = 3) {
     wcShowLoading("正在生成同人文，请耐心等待...");
 
     try {
-        forumState.posts = forumState.posts.filter(p => {
-            if (p.type !== 'fanfic') return true;
-            if (p.author.name === forumState.profile.name) return true;
-            if (Array.isArray(p.likes) && p.likes.includes(forumState.profile.name)) return true;
-            if (Array.isArray(p.saves) && p.saves.includes(forumState.profile.name)) return true;
-            return false;
-        });
+        if (!keepPosts) {
+            forumState.posts = forumState.posts.filter(p => {
+                if (p.type !== 'fanfic') return true;
+                if (p.windowId !== forumState.activeWindowId) return true; // 修复：只清理当前窗口的帖子
+                if (p.author.name === forumState.profile.name) return true;
+                if (Array.isArray(p.likes) && p.likes.includes(forumState.profile.name)) return true;
+                if (Array.isArray(p.saves) && p.saves.includes(forumState.profile.name)) return true;
+                return false;
+            });
+        }
 
         const cMin = forumState.config.commentMin !== undefined ? forumState.config.commentMin : 3;
         const cMax = forumState.config.commentMax !== undefined ? forumState.config.commentMax : 8;
@@ -23452,9 +24035,33 @@ function forumOpenGenCountModal(type) {
     document.getElementById('forum-setting-comment-min').value = forumState.config.commentMin !== undefined ? forumState.config.commentMin : 3;
     document.getElementById('forum-setting-comment-max').value = forumState.config.commentMax !== undefined ? forumState.config.commentMax : 8;
     
+    // 👇 新增：渲染当前窗口的帖子列表供选择关联 👇
+    const postListContainer = document.getElementById('forum-gen-post-select-list');
+    postListContainer.innerHTML = '';
+    const currentPosts = forumState.posts.filter(p => p.type === type && p.windowId === forumState.activeWindowId);
+    if (currentPosts.length === 0) {
+        postListContainer.innerHTML = '<div style="color:#999; font-size:12px; text-align:center; padding: 10px;">当前频道暂无帖子可关联</div>';
+    } else {
+        currentPosts.forEach(p => {
+            const shortTitle = p.title ? p.title : p.content.substring(0, 15) + '...';
+            postListContainer.innerHTML += `
+                <div class="wc-checkbox-item" style="padding: 6px 0; border-bottom: 1px solid #F9F9F9;">
+                    <input type="checkbox" value="${p.id}" class="forum-post-associate-cb" style="width: 16px; height: 16px;">
+                    <span style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;">${shortTitle}</span>
+                </div>
+            `;
+        });
+    }
+    // 👆 新增结束 👆
+
     document.getElementById('forum-gen-count-confirm').onclick = function() {
         const min = parseInt(minInput.value) || (type === 'home' ? 6 : 2);
         const max = parseInt(maxInput.value) || (type === 'home' ? 10 : 3);
+        
+        // 👇 获取选中的帖子 ID 和保留选项 👇
+        const selectedPostCbs = document.querySelectorAll('.forum-post-associate-cb:checked');
+        const selectedPostIds = Array.from(selectedPostCbs).map(cb => parseFloat(cb.value));
+        const keepPosts = document.getElementById('forum-gen-keep-posts').checked;
         
         if (min > max) {
             alert("最小值不能大于最大值哦~");
@@ -23468,9 +24075,9 @@ function forumOpenGenCountModal(type) {
         
         wcCloseModal('forum-modal-gen-count');
         if (type === 'home') {
-            forumGenerateAIPosts('home', min, max);
+            forumGenerateAIPosts('home', min, max, selectedPostIds, keepPosts);
         } else if (type === 'fanfic') {
-            forumDirectGenFanfic(min, max);
+            forumDirectGenFanfic(min, max, selectedPostIds, keepPosts);
         }
     };
     
@@ -25139,12 +25746,18 @@ function wcSubmitSendLocation() {
         isVirtual = true;
     }
 
+// 找到这段代码：
     const mapClass = isVirtual ? "wc-bubble-location-map virtual" : "wc-bubble-location-map";
     const markerClass = isVirtual ? "ins-loc-marker virtual-marker" : "ins-loc-marker";
     
+    // 👇 新增：对标题和描述进行安全转义，防止单引号和换行符破坏 onclick 语法
+    const safeLocTitle = locTitle.replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, " ");
+    const safeLocDesc = locDesc.replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, " ");
+
     // 核心：给卡片绑定 onclick 事件，传入参数打开地图弹窗
+    // 👇 修改：将 locTitle 和 locDesc 替换为 safeLocTitle 和 safeLocDesc
     const cardHtml = `
-        <div class="wc-bubble-location-card" onclick="window.wcOpenMapView(${isVirtual}, '${locTitle}', '${locDesc}', ${lat}, ${lon})">
+        <div class="wc-bubble-location-card" onclick="window.wcOpenMapView(${isVirtual}, '${safeLocTitle}', '${safeLocDesc}', ${lat}, ${lon})">
             <div class="${mapClass}">
                 <div class="${markerClass}"></div>
             </div>
