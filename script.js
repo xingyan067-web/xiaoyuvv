@@ -1,38 +1,3 @@
-// ✅ OneSignal 终极降级稳定版 (v15)
-window.OneSignal = window.OneSignal || [];
-OneSignal.push(function() {
-    try {
-        OneSignal.init({
-            appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
-            // 🔪 核心绝杀：v15 专属参数，强行锁定子目录！
-            path: "/xiaoyuvv/", 
-            serviceWorkerPath: "OneSignalSDKWorker.js",
-            serviceWorkerParam: { scope: "/xiaoyuvv/" }
-        });
-        console.log("✅ OneSignal v15 初始化成功！");
-    } catch(e) {
-        alert("❌ 初始化报错:\n" + e.message);
-    }
-});
-
-// 切回前台时拉取离线消息
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-        if (typeof syncOfflineMessages === 'function') {
-            syncOfflineMessages();
-        }
-    }
-});
-
-// 切回前台时拉取离线消息（只绑定一次）
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-        if (typeof syncOfflineMessages === 'function') {
-            syncOfflineMessages();
-        }
-    }
-});
-
 // ==========================================
 // 新增：iOS Standalone (全屏) 模式检测与防缩放
 // ==========================================
@@ -78,112 +43,99 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
-// 👇 适配 v15 版本的权限请求
-async function handleOfflineToggle(checkbox) {
-    if (checkbox.checked) {
-        if (!window.OneSignal) {
-            alert("推送组件还在加载中，请稍等 2-3 秒再试哦~");
-            checkbox.checked = false;
-            return;
-        }
-        
-        window.OneSignal.push(function() {
-            window.OneSignal.isPushNotificationsEnabled(function(isEnabled) {
-                if (isEnabled) {
-                    alert("✅ 通知权限已获取！请点击右上角保存设置生效。");
-                } else {
-                    // 唤起原生授权弹窗
-                    window.OneSignal.registerForPushNotifications();
-                    alert("请在弹出的窗口中允许通知权限哦~");
-                }
-            });
-        });
-    }
-}
-// 注册离线托管任务 (强行突破诊断版)
+// 注册离线托管任务 (纯前端完美打包版，无需修改 Cloudflare)
 async function registerOfflineProactiveTask(char) {
     try {
-        if (!window.OneSignal) {
-            alert("❌ 托管失败：OneSignal 推送组件未加载！");
+        // 1. 检查环境与权限
+        if (!('Notification' in window)) {
+            alert("当前浏览器不支持系统通知！如果是苹果手机，请点击底部「分享」-「添加到主屏幕」，从桌面打开本应用！");
             return;
         }
+        if (Notification.permission !== 'granted') {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') return;
+        }
 
-        // 1. 尝试获取真实的 ID
-        let subscriptionId = null;
-        try {
-            subscriptionId = await new Promise((resolve) => {
-                window.OneSignal.push(function() {
-                    window.OneSignal.getUserId(function(id) {
-                        resolve(id);
-                    });
-                });
-            });
-        } catch (err) {
-            console.error("获取ID报错:", err);
-        }
-        
-        // 2. 🚨 强行突破逻辑 🚨
-        if (!subscriptionId) {
-            const perm = Notification.permission;
-            const confirmBypass = confirm(`⚠️ 诊断报告：\n系统通知权限状态: ${perm}\nOneSignal ID: 尚未生成\n\nOneSignal 还在后台墨迹。是否先用【测试ID】强行连接云端大脑，看看云端是否正常？`);
-            
-            if (!confirmBypass) {
-                return; // 用户点击取消，退出
-            }
-            // 用户点击确定，强行赋予一个测试 ID！
-            subscriptionId = "test_dummy_id_88888888"; 
-        }
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+        });
 
         const apiConfig = await getActiveApiConfig('chat');
-        if (!apiConfig || !apiConfig.key) {
-            alert("❌ 托管失败：请先在设置里配置好 API 密钥！");
-            return;
-        }
-
         const chatConfig = char.chatConfig || {};
 
-        // 提取上下文
+        // 👇 2. 读取上下文条数 (根据聊天设置) 👇
         let limit = chatConfig.contextLimit > 0 ? chatConfig.contextLimit : 30;
         const recentMsgs = (wcState.chats[char.id] || []).slice(-limit).map(m => {
             if (m.isError || m.type === 'system') return null;
-            return { sender: m.sender, content: m.type !== 'text' ? `[${m.type}]` : m.content };
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return { sender: m.sender, content: content };
         }).filter(Boolean);
 
-        // 组装基础 System Prompt
-        let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
-        systemPrompt += `【角色活人运转规则】\n> 必须像真人一样聊天，拒绝机械回复。\n> 绝对禁止长文本：你必须模拟真实人类在线聊天的碎片化习惯，你可以一次性生成多条短消息，禁止把所有短消息融合成一个长文本发送！\n> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！\n`;
+        // 👇 3. 读取世界书 👇
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
 
+        // 👇 4. 读取回忆总结记忆条数 (根据聊天设置) 👇
+        let memoryText = "暂无特殊记忆。";
+        if (char.memories && char.memories.length > 0) {
+            const readCount = chatConfig.aiMemoryCount !== undefined ? chatConfig.aiMemoryCount : 5;
+            if (readCount > 0) {
+                memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content.replace(/^\[.*?\]\s*/, '')}`).join('\n');
+            }
+        }
+
+        // 👇 5. 组装终极 System Prompt 👇
+        let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        systemPrompt += `【用户(User)设定】：${chatConfig.userPersona || wcState.user.persona || "无"}\n`;
+        systemPrompt += `【你们的共同记忆（潜意识）】：\n${memoryText}\n\n`;
+        
+        // 时间感知规则
+        if (chatConfig.timePerceptionEnabled !== false) {
+            systemPrompt += `【时间感知指令】：系统会在最后告诉你当前的现实时间。请你务必根据那个时间点（如深夜、清晨、工作时间）来决定你的行为和语气！例如深夜可以说自己睡不着，清晨可以说刚醒。\n`;
+        }
+
+        // 活人运转与格式规则
+        systemPrompt += `【角色活人运转规则】\n`;
+        systemPrompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
+        systemPrompt += `> 绝对禁止长文本：必须将长回复拆分成多条短消息（1-4条），严禁把所有话挤在一个气泡里！\n`;
+        systemPrompt += `> 保持回复消息数量的随机性和多样性，每一条消息都是数组中的一个独立对象。\n`;
+        systemPrompt += `> 防重复：严禁输出重复的句子或重复的对话序列！\n`;
+        systemPrompt += `> 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n`;
+        systemPrompt += `> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！\n`;
+        systemPrompt += `返回格式示例：\n[\n  {"type":"text", "content":"第一句话"},\n  {"type":"text", "content":"第二句话"}\n]\n`;
+
+        // 6. 打包发送给云端
         const payload = {
             deviceId: getDeviceId(),
             charId: char.id,
             charName: char.name,
             charAvatar: char.avatar,
-            systemPrompt: systemPrompt, 
+            systemPrompt: systemPrompt, // 包含所有规则的终极提示词
             apiConfig: apiConfig,
-            context: recentMsgs, 
+            context: recentMsgs, // 截取好的上下文
             intervalMinutes: chatConfig.proactiveInterval || 60,
-            subscriptionId: subscriptionId, 
-            timePerceptionEnabled: chatConfig.timePerceptionEnabled !== false
+            subscription: subscription
         };
 
-        // 3. 强行发送给云端大脑
-        const response = await fetch('https://honey-offline-brain.xingyan067.workers.dev/register', {
+        await fetch('https://honey-offline-brain.xingyan067.workers.dev/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         
-        if (response.ok) {
-            alert(`✅ 霸王硬上弓成功！\n角色 [${char.name}] 已成功连上云端大脑！\n\n这证明你的云端 Worker 和数据库完美无缺！`);
-        } else {
-            alert(`❌ 云端拒绝了请求，状态码: ${response.status}`);
-        }
+        console.log("✅ 已成功将角色托管至云端大脑！");
     } catch (e) {
         console.error("❌ 托管至云端失败:", e);
-        alert(`❌ 托管至云端失败: ${e.message}\n请检查你的 Worker 网址是否正确！`);
     }
 }
-
 
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
@@ -11138,10 +11090,11 @@ async function wcSaveChatSettings() {
     wcApplyChatConfig(char);
     wcRenderMessages(char.id); 
     wcRenderChats(); 
-        // ✅ 修复：只要开启了离线托管，就交给云端！
-    if (char.chatConfig.offlineProactiveEnabled) {
+        // 👇 修改：如果同时开启了主动发消息和离线托管，才交给云端 👇
+    if (char.chatConfig.proactiveEnabled && char.chatConfig.offlineProactiveEnabled) {
         registerOfflineProactiveTask(char);
     } else {
+        // 如果关了离线开关，告诉云端取消托管
         unregisterOfflineProactiveTask(char);
     }
     // 👆 新增结束 👆
@@ -27033,13 +26986,19 @@ function wcAutoLayoutRelation() {
     wcUpdateRelationPositions();
 }
 // ==========================================
-// 新增：同步离线消息函数
+// 新增：同步离线消息函数 (带 ACK 确认机制)
 // ==========================================
 async function syncOfflineMessages() {
     try {
         // 注意：这里的网址也要换成你真实的 Worker 网址哦！
         const workerUrl = 'https://honey-offline-brain.xingyan067.workers.dev';
         const deviceId = getDeviceId();
+        
+        // 巧妙利用 Cache API，把 deviceId 存起来，让后台的 sw.js 也能读到！
+        if ('caches' in window) {
+            const cache = await caches.open('app-config-cache');
+            await cache.put('/current-device-id', new Response(deviceId));
+        }
         
         // 遍历所有开启了主动发消息的角色，去云端问问有没有新消息
         for (const char of wcState.characters) {
@@ -27049,10 +27008,23 @@ async function syncOfflineMessages() {
                 
                 if (data.messages && data.messages.length > 0) {
                     console.log(`拉取到 ${char.name} 的离线消息:`, data.messages);
+                    let addedCount = 0;
                     data.messages.forEach(msg => {
                         // 把云端发来的消息，悄悄塞进本地的聊天记录里
                         wcAddMessage(char.id, 'them', 'text', msg.content, { time: msg.time });
+                        addedCount++;
                     });
+                    
+                    // 核心修复：只有成功存入本地后，才通知云端删除消息 (ACK)
+                    if (addedCount > 0) {
+                        await wcSaveData(); // 确保保存到 IndexedDB
+                        await fetch(`${workerUrl}/ack`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ deviceId: deviceId, charId: char.id })
+                        });
+                        console.log(`✅ 已确认接收并清空云端 ${char.name} 的离线消息`);
+                    }
                 }
             }
         }
