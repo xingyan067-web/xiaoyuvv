@@ -100,7 +100,7 @@ async function handleOfflineToggle(checkbox) {
         });
     }
 }
-// 👇 适配 v15 版本的获取 ID 逻辑
+// 注册离线托管任务 (带强力防卡死与报错提示版)
 async function registerOfflineProactiveTask(char) {
     try {
         if (!window.OneSignal) {
@@ -108,17 +108,39 @@ async function registerOfflineProactiveTask(char) {
             return;
         }
 
-        // 🔪 核心修复：使用 v15 专属的异步方法获取 ID
+        // 🔪 核心修复：带 3 秒超时保护的获取 ID 逻辑，绝对不会卡死！
         let subscriptionId = await new Promise((resolve) => {
-            window.OneSignal.push(function() {
-                window.OneSignal.getUserId(function(userId) {
-                    resolve(userId);
+            let isResolved = false;
+            
+            // 3秒后如果还没拿到，强制返回 null，防止代码死锁
+            const timer = setTimeout(() => {
+                if (!isResolved) {
+                    isResolved = true;
+                    resolve(null);
+                }
+            }, 3000);
+
+            try {
+                window.OneSignal.push(function() {
+                    window.OneSignal.getUserId(function(userId) {
+                        if (!isResolved) {
+                            isResolved = true;
+                            clearTimeout(timer);
+                            resolve(userId);
+                        }
+                    });
                 });
-            });
+            } catch (err) {
+                if (!isResolved) {
+                    isResolved = true;
+                    clearTimeout(timer);
+                    resolve(null);
+                }
+            }
         });
         
         if (!subscriptionId) {
-            alert("❌ 托管失败：未获取到推送 ID！\n请确保您已允许通知权限，或者稍等几秒再点保存。");
+            alert("❌ 托管失败：未获取到推送 ID！\n\n可能原因：\n1. 您还没有允许通知权限。\n2. 网络延迟，OneSignal 还没准备好。\n\n请再点一次右上角的【保存】重试！");
             return;
         }
 
