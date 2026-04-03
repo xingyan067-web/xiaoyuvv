@@ -1,22 +1,28 @@
-// ✅ OneSignal 终极修复版 (双重保险防拦截版)
+// ✅ OneSignal 终极修复版 (三重保险防 404 版)
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {
     try {
-        // 1. 强制手动注册一次 Service Worker，防止 OneSignal 找不到文件
+        // 第一重保险：我们自己手动帮它注册，把路铺好！
         if ('serviceWorker' in navigator) {
             await navigator.serviceWorker.register('/xiaoyuvv/sw.js', { scope: '/xiaoyuvv/' });
         }
 
-        // 2. 初始化 OneSignal
+        // 第二重保险：初始化 OneSignal，同时写上新旧两种版本的路径配置，绝不让它乱跑！
         await OneSignal.init({
             appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
+            // 旧版配置写法
+            serviceWorkerPath: "sw.js",
             serviceWorkerParam: { scope: "/xiaoyuvv/" },
-            serviceWorkerPath: "/xiaoyuvv/sw.js", // 🔪 改回相对路径！
-            allowLocalhostAsSecureOrigin: true
+            // 新版 v16 配置写法
+            serviceWorker: {
+                path: "sw.js",
+                scope: "/xiaoyuvv/"
+            }
         });
         console.log("✅ OneSignal 初始化成功！");
     } catch(e) {
-        alert("❌ 推送组件初始化报错: " + e.message);
+        console.error("❌ OneSignal 初始化失败:", e);
+        alert("推送组件加载失败，请检查网络或清除缓存重试！");
     }
 });
 
