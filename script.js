@@ -1,20 +1,24 @@
-// ✅ OneSignal 终极修复版 (绝对路径防丢版)
+// ✅ OneSignal 终极修复版 (双重保险防拦截版)
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal) {
     try {
+        // 1. 强制手动注册一次 Service Worker，防止 OneSignal 找不到文件
+        if ('serviceWorker' in navigator) {
+            await navigator.serviceWorker.register('/xiaoyuvv/sw.js', { scope: '/xiaoyuvv/' });
+        }
+
+        // 2. 初始化 OneSignal
         await OneSignal.init({
             appId: "e4201c8e-52ad-42e7-9d13-ccd74d671813",
             serviceWorkerParam: { scope: "/xiaoyuvv/" },
-            // 🔪 核心修复：直接写死绝对路径，绝不迷路！
-            serviceWorkerPath: "https://xingyan067-web.github.io/xiaoyuvv/sw.js", 
+            serviceWorkerPath: "/xiaoyuvv/sw.js", // 🔪 改回相对路径！
             allowLocalhostAsSecureOrigin: true
         });
         console.log("✅ OneSignal 初始化成功！");
     } catch(e) {
-        console.error("❌ OneSignal 初始化失败:", e);
+        alert("❌ 推送组件初始化报错: " + e.message);
     }
 });
-
 
 // 切回前台时拉取离线消息（只绑定一次）
 document.addEventListener('visibilitychange', () => {
