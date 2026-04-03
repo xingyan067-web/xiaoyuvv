@@ -9665,15 +9665,70 @@ input::-webkit-inner-spin-button {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     background: linear-gradient(135deg, #FDFDFD 0%, #EAEAEA 100%); z-index: 0; opacity: 0.6;
 }
-.ta-widget-box {
-    width: 100%; height: 160px; background: #FFF; border-radius: 20px;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.06); margin-bottom: 30px;
-    position: relative; overflow: hidden; z-index: 1; display: flex; flex-direction: column;
-    border: 1px solid rgba(0,0,0,0.03); transition: all 0.5s ease;
+/* 桌面预览区背景调整 */
+.ta-desktop-preview-section {
+    background: #111; /* 底色改深，衬托壁纸 */
+    border-radius: 24px; padding: 24px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.1); border: 1px solid #E5E5EA;
+    display: flex; flex-direction: column; align-items: center; position: relative; overflow: hidden;
+    min-height: 400px; /* 保证预览区有足够高度 */
 }
-.ta-widget-img { width: 100%; height: 70%; object-fit: cover; background: #F5F5F5; transition: opacity 0.5s ease; }
-.ta-widget-text-area { height: 30%; display: flex; align-items: center; justify-content: center; background: #FFF; padding: 0 15px; }
-.ta-widget-text { font-size: 13px; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'Kaiti', 'STKaiti', serif; }
+.ta-desktop-bg {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(135deg, #FDFDFD 0%, #EAEAEA 100%); z-index: 0; 
+    background-size: cover; background-position: center; transition: background-image 0.5s ease;
+}
+
+/* 新增：AI 留言气泡 */
+.ta-ai-message-bubble {
+    position: relative; z-index: 1;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    padding: 12px 20px; border-radius: 20px;
+    font-size: 14px; color: #111; font-weight: 600;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    margin-top: 20px; text-align: center;
+    font-family: 'Kaiti', 'STKaiti', serif;
+    transition: opacity 0.5s ease;
+    max-width: 90%; word-break: break-word;
+}
+
+/* 修复：APP 名称在深色壁纸上可见 */
+.ta-app-name { 
+    font-size: 11px; color: #FFF; font-weight: 600; 
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8); /* 增加文字阴影 */
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; transition: all 0.5s ease; 
+}
+/* 修复：APP 图标透明底支持 */
+.ta-app-icon { 
+    width: 56px; height: 56px; border-radius: 16px; 
+    background: transparent; /* 改为透明底 */
+    object-fit: contain; /* 保证透明图标不被拉伸变形 */
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15)); /* 用 drop-shadow 替代 box-shadow 适配透明图 */
+    transition: all 0.5s ease; 
+}
+
+/* 新增：图库多选框样式 */
+.ta-image-wrapper {
+    position: relative; width: 70px; height: 70px; flex-shrink: 0;
+}
+.ta-image-wrapper .ta-image-item {
+    width: 100%; height: 100%; margin: 0;
+}
+.ta-image-checkbox {
+    position: absolute; top: 4px; right: 4px; width: 18px; height: 18px;
+    appearance: none; background: rgba(255,255,255,0.8); border: 1px solid #CCC;
+    border-radius: 4px; cursor: pointer; z-index: 10; display: none;
+}
+.ta-image-checkbox:checked {
+    background: #007AFF; border-color: #007AFF;
+}
+.ta-image-checkbox:checked::after {
+    content: ''; position: absolute; top: 2px; left: 5px; width: 4px; height: 8px;
+    border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.manage-mode .ta-image-checkbox { display: block; }
+.manage-mode .ta-image-item { opacity: 0.8; }
 
 /* 适配 7 个 APP 的网格 */
 .ta-app-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px 10px; width: 100%; z-index: 1; }

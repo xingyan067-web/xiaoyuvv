@@ -3747,7 +3747,13 @@ function wcCompressImage(file) {
                 }
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL('image/jpeg', 0.6));
+                
+                // 🔪 核心修复：如果是 PNG 图片，保留透明通道，不进行 JPEG 压缩
+                if (file.type === 'image/png') {
+                    resolve(canvas.toDataURL('image/png'));
+                } else {
+                    resolve(canvas.toDataURL('image/jpeg', 0.6));
+                }
             };
             img.onerror = (err) => reject(err);
         };
@@ -21800,139 +21806,424 @@ async function lsHandleDecorUpload(event) {
     }
 }
 
-function lsRenderDecorPreview() {
-    const previewContainer = document.getElementById('ta-upload-preview');
-    const countSpan = document.getElementById('ta-img-count');
-    const decorateBtn = document.getElementById('ta-decorate-btn');
+// --- 新增：双图库多选管理逻辑 ---
+let isWpManageMode = false;
+let isIconManageMode = false;
 
-    if (!lsState.decorImages) lsState.decorImages = [];
-    countSpan.innerText = lsState.decorImages.length;
+// 1. 壁纸图库管理
+function lsToggleWpManageMode() {
+    isWpManageMode = !isWpManageMode;
+    const previewContainer = document.getElementById('ta-wp-preview');
+    const manageActions = document.getElementById('ta-wp-manage-actions');
+    const manageBtn = document.getElementById('ta-wp-manage-btn');
+    
+    if (isWpManageMode) {
+        previewContainer.classList.add('manage-mode');
+        manageActions.style.display = 'flex';
+        manageBtn.innerText = '完成';
+    } else {
+        previewContainer.classList.remove('manage-mode');
+        manageActions.style.display = 'none';
+        manageBtn.innerText = '管理';
+        previewContainer.querySelectorAll('.ta-image-checkbox').forEach(cb => cb.checked = false);
+    }
+}
 
-    if (lsState.decorImages.length === 0) {
-        previewContainer.innerHTML = '<div class="ta-empty-text">上传一些照片，让 Ta 帮你布置桌面吧</div>';
-        decorateBtn.disabled = true;
+function lsDeleteSelectedWallpapers() {
+    const checkboxes = document.querySelectorAll('#ta-wp-preview .ta-image-checkbox:checked');
+    if (checkboxes.length === 0) return alert("请先选择要删除的壁纸");
+    
+    if (confirm(`确定要删除选中的 ${checkboxes.length} 张壁纸吗？`)) {
+        const indicesToDelete = Array.from(checkboxes).map(cb => parseInt(cb.value)).sort((a, b) => b - a);
+        indicesToDelete.forEach(idx => { lsState.decorWallpapers.splice(idx, 1); });
+        lsSaveData();
+        lsToggleWpManageMode(); 
+        lsRenderWallpaperPreview(); 
+    }
+}
+
+// 2. 图标图库管理
+function lsToggleIconManageMode() {
+    isIconManageMode = !isIconManageMode;
+    const previewContainer = document.getElementById('ta-icon-preview');
+    const manageActions = document.getElementById('ta-icon-manage-actions');
+    const manageBtn = document.getElementById('ta-icon-manage-btn');
+    
+    if (isIconManageMode) {
+        previewContainer.classList.add('manage-mode');
+        manageActions.style.display = 'flex';
+        manageBtn.innerText = '完成';
+    } else {
+        previewContainer.classList.remove('manage-mode');
+        manageActions.style.display = 'none';
+        manageBtn.innerText = '管理';
+        previewContainer.querySelectorAll('.ta-image-checkbox').forEach(cb => cb.checked = false);
+    }
+}
+
+function lsDeleteSelectedIcons() {
+    const checkboxes = document.querySelectorAll('#ta-icon-preview .ta-image-checkbox:checked');
+    if (checkboxes.length === 0) return alert("请先选择要删除的图标");
+    
+    if (confirm(`确定要删除选中的 ${checkboxes.length} 张图标吗？`)) {
+        const indicesToDelete = Array.from(checkboxes).map(cb => parseInt(cb.value)).sort((a, b) => b - a);
+        indicesToDelete.forEach(idx => { lsState.decorIcons.splice(idx, 1); });
+        lsSaveData();
+        lsToggleIconManageMode(); 
+        lsRenderIconPreview(); 
+    }
+}
+
+// --- 桌面装修上传与渲染 ---
+async function lsHandleWallpaperUpload(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    if (!lsState.decorWallpapers) lsState.decorWallpapers = [];
+
+    const fileArray = Array.from(files);
+    const loading = document.getElementById('ta-loading-overlay');
+    if (loading) {
+        loading.querySelector('.ta-spinner').nextElementSibling.innerText = "正在处理壁纸...";
+        loading.classList.add('active');
+    }
+
+    try {
+        for (let file of fileArray) {
+            const base64 = await wcCompressImage(file);
+            lsState.decorWallpapers.push(base64);
+        }
+        lsSaveData();
+        lsRenderWallpaperPreview();
+        checkDecorateBtnState();
+    } catch (e) {
+        console.error("壁纸处理失败", e);
+    } finally {
+        if (loading) loading.classList.remove('active');
+        event.target.value = '';
+    }
+}
+
+async function lsHandleIconUpload(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    if (!lsState.decorIcons) lsState.decorIcons = [];
+
+    const fileArray = Array.from(files);
+    const loading = document.getElementById('ta-loading-overlay');
+    if (loading) {
+        loading.querySelector('.ta-spinner').nextElementSibling.innerText = "正在处理图标...";
+        loading.classList.add('active');
+    }
+
+    try {
+        for (let file of fileArray) {
+            const base64 = await wcCompressImage(file);
+            lsState.decorIcons.push(base64);
+        }
+        lsSaveData();
+        lsRenderIconPreview();
+        checkDecorateBtnState();
+    } catch (e) {
+        console.error("图标处理失败", e);
+    } finally {
+        if (loading) loading.classList.remove('active');
+        event.target.value = '';
+    }
+}
+// ==========================================
+// 修复：补充缺失的桌面装修综合渲染函数
+// ==========================================
+window.lsRenderDecorPreview = function() {
+    // 渲染壁纸预览区
+    if (typeof lsRenderWallpaperPreview === 'function') {
+        lsRenderWallpaperPreview();
+    }
+    // 渲染图标预览区
+    if (typeof lsRenderIconPreview === 'function') {
+        lsRenderIconPreview();
+    }
+    // 检查并更新“让 Ta 帮忙装修”按钮的可用状态
+    if (typeof checkDecorateBtnState === 'function') {
+        checkDecorateBtnState();
+    }
+};
+function lsRenderWallpaperPreview() {
+    const previewContainer = document.getElementById('ta-wp-preview');
+    const countSpan = document.getElementById('ta-wp-count');
+    if (!lsState.decorWallpapers) lsState.decorWallpapers = [];
+    countSpan.innerText = lsState.decorWallpapers.length;
+
+    if (lsState.decorWallpapers.length === 0) {
+        previewContainer.innerHTML = '<div class="ta-empty-text">上传一些竖屏图片作为壁纸备选吧</div>';
         return;
     }
 
     previewContainer.innerHTML = '';
-    lsState.decorImages.forEach((imgSrc, idx) => {
-        const img = document.createElement('img');
-        img.src = imgSrc;
-        img.className = 'ta-image-item';
-        // 长按删除图片
-        img.oncontextmenu = (e) => {
-            e.preventDefault();
-            if (confirm("删除这张图片？")) {
-                lsState.decorImages.splice(idx, 1);
-                lsSaveData();
-                lsRenderDecorPreview();
+    lsState.decorWallpapers.forEach((imgSrc, idx) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'ta-image-wrapper';
+        // 壁纸预览比例调整为竖屏
+        wrapper.style.width = '50px'; wrapper.style.height = '90px';
+        
+        wrapper.innerHTML = `
+            <img src="${imgSrc}" class="ta-image-item" style="width:100%; height:100%; object-fit:cover;" onclick="if(!isWpManageMode) wcPreviewImage('${imgSrc}')">
+            <input type="checkbox" class="ta-image-checkbox" value="${idx}">
+        `;
+        wrapper.onclick = (e) => {
+            if (isWpManageMode && e.target.tagName !== 'INPUT') {
+                const cb = wrapper.querySelector('.ta-image-checkbox');
+                cb.checked = !cb.checked;
             }
         };
-        previewContainer.appendChild(img);
+        previewContainer.appendChild(wrapper);
     });
+}
 
-    decorateBtn.disabled = false;
+function lsRenderIconPreview() {
+    const previewContainer = document.getElementById('ta-icon-preview');
+    const countSpan = document.getElementById('ta-icon-count');
+    if (!lsState.decorIcons) lsState.decorIcons = [];
+    countSpan.innerText = lsState.decorIcons.length;
+
+    if (lsState.decorIcons.length === 0) {
+        previewContainer.innerHTML = '<div class="ta-empty-text">上传一些透明底图或正方形图片作为图标吧</div>';
+        return;
+    }
+
+    previewContainer.innerHTML = '';
+    lsState.decorIcons.forEach((imgSrc, idx) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'ta-image-wrapper';
+        
+        wrapper.innerHTML = `
+            <img src="${imgSrc}" class="ta-image-item" style="object-fit:contain; background:transparent;" onclick="if(!isIconManageMode) wcPreviewImage('${imgSrc}')">
+            <input type="checkbox" class="ta-image-checkbox" value="${idx}">
+        `;
+        wrapper.onclick = (e) => {
+            if (isIconManageMode && e.target.tagName !== 'INPUT') {
+                const cb = wrapper.querySelector('.ta-image-checkbox');
+                cb.checked = !cb.checked;
+            }
+        };
+        previewContainer.appendChild(wrapper);
+    });
+}
+
+function checkDecorateBtnState() {
+    const btn = document.getElementById('ta-decorate-btn');
+    if (lsState.decorWallpapers && lsState.decorWallpapers.length > 0 && lsState.decorIcons && lsState.decorIcons.length > 0) {
+        btn.disabled = false;
+    } else {
+        btn.disabled = true;
+    }
 }
 
 // 记录 AI 生成的装修结果，用于应用到真实桌面
 let tempDecorResult = null;
 
+// --- 核心：真正的 AI 视觉选图逻辑 (壁纸 + 图标分离) ---
 async function lsStartDecoration() {
-    if (!lsState.decorImages || lsState.decorImages.length === 0) return;
+    if (!lsState.decorWallpapers || lsState.decorWallpapers.length === 0 || !lsState.decorIcons || lsState.decorIcons.length === 0) {
+        return alert("请确保壁纸图库和图标图库中都有图片哦~");
+    }
 
     const char = wcState.characters.find(c => c.id === lsState.boundCharId);
     if (!char) return;
 
     const loading = document.getElementById('ta-loading-overlay');
     loading.classList.add('active');
-    document.getElementById('ta-apply-btn').style.display = 'none'; // 隐藏应用按钮
+    document.getElementById('ta-apply-btn').style.display = 'none';
 
     const apiConfig = await getActiveApiConfig('npc');
     if (!apiConfig || !apiConfig.key) {
-        // 降级：如果没有配置 API，使用随机兜底
         setTimeout(() => {
             loading.classList.remove('active');
-            lsApplyDecoration({
-                widgetText: "今天也要开心哦！",
-                appNames: ["聊天", "空间", "音乐", "论坛", "主题", "设置", "世界书"]
-            });
+            lsApplyDecorationFallback(); // 降级为随机
         }, 1500);
         return;
     }
 
     try {
-        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
-        prompt += `User 让你帮忙“装修”Ta的手机桌面。\n`;
-        prompt += `请根据你的人设，为 User 的桌面生成：\n`;
-        prompt += `1. 一句留在桌面大组件上的简短留言（如：记得按时吃饭、今天也要开心等，体现你的性格）。\n`;
-        prompt += `2. 7个常用APP的自定义名称（分别是：聊天, 空间, 音乐, 论坛, 主题, 设置, 世界书。请改成符合你性格的昵称，如把聊天改成“找我”，相册改成“回忆”等，每个不超过4个字）。\n`;
+        // 1. 收集上下文
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-30).map(m => {
+            if (m.isError || m.type === 'system') return null;
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return `${m.sender==='me'?'User':char.name}: ${content}`;
+        }).filter(Boolean).join('\n');
+
+        // 2. 判断是否为视觉模型
+        const isVisionModel = /vision|gpt-4o|claude-3|gemini|pixtral|qwen-vl|llava/i.test(apiConfig.model);
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `User 让你帮忙“装修”Ta的手机桌面。壁纸图库有 ${lsState.decorWallpapers.length} 张，图标图库有 ${lsState.decorIcons.length} 张。\n`;
+        
+        if (isVisionModel) {
+            prompt += `我已经将图库中的图片附在下方，分为【壁纸备选】和【图标备选】。\n`;
+            prompt += `请你真正地“看”这些图片，根据你的人设、User的设定以及最近的聊天氛围，挑选最合适的 1 张壁纸和 7 张图标！\n`;
+        } else {
+            prompt += `(注意：当前模型不支持视觉识别，请你随机分配 0 到 ${lsState.decorWallpapers.length - 1} 之间的数字作为壁纸索引，0 到 ${lsState.decorIcons.length - 1} 之间的数字作为图标索引)。\n`;
+        }
+
+        prompt += `【任务要求】：\n`;
+        prompt += `1. 挑选 1 张壁纸索引（wallpaperIndex）。\n`;
+        prompt += `2. 写一句简短留言（message），体现你的性格或对User的关心。\n`;
+        prompt += `3. 为 7 个常用APP（微信, 相册, 音乐, 论坛, 主题, 设置, 世界书）分别起一个符合你性格的昵称（每个不超过4个字），并为它们分别挑选一张图标索引（iconIndex）。\n`;
         prompt += `返回纯JSON格式：\n`;
-        prompt += `{"widgetText": "留言内容", "appNames": ["APP1", "APP2", "APP3", "APP4", "APP5", "APP6", "APP7"]}`;
+        prompt += `{
+  "wallpaperIndex": 0,
+  "message": "留言内容",
+  "apps": [
+    {"name": "微信的新名字", "iconIndex": 1},
+    {"name": "相册的新名字", "iconIndex": 2},
+    {"name": "音乐的新名字", "iconIndex": 3},
+    {"name": "论坛的新名字", "iconIndex": 4},
+    {"name": "主题的新名字", "iconIndex": 5},
+    {"name": "设置的新名字", "iconIndex": 6},
+    {"name": "世界书的新名字", "iconIndex": 7}
+  ]
+}`;
+
+        // 3. 构造 payload
+        let messagesContent = [];
+        if (isVisionModel) {
+            messagesContent.push({ type: "text", text: prompt });
+            
+            // 限制最多传 5 张壁纸，10 张图标给 AI，防止 Token 爆炸
+            const maxWp = Math.min(lsState.decorWallpapers.length, 5);
+            for (let i = 0; i < maxWp; i++) {
+                messagesContent.push({ type: "text", text: `【壁纸备选】[索引 ${i}]:` });
+                messagesContent.push({ type: "image_url", image_url: { url: lsState.decorWallpapers[i] } });
+            }
+            
+            const maxIcon = Math.min(lsState.decorIcons.length, 10);
+            for (let i = 0; i < maxIcon; i++) {
+                messagesContent.push({ type: "text", text: `【图标备选】[索引 ${i}]:` });
+                messagesContent.push({ type: "image_url", image_url: { url: lsState.decorIcons[i] } });
+            }
+        } else {
+            messagesContent = prompt;
+        }
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
             body: JSON.stringify({
                 model: apiConfig.model,
-                messages: [{ role: "user", content: prompt }],
-                temperature: 0.8
+                messages: [{ role: "user", content: messagesContent }],
+                temperature: 0.8,
+                max_tokens: 2000
             })
         });
 
         const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || "API 请求失败");
+
         let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
         const result = JSON.parse(content);
 
         loading.classList.remove('active');
-        lsApplyDecoration(result);
+        lsApplyDecorationAI(result);
 
     } catch (e) {
         console.error("AI 装修失败", e);
         loading.classList.remove('active');
-        lsApplyDecoration({
-            widgetText: "照片很好看，我帮你换上啦~",
-            appNames: ["聊天", "空间", "音乐", "论坛", "主题", "设置", "世界书"]
-        });
+        lsApplyDecorationFallback(); // 降级为随机
     }
 }
 
-function lsApplyDecoration(aiResult) {
-    const getRandomImage = () => lsState.decorImages[Math.floor(Math.random() * lsState.decorImages.length)];
+// AI 视觉选图应用逻辑
+function lsApplyDecorationAI(aiResult) {
+    const getWpByIndex = (idx) => {
+        const safeIdx = (typeof idx === 'number' && idx >= 0 && idx < lsState.decorWallpapers.length) ? idx : Math.floor(Math.random() * lsState.decorWallpapers.length);
+        return lsState.decorWallpapers[safeIdx];
+    };
+    const getIconByIndex = (idx) => {
+        const safeIdx = (typeof idx === 'number' && idx >= 0 && idx < lsState.decorIcons.length) ? idx : Math.floor(Math.random() * lsState.decorIcons.length);
+        return lsState.decorIcons[safeIdx];
+    };
 
-    // 1. 更换桌面组件图片和文字
-    const widgetImg = document.getElementById('ta-widget-img');
-    const widgetImgSrc = getRandomImage();
-    widgetImg.src = widgetImgSrc;
-    widgetImg.style.opacity = '1';
+    // 1. 桌面壁纸与留言
+    const wpSrc = getWpByIndex(aiResult.wallpaperIndex);
+    document.getElementById('ta-desktop-bg-preview').style.backgroundImage = `url('${wpSrc}')`;
     
-    const widgetText = aiResult.widgetText || "今天也要开心哦！";
-    document.getElementById('ta-widget-text').innerText = widgetText;
+    const msgText = aiResult.message || "今天也要开心哦！";
+    const bubble = document.getElementById('ta-ai-message-bubble');
+    bubble.innerText = msgText;
+    bubble.style.opacity = '1';
 
-    // 2. 更换 7 个 APP 图标和名称
-    const names = aiResult.appNames || ["聊天", "空间", "音乐", "论坛", "主题", "设置", "世界书"];
+    // 2. 7 个 APP
+    const appNames = [];
+    const appIcons = [];
+    const defaultNames = ["聊天", "空间", "音乐", "论坛", "主题", "设置", "世界书"];
+    
+    for (let i = 0; i < 7; i++) {
+        const appData = (aiResult.apps && aiResult.apps[i]) ? aiResult.apps[i] : {};
+        const iconSrc = getIconByIndex(appData.iconIndex);
+        const name = appData.name || defaultNames[i];
+        
+        appIcons.push(iconSrc);
+        appNames.push(name);
+        
+        const appIconEl = document.getElementById(`ta-app-icon-${i}`);
+        const appNameEl = document.getElementById(`ta-app-name-${i}`);
+        
+        if (appIconEl) { appIconEl.src = iconSrc; appIconEl.style.opacity = '1'; }
+        if (appNameEl) { appNameEl.innerText = name; }
+    }
+
+    // 3. 保存临时结果
+    tempDecorResult = {
+        wallpaper: wpSrc,
+        appNames: appNames,
+        appIcons: appIcons
+    };
+    document.getElementById('ta-apply-btn').style.display = 'flex';
+}
+
+// 降级随机应用逻辑
+function lsApplyDecorationFallback() {
+    const getRandomWp = () => lsState.decorWallpapers[Math.floor(Math.random() * lsState.decorWallpapers.length)];
+    const getRandomIcon = () => lsState.decorIcons[Math.floor(Math.random() * lsState.decorIcons.length)];
+
+    const wpSrc = getRandomWp();
+    document.getElementById('ta-desktop-bg-preview').style.backgroundImage = `url('${wpSrc}')`;
+    
+    const bubble = document.getElementById('ta-ai-message-bubble');
+    bubble.innerText = "照片很好看，我帮你换上啦~";
+    bubble.style.opacity = '1';
+
+    const names = ["聊天", "空间", "音乐", "论坛", "主题", "设置", "世界书"];
     const appIcons = [];
     
     for (let i = 0; i < 7; i++) {
-        const appIcon = document.getElementById(`ta-app-icon-${i}`);
-        const appName = document.getElementById(`ta-app-name-${i}`);
-        
-        const iconSrc = getRandomImage();
+        const iconSrc = getRandomIcon();
         appIcons.push(iconSrc);
         
-        if (appIcon) {
-            appIcon.src = iconSrc;
-            appIcon.style.opacity = '1';
-        }
-        if (appName) {
-            appName.innerText = names[i] || "APP";
-        }
+        const appIconEl = document.getElementById(`ta-app-icon-${i}`);
+        const appNameEl = document.getElementById(`ta-app-name-${i}`);
+        
+        if (appIconEl) { appIconEl.src = iconSrc; appIconEl.style.opacity = '1'; }
+        if (appNameEl) { appNameEl.innerText = names[i]; }
     }
 
-    // 3. 保存临时结果，显示“应用到桌面”按钮
     tempDecorResult = {
-        widgetImg: widgetImgSrc,
-        widgetText: widgetText,
+        wallpaper: wpSrc,
         appNames: names,
         appIcons: appIcons
     };
@@ -21943,12 +22234,9 @@ function lsApplyDecoration(aiResult) {
 function lsApplyDecorationToRealDesktop() {
     if (!tempDecorResult) return alert("请先让 Ta 帮忙装修哦~");
     
-    // 1. 更新真实大组件 (恋人空间组件)
-    lsState.widgetData.customPhoto = tempDecorResult.widgetImg;
-    lsState.widgetData.noteText = tempDecorResult.widgetText;
-    lsState.widgetData.currentMode = 'photo'; // 默认翻到照片面
-    lsSaveData();
-    lsRenderWidget(); // 刷新真实桌面组件
+    // 1. 更新真实桌面壁纸
+    document.getElementById('mainScreen').style.backgroundImage = `url('${tempDecorResult.wallpaper}')`;
+    saveThemeSettings(); // 保存壁纸设置
 
     // 2. 更新真实 7 个 APP
     for (let i = 0; i < 7; i++) {
@@ -21969,6 +22257,22 @@ function lsApplyDecorationToRealDesktop() {
     alert("装修已成功应用到你的真实桌面！");
     lsCloseTimeAlbum();
 }
+
+// 修复：在初始化时渲染图库
+const originalLsLoadData = lsLoadData;
+lsLoadData = async function() {
+    await originalLsLoadData();
+    // 初始化时确保数组存在
+    if (!lsState.decorWallpapers) lsState.decorWallpapers = [];
+    if (!lsState.decorIcons) lsState.decorIcons = [];
+    // 如果之前存的是旧的 decorImages，迁移到壁纸库
+    if (lsState.decorImages && lsState.decorImages.length > 0) {
+        lsState.decorWallpapers = [...lsState.decorImages];
+        delete lsState.decorImages;
+        lsSaveData();
+    }
+};
+
 
 /* ==========================================================================
    APP 4: INS FORUM LOGIC (Advanced iOS Style - Twitter/INS Clone)

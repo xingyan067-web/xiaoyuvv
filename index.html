@@ -485,42 +485,70 @@
 
                 <!-- 视图 2：桌面装修 -->
                 <div class="ta-content-view" id="ta-view-decor">
-                    <input type="file" id="ta-decor-upload" multiple accept="image/*" class="hidden-file-input" onchange="lsHandleDecorUpload(event)">
+                    <!-- 隐藏的上传框 -->
+                    <input type="file" id="ta-wallpaper-upload" multiple accept="image/*" class="hidden-file-input" onchange="lsHandleWallpaperUpload(event)">
+                    <input type="file" id="ta-icon-upload" multiple accept="image/*" class="hidden-file-input" onchange="lsHandleIconUpload(event)">
                     
-                    <div class="ta-upload-section">
+                    <!-- 1. 壁纸图库区 -->
+                    <div class="ta-upload-section" style="margin-bottom: 15px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                            <div class="ta-section-title" style="margin: 0;">本地图库 (<span id="ta-img-count">0</span>)</div>
-                            <button style="background:none; border:none; color:#888; font-size:12px; font-weight:bold; cursor:pointer;" onclick="document.getElementById('ta-decor-upload').click()">+ 添加</button>
+                            <div class="ta-section-title" style="margin: 0;">壁纸图库 (<span id="ta-wp-count">0</span>)</div>
+                            <div style="display: flex; gap: 12px;">
+                                <button id="ta-wp-manage-btn" style="background:none; border:none; color:#007AFF; font-size:12px; font-weight:bold; cursor:pointer;" onclick="lsToggleWpManageMode()">管理</button>
+                                <button style="background:none; border:none; color:#888; font-size:12px; font-weight:bold; cursor:pointer;" onclick="document.getElementById('ta-wallpaper-upload').click()">+ 添加</button>
+                            </div>
                         </div>
-                        <div class="ta-image-grid" id="ta-upload-preview">
-                            <div class="ta-empty-text">上传一些照片，让 Ta 帮你布置桌面吧</div>
+                        <div class="ta-image-grid" id="ta-wp-preview">
+                            <div class="ta-empty-text">上传一些竖屏图片作为壁纸备选吧</div>
+                        </div>
+                        <div id="ta-wp-manage-actions" style="display: none; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid #F0F0F0;">
+                            <button style="background:none; border:none; color:#888; font-size:13px; font-weight:bold; cursor:pointer;" onclick="lsToggleWpManageMode()">取消</button>
+                            <button style="background:none; border:none; color:#FF3B30; font-size:13px; font-weight:bold; cursor:pointer;" onclick="lsDeleteSelectedWallpapers()">删除所选</button>
                         </div>
                     </div>
 
-                    <button class="ta-action-btn" id="ta-decorate-btn" onclick="lsStartDecoration()" disabled>
+                    <!-- 2. APP图标图库区 -->
+                    <div class="ta-upload-section">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <div class="ta-section-title" style="margin: 0;">APP图标图库 (<span id="ta-icon-count">0</span>)</div>
+                            <div style="display: flex; gap: 12px;">
+                                <button id="ta-icon-manage-btn" style="background:none; border:none; color:#007AFF; font-size:12px; font-weight:bold; cursor:pointer;" onclick="lsToggleIconManageMode()">管理</button>
+                                <button style="background:none; border:none; color:#888; font-size:12px; font-weight:bold; cursor:pointer;" onclick="document.getElementById('ta-icon-upload').click()">+ 添加</button>
+                            </div>
+                        </div>
+                        <div class="ta-image-grid" id="ta-icon-preview">
+                            <div class="ta-empty-text">上传一些透明底图或正方形图片作为图标吧</div>
+                        </div>
+                        <div id="ta-icon-manage-actions" style="display: none; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid #F0F0F0;">
+                            <button style="background:none; border:none; color:#888; font-size:13px; font-weight:bold; cursor:pointer;" onclick="lsToggleIconManageMode()">取消</button>
+                            <button style="background:none; border:none; color:#FF3B30; font-size:13px; font-weight:bold; cursor:pointer;" onclick="lsDeleteSelectedIcons()">删除所选</button>
+                        </div>
+                    </div>
+
+                    <button class="ta-action-btn" id="ta-decorate-btn" onclick="lsStartDecoration()" disabled style="margin-top: 20px;">
                         <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
                         让 Ta 帮忙装修桌面
                     </button>
 
+                    <!-- 桌面预览区 -->
                     <div class="ta-desktop-preview-section">
-                        <div class="ta-desktop-bg"></div>
+                        <!-- 动态替换的壁纸背景 -->
+                        <div class="ta-desktop-bg" id="ta-desktop-bg-preview"></div>
                         
                         <div class="ta-loading-overlay" id="ta-loading-overlay">
                             <div class="ta-spinner"></div>
                             <div style="font-size: 12px; font-weight: bold; color: #111; letter-spacing: 1px;">Ta 正在为你搭配...</div>
                         </div>
 
-                        <div class="ta-section-title" style="position:relative; z-index:1; width:100%; text-align:left;">MY SCREEN</div>
+                        <div class="ta-section-title" style="position:relative; z-index:1; width:100%; text-align:left; color: #FFF; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">MY SCREEN</div>
                         
-                        <div class="ta-widget-box">
-                            <img src="" class="ta-widget-img" id="ta-widget-img" style="opacity: 0;">
-                            <div class="ta-widget-text-area">
-                                <div class="ta-widget-text" id="ta-widget-text">等待 Ta 的留言...</div>
-                            </div>
+                        <!-- AI 留言气泡 -->
+                        <div class="ta-ai-message-bubble" id="ta-ai-message-bubble" style="opacity: 0;">
+                            等待 Ta 的留言...
                         </div>
                         
                         <!-- 同步 7 个 APP -->
-                        <div class="ta-app-grid">
+                        <div class="ta-app-grid" style="margin-top: 40px;">
                             <div class="ta-app-item"><img src="" class="ta-app-icon" id="ta-app-icon-0" style="opacity: 0;"><div class="ta-app-name" id="ta-app-name-0">App 1</div></div>
                             <div class="ta-app-item"><img src="" class="ta-app-icon" id="ta-app-icon-1" style="opacity: 0;"><div class="ta-app-name" id="ta-app-name-1">App 2</div></div>
                             <div class="ta-app-item"><img src="" class="ta-app-icon" id="ta-app-icon-2" style="opacity: 0;"><div class="ta-app-name" id="ta-app-name-2">App 3</div></div>
@@ -531,7 +559,7 @@
                         </div>
                     </div>
 
-                    <!-- 新增：应用到真实桌面按钮 -->
+                    <!-- 应用到真实桌面按钮 -->
                     <button class="ta-action-btn" id="ta-apply-btn" onclick="lsApplyDecorationToRealDesktop()" style="background: #34C759; margin-top: 10px; display: none;">
                         <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;"><polyline points="20 6 9 17 4 12"></polyline></svg>
                         应用到我的桌面
