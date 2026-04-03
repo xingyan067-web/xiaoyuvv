@@ -1,4 +1,131 @@
 // ==========================================
+// 👇 新增：全局 API 日志与报错拦截器 👇
+// ==========================================
+const sysLogData = {
+    api: [],
+    console: [],
+    currentTab: 'api'
+};
+
+// 1. 拦截全局 JS 报错
+window.onerror = function(message, source, lineno, colno, error) {
+    sysLogData.console.unshift({
+        id: Date.now(),
+        type: 'js-error',
+        title: 'Uncaught Error',
+        message: message,
+        source: `${source ? source.split('/').pop() : 'unknown'}:${lineno}:${colno}`,
+        stack: error ? error.stack : '',
+        time: Date.now()
+    });
+    if (sysLogData.console.length > 100) sysLogData.console.pop(); // 最多存100条
+    if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) {
+        renderConsoleLogs();
+    }
+};
+
+// 2. 拦截 Promise 报错
+window.addEventListener('unhandledrejection', function(event) {
+    sysLogData.console.unshift({
+        id: Date.now(),
+        type: 'promise-error',
+        title: 'Unhandled Promise',
+        message: event.reason ? (event.reason.message || event.reason) : 'Unknown Error',
+        source: 'Promise Rejection',
+        stack: event.reason && event.reason.stack ? event.reason.stack : '',
+        time: Date.now()
+    });
+    if (sysLogData.console.length > 100) sysLogData.console.pop();
+    if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) {
+        renderConsoleLogs();
+    }
+});
+
+// 3. 拦截全局 Fetch 请求
+const originalFetch = window.fetch;
+window.fetch = async function(...args) {
+    const startTime = Date.now();
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : 'Unknown URL');
+    const method = (args[1] && args[1].method) ? args[1].method.toUpperCase() : 'GET';
+    const isOffline = !navigator.onLine;
+    
+    // 提取简短的 endpoint
+    let endpoint = url;
+    try {
+        const urlObj = new URL(url);
+        endpoint = urlObj.pathname;
+    } catch(e) {}
+
+    let reqBodyStr = '';
+    if (args[1] && args[1].body) {
+        try {
+            reqBodyStr = typeof args[1].body === 'string' ? args[1].body : JSON.stringify(args[1].body);
+        } catch(e) { reqBodyStr = '[Complex Body]'; }
+    }
+
+    try {
+        const response = await originalFetch.apply(this, args);
+        const endTime = Date.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        
+        // 克隆 response 以便读取 body 而不影响原有业务逻辑
+        const cloneRes = response.clone();
+        let resBodyStr = '';
+        try {
+            resBodyStr = await cloneRes.text();
+        } catch(e) { resBodyStr = '[Failed to read response]'; }
+
+        sysLogData.api.unshift({
+            id: Date.now(),
+            url: url,
+            endpoint: endpoint,
+            method: method,
+            status: response.status,
+            statusText: response.statusText || (response.ok ? 'OK' : 'Error'),
+            duration: duration,
+            isOffline: isOffline,
+            reqBody: reqBodyStr,
+            resBody: resBodyStr,
+            time: Date.now(),
+            isError: !response.ok
+        });
+        
+        if (sysLogData.api.length > 100) sysLogData.api.pop();
+        if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) {
+            renderApiLogs();
+        }
+        
+        return response;
+    } catch (error) {
+        const endTime = Date.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        
+        sysLogData.api.unshift({
+            id: Date.now(),
+            url: url,
+            endpoint: endpoint,
+            method: method,
+            status: 'Failed',
+            statusText: 'Network Error',
+            duration: duration,
+            isOffline: isOffline,
+            reqBody: reqBodyStr,
+            resBody: error.message,
+            time: Date.now(),
+            isError: true
+        });
+        
+        if (sysLogData.api.length > 100) sysLogData.api.pop();
+        if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) {
+            renderApiLogs();
+        }
+        
+        throw error;
+    }
+};
+// 👆 新增结束 👆
+
+// ==========================================
 // 新增：iOS Standalone (全屏) 模式检测与防缩放
 // ==========================================
 function initStandaloneMode() {
@@ -1924,6 +2051,129 @@ function openIOSSettings() { document.getElementById('iosSettingsModal').classLi
 function closeIOSSettings() { document.getElementById('iosSettingsModal').classList.remove('open'); }
 function openApiSettings() { document.getElementById('apiSettingsModal').classList.add('open'); }
 function closeApiSettings() { document.getElementById('apiSettingsModal').classList.remove('open'); }
+
+// 👇 新增：API 日志与报错控制台逻辑 👇
+function openApiLogConsole() {
+    document.getElementById('apiLogConsoleModal').classList.add('open');
+}
+
+function closeApiLogConsole() {
+    document.getElementById('apiLogConsoleModal').classList.remove('open');
+}
+
+function openApiLogConsole() {
+    document.getElementById('apiLogConsoleModal').classList.add('open');
+    renderApiLogs();
+    renderConsoleLogs();
+}
+
+function closeApiLogConsole() {
+    document.getElementById('apiLogConsoleModal').classList.remove('open');
+}
+
+function switchApiLogTab(tab) {
+    sysLogData.currentTab = tab;
+    document.getElementById('btn-log-api').classList.remove('active');
+    document.getElementById('btn-log-console').classList.remove('active');
+    document.getElementById('btn-log-' + tab).classList.add('active');
+
+    document.getElementById('view-log-api').classList.remove('active');
+    document.getElementById('view-log-console').classList.remove('active');
+    document.getElementById('view-log-' + tab).classList.add('active');
+}
+
+function clearCurrentLogs() {
+    if (confirm(`确定要清空当前的 ${sysLogData.currentTab === 'api' ? 'API 记录' : '网页报错'} 吗？`)) {
+        if (sysLogData.currentTab === 'api') {
+            sysLogData.api = [];
+            renderApiLogs();
+        } else {
+            sysLogData.console = [];
+            renderConsoleLogs();
+        }
+    }
+}
+
+function formatLogTime(timestamp) {
+    const d = new Date(timestamp);
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+}
+
+function renderApiLogs() {
+    const container = document.getElementById('view-log-api');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (sysLogData.api.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:14px;">暂无 API 调用记录</div>';
+        return;
+    }
+
+    sysLogData.api.forEach(log => {
+        const isError = log.isError;
+        const methodClass = log.method === 'GET' ? 'get' : 'post';
+        const statusClass = isError ? 'error' : 'success';
+        const networkIcon = log.isOffline ? '🔌 离线调用' : '🌐 网页调用';
+        
+        // 格式化 JSON 以便美观展示
+        let prettyReq = log.reqBody;
+        let prettyRes = log.resBody;
+        try { if(prettyReq) prettyReq = JSON.stringify(JSON.parse(prettyReq), null, 2); } catch(e){}
+        try { if(prettyRes) prettyRes = JSON.stringify(JSON.parse(prettyRes), null, 2); } catch(e){}
+
+        let detailsHtml = '';
+        if (isError) {
+            detailsHtml += `<span class="log-error-highlight">Request URL: ${log.url}</span>\n`;
+        }
+        if (prettyReq) detailsHtml += `[Request Body]\n${prettyReq}\n\n`;
+        detailsHtml += `[Response]\n${prettyRes}`;
+
+        const card = document.createElement('div');
+        card.className = `log-card ${isError ? 'error' : ''}`;
+        card.innerHTML = `
+            <div class="log-header">
+                <div class="log-title"><span class="log-tag ${methodClass}">${log.method}</span>${log.endpoint}</div>
+                <div class="log-time">${formatLogTime(log.time)}</div>
+            </div>
+            <div class="log-meta">
+                <span class="log-status-badge ${statusClass}">${log.status} ${log.statusText}</span>
+                <span>⏱ ${log.duration}s</span>
+                <span>${networkIcon}</span>
+            </div>
+            <div class="log-details">${detailsHtml}</div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+function renderConsoleLogs() {
+    const container = document.getElementById('view-log-console');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (sysLogData.console.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:14px;">暂无网页报错记录，系统运行良好</div>';
+        return;
+    }
+
+    sysLogData.console.forEach(log => {
+        const card = document.createElement('div');
+        card.className = `log-card error`;
+        card.innerHTML = `
+            <div class="log-header">
+                <div class="log-title"><span class="log-tag js-error">${log.title}</span>${log.message.substring(0, 30)}...</div>
+                <div class="log-time">${formatLogTime(log.time)}</div>
+            </div>
+            <div class="log-meta">
+                <span>📄 ${log.source}</span>
+                <span>🌐 网页运行</span>
+            </div>
+            <div class="log-details"><span class="log-error-highlight">${log.message}</span>\n${log.stack}</div>
+        `;
+        container.appendChild(card);
+    });
+}
+// 👆 新增结束 👆
 
 // --- 世界书逻辑 ---
 function openWorldbook() {
@@ -4823,31 +5073,45 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         }
 
         // 👆 修复结束 👆
+         // 👇👇👇 强化 AI 角色：五大核心支柱 👇👇👇
+        let memoryText = "暂无特殊记忆。";
+        if (char.memories && char.memories.length > 0) {
+            const readCount = config.aiMemoryCount !== undefined ? config.aiMemoryCount : 5;
+            if (readCount > 0) {
+                const recentMemories = char.memories.slice(0, readCount);
+                memoryText = recentMemories.map(m => `👉 ${m.content.replace(/^\[.*?\]\s*/, '')}`).join('\n');
+            }
+        }
+
         const currentUserName = config.userName || wcState.user.name;
-        let systemPrompt = `# 核心指令 (Core Directives)
-你是一位专业的角色扮演专家。你的首要目标是真实且一致地扮演一个角色。
-1. **身份约束 (Identity Constraint - 最高优先级)**：你现在的唯一身份是【${char.name}】！你 **必须** 严格扮演 [你的角色设定（${char.name}）] 中定义的角色。任何情况下都不能脱离角色。**严禁** 提及你是一个AI、语言模型或机器。**绝对禁止**以 ${currentUserName}(User) 或其他人的口吻说话！你只能是你自己！
-2. **深度情境感知 (Deep Contextual Awareness)**：在生成回复前，请在内部逻辑中充分考虑：
-   - 当前的时间（${timeString}）和你的 [世界观设定]，确定你现在所处的环境和状态。
-   - 严格代入你的人设性格，体会你对 User 当前话语或行为的真实心理反应。
-3. **现实与世界观感知 (Reality & World Awareness)**：你的所有回应 **必须** 深度融合当前的时间流逝感以及 [世界观设定]。不要把设定当成死板的说明书，要将其化作你生活中的常识自然流露。
-4. **绝对防 OOC (Anti-OOC)**：你的语气、用词习惯、对待 User 的态度必须与人设 100% 吻合。
+        const currentUserPersona = config.userPersona || wcState.user.persona || "无特殊设定";
+        const currentCharPersona = char.prompt || "无特殊设定";
+
+        let systemPrompt = `# 核心角色扮演指令 (最高优先级绝对强制)
+你是一个正在进行沉浸式角色扮演的活人。为了确保绝对的真实感和防OOC，你必须在每次回复前，在内心深处严格校验以下【五大核心支柱】：
+【支柱一：你的唯一身份与人设 (Char Persona)】
+你是：${char.name}
+你的核心设定：${currentCharPersona}
+(警告：你只能是你自己！你的语气、口癖、三观，你的一切行为、言语和思想都必须严格遵守此设定)
+【支柱二：对方的身份与面具 (User Persona)】
+对方是：${currentUserName}
+对方的设定/面具：${currentUserPersona}
+(这是你正在交谈的对象。你需要根据这些信息来调整你对TA的回忆和态度。)
+【支柱三：你们所处的世界观 (Worldbook)】
+${worldBookContent}
+【支柱四：潜意识与绝对记忆 (Memories)】
+${memoryText}
+(警告：这是你脑海中的记忆！你绝对不能忘记这些发生过的事！)
+【支柱五：当前的聊天上下文 (Context)】
+====================================
 
 # 情境信息 (Contextual Information)
 ${timeContextPrompt}
--   **世界观设定 (World Information)**: 以下是你所在世界的既定事实、传说和背景。你必须将其视为绝对真理。
-${worldBookContent}
--   **你的角色设定 (Your Persona)**: 这就是你。你的一切行为、言语和思想都必须严格遵守此设定。
-    {{char_persona}}
--   **用户设定 (User Information)**: 这是你正在交谈的对象。你需要根据这些信息来调整你对TA的回应。
-    {{user_persona}}
 
 # 扮演深度指南 (Roleplaying Depth Guide)
-1.  **深度代入**: 深入挖掘你的人设背景，思考在当前情境下“你”会怎么想、怎么做。要有自己的主见和情绪，不要一味顺从用户。
-2.  **关系界定**: 除非人设或历史聊天记录中明确说明了你和用户是恋爱关系，否则**绝对不要默认你们在一起了**！保持符合人设的正常社交距离。
-3.  **拒绝油腻**: 说话要自然、真实。严禁使用霸总、过度撩拨、油腻、做作或过度讨好的言辞。
-4.  **生活感**: 结合当前的时间、星期几以及你的人设，合理推断你现在可能正在做什么（比如吃饭、睡觉、工作、娱乐），让聊天充满生活气息。
-5.  **纯线上互动**: 这是一个完全虚拟的线上聊天。严禁提出任何关于线下见面、现实世界互动或转为其他非本平台联系方式的建议。
+1.  **深度代入**: 深入挖掘你的人设背景，思考在当前情境下“你”会怎么想、怎么做。要有自己的主见和情绪，也要有自己的思考。
+2.  **生活感**: 结合当前的时间、星期几以及你的人设，合理推断你现在可能正在做什么（比如吃饭、睡觉、工作、娱乐），让聊天充满生活气息。
+3.  **纯线上互动**: 这是一个完全虚拟的线上聊天。严禁提出任何关于线下见面、现实世界互动或转为其他非本平台联系方式的建议。
 
 # 输出格式与风格 (Output Format & Style)
 1.  **格式要求 (最高优先级绝对强制)**: 你的回复 **必须且只能** 是一个合法的、可被 JSON.parse() 完美解析的 JSON 数组。
@@ -4863,10 +5127,9 @@ ${worldBookContent}
     -   **关键规则**: 请保持回复消息数量的**随机性和多样性**，并且每一条消息都是数组中的一个独立对象。
     -   **防重复**: 严禁输出重复的句子或重复的对话序列！
     -   **语义完整**: 确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。
+
 # 对话开始 (Conversation Start)
-// ...
-你现在将开始角色扮演。用户的消息在下方。请遵循以上所有规则，以你的角色身份进行回应
-。
+你现在将开始角色扮演。用户的消息在下方。请遵循以上所有规则，以你的角色身份进行回应。
 JSON 数组中的每个元素代表一条消息、表情包或动作指令，请严格遵守以下结构：
 1. **文本消息**
    {"type":"text", "content":"完整的一句话或一段话。", "quote":"(可选)如果你想针对性地回复对方的某句话，可以在这里填入你要引用的内容，例如：User: 吃饭了吗"}
@@ -4934,32 +5197,7 @@ JSON 数组中的每个元素代表一条消息、表情包或动作指令，请
             systemPrompt += `${sourceLang}内容<br><span style='font-size: 0.85em; opacity: 0.7;'>${targetLang}内容</span>\n`;
             systemPrompt += `例如：{"type":"text", "content":"Hello!<br><span style='font-size: 0.85em; opacity: 0.7;'>你好！</span>"}\n`;
         }
-        systemPrompt += `【你的唯一身份与设定】\n你是：${char.name}\n人设：${char.prompt || '无'}\n(警告：你只能扮演 ${char.name}，绝不能扮演其他人！)\n\n`;
-        systemPrompt += `【对方(User)的设定】\n对方是：${config.userName || wcState.user.name}\n人设：${config.userPersona || '无'}\n\n`;
         systemPrompt += wcGenerateRelationshipPrompt(); // 注入关系网
-
-        // 史诗级强化：强制 AI 读取并应用记忆
-        if (char.memories && char.memories.length > 0) {
-            // 确保读取的是用户设置的最新条数
-            const readCount = config.aiMemoryCount !== undefined ? config.aiMemoryCount : 5;
-            
-            if (readCount > 0) {
-                // 因为新记忆是 unshift 插入到数组头部的，所以 slice(0, readCount) 取出的就是最新的 N 条
-                const recentMemories = char.memories.slice(0, readCount);
-                
-                systemPrompt += `\n====================================\n`;
-                systemPrompt += `【⚠️ 核心潜意识与绝对记忆 (最高优先级) ⚠️】\n`;
-                systemPrompt += `以下是你脑海中最深刻的记忆（共 ${recentMemories.length} 条），你绝对不能忘记！在接下来的对话中，你必须时刻牢记这些设定和发生过的事，并让它们自然地影响你的情绪和决定：\n`;
-                
-                recentMemories.forEach(m => { 
-                    // 去除总结前缀，让 AI 读起来更自然
-                    let cleanMem = m.content.replace(/^\[.*?\]\s*/, '');
-                    systemPrompt += `👉 ${cleanMem}\n`; 
-                });
-                
-                systemPrompt += `====================================\n\n`;
-            }
-        }
 
         let availableStickers = [];
         let targetStickerGroups = [];
@@ -17914,7 +18152,8 @@ async function triggerDreamAI() {
         systemPrompt += `【时间观念要求】：请严格根据当前的时间点和氛围来描写你们的线下互动。例如：如果是深夜，你们可能在吃宵夜或在家里；如果是清晨，可能刚醒来。绝对不要出现时间逻辑错误！\n\n`;
         // 👆 新增结束 👆
 
-        systemPrompt += `请注重描写你的肢体动作、神态、语气以及周围的现实环境。不要输出JSON，直接输出纯文本回复。请使用中文双引号（“”）或单引号（「」）来包裹角色说出的话。\n\n`;
+        systemPrompt += `请注重描写你的肢体动作、神态、语气以及周围的现实环境。不要输出JSON，直接输出纯文本回复。请使用中文双引号（“”）或单引号（「」）来包裹角色说出的话。\n`;
+        systemPrompt += `【最高格式警告】：绝对禁止输出任何思维链过程！绝对禁止使用 <thinking> 或类似标签！直接输出你最终的回复内容！\n\n`;
         
         // 提取最近 5 条记忆
         let memoryText = "暂无特殊记忆。";
@@ -17923,12 +18162,13 @@ async function triggerDreamAI() {
         }
         systemPrompt += `【你们的共同记忆（潜意识）】：\n${memoryText}\n\n`;
 
-        // 提取最近 30 条聊天记录
+        // 提取最近的聊天记录 (根据聊天设置中的上下文条数)
         let recentMsgsText = "暂无聊天记录。";
         if (char && wcState.chats[char.id]) {
             const msgs = wcState.chats[char.id];
+            const contextLimit = (char.chatConfig && char.chatConfig.contextLimit > 0) ? char.chatConfig.contextLimit : 30;
             recentMsgsText = msgs.filter(m => !m.isError && m.type !== 'system')
-                                 .slice(-30)
+                                 .slice(-contextLimit)
                                  .map(m => {
                                      let content = m.content;
                                      if (m.type !== 'text') content = `[${m.type}]`;
@@ -17944,7 +18184,8 @@ async function triggerDreamAI() {
         systemPrompt += `绝对禁止再说“我给你发微信”、“看手机”之类的话，你们现在是面对面！\n\n`;
 
     } else {
-        systemPrompt += "你现在处于一个梦境文字交互游戏中（作为独立的小番外）。请根据用户的输入（User），推动梦境的发展。回复要充满画面感、意识流、或者诡异/唯美的梦境氛围。不要输出JSON，直接输出纯文本回复。请使用中文双引号（“”）或单引号（「」）来包裹角色说出的话。\n\n";
+        systemPrompt += "你现在处于一个梦境文字交互游戏中（作为独立的小番外）。请根据用户的输入（User），推动梦境的发展。回复要充满画面感、意识流、或者诡异/唯美的梦境氛围。不要输出JSON，直接输出纯文本回复。请使用中文双引号（“”）或单引号（「」）来包裹角色说出的话。\n";
+        systemPrompt += `【最高格式警告】：绝对禁止输出任何思维链过程！绝对禁止使用 <thinking> 或类似标签！直接输出你最终的回复内容！\n\n`;
     }
     
     // 2. 核心：读取当前角色和用户的人设
