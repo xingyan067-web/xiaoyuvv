@@ -197,8 +197,10 @@ async function registerOfflineProactiveTask(char) {
             body: JSON.stringify(payload)
         });
         console.log("✅ 已成功将角色托管至云端大脑！");
+        alert("✅ 云端大脑连接成功！\n请杀掉网页后台，等待设定的时间后查看是否有推送！"); // 👈 加上这行弹窗
     } catch (e) {
         console.error("❌ 托管至云端失败:", e);
+        alert("❌ 连接云端失败，请检查网络或 Worker 地址是否正确！"); // 👈 加上这行弹窗
     }
 }
 
@@ -11155,11 +11157,10 @@ async function wcSaveChatSettings() {
     wcApplyChatConfig(char);
     wcRenderMessages(char.id); 
     wcRenderChats(); 
-        // 👇 修改：如果同时开启了主动发消息和离线托管，才交给云端 👇
-    if (char.chatConfig.proactiveEnabled && char.chatConfig.offlineProactiveEnabled) {
+        // ✅ 修复：只要开启了离线托管，就交给云端！
+    if (char.chatConfig.offlineProactiveEnabled) {
         registerOfflineProactiveTask(char);
     } else {
-        // 如果关了离线开关，告诉云端取消托管
         unregisterOfflineProactiveTask(char);
     }
     // 👆 新增结束 👆
