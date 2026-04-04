@@ -861,16 +861,15 @@ function initNewPhoneFeatures() {
     // 2. 注入微信收藏的 HTML
     if (screenBg && !document.getElementById('wc-phone-app-favorites')) {
         const favHtml = `
-            <div id="wc-phone-app-favorites" class="wc-phone-app-view" style="display: none;">
-                <div class="wc-phone-sim-navbar" style="background: #F2F2F7; color: #000; border-bottom: 0.5px solid #C6C6C8; justify-content: space-between; padding: 0 10px;">
-                    <div onclick="wcGeneratePhoneFavorites()" style="cursor: pointer; font-size: 14px; color: #007AFF; display: flex; align-items: center; gap: 4px;">
-                        <svg class="wc-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.85L2 9"></path></svg>
-                        刷新(偷看)
+            <div id="wc-phone-app-favorites" class="wc-phone-app-view" style="display: none; background: #F4F5F9;">
+                <!-- 极简 INS 风顶栏 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: calc(env(safe-area-inset-top, 20px) + 15px) 20px 10px 20px; background: transparent; z-index: 10; flex-shrink: 0;">
+                    <div onclick="wcClosePhoneFavorites()" style="font-size: 28px; font-weight: 900; color: #111; cursor: pointer; letter-spacing: 1px; transition: opacity 0.2s;" title="点击返回">收藏</div>
+                    <div onclick="wcGeneratePhoneFavorites()" style="width: 38px; height: 38px; background: #FFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); cursor: pointer; color: #111; transition: transform 0.2s;" title="刷新数据">
+                        <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.85L2 9"></path></svg>
                     </div>
-                    <div style="font-weight: 600;">我的收藏</div>
-                    <div onclick="wcClosePhoneFavorites()" style="cursor: pointer; font-size: 14px;">关闭</div>
                 </div>
-                <div id="wc-phone-favorites-content" style="flex: 1; overflow-y: auto; padding: 0; background: #F2F2F7;"></div>
+                <div id="wc-phone-favorites-content" style="flex: 1; overflow-y: auto; padding: 0; background: transparent;"></div>
             </div>
             
             <!-- 备忘录详情弹窗 -->
@@ -889,17 +888,45 @@ function initNewPhoneFeatures() {
     // 3. 注入浏览器的 HTML
     if (screenBg && !document.getElementById('wc-phone-app-browser')) {
         const browserHtml = `
-            <div id="wc-phone-app-browser" class="wc-phone-app-view" style="display: none;">
-                <div class="wc-phone-sim-navbar" style="background: #F9F9F9; color: #000; border-bottom: 0.5px solid #C6C6C8; justify-content: space-between; padding: 0 10px;">
-                    <div onclick="wcGeneratePhoneBrowser()" style="cursor: pointer; font-size: 14px; color: #007AFF; display: flex; align-items: center; gap: 4px;">
-                        <svg class="wc-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.85L2 9"></path></svg>
-                        刷新(偷看)
+            <div id="wc-phone-app-browser" class="wc-phone-app-view" style="display: none; background: #F2F2F7;">
+                <div style="padding: calc(env(safe-area-inset-top, 20px) + 10px) 20px 0 20px; flex-shrink: 0;">
+                    <!-- 顶部退出键 -->
+                    <div class="browser-header-title" onclick="wcClosePhoneApp()">
+                        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        Browser
                     </div>
-                    <div style="font-weight: 600;">Browser</div>
-                    <div onclick="wcClosePhoneApp()" style="cursor: pointer; font-size: 14px;">关闭</div>
+                    <!-- 搜索框 -->
+                    <div class="browser-search-container">
+                        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input type="text" placeholder="搜索网页或输入网址..." readonly>
+                    </div>
                 </div>
-                <div id="wc-phone-browser-content" style="flex: 1; overflow-y: auto; padding: 0; background: #F2F2F7;"></div>
+                
+                <div id="wc-phone-browser-content" style="flex: 1; overflow-y: auto; padding: 0 20px; padding-bottom: 120px; scrollbar-width: none;"></div>
+                
+                <!-- 底部悬浮导航栏 -->
+                <div class="browser-bottom-nav-wrapper">
+                    <div class="nav-bg"></div>
+                    <div class="nav-items">
+                        <div class="nav-btn active" id="browser-nav-history" onclick="wcToggleBrowserTab('history')">
+                            <!-- 左侧：方案1的指南针 -->
+                            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+                        </div>
+                        <div class="nav-btn" id="browser-nav-posts" onclick="wcToggleBrowserTab('posts')">
+                            <!-- 右侧：方案3的星球 -->
+                            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                            <div class="red-dot" id="browser-posts-dot" style="display:none;"></div>
+                        </div>
+                    </div>
+                    <div class="center-btn" onclick="wcGeneratePhoneBrowser()">
+                        <div class="center-btn-inner">
+                            <!-- 中间：保持原样 -->
+                            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                        </div>
+                    </div>
+                </div>
             </div>
+
 
             <!-- 帖子详情弹窗 -->
             <div id="wc-phone-post-detail" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #FFF; z-index: 300; display: none; flex-direction: column;">
@@ -7619,25 +7646,12 @@ function wcOpenWallet() {
     document.getElementById('wc-view-user').classList.remove('active');
     document.getElementById('wc-view-wallet').classList.add('active');
     
+    // 隐藏底部 Tabbar
     document.getElementById('wc-main-tabbar').style.display = 'none';
     
-    document.getElementById('wc-btn-exit').style.display = 'none';
-    document.getElementById('wc-btn-back').style.display = 'flex';
-    
-    document.getElementById('wc-btn-back').onclick = wcCloseWallet;
-    
-    const titleEl = document.getElementById('wc-nav-title');
-    titleEl.innerText = '钱包';
-    titleEl.onclick = null;
-    titleEl.style.cursor = 'default';
-    
-    const rightContainer = document.getElementById('wc-nav-right-container');
-    rightContainer.innerHTML = '';
-    const btn = document.createElement('button');
-    btn.className = 'wc-nav-btn';
-    btn.innerText = '设置'; 
-    btn.onclick = () => wcOpenModal('wc-modal-wallet-settings');
-    rightContainer.appendChild(btn);
+    // 隐藏全局顶部导航栏 (实现沉浸式，去除顶栏)
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'none';
 
     wcRenderWallet();
 }
@@ -7646,40 +7660,53 @@ function wcCloseWallet() {
     document.getElementById('wc-view-wallet').classList.remove('active');
     wcSwitchTab('user');
     
+    // 恢复底部 Tabbar
     document.getElementById('wc-main-tabbar').style.display = 'flex';
-    document.getElementById('wc-btn-back').style.display = 'none';
-    document.getElementById('wc-btn-exit').style.display = 'flex';
     
-    document.getElementById('wc-btn-back').onclick = wcHandleBack;
+    // 恢复全局顶部导航栏
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'flex';
 }
 
 function wcRenderWallet() {
-    document.getElementById('wc-wallet-balance-display').innerText = parseFloat(wcState.wallet.balance).toFixed(2);
+    // 1. 更新余额
+    document.getElementById('wc-wallet-balance-display').innerText = '¥' + parseFloat(wcState.wallet.balance).toFixed(2);
+    
+    // 2. 动态更新头像和名字 (跟随 User)
+    const avatarEl = document.getElementById('wc-wallet-user-avatar');
+    const nameEl = document.getElementById('wc-wallet-user-name');
+    if (avatarEl) avatarEl.src = wcState.user.avatar;
+    if (nameEl) nameEl.innerText = wcState.user.name;
+
+    // 3. 渲染交易记录到小票内部
     const list = document.getElementById('wc-wallet-history-list');
+    if (!list) return;
     list.innerHTML = '';
+    
     const sortedTrans = [...wcState.wallet.transactions].sort((a, b) => b.time - a.time);
 
     if (sortedTrans.length === 0) {
-        list.innerHTML = '<div style="padding: 20px; text-align: center; color: #8E8E93;">暂无交易记录</div>';
+        list.innerHTML = '<div style="text-align: center; color: #8E8E93; font-size: 12px; padding: 10px 0;">暂无交易记录</div>';
         return;
     }
 
-    // 修复：钱包页面下移
-    const header = document.querySelector('.wc-wallet-header');
-    if(header) header.style.paddingTop = '60px';
-
     sortedTrans.forEach(t => {
-        const div = document.createElement('div');
-        div.className = 'wc-transaction-item';
         const isIncome = t.type === 'income' || t.type === 'recharge';
         const sign = isIncome ? '+' : '-';
-        const colorClass = isIncome ? 'wc-amount-in' : 'wc-amount-out';
+        const colorClass = isIncome ? 'in' : 'out';
+        
+        // 格式化时间为简短格式 (如 10-24 14:30)
+        const d = new Date(t.time);
+        const timeStr = `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+
+        const div = document.createElement('div');
+        div.className = 'rcpt-trans-item';
         div.innerHTML = `
-            <div class="wc-trans-info">
-                <div class="wc-trans-title">${t.note}</div>
-                <div class="wc-trans-time">${new Date(t.time).toLocaleString()}</div>
+            <div class="rcpt-trans-info">
+                <div class="rcpt-trans-title">${t.note}</div>
+                <div class="rcpt-trans-time">${timeStr}</div>
             </div>
-            <div class="wc-trans-amount ${colorClass}">${sign}${parseFloat(t.amount).toFixed(2)}</div>
+            <div class="rcpt-trans-amount ${colorClass}">${sign}${parseFloat(t.amount).toFixed(2)}</div>
         `;
         list.appendChild(div);
     });
@@ -9169,10 +9196,23 @@ function wcOpenPhoneApp(appName) {
     if (appName === 'message') {
         document.getElementById('wc-phone-app-message').style.display = 'flex';
         wcSwitchPhoneTab('chat');
-    } else if (appName === 'settings') {
-        document.getElementById('wc-phone-app-settings').style.display = 'flex';
-        wcGeneratePhoneSettings(true); 
-    } else if (appName === 'browser') {
+        } else if (appName === 'settings') {
+            document.getElementById('wc-phone-app-settings').style.display = 'flex';
+            
+            // 设置顶部头像和背景
+            const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+            if (char) {
+                document.getElementById('sim-profile-avatar').src = char.avatar;
+                document.getElementById('sim-profile-name').innerText = char.name;
+                
+                // 👇 修改：彻底去除顶部背景图，让其保持透明 👇
+                document.getElementById('sim-profile-header').style.backgroundImage = 'none';
+                document.getElementById('sim-profile-header').style.backgroundColor = 'transparent';
+            }
+            
+            wcGeneratePhoneSettings(true); 
+        }
+ else if (appName === 'browser') {
         document.getElementById('wc-phone-app-browser').style.display = 'flex';
         wcRenderPhoneBrowserContent();
     } else if (appName === 'cart') { // <--- 新增这一段
@@ -9573,35 +9613,66 @@ function wcRenderPhoneWalletContent() {
 
     const wallet = (char.phoneData && char.phoneData.wallet) ? char.phoneData.wallet : { balance: 0.00, transactions: [] };
 
+    // 渲染交易记录 HTML
     let transHtml = '';
     if (wallet.transactions && wallet.transactions.length > 0) {
         wallet.transactions.forEach(t => {
             const isIncome = t.type === 'income';
             const sign = isIncome ? '+' : '-';
-            const colorClass = isIncome ? 'wc-amount-in' : 'wc-amount-out';
+            const colorClass = isIncome ? 'in' : 'out';
             transHtml += `
-                <div class="wc-transaction-item">
-                    <div class="wc-trans-info">
-                        <div class="wc-trans-title">${t.note}</div>
-                        <div class="wc-trans-time">${t.time}</div>
+                <div class="rcpt-trans-item">
+                    <div class="rcpt-trans-info">
+                        <div class="rcpt-trans-title">${t.note}</div>
+                        <div class="rcpt-trans-time">${t.time}</div>
                     </div>
-                    <div class="wc-trans-amount ${colorClass}">${sign}${parseFloat(t.amount).toFixed(2)}</div>
+                    <div class="rcpt-trans-amount ${colorClass}">${sign}${parseFloat(t.amount).toFixed(2)}</div>
                 </div>
             `;
         });
     } else {
-        transHtml = '<div style="padding: 20px; text-align: center; color: #8E8E93;">暂无交易记录</div>';
+        transHtml = '<div style="text-align: center; color: #8E8E93; font-size: 12px; padding: 10px 0;">暂无交易记录</div>';
     }
 
+    // 注入全新的票据 UI，头像和名字跟随 Char，包含底部三个按钮
     content.innerHTML = `
-        <div class="wc-wallet-header" style="padding: 30px 20px; margin-bottom: 10px; background: #07C160; color: white;">
-            <svg class="wc-icon wc-wallet-icon-lg" style="color: white;" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
-            <div class="wc-wallet-balance-label" style="color: rgba(255,255,255,0.8);">当前余额 (元)</div>
-            <div class="wc-wallet-balance-num" style="color: white;">${parseFloat(wallet.balance).toFixed(2)}</div>
-        </div>
-        <div class="wc-list-group-title" style="padding: 0 16px 8px; color: var(--wc-text-secondary); font-size: 13px;">交易记录</div>
-        <div style="background: #fff;">
-            ${transHtml}
+        <div class="rcpt-ui-container">
+            <div class="rcpt-ui-card-top">
+                <div class="rcpt-ui-avatar-ring">
+                    <img src="${char.avatar}" alt="avatar">
+                </div>
+                <div class="rcpt-ui-name">${char.name}</div>
+                <div class="rcpt-ui-subtitle">WeChat Pay</div>
+                <div class="rcpt-ui-status">ACTIVE</div>
+            </div>
+            
+            <div class="rcpt-ui-paper">
+                <div class="rcpt-trans-list">
+                    ${transHtml}
+                </div>
+                
+                <div class="rcpt-ui-divider"></div>
+                <div class="rcpt-ui-row total">
+                    <span class="label">Balance</span>
+                    <span class="value">¥${parseFloat(wallet.balance).toFixed(2)}</span>
+                </div>
+            </div>
+            
+            <!-- 底部三个交互按钮 -->
+            <div class="rcpt-action-bar">
+                <!-- 左：占位 (不可点击) -->
+                <button class="rcpt-circle-btn disabled">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                </button>
+                <!-- 中：退出页面 -->
+                <button class="rcpt-circle-btn main" onclick="wcClosePhoneWallet()" title="退出">
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+                <!-- 右：生成交易记录 -->
+                <button class="rcpt-circle-btn" onclick="wcGenerateCharWallet()" title="刷新账单">
+                    <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                </button>
+            </div>
         </div>
     `;
 }
@@ -9780,7 +9851,7 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
         prompt += `1. "battery": 当前电量。如果现在是深夜且Ta一直在和你聊天，电量应该偏低。\n`;
         prompt += `2. "appUsage": 5到15个应用的今日使用时长。必须映射【今日行程】！如果行程里在打游戏，游戏APP时长就高；如果在外面跑，导航APP时长就高。\n`;
         prompt += `3. "locations": 5到10个今日的行程记录。必须与传入的【当前生活状态参考】中的行程保持一致，并在此基础上进行细节扩写和吐槽(desc)。\n`;
-        prompt += `4. "playlist": 10-15首真实存在的歌曲。必须完美契合Ta今天的心情(mood)和聊天氛围！\n`;
+        prompt += `4. "playlists": 2到4个歌单。每个歌单包含名称(name)、封面描述(coverDesc)、符合该角色人设的歌单总歌曲数(totalCount，例如热爱音乐的人可能有几百首，不怎么听歌的人可能只有十几首)、以及【固定10首】真实存在的初始歌曲(tracks)。必须完美契合Ta今天的心情(mood)和聊天氛围！\n`;
         prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
         prompt += `1. 分析【当前生活状态】和【聊天记录】，确定今天的主基调（忙碌、悠闲、伤心、甜蜜）。\n`;
         prompt += `2. 根据主基调，推断手机电量、APP使用偏好和听歌品味。\n`;
@@ -9794,8 +9865,15 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
   "locations": [
     {"time": "02:00", "place": "地点", "desc": "具体的动作和吐槽"}
   ],
-  "playlist": [
-    {"title": "歌名", "artist": "歌手"}
+  "playlists": [
+    {
+      "name": "歌单名称",
+      "coverDesc": "深蓝色忧郁",
+      "totalCount": 128,
+      "tracks": [
+        {"title": "歌名", "artist": "歌手"}
+      ]
+    }
   ]
 }`;
 
@@ -9848,241 +9926,354 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
 function renderSettingsUI(data) {
     const content = document.getElementById('wc-phone-settings-content');
     
-    let appUsageHtml = '';
-    if (data.appUsage && data.appUsage.length > 0) {
-        data.appUsage.forEach(app => {
-            appUsageHtml += `
-                <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee;">
-                    <span>${app.name}</span>
-                    <span style="color: #888;">${app.time}</span>
-                </div>
-            `;
-        });
-    } else {
-        appUsageHtml = '<div style="color:#999; text-align:center; padding:10px;">暂无数据</div>';
-    }
-
-    let locationsHtml = '';
-    if (data.locations && data.locations.length > 0) {
-        data.locations.forEach(loc => {
-            locationsHtml += `
-                <div style="display: flex; padding: 10px 0; border-bottom: 1px solid #eee;">
-                    <div style="width: 60px; color: #888; font-size: 13px;">${loc.time}</div>
-                    <div style="flex: 1;">
-                        <div style="font-weight: 500;">${loc.place}</div>
-                        <div style="font-size: 12px; color: #888;">${loc.desc}</div>
-                    </div>
-                </div>
-            `;
-        });
-    } else {
-        locationsHtml = '<div style="color:#999; text-align:center; padding:10px;">暂无行程记录</div>';
-    }
-
     let statusHtml = `
-        <div id="wc-settings-tab-status" style="display: block; padding: 0 16px;">
-            <div style="background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
-                <div style="font-size: 16px; font-weight: 600; margin-bottom: 10px;">电池</div>
-                <div style="display: flex; align-items: center;">
-                    <div style="flex: 1; height: 20px; background: #eee; border-radius: 10px; overflow: hidden;">
-                        <div style="width: ${data.battery}%; height: 100%; background: #34C759;"></div>
+        <div id="wc-settings-tab-status" style="display: block;">
+            <div class="sim-info-card">
+                <div class="sim-card-title">
+                    <svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                    Device Info
+                </div>
+                <div class="sim-info-row">
+                    <span class="sim-info-label">当前电量</span>
+                    <div class="sim-progress-wrap">
+                        <div class="sim-progress-track"><div class="sim-progress-fill" style="width: ${data.battery}%; background: ${data.battery < 20 ? '#FF3B30' : '#111'};"></div></div>
+                        <span class="sim-progress-text">${data.battery}%</span>
                     </div>
-                    <span style="margin-left: 10px; font-weight: bold;">${data.battery}%</span>
+                </div>
+                <div class="sim-info-row">
+                    <span class="sim-info-label">屏幕使用时间</span>
+                    <span class="sim-info-value">${data.screenTime}</span>
                 </div>
             </div>
 
-            <div style="background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px;">
-                <div style="font-size: 16px; font-weight: 600; margin-bottom: 10px;">屏幕使用时间</div>
-                <div style="font-size: 24px; font-weight: bold; margin-bottom: 16px;">${data.screenTime}</div>
-                <div style="font-size: 14px; color: #888; margin-bottom: 8px;">应用使用排行</div>
-                ${appUsageHtml}
+            <div class="sim-info-card">
+                <div class="sim-card-title">
+                    <svg viewBox="0 0 24 24"><path d="M12 20v-6M6 20V10M18 20V4"></path></svg>
+                    App Usage
+                </div>
+                ${data.appUsage ? data.appUsage.map(app => `
+                    <div class="sim-info-row">
+                        <span class="sim-info-label">${app.name}</span>
+                        <span class="sim-info-value">${app.time}</span>
+                    </div>
+                `).join('') : '<div class="sim-info-label" style="text-align:center;">暂无数据</div>'}
             </div>
 
-            <div style="background: #fff; border-radius: 10px; padding: 16px;">
-                <div style="font-size: 16px; font-weight: 600; margin-bottom: 10px;">今日行程记录</div>
-                ${locationsHtml}
+            <div class="sim-info-card">
+                <div class="sim-card-title">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Timeline
+                </div>
+                ${data.locations ? data.locations.map(loc => `
+                    <div class="sim-timeline-item">
+                        <div class="sim-timeline-time">${loc.time}</div>
+                        <div class="sim-timeline-content">
+                            <div class="sim-timeline-place">${loc.place}</div>
+                            <div class="sim-timeline-desc">${loc.desc}</div>
+                        </div>
+                    </div>
+                `).join('') : '<div class="sim-info-label" style="text-align:center;">暂无行程记录</div>'}
             </div>
         </div>
     `;
 
-    // 全新的歌单 UI 逻辑 (去除了默认图片和Emoji星光)
-    let playlistHtml = `<div id="wc-settings-tab-playlist" style="display: none; position: relative; height: calc(100vh - 220px); overflow: hidden; background: #F9F9F9; margin: -16px; border-radius: 16px;">`;
+    // 歌单部分 (CD 风格)
+    let playlistHtml = `<div id="wc-settings-tab-playlist" style="display: none;">`;
     
-    if (data.playlist && data.playlist.length > 0) {
-        playlistHtml += `<div class="char-playlist-list" id="char-playlist-list">`;
-        data.playlist.forEach((song, idx) => {
+    // 兼容旧数据
+    const playlists = data.playlists || (data.playlist ? [{ name: "最近常听", coverDesc: "默认", tracks: data.playlist }] : []);
+
+    if (playlists.length > 0) {
+        playlists.forEach((pl, idx) => {
+            // 随机生成一个封面渐变色和光盘颜色
+            const hue1 = Math.floor(Math.random() * 360);
+            const hue2 = (hue1 + 40) % 360;
+            const bg = `linear-gradient(135deg, hsl(${hue1}, 30%, 80%), hsl(${hue2}, 30%, 70%))`;
+            const discBg = `conic-gradient(hsl(${hue1}, 20%, 90%), hsl(${hue2}, 20%, 85%), hsl(${hue1}, 20%, 90%), hsl(${hue2}, 20%, 85%), hsl(${hue1}, 20%, 90%))`;
+
             playlistHtml += `
-                <div class="char-playlist-item" id="char-playlist-item-${idx}" onclick="wcSelectAndPlayCharSong(${idx})">
-                    <div class="char-playlist-item-title">${song.title}</div>
-                    <div class="char-playlist-item-artist">${song.artist}</div>
+                <div class="cd-playlist-card" onclick="wcOpenSimPlaylistDetail(${idx})">
+                    <div class="cd-cover-wrapper" style="background: ${bg};">
+                        <div class="cd-cover-text">${pl.name}</div>
+                    </div>
+                    <div class="cd-disc" style="background: ${discBg};"></div>
+                    <div class="cd-info">
+                        <div class="cd-title">${pl.name}</div>
+                        <div class="cd-count">${pl.totalCount ? pl.totalCount : (pl.tracks ? pl.tracks.length : 0)} 首</div>
+                    </div>
                 </div>
             `;
         });
-        playlistHtml += `</div>`;
-        
-        // 右侧星空星球区域 (纯CSS光影，绝对无Emoji)
-        playlistHtml += `
-            <div class="char-playlist-record-area" id="char-playlist-record-area" ontouchstart="wcRecordTouchStart(event)" ontouchend="wcRecordTouchEnd(event)">
-                <!-- 宇宙星云背景光晕 -->
-                <div class="space-glow"></div>
-                
-                <!-- 环绕的星轨与纯CSS发光星点 -->
-                <div class="planet-orbit orbit-1"></div>
-                <div class="planet-orbit orbit-2"></div>
-                <div class="planet-orbit orbit-3"></div>
-                
-                <!-- 星球本体 (替代黑胶) -->
-                <div class="char-playlist-record" id="char-playlist-record">
-                    <img src="" class="char-playlist-record-cover" id="char-playlist-record-cover">
-                    <!-- 星球大气层反光遮罩 -->
-                    <div class="planet-surface-gloss"></div>
-                </div>
-            </div>
-            <div style="position: absolute; bottom: 20px; right: 150px; font-size: 10px; color: #999; pointer-events: none; animation: pulse 2s infinite;">↕ 滑动切歌</div>
-        `;
     } else {
         playlistHtml += `<div style="text-align: center; color: #888; padding: 20px; width: 100%;">暂无歌单数据，请点击右上角刷新生成</div>`;
     }
     playlistHtml += `</div>`;
 
-    content.style.padding = '0';
-    content.innerHTML = `
-        <div style="padding: 16px;">
-            <div class="wc-segmented-control" style="margin-bottom: 0; background: #E5E5EA;">
-                <div class="wc-segment-btn active" id="wc-seg-settings-status" onclick="wcToggleSettingsTab('status')">手机状态</div>
-                <div class="wc-segment-btn" id="wc-seg-settings-playlist" onclick="wcToggleSettingsTab('playlist')">最近常听</div>
-            </div>
-        </div>
-        ${statusHtml}
-        ${playlistHtml}
-    `;
+        content.innerHTML = statusHtml + playlistHtml;
+    
+    // 👇 加上这两行，确保渲染时应用当前的五角星视图状态 👇
+    document.getElementById('wc-settings-tab-status').style.display = currentSimSettingsTab === 'status' ? 'block' : 'none';
+    document.getElementById('wc-settings-tab-playlist').style.display = currentSimSettingsTab === 'playlist' ? 'block' : 'none';
 }
-window.wcToggleSettingsTab = function(tab) {
-    const statusBtn = document.getElementById('wc-seg-settings-status');
-    const playlistBtn = document.getElementById('wc-seg-settings-playlist');
-    const statusTab = document.getElementById('wc-settings-tab-status');
-    const playlistTab = document.getElementById('wc-settings-tab-playlist');
-    
-    if (statusBtn) statusBtn.classList.toggle('active', tab === 'status');
-    if (playlistBtn) playlistBtn.classList.toggle('active', tab === 'playlist');
-    if (statusTab) statusTab.style.display = tab === 'status' ? 'block' : 'none';
-    if (playlistTab) playlistTab.style.display = tab === 'playlist' ? 'block' : 'none';
-};
 
-// 完整的播放函数
 // ==========================================
-// Char 歌单滑动与点击逻辑
+// Char 手机设置页：背景上传与五角星切换逻辑
 // ==========================================
-let wcRecordStartY = 0;
-let wcCurrentPlaylistIdx = -1;
 
-window.wcSelectAndPlayCharSong = function(idx) {
-    wcCurrentPlaylistIdx = idx;
-    
-    // 更新列表高亮状态
-    document.querySelectorAll('.char-playlist-item').forEach(el => el.classList.remove('active'));
-    const activeItem = document.getElementById(`char-playlist-item-${idx}`);
-    if (activeItem) {
-        activeItem.classList.add('active');
-        activeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-    
-    // 唱片动画复位并转动
-    const record = document.getElementById('char-playlist-record');
-    if (record) {
-        record.classList.remove('playing');
-        setTimeout(() => record.classList.add('playing'), 50);
-    }
-    
-    // 调用播放逻辑
-    wcPlayCharPlaylistSong(idx);
-};
-
-window.wcRecordTouchStart = function(e) {
-    wcRecordStartY = e.touches[0].clientY;
-};
-
-window.wcRecordTouchEnd = function(e) {
-    const endY = e.changedTouches[0].clientY;
-    const diff = endY - wcRecordStartY;
-    
+// 处理点击顶部背景上传图片
+window.handleSimProfileBgUpload = async function(input) {
+    const file = input.files[0];
+    if (!file) return;
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
-    if (!char || !char.phoneData || !char.phoneData.settings || !char.phoneData.settings.playlist) return;
-    const playlist = char.phoneData.settings.playlist;
-    
-    if (diff > 30) {
-        // 向下滑动，上一首
-        let nextIdx = (wcCurrentPlaylistIdx - 1 + playlist.length) % playlist.length;
-        wcSelectAndPlayCharSong(nextIdx);
-    } else if (diff < -30) {
-        // 向上滑动，下一首
-        let nextIdx = (wcCurrentPlaylistIdx + 1) % playlist.length;
-        wcSelectAndPlayCharSong(nextIdx);
-    }
-};
+    if (!char) return;
 
-// 完整的播放函数 (去除了跳转，实现沉浸式播放)
-async function wcPlayCharPlaylistSong(idx) {
-    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
-    if (!char || !char.phoneData || !char.phoneData.settings || !char.phoneData.settings.playlist) return;
-    
-    const song = char.phoneData.settings.playlist[idx];
-    if (!song) return;
-
-    wcShowLoading(`正在搜索《${song.title}》...`);
-
+    wcShowLoading("正在更换背景...");
     try {
-        const keyword = `${song.title} ${song.artist}`;
-        let trackId, trackTitle, trackArtist, trackCover;
-
-        const baseUrl = getMusicApiBaseUrl();
-        const res = await fetch(`${baseUrl}/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
-        const data = await res.json();
+        const base64 = await wcCompressImage(file);
+        if (!char.phoneData) char.phoneData = {};
+        if (!char.phoneData.settings) char.phoneData.settings = {};
         
-        if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
-            const track = data.result.songs[0];
-            trackId = track.id;
-            trackTitle = track.name;
-            trackArtist = track.ar.map(a => a.name).join(', ');
-            trackCover = track.al.picUrl + '?param=100y100';
-        }
-
-        if (trackId) {
-            wcShowSuccess("即将播放");
-            
-            const coverEl = document.getElementById('char-playlist-record-cover');
-            if (coverEl) {
-                coverEl.src = trackCover;
-                coverEl.style.opacity = '1'; 
-            }
-            
-            setTimeout(() => {
-                if (!musicState.currentPlaylist) musicState.currentPlaylist = [];
-                
-                let existingIdx = musicState.currentPlaylist.findIndex(s => s.id === trackId);
-                if (existingIdx !== -1) {
-                    musicState.currentIndex = existingIdx;
-                } else {
-                    musicState.currentPlaylist.push({ id: trackId, title: trackTitle, artist: trackArtist, cover: trackCover });
-                    musicState.currentIndex = musicState.currentPlaylist.length - 1;
-                }
-                
-                musicPlaySong(trackId, trackTitle, trackArtist, trackCover);
-                
-                if (musicState.listenTogether.active && musicState.listenTogether.charId === char.id) {
-                    wcAddMessage(char.id, 'system', 'system', `[系统内部信息(仅AI可见): 用户偷偷查看了你的手机歌单，并点播了你最近常听的《${trackTitle}》，这首歌已加入你们的播放列表，现在你们正在一起听这首歌。]`, { hidden: true });
-                }
-                
-            }, 1000);
-
-        } else {
-            wcShowError("未找到该歌曲资源");
-        }
+        char.phoneData.settings.profileBg = base64;
+        wcSaveData();
+        
+        document.getElementById('sim-profile-header').style.backgroundImage = `url('${base64}')`;
+        wcShowSuccess("更换成功");
     } catch (e) {
         console.error(e);
-        wcShowError("搜索失败，网络异常");
+        wcShowError("图片处理失败");
     }
-}
+    input.value = ''; // 清空 input
+};
+
+// 五角星切换视图逻辑
+let currentSimSettingsTab = 'status';
+
+window.wcToggleSettingsView = function() {
+    // 切换状态
+    currentSimSettingsTab = currentSimSettingsTab === 'status' ? 'playlist' : 'status';
+    
+    const statusTab = document.getElementById('wc-settings-tab-status');
+    const playlistTab = document.getElementById('wc-settings-tab-playlist');
+    const starToggle = document.getElementById('sim-star-toggle');
+    
+    // 切换显示内容
+    if (statusTab) statusTab.style.display = currentSimSettingsTab === 'status' ? 'block' : 'none';
+    if (playlistTab) playlistTab.style.display = currentSimSettingsTab === 'playlist' ? 'block' : 'none';
+    
+    // 切换五角星动画状态
+    if (starToggle) {
+        if (currentSimSettingsTab === 'playlist') {
+            starToggle.classList.add('active');
+        } else {
+            starToggle.classList.remove('active');
+        }
+    }
+};
+
+// ==========================================
+// Char 歌单详情与加载更多逻辑
+// ==========================================
+let currentSimPlaylistIdx = -1;
+
+window.wcOpenSimPlaylistDetail = function(idx) {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.settings) return;
+    
+    const settings = char.phoneData.settings;
+    const playlists = settings.playlists || (settings.playlist ? [{ name: "最近常听", tracks: settings.playlist }] : []);
+    const pl = playlists[idx];
+    if (!pl) return;
+
+    currentSimPlaylistIdx = idx;
+    document.getElementById('sim-playlist-detail-title').innerText = pl.name;
+    
+    wcRenderSimPlaylistTracks();
+    
+    document.getElementById('wc-phone-playlist-detail').style.display = 'flex';
+};
+
+window.wcClosePhonePlaylistDetail = function() {
+    document.getElementById('wc-phone-playlist-detail').style.display = 'none';
+};
+
+window.wcRenderSimPlaylistTracks = function() {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    const settings = char.phoneData.settings;
+    const playlists = settings.playlists || (settings.playlist ? [{ name: "最近常听", tracks: settings.playlist }] : []);
+    const pl = playlists[currentSimPlaylistIdx];
+    
+    const container = document.getElementById('wc-phone-playlist-tracks');
+    container.innerHTML = '';
+    
+    if (pl.tracks && pl.tracks.length > 0) {
+        pl.tracks.forEach((song, i) => {
+            container.innerHTML += `
+                <div class="sim-track-item" onclick="wcPlaySimTrack(${currentSimPlaylistIdx}, ${i})">
+                    <div class="sim-track-index">${(i + 1).toString().padStart(2, '0')}</div>
+                    <div class="sim-track-info">
+                        <div class="sim-track-title">${song.title}</div>
+                        <div class="sim-track-artist">${song.artist}</div>
+                    </div>
+                    <div class="sim-track-play">
+                        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                </div>
+            `;
+        });
+        
+        // 加载更多按钮 (根据总数判断是否显示)
+        const totalCount = pl.totalCount || pl.tracks.length;
+        if (pl.tracks.length < totalCount) {
+            container.innerHTML += `
+                <button class="sim-load-more-btn" onclick="wcLoadMoreSimTracks()">
+                    加载更多歌曲 (${pl.tracks.length}/${totalCount})
+                </button>
+            `;
+        } else {
+            container.innerHTML += `
+                <div style="text-align:center; color:#999; padding:20px; font-size: 12px;">已加载全部歌曲</div>
+            `;
+        }
+    } else {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">暂无歌曲</div>';
+    }
+};
+
+window.wcPlaySimTrack = function(plIdx, trackIdx) {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    const settings = char.phoneData.settings;
+    const playlists = settings.playlists || (settings.playlist ? [{ name: "最近常听", tracks: settings.playlist }] : []);
+    const pl = playlists[plIdx];
+    const song = pl.tracks[trackIdx];
+    
+    if (!song) return;
+    
+    // 为了兼容，将当前歌单设为播放列表
+    musicState.currentPlaylist = [...pl.tracks];
+    musicState.currentIndex = trackIdx;
+    
+    // 👇 新增：显示 Settings 页面的迷你播放器并更新基础信息 👇
+    const miniPlayer = document.getElementById('sim-global-mini-player');
+    if (miniPlayer) {
+        miniPlayer.style.display = 'flex';
+        document.getElementById('sim-global-mini-title').innerText = song.title;
+        document.getElementById('sim-global-mini-artist').innerText = song.artist;
+        document.getElementById('sim-global-mini-cover').src = 'https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg';
+    }
+    
+    // 弹出提示并调用播放
+    wcShowLoading(`正在搜索《${song.title}》...`);
+    
+    // 真实搜索并播放 (通过 API 获取真实的歌曲 ID 和播放链接)
+    setTimeout(async () => {
+        try {
+            const baseUrl = getMusicApiBaseUrl();
+            const keyword = `${song.title} ${song.artist}`;
+            const res = await fetch(`${baseUrl}/cloudsearch?keywords=${encodeURIComponent(keyword)}`);
+            const data = await res.json();
+            if (data.code === 200 && data.result && data.result.songs && data.result.songs.length > 0) {
+                const track = data.result.songs[0];
+                const newSong = {
+                    id: track.id,
+                    title: track.name,
+                    artist: track.ar.map(a => a.name).join(', '),
+                    cover: track.al.picUrl + '?param=100y100'
+                };
+                // 更新播放列表中的这首歌为真实数据
+                musicState.currentPlaylist[musicState.currentIndex] = newSong;
+                // 播放真实歌曲
+                musicPlaySong(newSong.id, newSong.title, newSong.artist, newSong.cover);
+                wcShowSuccess("即将播放");
+            } else {
+                wcShowError("未找到该歌曲");
+            }
+        } catch (e) {
+            console.error("搜索失败", e);
+            wcShowError("搜索失败");
+        }
+    }, 500);
+};
+
+// 新增：控制迷你播放器的播放/暂停
+window.wcToggleSimPlay = function(e) {
+    e.stopPropagation(); // 阻止冒泡，防止触发打开全屏播放器
+    musicTogglePlay(); // 调用全局的播放/暂停逻辑
+};
+
+window.wcLoadMoreSimTracks = async function() {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char) return;
+
+    const apiConfig = await getActiveApiConfig('phone');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const limit = apiConfig.limit || 50;
+    if (limit > 0 && sessionApiCallCount >= limit) {
+        wcShowError("已达到API调用上限");
+        return;
+    }
+    sessionApiCallCount++;
+
+    wcShowLoading("正在生成更多歌曲...");
+
+    try {
+        const settings = char.phoneData.settings;
+        const playlists = settings.playlists || (settings.playlist ? [{ name: "最近常听", tracks: settings.playlist }] : []);
+        const pl = playlists[currentSimPlaylistIdx];
+        
+        const existingSongs = pl.tracks.map(t => `${t.title}-${t.artist}`).join('、');
+
+        // 👇 提取聊天上下文、世界书和用户面具 👇
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-15).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
+
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `你有一个名为“${pl.name}”的歌单。目前歌单里已经有以下歌曲：${existingSongs}。\n`;
+        prompt += `请根据你的人设、当前聊天氛围和这个歌单的风格，再推荐 10 首真实存在的歌曲。\n`;
+        prompt += `要求：\n1. 必须是真实存在的流行歌曲。\n2. 【绝对禁止】和已有的歌曲重复！\n3. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `[
+  {"title": "歌名", "artist": "歌手"}
+]`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let contentStr = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        contentStr = contentStr.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const newTracks = JSON.parse(contentStr);
+        
+        pl.tracks.push(...newTracks);
+        wcSaveData();
+        
+        wcRenderSimPlaylistTracks();
+        wcShowSuccess("加载成功");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("生成失败");
+    }
+};
 
 // --- Phone Message Logic ---
 
@@ -13597,42 +13788,66 @@ function wcRenderPhoneFavoritesContent() {
     const favData = (char.phoneData && char.phoneData.favorites) ? char.phoneData.favorites : null;
 
     if (!favData) {
-        content.innerHTML = '<div style="padding: 40px 20px; text-align: center; color: #8E8E93; font-size: 14px;">点击左上角「刷新」<br>偷偷查看 Ta 的微信收藏...</div>';
+        content.innerHTML = `
+            <div style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8E8E93; font-size: 14px; text-align: center; margin-top: 40%;">
+                <svg viewBox="0 0 24 24" style="width: 48px; height: 48px; stroke: #CCC; fill: none; stroke-width: 1; margin-bottom: 15px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                点击右上角刷新按钮<br>偷偷查看 Ta 的微信收藏...
+            </div>`;
         return;
     }
 
     let html = `
-        <div class="wc-segmented-control" style="margin: 16px; background: #E5E5EA; display: flex; border-radius: 8px; padding: 2px;">
-            <div class="wc-segment-btn ${wcFavoritesTab === 'memos' ? 'active' : ''}" style="flex:1; text-align:center; padding:6px; border-radius:6px; font-size:14px; cursor:pointer; ${wcFavoritesTab === 'memos' ? 'background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);' : 'color:#8E8E93;'}" onclick="wcToggleFavoritesTab('memos')">备忘录</div>
-            <div class="wc-segment-btn ${wcFavoritesTab === 'diaries' ? 'active' : ''}" style="flex:1; text-align:center; padding:6px; border-radius:6px; font-size:14px; cursor:pointer; ${wcFavoritesTab === 'diaries' ? 'background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.1);' : 'color:#8E8E93;'}" onclick="wcToggleFavoritesTab('diaries')">手账日记</div>
+        <!-- 胶囊形切换栏 -->
+        <div style="display: flex; justify-content: center; margin: 5px 0 20px 0;">
+            <div style="background: #EAECEF; border-radius: 30px; padding: 4px; display: flex; gap: 4px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);">
+                <div onclick="wcToggleFavoritesTab('memos')" style="padding: 8px 24px; border-radius: 24px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s; ${wcFavoritesTab === 'memos' ? 'background: #FFF; color: #111; box-shadow: 0 4px 12px rgba(0,0,0,0.05);' : 'color: #888;'}">备忘录</div>
+                <div onclick="wcToggleFavoritesTab('diaries')" style="padding: 8px 24px; border-radius: 24px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s; ${wcFavoritesTab === 'diaries' ? 'background: #FFF; color: #111; box-shadow: 0 4px 12px rgba(0,0,0,0.05);' : 'color: #888;'}">手账日记</div>
+            </div>
         </div>
         <div style="padding: 0 16px 16px 16px; display: flex; flex-direction: column; gap: 12px;">
     `;
 
     if (wcFavoritesTab === 'memos') {
         if (favData.memos && favData.memos.length > 0) {
+            html += `<div class="folder-grid">`; // 开启网格容器
+            
             favData.memos.forEach((memo, idx) => {
                 const sig = getFavSignature('memo', memo.title, memo.time, memo.content);
                 const isFav = wcState.myFavorites && wcState.myFavorites.some(f => f.sig === sig);
+                
+                // 随机生成纸张上的线条，增加真实感
+                const linesHtml = Math.random() > 0.5 
+                    ? `<div class="folder-paper-line long"></div><div class="folder-paper-line short"></div><div class="folder-paper-line long"></div>`
+                    : `<div class="folder-paper-line long"></div><div class="folder-paper-line long"></div>`;
 
                 html += `
-                    <div style="background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); cursor: pointer; position: relative;" onclick="wcOpenMemoDetail(${idx})">
-                        <div style="padding-right: 60px;">
-                            <div style="font-size: 16px; font-weight: 600; margin-bottom: 6px; color: #333;">${memo.title}</div>
-                            <div style="font-size: 14px; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${memo.content}</div>
-                            <div style="font-size: 11px; color: #B2B2B2; margin-top: 8px;">${memo.time}</div>
+                    <div class="folder-item" onclick="wcOpenMemoDetail(${idx})">
+                        <div class="folder-back"></div>
+                        <div class="folder-papers">
+                            <div class="folder-paper folder-paper-1">${linesHtml}</div>
+                            <div class="folder-paper folder-paper-2"><div class="folder-paper-line long"></div><div class="folder-paper-line short"></div></div>
                         </div>
-                        <!-- 收藏按钮 -->
-                        <div onclick="wcToggleFavorite(event, 'memo', ${idx})" style="position: absolute; top: 16px; right: 52px; width: 28px; height: 28px; background: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: ${isFav ? '#111' : '#CCC'}; transition: all 0.2s;">
-                            <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: ${isFav ? 'currentColor' : 'none'}; stroke: currentColor; stroke-width: 2;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        <div class="folder-front"></div>
+                        <div class="folder-decor"></div>
+                        <div class="folder-info">
+                            <div class="folder-title">${memo.title}</div>
+                            <div class="folder-subtitle">${memo.time ? memo.time.split(' ')[0] : ''}</div>
                         </div>
-                        <!-- 分享按钮 -->
-                        <div onclick="wcTriggerShare(event, 'memo', ${idx})" style="position: absolute; top: 16px; right: 16px; width: 28px; height: 28px; background: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #111; transition: background 0.2s;">
-                            <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+                        
+                        <!-- 悬浮操作区 (收藏/分享) -->
+                        <div class="folder-actions" onclick="event.stopPropagation()">
+                            <div class="folder-action-btn" onclick="wcToggleFavorite(event, 'memo', ${idx})" style="color: ${isFav ? '#FFD700' : '#FFF'};">
+                                <svg viewBox="0 0 24 24" style="fill: ${isFav ? 'currentColor' : 'none'};"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                            </div>
+                            <div class="folder-action-btn" onclick="wcTriggerShare(event, 'memo', ${idx})">
+                                <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+                            </div>
                         </div>
                     </div>
                 `;
             });
+            
+            html += `</div>`; // 闭合网格容器
         } else {
             html += `<div style="text-align:center; color:#999; padding:20px;">暂无备忘录</div>`;
         }
@@ -13823,41 +14038,46 @@ function wcRenderPhoneBrowserContent() {
         return;
     }
 
-    let html = `
-        <div class="wc-segmented-control" style="margin: 16px; background: #E5E5EA;">
-            <div class="wc-segment-btn active" id="wc-seg-browser-history" onclick="wcToggleBrowserTab('history')">浏览记录</div>
-            <div class="wc-segment-btn" id="wc-seg-browser-posts" onclick="wcToggleBrowserTab('posts')">论坛帖子</div>
-        </div>
-    `;
+    let html = ''; // 移除了旧的顶部分段控制器
 
-    html += `<div id="wc-browser-tab-history" style="display: block; padding: 0 16px 16px 16px;">`;
+    html += `<div id="wc-browser-tab-history" style="display: block; padding-top: 10px;">`;
     if (browserData.history && browserData.history.length > 0) {
         browserData.history.forEach((item, idx) => {
             const sig = getFavSignature('history', item.title, item.time, `[内心批注] ${item.annotation}`);
             const isFav = wcState.myFavorites && wcState.myFavorites.some(f => f.sig === sig);
 
             html += `
-                <div style="background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); position: relative;">
-                    <div style="padding-right: 60px;">
-                        <div style="font-size: 15px; font-weight: 600; color: #007AFF; margin-bottom: 4px; word-break: break-all;">${item.title}</div>
-                        <div style="font-size: 12px; color: #8E8E93; margin-bottom: 10px;">${item.url_placeholder}</div>
-                        <div style="font-size: 14px; color: #333; background: #FFF9C4; padding: 10px; border-radius: 6px; border-left: 3px solid #FFC107;">
-                            <span style="font-weight: bold; color: #F57F17;">[内心批注]</span> ${item.annotation}
-                        </div>
-                        <div style="font-size: 11px; color: #B2B2B2; margin-top: 8px; text-align: right;">${item.time}</div>
+                <div style="background: #fff; border-radius: 16px; padding: 18px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); position: relative;">
+                    <div style="padding-right: 30px;">
+                        <div style="font-size: 16px; font-weight: 600; color: #007AFF; margin-bottom: 6px; word-break: break-all;">${item.title}</div>
+                        <div style="font-size: 12px; color: #8E8E93; font-family: monospace;">${item.url_placeholder}</div>
+                        <div style="font-size: 11px; color: #B2B2B2; margin-top: 8px;">${item.time}</div>
                     </div>
+                    
+                    <!-- 右上角小圆点 -->
+                    <div class="dot-btn" onclick="wcToggleAnnotation('anno-${idx}', this, event)">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/></svg>
+                    </div>
+                    
+                    <!-- 悬浮批注卡片 -->
+                    <div class="annotation-popover" id="anno-${idx}" onclick="event.stopPropagation()">
+                        <div class="anno-tag">INNER OS</div>
+                        <div class="anno-text">“${item.annotation}”</div>
+                    </div>
+
                     <!-- 收藏按钮 -->
-                    <div onclick="wcToggleFavorite(event, 'history', ${idx})" style="position: absolute; top: 16px; right: 52px; width: 28px; height: 28px; background: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: ${isFav ? '#111' : '#CCC'}; cursor: pointer; transition: all 0.2s;">
+                    <div onclick="wcToggleFavorite(event, 'history', ${idx})" style="position: absolute; bottom: 16px; right: 52px; width: 28px; height: 28px; background: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: ${isFav ? '#111' : '#CCC'}; cursor: pointer; transition: all 0.2s;">
                         <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: ${isFav ? 'currentColor' : 'none'}; stroke: currentColor; stroke-width: 2;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                     </div>
                     <!-- 分享按钮 -->
-                    <div onclick="wcTriggerShare(event, 'history', ${idx})" style="position: absolute; top: 16px; right: 16px; width: 28px; height: 28px; background: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #111; cursor: pointer; transition: background 0.2s;">
+                    <div onclick="wcTriggerShare(event, 'history', ${idx})" style="position: absolute; bottom: 16px; right: 16px; width: 28px; height: 28px; background: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #111; cursor: pointer; transition: background 0.2s;">
                         <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
                     </div>
                 </div>
             `;
         });
-    } else {
+    }
+ else {
         html += `<div style="text-align: center; color: #888; padding: 20px;">暂无浏览记录</div>`;
     }
     html += `</div>`;
@@ -13898,11 +14118,41 @@ function wcRenderPhoneBrowserContent() {
 }
 
 function wcToggleBrowserTab(tab) {
-    document.getElementById('wc-seg-browser-history').classList.toggle('active', tab === 'history');
-    document.getElementById('wc-seg-browser-posts').classList.toggle('active', tab === 'posts');
-    document.getElementById('wc-browser-tab-history').style.display = tab === 'history' ? 'block' : 'none';
-    document.getElementById('wc-browser-tab-posts').style.display = tab === 'posts' ? 'block' : 'none';
+    const btnHistory = document.getElementById('browser-nav-history');
+    const btnPosts = document.getElementById('browser-nav-posts');
+    if (btnHistory) btnHistory.classList.toggle('active', tab === 'history');
+    if (btnPosts) btnPosts.classList.toggle('active', tab === 'posts');
+    
+    const tabHistory = document.getElementById('wc-browser-tab-history');
+    const tabPosts = document.getElementById('wc-browser-tab-posts');
+    if (tabHistory) tabHistory.style.display = tab === 'history' ? 'block' : 'none';
+    if (tabPosts) tabPosts.style.display = tab === 'posts' ? 'block' : 'none';
 }
+
+// 👇 新增：切换批注卡片显示/隐藏的逻辑 👇
+window.wcToggleAnnotation = function(id, btn, event) {
+    event.stopPropagation();
+    const popover = document.getElementById(id);
+    const isShowing = popover.classList.contains('show');
+    
+    // 先关闭所有的批注卡片和圆点高亮
+    document.querySelectorAll('.annotation-popover').forEach(el => el.classList.remove('show'));
+    document.querySelectorAll('.dot-btn').forEach(el => el.classList.remove('active'));
+
+    // 如果点击的原本是隐藏的，则展开它
+    if (!isShowing) {
+        popover.classList.add('show');
+        btn.classList.add('active');
+    }
+};
+
+// 全局点击关闭批注卡片
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dot-btn') && !e.target.closest('.annotation-popover')) {
+        document.querySelectorAll('.annotation-popover').forEach(el => el.classList.remove('show'));
+        document.querySelectorAll('.dot-btn').forEach(el => el.classList.remove('active'));
+    }
+});
 
 function wcOpenPostDetail(idx) {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
@@ -14760,8 +15010,11 @@ function wcRenderShopItems(tab, isAddMode = false) {
             card.className = 'ins-shop-card manual-card';
             card.innerHTML = `
                 <div class="ins-shop-card-icon">${icon}</div>
-                <div class="ins-shop-card-name">${item.name}</div>
-                <div class="ins-shop-card-price">¥${parseFloat(item.price).toFixed(2)}</div>
+                <div class="ins-shop-card-info">
+                    <div class="ins-shop-card-name">${item.name}</div>
+                    <div class="ins-shop-card-desc">${item.desc || ''}</div>
+                    <div class="ins-shop-card-price">¥${parseFloat(item.price).toFixed(2)}</div>
+                </div>
             `;
             card.onclick = () => wcOpenTarotModal(tab, idx);
             container.appendChild(card);
@@ -14793,7 +15046,7 @@ function wcRenderShopItems(tab, isAddMode = false) {
         container.innerHTML = '<div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">空空如也</div>';
         return;
     }
-// 修改后的代码
+
     items.forEach((item, idx) => {
         const icon = tab === 'mall' 
             ? '<svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>' 
@@ -14803,8 +15056,12 @@ function wcRenderShopItems(tab, isAddMode = false) {
         card.onclick = () => wcOpenTarotModal(tab, idx);
         card.innerHTML = `
             <div class="ins-shop-card-icon">${icon}</div>
-            <div class="ins-shop-card-name">${item.name}</div>
-            <div class="ins-shop-card-price">¥${parseFloat(item.price).toFixed(2)}</div>
+            <div class="ins-shop-card-info">
+                <div class="ins-shop-card-name">${item.name}</div>
+                <div class="ins-shop-card-desc">${item.desc || ''}</div>
+                <div class="ins-shop-card-price">¥${parseFloat(item.price).toFixed(2)}</div>
+            </div>
+            <div class="ins-shop-card-add-btn" onclick="event.stopPropagation(); wcAddToCart('${tab}', ${idx})">+</div>
         `;
         container.appendChild(card);
     });
@@ -16752,23 +17009,35 @@ function musicUpdatePlayerUI() {
     
     document.getElementById('music-player-cover').src = musicState.currentSong.cover;
     document.getElementById('music-fp-cover').src = musicState.currentSong.cover;
-// 修改为：
-const miniTitle = document.getElementById('music-player-title');
-const miniArtist = document.getElementById('music-player-artist');
-const fpTitle = document.getElementById('music-fp-title');
-const fpArtist = document.getElementById('music-fp-artist');
 
-if (miniTitle) miniTitle.innerText = musicState.currentSong.title;
-if (miniArtist) miniArtist.innerText = musicState.currentSong.artist;
-if (fpTitle) fpTitle.innerText = musicState.currentSong.title;
-if (fpArtist) fpArtist.innerText = musicState.currentSong.artist; 
-const widgetTitle = document.getElementById('widget-song-name');
-if (widgetTitle) widgetTitle.innerText = musicState.currentSong.title;
+    const miniTitle = document.getElementById('music-player-title');
+    const miniArtist = document.getElementById('music-player-artist');
+    const fpTitle = document.getElementById('music-fp-title');
+    const fpArtist = document.getElementById('music-fp-artist');
+
+    if (miniTitle) miniTitle.innerText = musicState.currentSong.title;
+    if (miniArtist) miniArtist.innerText = musicState.currentSong.artist;
+    if (fpTitle) fpTitle.innerText = musicState.currentSong.title;
+    if (fpArtist) fpArtist.innerText = musicState.currentSong.artist; 
+    const widgetTitle = document.getElementById('widget-song-name');
+    if (widgetTitle) widgetTitle.innerText = musicState.currentSong.title;
+
+    // 👇 新增：同步更新 Settings 页面的迷你播放器信息 👇
+    const simMiniTitle = document.getElementById('sim-global-mini-title');
+    const simMiniArtist = document.getElementById('sim-global-mini-artist');
+    const simMiniCover = document.getElementById('sim-global-mini-cover');
+    if (simMiniTitle) simMiniTitle.innerText = musicState.currentSong.title;
+    if (simMiniArtist) simMiniArtist.innerText = musicState.currentSong.artist;
+    if (simMiniCover) simMiniCover.src = musicState.currentSong.cover;
 
     const coverEl = document.getElementById('music-player-cover');
     const fpRecordEl = document.getElementById('music-fp-record');
     const playBtn = document.getElementById('music-btn-play');
     const fpPlayBtn = document.getElementById('music-fp-btn-play');
+    
+    // 👇 新增：获取 Settings 页面的迷你播放器控制元素 👇
+    const simMiniRecord = document.getElementById('sim-global-mini-record');
+    const simMiniPlayBtn = document.getElementById('sim-global-mini-play-btn');
     
     const pauseIcon = '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
     const playIcon = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';            
@@ -16778,18 +17047,26 @@ if (widgetTitle) widgetTitle.innerText = musicState.currentSong.title;
         fpRecordEl.classList.add('playing');
         playBtn.innerHTML = pauseIcon;
         fpPlayBtn.innerHTML = pauseIcon;
+        
+        // 同步旋转和暂停图标
+        if (simMiniRecord) simMiniRecord.classList.add('playing');
+        if (simMiniPlayBtn) simMiniPlayBtn.innerHTML = pauseIcon;
     } else {
         coverEl.classList.remove('playing');
         fpRecordEl.classList.remove('playing');
         playBtn.innerHTML = playIcon;
         fpPlayBtn.innerHTML = playIcon;
+        
+        // 同步停止旋转和播放图标
+        if (simMiniRecord) simMiniRecord.classList.remove('playing');
+        if (simMiniPlayBtn) simMiniPlayBtn.innerHTML = playIcon;
     }
     const widgetPlayBtn = document.getElementById('widget-btn-play');
     if (widgetPlayBtn) {
         widgetPlayBtn.innerHTML = musicState.isPlaying ? pauseIcon : playIcon;
     }
 
-    // 【追加这一行】：同步更新音乐胶囊的 UI
+    // 同步更新音乐胶囊的 UI
     if (typeof musicUpdateCapsuleUI === 'function') musicUpdateCapsuleUI();
 }
 

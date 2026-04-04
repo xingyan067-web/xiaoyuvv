@@ -695,31 +695,86 @@
                         </div>
 
                         <!-- 模拟钱包详情页 -->
-                        <div id="wc-phone-app-wallet" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #F2F2F7; z-index: 200; display: none; flex-direction: column;">
-                            <div class="wc-phone-sim-navbar" style="background: #EDEDED; border-bottom: 0.5px solid #C6C6C8; flex-shrink: 0; color: #000;">
-                                <div onclick="wcClosePhoneWallet()" style="cursor: pointer; font-size: 14px; display:flex; align-items:center;">
-                                    <svg class="wc-icon" viewBox="0 0 24 24" style="width:20px;height:20px;"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                                    我
-                                </div>
-                                <div style="font-weight: 600;">钱包</div>
-                                <div onclick="wcGenerateCharWallet()" style="cursor: pointer; font-size: 14px;">刷新账单</div>
-                            </div>
-                            <div id="wc-phone-wallet-content" style="flex: 1; overflow-y: auto;"></div>
+                        <div id="wc-phone-app-wallet" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #F2F2F7; z-index: 200; display: none; flex-direction: column; overflow: hidden;">
+                            <div id="wc-phone-wallet-content" style="flex: 1; height: 100%;"></div>
                         </div>
                     </div>
-                    <!-- Phone App: Settings (新增) -->
-                    <div id="wc-phone-app-settings" class="wc-phone-app-view" style="display: none;">
-                        <div class="wc-phone-sim-navbar" style="background: #F2F2F7; color: #000; border-bottom: 0.5px solid #C6C6C8; justify-content: space-between; padding: 0 10px;">
-                            <div onclick="wcGeneratePhoneSettings()" style="cursor: pointer; font-size: 14px; color: #007AFF;">刷新状态</div>
-                            <div style="font-weight: 600;">设置</div>
-                            <div onclick="wcClosePhoneApp()" style="cursor: pointer; font-size: 14px;">关闭</div>
+                    <!-- Phone App: Settings (重构为仿网易云个人主页) -->
+                    <div id="wc-phone-app-settings" class="wc-phone-app-view" style="display: none; background-color: #F4F5F9; background-image: radial-gradient(#D1D1D6 1.5px, transparent 1.5px); background-size: 20px 20px;">
+                        <!-- 顶部背景与信息区 -->
+                        <div class="sim-profile-header" id="sim-profile-header">
+                            <div class="sim-profile-header-mask"></div>
+                            
+                            <!-- 悬浮操作按钮 -->
+                            <div class="sim-nav-btn back" onclick="wcClosePhoneApp()">
+                                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </div>
+                            <div class="sim-nav-btn refresh" onclick="wcGeneratePhoneSettings()">
+                                <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                            </div>
+
+                            <!-- 头像与名字 -->
+                            <div class="sim-profile-info">
+                                <img src="" id="sim-profile-avatar" class="sim-profile-avatar">
+                                <div class="sim-profile-name" id="sim-profile-name">Name</div>
+                                <div class="sim-profile-id">STATUS & MUSIC</div>
+                            </div>
                         </div>
-                        <div id="wc-phone-settings-content" style="flex: 1; overflow-y: auto; padding: 20px;">
-                            <!-- Settings Content Injected Here -->
+
+                        <!-- 下方内容区 (圆角上浮 + 韩系波点背景) -->
+                        <div class="sim-content-container ins-polka-dot-bg">
+                            <!-- 交互栏 (Tab) -->
+                            <div class="sim-tab-bar" style="background: transparent; justify-content: center;">
+                                <div class="sim-star-toggle" id="sim-star-toggle" onclick="wcToggleSettingsView()">
+                                    <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                </div>
+                            </div>
+
+                            <!-- 滚动内容 -->
+                            <div class="sim-scroll-content" id="wc-phone-settings-content">
+                                <!-- 内容由 JS 注入 -->
+                            </div>
                         </div>
-                    </div>                                        
+
+                        <!-- 悬浮在 Settings 页面底部的迷你播放器 -->
+                        <div id="sim-global-mini-player" class="sim-mini-player" style="display: none;" onclick="musicOpenFullPlayer()">
+                            <div class="sim-mini-record" id="sim-global-mini-record">
+                                <img src="" id="sim-global-mini-cover" class="sim-mini-cover">
+                            </div>
+                            <div class="sim-mini-info">
+                                <div class="sim-mini-title" id="sim-global-mini-title">Song Title</div>
+                                <div class="sim-mini-artist" id="sim-global-mini-artist">Artist</div>
+                            </div>
+                            <div class="sim-mini-controls">
+                                <div class="sim-mini-btn" onclick="wcToggleSimPlay(event)" id="sim-global-mini-play-btn">
+                                    <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </div>
+                                <div class="sim-mini-btn" onclick="event.stopPropagation(); musicOpenCurrentPlaylist();">
+                                    <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 歌单详情弹窗 (全屏) -->
+                    <div id="wc-phone-playlist-detail" class="wc-phone-app-view" style="display: none; z-index: 30; background: #F9F9F9;">
+                        <div class="sim-profile-header" style="height: 120px; min-height: 120px; background: #111;">
+                            <div class="sim-nav-btn back" onclick="wcClosePhonePlaylistDetail()">
+                                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </div>
+                            <div class="sim-profile-info" style="margin-top: 40px;">
+                                <div class="sim-profile-name" id="sim-playlist-detail-title">Playlist</div>
+                            </div>
+                        </div>
+                        <div class="sim-content-container" style="margin-top: -20px; background: #F9F9F9; box-shadow: none;">
+                            <div class="sim-scroll-content" id="wc-phone-playlist-tracks" style="padding: 0 20px 80px 20px;">
+                                <!-- 歌曲列表 -->
+                            </div>
+                        </div>                        
+                    </div>
 
                     <!-- Phone App: Privacy (新增私密空间) -->
+
                     <div id="wc-phone-app-privacy" class="wc-phone-app-view" style="display: none;">
                         <div class="wc-phone-sim-navbar" style="background: #F2F2F7; color: #000; border-bottom: 0.5px solid #C6C6C8; justify-content: space-between; padding: 0 10px;">
                             <div onclick="wcGeneratePhonePrivacy()" style="cursor: pointer; font-size: 14px; color: #FF3B30; display: flex; align-items: center; gap: 4px;">
@@ -2277,18 +2332,43 @@
                     </div>
 
                     <!-- Wallet Page -->
-                    <div id="wc-view-wallet" class="wc-page" style="padding: 0;">
-                        <div class="wc-wallet-header">
-                            <svg class="wc-icon wc-wallet-icon-lg" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
-                            <div class="wc-wallet-balance-label">当前余额 (元)</div>
-                            <div class="wc-wallet-balance-num" id="wc-wallet-balance-display">0.00</div>
-                            <div class="wc-wallet-btn-row">
-                                <button class="wc-ios-btn-block" style="background: var(--wc-accent-green);" onclick="wcOpenRechargeModal()">充值</button>
+                    <div id="wc-view-wallet" class="wc-page" style="padding: 0; background: #F2F2F7; padding-top: 0 !important; overflow: hidden;">
+                        <div class="rcpt-ui-container">
+                            <div class="rcpt-ui-card-top">
+                                <div class="rcpt-ui-avatar-ring">
+                                    <img id="wc-wallet-user-avatar" src="" alt="avatar">
+                                </div>
+                                <div class="rcpt-ui-name" id="wc-wallet-user-name">User</div>
+                                <div class="rcpt-ui-subtitle">WeChat Pay</div>
+                                <div class="rcpt-ui-status">ACTIVE</div>
                             </div>
-                        </div>
-                        <div class="wc-list-group-title" style="padding: 0 16px 8px; color: var(--wc-text-secondary); font-size: 13px;">交易记录</div>
-                        <div id="wc-wallet-history-list" style="background: #fff;">
-                            <!-- Transactions injected here -->
+                            
+                            <div class="rcpt-ui-paper">
+                                <!-- 交易记录将注入到这里 -->
+                                <div class="rcpt-trans-list" id="wc-wallet-history-list"></div>
+                                
+                                <div class="rcpt-ui-divider"></div>
+                                <div class="rcpt-ui-row total">
+                                    <span class="label">Balance</span>
+                                    <span class="value" id="wc-wallet-balance-display">¥0.00</span>
+                                </div>
+                            </div>
+                            
+                            <!-- 底部三个交互按钮 -->
+                            <div class="rcpt-action-bar">
+                                <!-- 左：设置密码 -->
+                                <button class="rcpt-circle-btn" onclick="wcOpenModal('wc-modal-wallet-settings')" title="设置">
+                                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                </button>
+                                <!-- 中：退出页面 -->
+                                <button class="rcpt-circle-btn main" onclick="wcCloseWallet()" title="退出">
+                                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </button>
+                                <!-- 右：充值 -->
+                                <button class="rcpt-circle-btn" onclick="wcOpenRechargeModal()" title="充值">
+                                    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -2610,8 +2690,6 @@
                         </div>
                     </div>
                 </div>
-                <!-- 👆 替换结束 👆 -->
-
                 <!-- WeChat Settings Modal (New) -->
                 <div id="wc-modal-wechat-settings" class="wc-modal hidden" style="z-index: 3500; align-items: flex-end;">
                     <div class="wc-modal-content" style="height: auto; border-radius: 12px 12px 0 0; width: 100%; max-width: 100%; background-color: transparent;">
