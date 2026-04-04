@@ -5316,6 +5316,9 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             systemPrompt += `11. 保存图片到时光相册: {"type":"save_to_album", "content":"存图时的内心OS"}\n`;
         }
         
+        // 👇【修改】：优化转账指令，强制 AI 根据人设自己生成台词
+        systemPrompt += `12. 收款/退款(如果User给你转账，你可以根据人设和金额决定是否收下): {"type":"transfer_action", "action":"received", "content":"(这里写你决定收款时想说的话，必须符合你的人设)"} 或 {"type":"transfer_action", "action":"rejected", "content":"(这里写你决定退款时想说的话，必须符合你的人设)"}\n`;
+        
         systemPrompt += `\n示例输出：\n[\n  {"type":"text", "content":"刚才去便利店了。"},\n  {"type":"text", "content":"买了个冰淇淋，你要吃吗？"},\n  {"type":"sticker", "content":"开心"}\n]\n`;
         systemPrompt += `</format_rules>\n\n`;
         systemPrompt += wcGenerateRelationshipPrompt(); // 注入关系网
@@ -5782,8 +5785,16 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             extra.senderName = action.senderName;
         }
 
-        if (action.type === 'transfer_action') { // 兼容旧逻辑
-        } // <--- 🌟 补上这个右大括号！
+        if (action.type === 'transfer_action') { 
+            // 👇【新增】：处理 AI 决定收款或退款的逻辑
+            if (action.action === 'received' || action.action === 'rejected') {
+                wcAIHandleTransfer(charId, action.action);
+            }
+            // 如果 AI 收款/退款时还附带了说话内容，发出来
+            if (action.content) {
+                wcAddMessage(charId, 'them', 'text', action.content, extra);
+            }
+        } 
         // --- 新增：处理换头像指令 (通过唯一ID精准匹配真实图片) ---
         else if (action.type === 'change_avatar') {
             const msgs = wcState.chats[charId] || [];
@@ -7602,10 +7613,7 @@ function wcUpdateTransferStatus(status) {
         
         if (aiPrompt) {
             wcAddMessage(wcState.activeChatId, 'system', 'system', aiPrompt, { hidden: true });
-            // 延迟 1 秒触发 AI 回复，模拟真实反应时间
-            setTimeout(() => {
-                wcTriggerAI(wcState.activeChatId);
-            }, 1000);
+            // 【修改】：删除了 setTimeout 触发 wcTriggerAI 的逻辑，不再自动调取 API 生成回复
         }
         
         wcSaveData();
