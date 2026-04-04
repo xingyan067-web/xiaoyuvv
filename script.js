@@ -215,7 +215,7 @@ async function registerOfflineProactiveTask(char) {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -5238,8 +5238,9 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
 对方是：${currentUserName}
 对方的设定/面具：${currentUserPersona}
 (这是你正在交谈的对象。你需要根据这些信息来调整你对TA的回忆和态度。)
-【支柱三：你们所处的世界观 (Worldbook)】
+【支柱三：附加设定 和内容补充参(Worldbook & Rules)】
 ${worldBookContent}
+(警告：这是关于你的内容补充（世界书），你必须严格读取里面的内容，并且遵守里面的内容)
 【支柱四：潜意识与绝对记忆 (Memories)】
 ${memoryText}
 (警告：这是你脑海中的记忆！你绝对不能忘记这些发生过的事！)
@@ -6227,7 +6228,7 @@ async function wcTriggerAIMoment(charId) {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -9511,7 +9512,7 @@ async function wcGeneratePhonePrivacy() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -9703,7 +9704,7 @@ async function wcGenerateCharWallet() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -9826,7 +9827,7 @@ async function wcGeneratePhoneSettings(renderOnly = false) {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -10233,7 +10234,7 @@ window.wcLoadMoreSimTracks = async function() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -10305,7 +10306,7 @@ async function wcGeneratePhoneChats() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -10978,7 +10979,7 @@ async function wcGeneratePhoneContacts() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -11941,7 +11942,7 @@ window.wcExecuteSingleMomentAI = async function(charId) {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -12858,7 +12859,7 @@ async function lsTriggerNpcMessage() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -13469,7 +13470,7 @@ async function wcGeneratePrivacyAndFavorites() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -13608,7 +13609,7 @@ async function wcTriggerBackgroundPhoneUpdate(charId) {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -13951,7 +13952,7 @@ async function wcGeneratePhoneFavorites() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -14222,7 +14223,7 @@ async function wcGeneratePhoneBrowser() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -14779,7 +14780,7 @@ async function wcGenerateShopItems() {
         if (worldbookEntries.length > 0 && selectedWbs.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => selectedWbs.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -15628,7 +15629,7 @@ async function wcGeneratePhoneCart() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -20636,7 +20637,7 @@ const apiConfig = await getActiveApiConfig('npc');
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -21550,7 +21551,7 @@ async function lsGenerateAILetter() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -21813,7 +21814,7 @@ async function lsRequestReply() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -22338,7 +22339,7 @@ async function lsStartDecoration() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -25349,7 +25350,7 @@ async function wcProcessCallDecision(char) {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
@@ -25582,7 +25583,7 @@ window.wcTriggerCallAI = async function() {
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
             const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
             if (linkedEntries.length > 0) {
-                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
             }
         }
 
