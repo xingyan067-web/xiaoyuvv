@@ -2883,71 +2883,107 @@ input::-webkit-inner-spin-button {
     .ins-shop-btn svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; }
 
     /* ========================================== */
-    /* 横向滚动商品列表 (精准控制高度与点击层级) */
+    /* 竖向滚动商品列表 (精准控制高度与点击层级) */
     /* ========================================== */
     .ins-shop-scroll-container {
-        flex: 1; display: flex; gap: 15px; 
+        flex: 1; display: flex; flex-direction: column; gap: 15px; 
         padding: 20px; 
-        overflow-x: auto; 
-        align-items: center; /* 居中对齐 */
+        overflow-y: auto; 
+        overflow-x: hidden;
+        align-items: stretch; /* 占满宽度 */
         scrollbar-width: none;
         margin-top: 0; 
         margin-bottom: 250px; 
         position: relative; 
-        z-index: 100; /* 👈 核心修复：大幅提高层级，确保在轨道上方，防止点击被拦截 */
+        z-index: 100; 
         pointer-events: auto;
     }
     .ins-shop-scroll-container::-webkit-scrollbar { display: none; }
-/* 修改后的代码 */
-    /* 80x310px 竖向卡片 (严格锁定尺寸) */
+
+    /* 横向卡片样式 */
     .ins-shop-card {
-        width: 80px !important; 
-        height: 310px !important; 
+        width: 100% !important; 
+        height: auto !important; 
+        min-height: 100px;
         flex-shrink: 0; position: relative;
-        background: #FFFFFF; /* 纯白背景 */
-        border: 1px solid #E5E5EA; /* 浅灰边框 */
-        box-shadow: 0 4px 15px rgba(0,0,0,0.03); /* 柔和阴影 */
-        border-radius: 12px; /* 增加圆角 */
-        cursor: pointer; display: flex; flex-direction: column; align-items: center;
-        padding: 15px 5px; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        background: #FFFFFF; 
+        border: 1px solid #E5E5EA; 
+        box-shadow: 0 4px 15px rgba(0,0,0,0.03); 
+        border-radius: 16px; 
+        cursor: pointer; display: flex; flex-direction: row; align-items: center;
+        padding: 15px; transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         box-sizing: border-box;
         z-index: 110;
     }
-    .ins-shop-card:active { transform: translateY(-10px); }
-    
-    /* 顶部几何设计感边框 (颜色调浅) */
-    .ins-shop-card::before {
-        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 100px;
-        border: 1px solid #F0F0F0; border-bottom: none; pointer-events: none;
-        border-radius: 12px 12px 0 0;
-    }
-    .ins-shop-card::after {
-        content: ''; position: absolute; top: 5px; left: 5px; right: 5px; height: 40px;
-        border: 1px dashed #EAEAEA; border-bottom: none; pointer-events: none;
-        border-radius: 8px 8px 0 0;
+    .ins-shop-card:active { transform: scale(0.98); }
+
+    /* 移除之前的 before/after 装饰 */
+    .ins-shop-card::before, .ins-shop-card::after {
+        display: none;
     }
 
     .ins-shop-card-icon { 
-        color: #111; /* SVG 颜色 */
-        margin-bottom: 20px; margin-top: 5px; 
+        width: 60px; height: 60px;
+        background: #F5F5F5; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        color: #111; margin-right: 15px; flex-shrink: 0;
     }
-    .ins-shop-card-name {
-        writing-mode: vertical-rl; color: #111; font-size: 14px; letter-spacing: 4px;
-        font-family: 'Kaiti', 'STKaiti', serif; flex: 1; text-shadow: none; /* 去掉发光，改为深色 */
-    }
-    .ins-shop-card-price {
-        color: #8E8E93; font-size: 10px; font-family: 'Courier New', monospace;
-        writing-mode: vertical-rl; margin-top: 10px; letter-spacing: 1px;
+    .ins-shop-card-icon svg {
+        width: 30px !important; height: 30px !important;
     }
 
-    /* 添加商品专属卡片 (严格 80x310px，居中排版) */
+    .ins-shop-card-info {
+        flex: 1; display: flex; flex-direction: column; justify-content: center;
+        overflow: hidden;
+    }
+
+    .ins-shop-card-name {
+        writing-mode: horizontal-tb; color: #111; font-size: 16px; font-weight: 600;
+        letter-spacing: normal; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px;
+    }
+
+    .ins-shop-card-desc {
+        font-size: 12px; color: #8E8E93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        margin-bottom: 8px;
+    }
+
+    .ins-shop-card-price {
+        color: #111; font-size: 16px; font-weight: bold; font-family: 'Georgia', serif;
+        writing-mode: horizontal-tb; margin-top: 0; letter-spacing: normal;
+    }
+
+    /* 新增：仿图的加入购物车胶囊按钮 */
+    .ins-shop-card-add-btn {
+        width: 44px; 
+        height: 28px;
+        border-radius: 14px;
+        border: 1px solid #E5E5EA;
+        background: #FFFFFF;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #111;
+        font-size: 18px;
+        font-weight: 400;
+        cursor: pointer;
+        flex-shrink: 0;
+        margin-left: 10px;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+    }
+    .ins-shop-card-add-btn:active {
+        background: #F5F5F5;
+        transform: scale(0.9);
+    }
+
+    /* 添加商品专属卡片 */
     .ins-shop-card.add-card {
         background: rgba(0, 0, 0, 0.02); border: 1px dashed #CCC;
-        justify-content: center; padding: 0;
+        justify-content: center; padding: 20px; flex-direction: row;
     }
-    .ins-shop-card.add-card::before, .ins-shop-card.add-card::after { display: none; }
-    .ins-shop-card.add-card .ins-shop-card-icon { margin: 0 0 15px 0; font-size: 24px; opacity: 0.5; }
-    .ins-shop-card.add-card .ins-shop-card-name { flex: none; color: #888; text-shadow: none; font-size: 13px; letter-spacing: 6px; }
+    .ins-shop-card.add-card .ins-shop-card-icon { margin: 0 15px 0 0; font-size: 24px; opacity: 0.5; background: transparent; }
+    .ins-shop-card.add-card .ins-shop-card-name { flex: none; color: #888; text-shadow: none; font-size: 15px; letter-spacing: 2px; font-weight: 500; }
 
     /* ========================================== */
     /* 星际环绕半圆滑动键 (主页分类) */
@@ -5411,28 +5447,673 @@ input::-webkit-inner-spin-button {
 .sim-msg-bubble { border-radius: 16px !important; padding: 10px 14px !important; font-size: 14px !important; box-shadow: 0 2px 8px rgba(0,0,0,0.02) !important; }
 .sim-msg-me .sim-msg-bubble { background: #111111 !important; color: #FFFFFF !important; border-bottom-right-radius: 4px !important; }
 .sim-msg-them .sim-msg-bubble { background: #FFFFFF !important; color: #111111 !important; border: 1px solid #F0F0F0 !important; border-bottom-left-radius: 4px !important; }
+/* ========================================== */
+/* 新增：Browser 浏览器全新 UI 样式 */
+/* ========================================== */
 
-/* 3. 设置 (Settings) 高级卡片风 */
-#wc-phone-app-settings { background: #F9F9F9 !important; }
-#wc-phone-app-settings .wc-phone-sim-navbar {
-    background: transparent !important;
-    border-bottom: none !important;
-    padding-top: 20px !important;
+/* 顶部标题 (退出键) */
+.browser-header-title {
+    font-size: 26px; 
+    font-weight: 800; 
+    color: #111; 
+    margin-bottom: 16px; 
+    padding-left: 4px;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    letter-spacing: 0.5px;
 }
-#wc-phone-app-settings .wc-phone-sim-navbar div { color: #111111 !important; font-weight: 700 !important; }
-#wc-phone-settings-content { padding: 10px 20px !important; }
-/* 设置里的卡片 */
-.sim-setting-card {
-    background: #FFFFFF !important;
-    border-radius: 20px !important;
-    padding: 16px !important;
-    margin-bottom: 16px !important;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.03) !important;
-    border: 1px solid #F5F5F5 !important;
-    display: flex; justify-content: space-between; align-items: center;
+.browser-header-title:active {
+    opacity: 0.5;
 }
-.sim-setting-card-title { font-size: 15px; font-weight: 600; color: #111; }
-.sim-setting-card-value { font-size: 14px; color: #888; }
+.browser-header-title svg {
+    width: 20px;
+    height: 20px;
+    stroke: #111;
+    stroke-width: 2.5;
+    fill: none;
+    margin-right: 6px;
+}
+
+/* 搜索框 */
+.browser-search-container {
+    display: flex;
+    align-items: center;
+    background: #E3E3E8;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+}
+.browser-search-container svg {
+    width: 16px;
+    height: 16px;
+    stroke: #8E8E93;
+    stroke-width: 2.5;
+    fill: none;
+    margin-right: 8px;
+}
+.browser-search-container input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: 15px;
+    color: #111;
+}
+.browser-search-container input::placeholder {
+    color: #8E8E93;
+}
+
+/* 右上角小圆点按钮 */
+.dot-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #D1D1D6;
+    transition: all 0.2s ease;
+    border-radius: 50%;
+}
+.dot-btn:active {
+    background: #F5F5F5;
+}
+.dot-btn.active {
+    color: #FF9500;
+}
+.dot-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+/* 悬浮批注卡片 */
+.annotation-popover {
+    position: absolute;
+    top: 45px;
+    right: 16px;
+    width: calc(100% - 32px);
+    background: #FFFFFF;
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    border: 1px solid #F0F0F0;
+    z-index: 10;
+    display: none;
+    transform-origin: top right;
+    animation: popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.annotation-popover.show {
+    display: block;
+}
+.anno-tag {
+    font-size: 10px;
+    font-weight: 800;
+    color: #FF9500;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+}
+.anno-text {
+    font-size: 14px;
+    color: #333;
+    line-height: 1.5;
+    font-style: italic;
+}
+
+/* 底部悬浮导航栏 */
+.browser-bottom-nav-wrapper {
+    position: absolute;
+    bottom: max(30px, env(safe-area-inset-bottom, 30px));
+    left: 50%;
+    transform: translateX(-50%);
+    width: 280px;
+    height: 70px;
+    z-index: 100;
+}
+
+.browser-bottom-nav-wrapper .nav-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #FFFFFF;
+    border-radius: 35px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    -webkit-mask-image: radial-gradient(circle at 50% -15px, transparent 35px, black 36px);
+    mask-image: radial-gradient(circle at 50% -15px, transparent 35px, black 36px);
+}
+
+.browser-bottom-nav-wrapper .nav-items {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 35px;
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+.browser-bottom-nav-wrapper .nav-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #A0A0A0;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.browser-bottom-nav-wrapper .nav-btn:active {
+    transform: scale(0.9);
+    color: #111;
+}
+
+.browser-bottom-nav-wrapper .nav-btn.active {
+    color: #111;
+}
+
+.browser-bottom-nav-wrapper .nav-btn svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.browser-bottom-nav-wrapper .red-dot {
+    position: absolute;
+    top: 4px;
+    right: 2px;
+    width: 8px;
+    height: 8px;
+    background-color: #FF8A8A;
+    border-radius: 50%;
+    border: 2px solid #FFF;
+}
+
+.browser-bottom-nav-wrapper .center-btn {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 54px;
+    height: 54px;
+    background: #FFFFFF;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    cursor: pointer;
+    pointer-events: auto;
+    transition: transform 0.2s ease;
+}
+
+.browser-bottom-nav-wrapper .center-btn:active {
+    transform: translateX(-50%) scale(0.95);
+}
+
+.browser-bottom-nav-wrapper .center-btn-inner {
+    width: 42px;
+    height: 42px;
+    background: #F5F5F5;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+}
+
+.browser-bottom-nav-wrapper .center-btn-inner svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    stroke-width: 2.5;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* ========================================== */
+/* 查手机：设置页 (极简一体化融合风) */
+/* ========================================== */
+.sim-profile-header {
+    position: relative;
+    height: auto;
+    min-height: 220px;
+    background: transparent; /* 去除背景图 */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: calc(env(safe-area-inset-top, 20px) + 40px);
+}
+.sim-profile-header-mask {
+    display: none; /* 隐藏黑色遮罩 */
+}
+.sim-nav-btn {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 20px) + 15px);
+    width: 36px;
+    height: 36px;
+    background: transparent; /* 去除按钮背景 */
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    border: none; /* 去除边框 */
+    transition: opacity 0.2s;
+}
+.sim-nav-btn:active { opacity: 0.5; }
+.sim-nav-btn.back { left: 20px; }
+.sim-nav-btn.refresh { right: 20px; }
+.sim-nav-btn svg { width: 22px; height: 22px; stroke: #888; fill: none; stroke-width: 2; } /* 图标改为灰色 */
+
+.sim-profile-info {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 0;
+}
+.sim-profile-avatar {
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    border: 2px solid #FFF;
+    object-fit: cover;
+    margin-bottom: 12px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+.sim-profile-name {
+    font-size: 20px;
+    font-weight: 700;
+    color: #111; /* 名字改为深色 */
+    letter-spacing: 1px;
+    text-shadow: none; /* 去除阴影 */
+}
+.sim-profile-id {
+    font-size: 11px;
+    color: #888; /* ID改为灰色 */
+    margin-top: 6px;
+    font-family: 'Courier New', Courier, monospace;
+    letter-spacing: 0.5px;
+}
+
+.sim-content-container {
+    flex: 1;
+    background: transparent; /* 去除白色背景，与外层融合 */
+    border-radius: 0; /* 去除圆角 */
+    margin-top: 0; /* 去除负边距 */
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: none; /* 去除阴影 */
+}
+
+.sim-tab-bar {
+    display: flex;
+    justify-content: center; /* 居中五角星 */
+    align-items: center;
+    padding: 10px 40px 10px;
+    background: transparent; /* 去除背景 */
+    flex-shrink: 0;
+    border-bottom: none; /* 去除底部分界线 */
+}
+
+.sim-scroll-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* 手机状态卡片 */
+.sim-info-card {
+    background: #FFF;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+    border: 1px solid #F5F5F5;
+}
+.sim-card-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #111;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.sim-card-title svg { width: 16px; height: 16px; stroke: #111; fill: none; stroke-width: 2; }
+.sim-info-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.sim-info-row:last-child { margin-bottom: 0; }
+.sim-info-label { font-size: 13px; color: #8E8E93; }
+.sim-info-value { font-size: 14px; font-weight: 600; color: #111; }
+.sim-progress-wrap { display: flex; align-items: center; gap: 10px; }
+.sim-progress-track { width: 80px; height: 6px; background: #F0F0F0; border-radius: 3px; overflow: hidden; }
+.sim-progress-fill { height: 100%; border-radius: 3px; }
+.sim-progress-text { font-size: 12px; font-weight: 700; font-family: monospace; color: #111; }
+.sim-timeline-item { display: flex; gap: 12px; margin-bottom: 16px; position: relative; }
+.sim-timeline-item:last-child { margin-bottom: 0; }
+.sim-timeline-time { width: 45px; font-size: 12px; color: #888; font-family: monospace; font-weight: 600; padding-top: 2px; }
+.sim-timeline-content { flex: 1; background: #F9F9F9; padding: 12px; border-radius: 12px; border: 1px solid #F0F0F0; }
+.sim-timeline-place { font-size: 14px; font-weight: 600; color: #111; margin-bottom: 4px; }
+.sim-timeline-desc { font-size: 12px; color: #666; line-height: 1.4; }
+
+/* 实体CD包装风格歌单 */
+.cd-playlist-card {
+    display: flex;
+    align-items: center;
+    margin-bottom: 30px;
+    cursor: pointer;
+    position: relative;
+    padding-right: 40px; /* 给露出的光盘留空间 */
+    transition: transform 0.2s;
+}
+.cd-playlist-card:active { transform: scale(0.98); }
+
+.cd-cover-wrapper {
+    width: 140px;
+    height: 140px;
+    background: #EAEAEA;
+    border-radius: 4px;
+    box-shadow: 2px 4px 12px rgba(0,0,0,0.1);
+    position: relative;
+    z-index: 2;
+    overflow: hidden;
+    border: 1px solid #E5E5EA;
+}
+.cd-cover-text {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    color: #FFF;
+    font-family: 'Georgia', serif;
+    font-size: 14px;
+    font-weight: bold;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+    width: calc(100% - 20px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cd-disc {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    position: absolute;
+    left: 70px; /* 露出一半 */
+    z-index: 1;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,0.5);
+}
+.cd-disc::before {
+    content: '';
+    width: 20px;
+    height: 20px;
+    background: #F9F9F9;
+    border-radius: 50%;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+}
+.cd-disc::after {
+    content: '';
+    position: absolute;
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.3);
+}
+
+.cd-info {
+    margin-left: 70px; /* 避开光盘 */
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.cd-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #111;
+    margin-bottom: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.cd-count {
+    font-size: 12px;
+    color: #888;
+    font-family: monospace;
+}
+
+/* 歌单详情列表 */
+.sim-track-item {
+    display: flex;
+    align-items: center;
+    padding: 16px 0;
+    border-bottom: 1px solid #F0F0F0;
+    cursor: pointer;
+}
+.sim-track-item:active { opacity: 0.6; }
+.sim-track-index {
+    width: 30px;
+    font-size: 14px;
+    color: #999;
+    font-family: monospace;
+    text-align: center;
+}
+.sim-track-info {
+    flex: 1;
+    overflow: hidden;
+    margin-left: 10px;
+}
+.sim-track-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #111;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+.sim-track-artist {
+    font-size: 12px;
+    color: #888;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sim-track-play {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #CCC;
+}
+.sim-track-play svg { width: 20px; height: 20px; fill: currentColor; }
+
+.sim-load-more-btn {
+    width: 100%;
+    padding: 14px;
+    background: #F5F5F5;
+    color: #111;
+    border: none;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    transition: background 0.2s;
+}
+.sim-load-more-btn:active { background: #EAEAEA; }
+/* ========================================== */
+/* 查手机 Settings 五角星切换按钮 */
+/* ========================================== */
+.sim-star-toggle {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #CCC; /* 默认浅灰色 */
+    transition: all 0.3s ease;
+}
+.sim-star-toggle:active {
+    transform: scale(0.8);
+}
+.sim-star-toggle svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), fill 0.3s, color 0.3s;
+}
+/* 激活状态：变成黑色实心并旋转 */
+.sim-star-toggle.active {
+    color: #111;
+}
+.sim-star-toggle.active svg {
+    fill: #111;
+    transform: rotate(144deg);
+}
+
+/* ========================================== */
+/* 仿网易云底部迷你播放器 (黑胶旋转 + 毛玻璃) */
+/* ========================================== */
+.sim-mini-player {
+    position: absolute;
+    bottom: 20px;
+    left: 15px;
+    right: 15px;
+    height: 56px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 28px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+    display: flex;
+    align-items: center;
+    padding: 0 16px 0 8px;
+    z-index: 100;
+    border: 1px solid rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+.sim-mini-player:active {
+    transform: scale(0.98);
+}
+
+.sim-mini-record {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    animation: spinRecord 8s linear infinite;
+    animation-play-state: paused;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    position: relative;
+}
+.sim-mini-record::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #FFF;
+    border-radius: 50%;
+    border: 1px solid #CCC;
+}
+.sim-mini-record.playing {
+    animation-play-state: running;
+}
+.sim-mini-cover {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.sim-mini-info {
+    flex: 1;
+    overflow: hidden;
+}
+.sim-mini-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+.sim-mini-artist {
+    font-size: 11px;
+    color: #888;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sim-mini-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.sim-mini-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #111;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+.sim-mini-btn:active {
+    background: rgba(0,0,0,0.05);
+}
+.sim-mini-btn svg {
+    width: 22px;
+    height: 22px;
+    fill: currentColor;
+}
+
 /* ========================================== */
 /* 新增：分享确认弹窗 & 聊天分享卡片样式 (INS 黑白灰) */
 /* ========================================== */
@@ -7570,229 +8251,6 @@ input::-webkit-inner-spin-button {
 
 .twitter-stats { display: flex; gap: 20px; font-size: 14px; color: #536471; }
 .twitter-stats span { color: #0F1419; font-weight: bold; }
-
-/* ========================================== */
-/* Char 手机设置 - 最近常听歌单 UI (干净黑胶版) */
-/* ========================================== */
-.char-playlist-list {
-    width: 65%;
-    height: 100%;
-    overflow-y: auto;
-    padding: 20px 0 20px 20px;
-    z-index: 2;
-    box-sizing: border-box;
-}
-.char-playlist-list::-webkit-scrollbar {
-    display: none;
-}
-.char-playlist-item {
-    padding: 15px 10px;
-    border-bottom: 1px solid #E5E5EA;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    opacity: 0.5;
-}
-.char-playlist-item.active {
-    opacity: 1;
-    transform: translateX(10px);
-    border-bottom-color: transparent;
-}
-.char-playlist-item-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #111;
-    margin-bottom: 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.char-playlist-item.active .char-playlist-item-title {
-    color: #007AFF;
-    font-size: 17px;
-}
-.char-playlist-item-artist {
-    font-size: 12px;
-    color: #888;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.char-playlist-record-area {
-    position: absolute;
-    right: -120px; /* 溢出屏幕，只显示部分 */
-    top: 50%;
-    transform: translateY(-50%);
-    width: 260px;
-    height: 260px;
-    z-index: 1;
-}
-.char-playlist-record {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    background: #111;
-    box-shadow: 0 15px 35px rgba(0,0,0,0.15), inset 0 0 0 6px #222, inset 0 0 0 12px #111, inset 0 0 0 14px #333;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-}
-.char-playlist-record.playing {
-    animation: spinRecord 8s linear infinite;
-}
-.char-playlist-record-cover {
-    width: 140px;
-    height: 140px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid #000;
-    background-color: #333; /* 默认深灰色背景，防止没有图片时难看 */
-    opacity: 0; /* 初始透明，加载出图片后再显示 */
-    transition: opacity 0.3s ease;
-}
-.char-playlist-record-hole {
-    position: absolute;
-    width: 10px;
-    height: 10px;
-    background: #F9F9F9;
-    border-radius: 50%;
-    border: 2px solid #000;
-}
-
-@keyframes spinRecord { 100% { transform: rotate(360deg); } }
-/* ========================================== */
-/* Char 手机设置 - 星际星球播放器 (纯CSS/无Emoji) */
-/* ========================================== */
-
-/* 整体星空区域容器 */
-.char-playlist-record-area {
-    position: absolute;
-    right: -100px; /* 稍微往左移一点，露出星环 */
-    top: 50%;
-    transform: translateY(-50%);
-    width: 280px;
-    height: 280px;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* 宇宙星云背景光晕 (深蓝/紫渐变) */
-.space-glow {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(29, 78, 216, 0.15) 0%, rgba(88, 28, 135, 0.05) 50%, transparent 70%);
-    pointer-events: none;
-}
-
-/* 星球本体 (替代原本的黑胶) */
-.char-playlist-record {
-    width: 130px;
-    height: 130px;
-    border-radius: 50%;
-    background: #0f172a; /* 深邃宇宙底色 */
-    /* 模拟星球的立体光影：外发光 + 背光面暗角 + 受光面亮角 */
-    box-shadow: 
-        0 0 30px rgba(56, 189, 248, 0.3), 
-        inset -15px -15px 25px rgba(0,0,0,0.9), 
-        inset 10px 10px 20px rgba(255,255,255,0.2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    overflow: hidden;
-    z-index: 10;
-}
-
-/* 播放时星球缓慢自转 */
-.char-playlist-record.playing {
-    animation: spinPlanet 25s linear infinite; 
-}
-
-/* 专辑封面作为星球地表纹理 */
-.char-playlist-record-cover {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    object-fit: cover;
-    opacity: 0;
-    transition: opacity 0.5s ease;
-    /* 让图片颜色稍微融入星球的暗色调中 */
-    mix-blend-mode: luminosity; 
-}
-
-/* 星球大气层反光遮罩 (替代黑胶中间的洞) */
-.planet-surface-gloss {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15) 0%, transparent 60%);
-    pointer-events: none;
-}
-
-/* ================= 星环与纯CSS星光 ================= */
-.planet-orbit {
-    position: absolute;
-    border-radius: 50%;
-    pointer-events: none;
-}
-
-/* 利用伪元素绘制轨道上的发光星点 (绝对没有Emoji) */
-.planet-orbit::before, .planet-orbit::after {
-    content: '';
-    position: absolute;
-    border-radius: 50%;
-    background: #fff;
-}
-
-/* 内圈轨道：虚线 + 纯白星光 */
-.orbit-1 {
-    width: 170px; height: 170px;
-    border: 1px dashed rgba(255, 255, 255, 0.2);
-    animation: spinOrbit 15s linear infinite;
-}
-.orbit-1::before { 
-    width: 4px; height: 4px; top: 15px; left: 30px; 
-    box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.8); 
-}
-.orbit-1::after { 
-    width: 2px; height: 2px; bottom: 20px; right: 40px; 
-    background: #93c5fd; box-shadow: 0 0 6px 1px #93c5fd; 
-}
-
-/* 中圈轨道：点线 + 逆向旋转 + 浅蓝/淡黄星光 */
-.orbit-2 {
-    width: 210px; height: 210px;
-    border: 1px dotted rgba(147, 197, 253, 0.3);
-    animation: spinOrbit 25s linear infinite reverse;
-}
-.orbit-2::before { 
-    width: 3px; height: 3px; top: 50%; left: -1.5px; 
-    background: #bae6fd; box-shadow: 0 0 8px 2px #bae6fd;
-}
-.orbit-2::after { 
-    width: 5px; height: 5px; top: 25px; right: 25px; 
-    background: #fef08a; box-shadow: 0 0 10px 2px #fef08a; 
-}
-
-/* 外圈轨道：极细实线 + 远处的微弱星光 */
-.orbit-3 {
-    width: 250px; height: 250px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    animation: spinOrbit 40s linear infinite;
-}
-.orbit-3::before { 
-    width: 2px; height: 2px; bottom: 15%; left: 10%; 
-    box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.5);
-}
-
-/* 动画定义 */
-@keyframes spinPlanet { 100% { transform: rotate(360deg); } }
-@keyframes spinOrbit { 100% { transform: rotate(360deg); } }
 /* ========================================== */
 /* 语音通话系统 (高级暗黑神秘风) */
 /* ========================================== */
@@ -9743,3 +10201,208 @@ input::-webkit-inner-spin-button {
 }
 .ta-loading-overlay.active { display: flex; }
 .ta-spinner { width: 28px; height: 28px; border: 3px solid #E5E5EA; border-top: 3px solid #111; border-radius: 50%; animation: spin 1s linear infinite; }
+/* ========================================== */
+/* 新增：备忘录文件袋样式 (统一蓝色两列网格) */
+/* ========================================== */
+.folder-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px 15px;
+    padding: 10px 0;
+}
+
+.folder-item {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1.1 / 1;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.folder-item:active { transform: scale(0.95); }
+
+.folder-back {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 75%;
+    background: #5A9DF8; border-radius: 12px; z-index: 1;
+}
+
+.folder-papers {
+    position: absolute; bottom: 20%; left: 0; width: 100%; height: 80%; z-index: 2;
+}
+
+.folder-paper {
+    position: absolute; background: #FFFFFF; border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 8px; box-sizing: border-box;
+    display: flex; flex-direction: column; gap: 6px;
+}
+
+.folder-paper-line { height: 4px; background: #E5E5EA; border-radius: 2px; }
+.folder-paper-line.short { width: 60%; }
+.folder-paper-line.long { width: 90%; }
+
+.folder-paper-1 {
+    width: 65%; height: 70%; left: 10%; bottom: 10%;
+    transform: rotate(-8deg); transform-origin: bottom left;
+}
+
+.folder-paper-2 {
+    width: 60%; height: 65%; right: 5%; bottom: 5%;
+    transform: rotate(5deg); transform-origin: bottom right; z-index: 3;
+}
+
+.folder-front {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 65%;
+    background: linear-gradient(180deg, rgba(126, 190, 255, 0.9) 0%, rgba(85, 160, 250, 0.95) 100%);
+    border-radius: 0 12px 12px 12px; z-index: 4;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 10px 25px rgba(85, 160, 250, 0.3), inset 0 1px 2px rgba(255,255,255,0.3);
+}
+
+.folder-front::before {
+    content: ''; position: absolute; top: -12px; left: 0; width: 45%; height: 12px;
+    background: rgba(126, 190, 255, 0.9); border-radius: 10px 10px 0 0;
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+
+.folder-info {
+    position: absolute; bottom: 12px; left: 12px; color: #FFFFFF; z-index: 5; width: calc(100% - 24px);
+}
+.folder-title {
+    font-size: 13px; font-weight: 700; margin-bottom: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.folder-subtitle { font-size: 10px; opacity: 0.8; font-family: monospace; }
+
+.folder-decor {
+    position: absolute; bottom: 14px; right: 12px; width: 30px; height: 6px;
+    border-top: 1.5px solid rgba(255,255,255,0.25); border-bottom: 1.5px solid rgba(255,255,255,0.25); z-index: 5;
+}
+
+/* 悬浮在右上角的操作按钮 (收藏/分享) */
+.folder-actions {
+    position: absolute; top: 25px; right: 5px; z-index: 10;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.folder-action-btn {
+    width: 24px; height: 24px; background: rgba(0,0,0,0.15); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; color: #FFF;
+    backdrop-filter: blur(4px); cursor: pointer; transition: background 0.2s;
+}
+.folder-action-btn:active { background: rgba(0,0,0,0.3); }
+.folder-action-btn svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2; fill: none; }
+/* ========================================== */
+/* 新增：高级票据风钱包 UI (Receipt Wallet) - 放大波点版 */
+/* ========================================== */
+.rcpt-ui-container { 
+    display: flex; flex-direction: column; align-items: center; 
+    padding-top: 60px; height: 100%; 
+    padding-bottom: 40px; box-sizing: border-box; overflow: hidden;
+    /* 韩系 INS 风波点背景 */
+    background-color: #F4F5F9;
+    background-image: radial-gradient(#D1D1D6 1.5px, transparent 1.5px);
+    background-size: 20px 20px;
+}
+.rcpt-ui-card-top { 
+    width: 340px; height: 270px; /* 整体放大 */
+    background: #2c2c2e; border-radius: 24px; 
+    position: relative; z-index: 2; display: flex; flex-direction: column; 
+    align-items: center; justify-content: center; box-shadow: 0 20px 40px rgba(0,0,0,0.15); 
+    flex-shrink: 0;
+}
+.rcpt-ui-card-top::after { 
+    content: ''; position: absolute; bottom: 24px; left: 10%; width: 80%; height: 6px; 
+    background: #1c1c1e; border-radius: 3px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); 
+}
+.rcpt-ui-avatar-ring { 
+    width: 84px; height: 84px; /* 头像放大 */
+    border-radius: 50%; padding: 4px; 
+    background: rgba(255,255,255,0.1); margin-bottom: 16px; margin-top: -24px; 
+}
+.rcpt-ui-avatar-ring img { 
+    width: 100%; height: 100%; border-radius: 50%; object-fit: cover; 
+}
+.rcpt-ui-name { 
+    color: #ffffff; font-size: 24px; /* 字体放大 */
+    font-weight: 600; margin-bottom: 6px; letter-spacing: 0.5px; 
+}
+.rcpt-ui-subtitle { 
+    color: #8e8e93; font-size: 15px; /* 字体放大 */
+    margin-bottom: 16px; 
+}
+.rcpt-ui-status { 
+    background: rgba(52, 199, 89, 0.15); color: #34c759; font-size: 12px; 
+    font-weight: 700; padding: 6px 14px; border-radius: 6px; letter-spacing: 1px; 
+}
+/* 小票主体：固定高度，内部滚动 */
+.rcpt-ui-paper { 
+    width: 300px; /* 小票放大 */
+    background: #ffffff; border-radius: 0 0 16px 16px; 
+    margin: -35px auto 0; padding: 50px 28px 24px; position: relative; z-index: 1; 
+    box-shadow: 0 15px 35px rgba(0,0,0,0.05); box-sizing: border-box; 
+    display: flex; flex-direction: column; flex: 1; min-height: 0; margin-bottom: 30px;
+}
+.rcpt-ui-row { 
+    display: flex; justify-content: space-between; margin-bottom: 14px; 
+    font-size: 15px; color: #8e8e93; font-weight: 500; 
+}
+.rcpt-ui-row .value { color: #111111; font-weight: 600; }
+.rcpt-ui-divider { 
+    border-top: 2px dashed #e5e5ea; margin: 20px 0; position: relative; flex-shrink: 0;
+}
+.rcpt-ui-divider::before, .rcpt-ui-divider::after { 
+    content: ''; position: absolute; top: -10px; width: 18px; height: 18px; 
+    background: #F4F5F9; /* 匹配波点背景的底色 */
+    border-radius: 50%; 
+}
+.rcpt-ui-divider::before { left: -37px; }
+.rcpt-ui-divider::after { right: -37px; }
+.rcpt-ui-row.total { 
+    font-size: 18px; color: #111111; margin-bottom: 0; align-items: center; flex-shrink: 0;
+}
+.rcpt-ui-row.total .value { font-size: 24px; font-weight: 800; } /* 总计金额放大 */
+
+/* 交易记录列表样式 (内部滑动) */
+.rcpt-trans-list {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; margin-bottom: 15px;
+}
+.rcpt-trans-list::-webkit-scrollbar { display: none; }
+.rcpt-trans-item {
+    display: flex; justify-content: space-between; align-items: center;
+}
+.rcpt-trans-info {
+    display: flex; flex-direction: column; gap: 4px; flex: 1; overflow: hidden;
+}
+.rcpt-trans-title {
+    font-size: 15px; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* 字体放大 */
+}
+.rcpt-trans-time {
+    font-size: 11px; color: #b2b2b2; font-family: monospace;
+}
+.rcpt-trans-amount {
+    font-size: 16px; font-weight: 600; font-family: 'Georgia', serif; /* 字体放大 */
+}
+.rcpt-trans-amount.in { color: #34c759; }
+.rcpt-trans-amount.out { color: #111; }
+
+/* 底部三个圆形按钮交互栏 */
+.rcpt-action-bar { 
+    display: flex; gap: 24px; align-items: center; flex-shrink: 0;
+}
+.rcpt-circle-btn { 
+    width: 50px; height: 50px; /* 按钮放大 */
+    border-radius: 50%; background: #ffffff; border: none; 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05); display: flex; align-items: center; 
+    justify-content: center; cursor: pointer; color: #8e8e93; transition: transform 0.2s; 
+}
+.rcpt-circle-btn:active { transform: scale(0.95); }
+.rcpt-circle-btn.main { 
+    width: 64px; height: 64px; /* 主按钮放大 */
+    background: #2c2c2e; color: #ffffff; 
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15); 
+}
+.rcpt-circle-btn svg { 
+    width: 22px; height: 22px; /* 图标放大 */
+    stroke: currentColor; stroke-width: 2; fill: none; 
+    stroke-linecap: round; stroke-linejoin: round; 
+}
+.rcpt-circle-btn.main svg { width: 28px; height: 28px; } /* 主图标放大 */
+.rcpt-circle-btn.disabled { opacity: 0.5; cursor: not-allowed; }
