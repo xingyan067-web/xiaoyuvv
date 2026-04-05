@@ -2082,14 +2082,6 @@ function closeApiSettings() { document.getElementById('apiSettingsModal').classL
 // 👇 新增：API 日志与报错控制台逻辑 👇
 function openApiLogConsole() {
     document.getElementById('apiLogConsoleModal').classList.add('open');
-}
-
-function closeApiLogConsole() {
-    document.getElementById('apiLogConsoleModal').classList.remove('open');
-}
-
-function openApiLogConsole() {
-    document.getElementById('apiLogConsoleModal').classList.add('open');
     renderApiLogs();
     renderConsoleLogs();
 }
@@ -2452,29 +2444,7 @@ function deleteGroup(groupName) {
 
 function editWorldbookGroup(oldName) {
     if (oldName === 'Default') return alert("默认分组不可重命名");
-    const newName = prompt("重命名分组", oldName);
-    if (newName && newName.trim() !== "" && newName !== oldName) {
-        if (worldbookGroups.includes(newName)) return alert("分组名已存在");
-        const idx = worldbookGroups.indexOf(oldName);
-        if (idx !== -1) worldbookGroups[idx] = newName;
-        worldbookEntries.forEach(e => {
-            if (e.type === oldName) e.type = newName;
-        });
-        saveWorldbookData();
-        renderGroupView();
-    }
-}
-
-function deleteGroup(groupName) {
-    if (confirm(`确定要删除分组 "${groupName}" 吗？\n该分组下的所有条目也将被删除！`)) {
-        worldbookGroups = worldbookGroups.filter(g => g !== groupName);
-        worldbookEntries = worldbookEntries.filter(e => e.type !== groupName);
-        saveWorldbookData();
-        renderGroupView();
-    } else {
-        const items = document.querySelectorAll('.wb-swipe-box');
-        items.forEach(el => el.style.transform = 'translateX(0)');
-    }
+    // ...
 }
 
 function createEntryElement(entry) {
@@ -3992,7 +3962,8 @@ function updateChatTopBarStatus(char) {
     // 【修改】：增加判断，如果关闭了生活状态开关，则不显示
     const isLifeStatusEnabled = char.chatConfig && char.chatConfig.lifeStatusEnabled !== false;
     if (isLifeStatusEnabled && !char.isGroup && char.lifeStatus && char.lifeStatus.action && char.lifeStatus.action !== "未知") {
-        statusHtml = `<div style="font-size: 11px; color: #8E8E93; font-weight: normal; margin-top: 2px; line-height: 1;">${char.lifeStatus.action}</div>`;
+        // 👇 核心修改：加上 onclick 事件和 cursor: pointer，让它可以点击 👇
+        statusHtml = `<div onclick="wcQuickEditLifeStatus(${char.id}, event)" style="font-size: 11px; color: #8E8E93; font-weight: normal; margin-top: 2px; line-height: 1; cursor: pointer;">${char.lifeStatus.action}</div>`;
     }
     
     titleEl.innerHTML = `
@@ -4002,6 +3973,33 @@ function updateChatTopBarStatus(char) {
         </div>
     `;
 }
+
+// 👇 新增：点击状态栏直接修改的函数 👇
+window.wcQuickEditLifeStatus = function(charId, event) {
+    if (event) event.stopPropagation(); // 防止触发其他点击事件
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+    
+    const currentAction = (char.lifeStatus && char.lifeStatus.action) ? char.lifeStatus.action : '';
+    
+    // 🔪 核心修复：使用微信专属的高层级弹窗，防止被微信界面遮挡
+    wcOpenGeneralInput("修改生活状态 (正在做的事)", (newAction) => {
+        if (newAction !== null && newAction.trim() !== "") {
+            if (!char.lifeStatus) {
+                char.lifeStatus = { location: "未知", action: "未知", mood: "未知", timeline: [], autoRefresh: true, refreshTime: "06:00", lastRefreshTimestamp: Date.now() };
+            }
+            char.lifeStatus.action = newAction.trim();
+            wcSaveData();
+            updateChatTopBarStatus(char); // 刷新顶栏显示
+        }
+    });
+    
+    // 预填当前状态
+    setTimeout(() => {
+        const inputField = document.getElementById('wc-general-input-field');
+        if (inputField) inputField.value = currentAction;
+    }, 50);
+};
 
 // --- WeChat Chat Logic ---
 function wcOpenChat(charId) {
@@ -4301,7 +4299,31 @@ function wcRenderMessages(charId, preserveScroll = false) {
                         </div>
                     </div>
                 </div>`;
-         } else if (msg.type === 'invite') {
+         } else if (msg.type === 'avatar_invite') {
+            const pair = lsState.coupleAvatars[msg.pairIndex];
+            if (pair) {
+                const statusText = msg.status === 'accepted' ? '已更换' : (msg.status === 'rejected' ? '已拒绝' : '点击选择头像');
+                contentHtml = `
+                    <div class="wc-bubble invite" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important; display: block !important; width: fit-content !important;" onclick="lsOpenAvatarInviteModal(${charId}, '${msg.id}', ${msg.pairIndex})">
+                        ${quoteHtml}
+                        <div class="ins-invite-card-v2">
+                            <div class="ins-invite-v2-content">
+                                <div class="ins-invite-v2-header">
+                                    <div class="ins-invite-v2-tag">COUPLE AVATAR</div>
+                                    <svg class="ins-invite-v2-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                                </div>
+                                <div class="ins-invite-v2-body">
+                                    <div class="ins-invite-v2-title">更换情侣头像</div>
+                                    <div class="ins-invite-v2-subtitle">Ta 邀请你一起换上这组情头</div>
+                                </div>
+                                <div class="ins-invite-v2-footer">
+                                    <div class="ins-invite-v2-status ${msg.status}">${statusText}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+            }
+        } else if (msg.type === 'invite') {
             const statusText = msg.status === 'accepted' ? '已同意' : (msg.status === 'rejected' ? '已拒绝' : '等待回应');
             contentHtml = `
                 <!-- 👇 核心修复：加上 display: block 和 width: fit-content，绝对禁止父级拉伸！ -->
@@ -5099,6 +5121,41 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             timeContextPrompt = `-   **时间观念**: 你当前处于一个模糊的时间维度，不需要关注具体的时间流逝，也不要提及当前是几点或星期几。`;
         }
 
+        // 👇 新增：情头图库主动邀请逻辑 (按概率或关键词触发，节省Token) 👇
+        let avatarGalleryPrompt = "";
+        let galleryVisionMessage = null;
+        if (typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId && lsState.avatarInviteEnabled && lsState.coupleAvatars && lsState.coupleAvatars.length > 0) {
+            const lastUserMsg = recentMsgs[recentMsgs.length - 1] || "";
+            const triggerWords = ["头像", "情头", "换", "照片"];
+            // 15% 概率随机触发，或者用户主动提及时触发
+            const isTriggered = triggerWords.some(w => lastUserMsg.includes(w)) || Math.random() < 0.15;
+            
+            if (isTriggered) {
+                avatarGalleryPrompt = `\n【情侣头像图库 (你和User共同的图库)】\n`;
+                avatarGalleryPrompt += `图库中有 ${lsState.coupleAvatars.length} 组情侣头像。如果你觉得当前氛围很甜，或者你想主动邀请User更换情侣头像，请在JSON数组中输出指令：{"type":"avatar_invite", "pairIndex": 挑选的图库索引数字, "content":"邀请的话语"}\n`;
+                
+                const isVisionModel = /vision|gpt-4o|claude-3|gemini|pixtral|qwen-vl|llava/i.test(apiConfig.model);
+                if (isVisionModel) {
+                    let contentArr = [{ type: "text", text: "以下是我们的情侣头像图库备选：" }];
+                    // 最多传 5 组给视觉模型，防止 Token 爆炸
+                    const maxPairs = Math.min(lsState.coupleAvatars.length, 5);
+                    for (let i = 0; i < maxPairs; i++) {
+                        const pair = lsState.coupleAvatars[i];
+                        contentArr.push({ type: "text", text: `[图库索引 ${i}] 图片A (${pair.desc1}):` });
+                        contentArr.push({ type: "image_url", image_url: { url: pair.url1 } });
+                        contentArr.push({ type: "text", text: `[图库索引 ${i}] 图片B (${pair.desc2}):` });
+                        contentArr.push({ type: "image_url", image_url: { url: pair.url2 } });
+                    }
+                    galleryVisionMessage = { role: "user", content: contentArr };
+                } else {
+                    lsState.coupleAvatars.forEach((pair, idx) => {
+                        avatarGalleryPrompt += `[图库索引 ${idx}]: 图片A描述="${pair.desc1}", 图片B描述="${pair.desc2}"\n`;
+                    });
+                }
+            }
+        }
+        // 👆 新增结束 👆
+
         // --- 核心修复：正确读取并筛选已勾选的世界书 ---
         let worldBookContent = "无特定世界观设定。";
         const selectedWorldBookIds = config.worldbookEntries || [];
@@ -5318,6 +5375,12 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         
         // 👇【修改】：优化转账指令，强制 AI 根据人设自己生成台词
         systemPrompt += `12. 收款/退款(如果User给你转账，你可以根据人设和金额决定是否收下): {"type":"transfer_action", "action":"received", "content":"(这里写你决定收款时想说的话，必须符合你的人设)"} 或 {"type":"transfer_action", "action":"rejected", "content":"(这里写你决定退款时想说的话，必须符合你的人设)"}\n`;
+        if (typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId) {
+            systemPrompt += `13. 接受商城邀请并购买(当你收到User的商城邀请卡片时使用，注意检查余额是否足够): {"type":"shop_order", "items":["商品名1", "商品名2"], "content":"买完后想说的话"}\n`;
+            systemPrompt += `14. 主动玩扭蛋机(消耗微信零钱 ¥5.20，为你和User赚取心动值积分，按需使用): {"type":"play_gacha", "content":"扭蛋时的内心OS或对User说的话"}\n`;
+            systemPrompt += `15. 情绪典当(当你心情不好，或者想撒娇时，可以把坏情绪典当换取心动值积分): {"type":"pawn_emotion", "emotion":"你当前的坏情绪描述", "content":"对User说的话"}\n`;
+            systemPrompt += `【当前资产状态】：微信零钱余额 ¥${wcState.wallet.balance.toFixed(2)}，心动值(商城积分)余额 ♥${lsState.qaScore}。\n`;
+        }
         
         systemPrompt += `\n示例输出：\n[\n  {"type":"text", "content":"刚才去便利店了。"},\n  {"type":"text", "content":"买了个冰淇淋，你要吃吗？"},\n  {"type":"sticker", "content":"开心"}\n]\n`;
         systemPrompt += `</format_rules>\n\n`;
@@ -5426,7 +5489,18 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
 
         // 修复：自动识别是否为视觉模型，防止纯文本模型收到图片导致 400 错误
         const isVisionModel = /vision|gpt-4o|claude-3|gemini|pixtral|qwen-vl|llava/i.test(apiConfig.model);
+        
+        // 注入情头图库提示词
+        if (avatarGalleryPrompt) {
+            systemPrompt += avatarGalleryPrompt;
+        }
+
         const messages = [{ role: "system", content: systemPrompt }];
+        
+        // 如果是视觉模型且触发了情头邀请，把图片数组塞进去
+        if (galleryVisionMessage) {
+            messages.push(galleryVisionMessage);
+        }
         
         recentMsgs.forEach(m => {
             if (m.isError) return;
@@ -5995,8 +6069,87 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             // 3. 弹出屏幕中间的精美邀请弹窗
             musicShowCharInviteModal(charId, action.songName);      
             
-        // 👇 新增：解析 AI 主动打来的电话 👇
+        // 👇 新增：解析 AI 商城购买指令 👇
+        } else if (action.type === 'shop_order') {
+            if (action.items && Array.isArray(action.items)) {
+                let totalCost = 0;
+                let boughtItems = [];
+                
+                // 查找商品并计算总价
+                action.items.forEach(itemName => {
+                    const item = lsState.shopMenu.find(m => m.name === itemName);
+                    if (item) {
+                        totalCost += item.price !== undefined ? parseInt(item.price) : 52;
+                        boughtItems.push(item);
+                    }
+                });
 
+                if (boughtItems.length > 0) {
+                    if (lsState.qaScore >= totalCost) {
+                        // 余额充足，扣费并入库
+                        lsState.qaScore -= totalCost;
+                        if (!lsState.inventory) lsState.inventory = [];
+                        boughtItems.forEach(item => {
+                            lsState.inventory.unshift({
+                                id: Date.now() + Math.random(),
+                                name: item.name,
+                                desc: item.desc || '专属互动特权',
+                                time: Date.now()
+                            });
+                        });
+                        lsSaveData();
+                        
+                        wcAddMessage(charId, 'them', 'text', action.content || `我挑好啦，买了 ${action.items.join('、')}！`, extra);
+                        wcAddMessage(charId, 'system', 'system', `[系统提示: Ta 消耗了 ♥${totalCost} 购买了 ${action.items.join('、')}，物品已存入特权背包]`, { style: 'transparent' });
+                    } else {
+                        // 余额不足
+                        wcAddMessage(charId, 'them', 'text', action.content || `呜呜，心动值不够买 ${action.items.join('、')}...`, extra);
+                        wcAddMessage(charId, 'system', 'system', `[系统提示: Ta 尝试购买商品，但心动值余额不足 (需要 ♥${totalCost}，当前 ♥${lsState.qaScore})]`, { style: 'transparent' });
+                    }
+                } else {
+                    wcAddMessage(charId, 'them', 'text', action.content || "我看了看，好像没有特别想买的~", extra);
+                }
+            }
+
+        // 👇 新增：解析 AI 主动扭蛋指令 👇
+        } else if (action.type === 'play_gacha') {
+            const cost = 5.20;
+            if (wcState.wallet.balance >= cost) {
+                wcState.wallet.balance -= cost;
+                wcState.wallet.transactions.push({
+                    id: Date.now(), type: 'payment', amount: cost, note: `${char.name} 玩扭蛋机`, time: Date.now()
+                });
+                
+                const wonScore = Math.floor(Math.random() * 41) + 10;
+                lsState.qaScore += wonScore;
+                lsSaveData();
+                wcSaveData();
+
+                wcAddMessage(charId, 'them', 'text', action.content || "我去玩扭蛋机啦！", extra);
+                wcAddMessage(charId, 'system', 'system', `[系统提示: Ta 消耗了微信零钱 ¥5.20 玩了一次扭蛋机，为你们赢得了 ♥${wonScore} 心动值！]`, { style: 'transparent' });
+            } else {
+                wcAddMessage(charId, 'them', 'text', action.content || "想玩扭蛋机，但是零钱不够了...", extra);
+            }
+
+        // 👇 新增：解析 AI 情绪典当指令 👇
+        } else if (action.type === 'pawn_emotion') {
+            const wonScore = Math.floor(Math.random() * 31) + 20; // 20-50 积分
+            lsState.qaScore += wonScore;
+            lsSaveData();
+
+            wcAddMessage(charId, 'them', 'text', action.content || "今天心情不太好，把坏情绪当掉啦！", extra);
+            
+            const receiptHtml = `
+                <div class="chat-shared-card" style="border-color: #111; background: #FAFAFA;">
+                    <div class="shared-card-tag" style="color: #111;">EMOTION RECEIPT</div>
+                    <div class="shared-card-title">情绪典当收据</div>
+                    <div class="shared-card-content" style="font-size: 12px; font-style: italic;">典当物：${action.emotion || '坏情绪'}</div>
+                    <div class="shared-card-footer" style="color: #FF3B30; font-weight: bold; font-size: 14px;">收购价: +♥${wonScore}</div>
+                </div>
+            `;
+            wcAddMessage(charId, 'them', 'receipt', receiptHtml);
+
+        // 👇 新增：解析 AI 主动打来的电话 👇
         } else if (action.type === 'call_invite') {
             wcShowIncomingCall(charId);
             wcAddMessage(charId, 'system', 'system', `[系统内部信息: 你主动向 User 发起了语音通话请求，等待对方接听...]`, { hidden: true });
@@ -6059,6 +6212,23 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 deliveryText: 'ETA: 30 MINS',
                 receiptData: receiptData
             });
+        // 👆 新增结束 👆
+
+        // 👇 新增：解析 AI 主动发送情头邀请 👇
+        } else if (action.type === 'avatar_invite') {
+            const pairIdx = parseInt(action.pairIndex);
+            if (!isNaN(pairIdx) && lsState.coupleAvatars && lsState.coupleAvatars[pairIdx]) {
+                // 1. 发送 AI 的邀请话语
+                if (action.content) {
+                    wcAddMessage(charId, 'them', 'text', action.content, extra);
+                }
+                // 2. 发送邀请卡片
+                wcAddMessage(charId, 'them', 'avatar_invite', '邀请更换情头', {
+                    ...extra,
+                    pairIndex: pairIdx,
+                    status: 'pending'
+                });
+            }
         // 👆 新增结束 👆
 
         // 👇 新增：解析 AI 保存图片到相册 👇
@@ -9082,6 +9252,12 @@ function wcOpenPhoneSim() {
         screenBg.style.backgroundImage = 'none';
     }
     
+    // 👇 新增：设置底部导航栏中间的头像
+    const centerAvatar = document.getElementById('sim-wechat-center-avatar');
+    if (centerAvatar) {
+        centerAvatar.src = char.avatar;
+    }
+    
     const noteBg = document.getElementById('wc-sticky-note-bg');
     if (char.phoneConfig && char.phoneConfig.stickyNote) {
         noteBg.style.backgroundImage = `url(${char.phoneConfig.stickyNote})`;
@@ -9257,27 +9433,26 @@ function wcClosePhoneSim() {
 function wcSwitchPhoneTab(tab) {
     wcState.phoneAppTab = tab;
     
-    document.querySelectorAll('.wc-phone-tab-item').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.sim-wechat-nav-item, .sim-wechat-nav-center').forEach(t => t.classList.remove('active'));
     document.getElementById(`wc-phone-tab-${tab}`).classList.add('active');
 
-    const headerLeft = document.getElementById('wc-phone-header-left');
-    const headerTitle = document.getElementById('wc-phone-header-title');
+    const rightBtn = document.getElementById('sim-wechat-header-right-btn');
+    const searchBar = document.getElementById('sim-wechat-search-bar');
     const content = document.getElementById('wc-phone-app-content');
     
     content.innerHTML = '';
 
     if (tab === 'chat') {
-        headerTitle.innerText = '微信';
-        headerLeft.innerHTML = `<div onclick="wcConfirmGenerateChats()" style="cursor: pointer; display: flex; align-items: center;"><svg class="wc-icon" style="width: 20px; height: 20px;" viewBox="0 0 24 24"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></div>`;
+        searchBar.style.display = 'flex';
+        rightBtn.innerHTML = `<div class="sim-wechat-header-icon" onclick="wcConfirmGenerateChats()"></div>`;
         wcRenderPhoneChats();
     } else if (tab === 'contacts') {
-        headerTitle.innerText = '通讯录';
-        headerLeft.innerHTML = `<div onclick="wcOpenPhoneContactsGenModal()" style="cursor: pointer; display: flex; align-items: center;"><svg class="wc-icon" style="width: 22px; height: 22px;" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg></div>`;
+        searchBar.style.display = 'flex';
+        rightBtn.innerHTML = `<div class="sim-wechat-header-icon" onclick="wcOpenPhoneContactsGenModal()"></div>`;
         wcRenderPhoneContacts();
     } else if (tab === 'me') {
-        headerTitle.innerText = '我';
-        // 核心修改：在左上角增加一键破解按钮
-        headerLeft.innerHTML = `<div onclick="wcGeneratePrivacyAndFavorites()" style="cursor: pointer; display: flex; align-items: center; font-size: 14px; color: #007AFF;"><svg class="wc-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px; margin-right: 4px;"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.85L2 9"></path></svg>一键破解</div>`;
+        searchBar.style.display = 'none'; // 个人主页隐藏搜索栏
+        rightBtn.innerHTML = `<div class="sim-wechat-header-icon" onclick="wcGeneratePrivacyAndFavorites()"></div>`;
         wcRenderPhoneMe();
     }
 }
@@ -10407,54 +10582,68 @@ function wcRenderPhoneChats() {
     contentDiv.innerHTML = '';
 
     if (!char || !char.phoneData || !char.phoneData.chats || char.phoneData.chats.length === 0) {
-        contentDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #999; font-size: 13px;">点击左上角刷新按钮<br>生成 AI 视角的聊天列表</div>';
+        contentDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #999; font-size: 13px;">点击右上角刷新按钮<br>生成 AI 视角的聊天列表</div>';
         return;
     }
 
+    // 创建一个白色大圆角卡片包裹所有会话
+    const wrapper = document.createElement('div');
+    wrapper.style.background = '#fff';
+    wrapper.style.borderRadius = '28px';
+    wrapper.style.padding = '10px 20px';
+    wrapper.style.boxShadow = '0 4px 20px rgba(0,0,0,0.03)';
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+
     char.phoneData.chats.forEach(chat => {
         const div = document.createElement('div');
-        div.className = 'wc-list-item';
-        div.style.background = 'white';
-        div.style.borderBottom = '0.5px solid #E5E5EA';
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.padding = '14px 0';
+        div.style.cursor = 'pointer';
         
         let imgHtml = '';
         if (chat.isUser) {
             const userAvatar = (char.chatConfig && char.chatConfig.userAvatar) ? char.chatConfig.userAvatar : wcState.user.avatar;
-            imgHtml = `<img src="${userAvatar}" class="wc-avatar" style="width:40px;height:40px;border-radius:4px;">`;
+            imgHtml = `<img src="${userAvatar}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;display:block;">`;
         } else {
             let avatarUrl = chat.avatar;
             if (!avatarUrl) {
                 const contact = char.phoneData.contacts ? char.phoneData.contacts.find(c => c.name === chat.name) : null;
-                // 👇 新增：直接去真实角色库里找，防止通讯录里没这个人但聊天列表里有 👇
                 const realChar = wcState.characters.find(c => c.name === chat.name && !c.isGroup);
                 
                 if (contact && contact.avatar) {
                     avatarUrl = contact.avatar;
                 } else if (realChar) {
-                    avatarUrl = realChar.avatar; // 强制使用真实头像
+                    avatarUrl = realChar.avatar; 
                 } else {
                     avatarUrl = getRandomNpcAvatar();
                 }
                 chat.avatar = avatarUrl;
                 wcSaveData();
             }
-            imgHtml = `<img src="${avatarUrl}" class="wc-avatar" style="width:40px;height:40px;border-radius:4px;">`;
+            imgHtml = `<img src="${avatarUrl}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;display:block;">`;
         }
 
         div.innerHTML = `
-            ${imgHtml}
-            <div class="wc-item-content" style="margin-left:10px;">
-                <div style="display:flex;justify-content:space-between;">
-                    <div class="wc-item-title" style="font-size:15px;font-weight:500;">${chat.name}</div>
-                    <div style="font-size:11px;color:#B2B2B2;">${chat.time}</div>
+            <div style="position: relative; margin-right: 16px; flex-shrink: 0;">
+                ${imgHtml}
+                <div style="position: absolute; top: -2px; right: -4px; background: #fff; border-radius: 10px; padding: 2px 5px; font-size: 10px; color: #333; border: 1px solid #f0f0f0; line-height: 1; box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-family: monospace;">★</div>
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden;">
+                <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom: 4px;">
+                    <div style="font-size:16px; font-weight:bold; color:#111; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${chat.name}</div>
+                    <div style="font-size:12px; color:#ccc; flex-shrink:0; margin-left:10px;">${chat.time}</div>
                 </div>
-                <div class="wc-item-subtitle" style="font-size:13px;color:#8E8E93;">${chat.lastMsg}</div>
+                <div style="font-size:13px; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${chat.lastMsg}</div>
             </div>
         `;
         
         div.onclick = () => wcOpenSimChatDetailSaved(chat);
-        contentDiv.appendChild(div);
+        wrapper.appendChild(div);
     });
+    
+    contentDiv.appendChild(wrapper);
 }
 
 function wcOpenSimChatDetailSaved(chatItem) {
@@ -11109,32 +11298,33 @@ function wcRenderPhoneContacts() {
     contentDiv.innerHTML = '';
 
     if (!char || !char.phoneData) {
-        contentDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #999; font-size: 13px;">点击左上角 + 号<br>生成通讯录</div>';
+        contentDiv.innerHTML = '<div style="padding: 20px; text-align: center; color: #999; font-size: 13px;">点击右上角刷新按钮<br>生成通讯录</div>';
         return;
     }
 
     if (char.phoneData.friendRequests && char.phoneData.friendRequests.length > 0) {
         const header = document.createElement('div');
-        header.className = 'wc-list-group-title';
-        header.innerText = '新的朋友';
+        header.className = 'sim-wechat-contacts-divider';
+        header.innerText = 'NEW FRIENDS';
         contentDiv.appendChild(header);
 
         char.phoneData.friendRequests.forEach(req => {
             const div = document.createElement('div');
             div.className = 'wc-list-item';
             div.style.background = 'white';
+            div.style.borderBottom = 'none';
             
             const color = '#' + ((req.name.length * 99999) % 16777215).toString(16).padStart(6, '0');
             
             div.innerHTML = `
-                <div style="width:36px;height:36px;border-radius:4px;background:${color};display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;">${req.name[0]}</div>
-                <div class="wc-item-content" style="margin-left:10px;">
-                    <div class="wc-item-title">${req.name}</div>
-                    <div class="wc-item-subtitle" style="font-size:12px;">${req.desc}</div>
+                <div style="width:48px;height:48px;border-radius:14px;background:${color};display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;margin-right:12px;flex-shrink:0;font-size:18px;">${req.name[0]}</div>
+                <div class="wc-item-content">
+                    <div class="wc-item-title" style="font-size:16px;font-weight:bold;color:#111;">${req.name}</div>
+                    <div class="wc-item-subtitle" style="font-size:13px;color:#888;">${req.desc}</div>
                 </div>
-                <div style="display:flex; gap:5px;">
-                    <button class="wc-btn-mini" style="background:#07C160; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:12px;" onclick="wcHandleFriendRequest('${req.id}', 'accept')">接受</button>
-                    <button class="wc-btn-mini" style="background:#FA5151; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:12px;" onclick="wcHandleFriendRequest('${req.id}', 'reject')">拒绝</button>
+                <div style="display:flex; gap:6px; flex-shrink:0;">
+                    <button style="background:#111; color:white; border:none; padding:6px 12px; border-radius:12px; font-size:12px; font-weight:bold; cursor:pointer;" onclick="wcHandleFriendRequest('${req.id}', 'accept')">接受</button>
+                    <button style="background:#F5F5F5; color:#888; border:none; padding:6px 12px; border-radius:12px; font-size:12px; font-weight:bold; cursor:pointer;" onclick="wcHandleFriendRequest('${req.id}', 'reject')">拒绝</button>
                 </div>
             `;
             contentDiv.appendChild(div);
@@ -11142,8 +11332,8 @@ function wcRenderPhoneContacts() {
     }
 
     const header2 = document.createElement('div');
-    header2.className = 'wc-list-group-title';
-    header2.innerText = '联系人';
+    header2.className = 'sim-wechat-contacts-divider';
+    header2.innerText = 'CONTACTS';
     contentDiv.appendChild(header2);
 
     const contacts = char.phoneData.contacts || [];
@@ -11151,12 +11341,13 @@ function wcRenderPhoneContacts() {
         const div = document.createElement('div');
         div.className = 'wc-list-item';
         div.style.background = 'white';
-        div.style.borderBottom = '0.5px solid #E5E5EA';
+        div.style.borderBottom = 'none';
+        div.style.cursor = 'pointer';
         
         let imgHtml = '';
         if (contact.isUser) {
             const userAvatar = (char.chatConfig && char.chatConfig.userAvatar) ? char.chatConfig.userAvatar : wcState.user.avatar;
-            imgHtml = `<img src="${userAvatar}" class="wc-avatar" style="width:36px;height:36px;border-radius:4px;">`;
+            imgHtml = `<img src="${userAvatar}" class="wc-avatar" style="width:48px;height:48px;border-radius:14px;margin-right:12px;object-fit:cover;flex-shrink:0;">`;
         } else {
             let avatarUrl = contact.avatar;
             if (!avatarUrl) {
@@ -11164,14 +11355,14 @@ function wcRenderPhoneContacts() {
                 contact.avatar = avatarUrl; 
                 wcSaveData();
             }
-            imgHtml = `<img src="${avatarUrl}" class="wc-avatar" style="width:36px;height:36px;border-radius:4px;">`;
+            imgHtml = `<img src="${avatarUrl}" class="wc-avatar" style="width:48px;height:48px;border-radius:14px;margin-right:12px;object-fit:cover;flex-shrink:0;">`;
         }
         
         div.innerHTML = `
             ${imgHtml}
-            <div class="wc-item-content" style="margin-left:10px;">
-                <div class="wc-item-title">${contact.name}</div>
-                <div class="wc-item-subtitle" style="font-size:12px; color:#999;">${contact.type === 'group' ? '[群聊]' : ''} ${contact.desc}</div>
+            <div class="wc-item-content">
+                <div class="wc-item-title" style="font-size:16px;font-weight:bold;color:#111;">${contact.name}</div>
+                <div class="wc-item-subtitle" style="font-size:13px;color:#888;">${contact.type === 'group' ? '[群聊]' : ''} ${contact.desc}</div>
             </div>
         `;
         div.onclick = () => wcShowPhoneContactDetail(contact);
@@ -12195,6 +12386,14 @@ function wcHandleTouchEndSwipe(evt) { wcXDown = null; wcYDown = null; }
 const lsState = {
     timeAlbum: [], // 新增：时光相册日记数据
     decorImages: [], // 新增：桌面装修图库
+    shopCategories: [], // 商城分类
+    shopMenu: [], // 商城菜品列表
+    shopCart: [], // 购物车
+    shopOrders: [], // 历史订单
+    inventory: [], // 新增：特权背包
+    activeShopCategoryId: null, // 当前选中的分类
+    isShopEditMode: false, // 是否处于修改模式
+    editingShopItemId: null, // 当前正在编辑的菜品ID
     boundCharId: null, 
     pendingCharId: null, 
     startDate: null, 
@@ -12228,7 +12427,9 @@ const lsState = {
         img1: 'https://i.postimg.cc/7YgYdR84/Image-1770474411684-498.jpg',
         img2: 'https://i.postimg.cc/GhkhVfwd/Image-1770474415295-455.jpg',
         text: '休戀逝水 早悟蘭因'
-    }
+    },
+    coupleAvatars: [], // 情头图库数据
+    avatarInviteEnabled: true // 允许AI主动邀请更换情头
 };
 
 // --- Lovers Space Core Functions ---
@@ -12253,10 +12454,18 @@ async function lsLoadData() {
         lsState.qaCurrentSession = data.qaCurrentSession || null;
         lsState.qaHistory = data.qaHistory || [];
         lsState.letters = data.letters || [];
-        // 👇 新增这一行
         if (data.lettersConfig) lsState.lettersConfig = data.lettersConfig;
         if (data.timeAlbum) lsState.timeAlbum = data.timeAlbum;
         if (data.decorImages) lsState.decorImages = data.decorImages;
+        if (data.coupleAvatars) lsState.coupleAvatars = data.coupleAvatars;
+        if (data.avatarInviteEnabled !== undefined) lsState.avatarInviteEnabled = data.avatarInviteEnabled;
+        if (data.inventory) lsState.inventory = data.inventory;
+        
+        // 👇 新增：读取商城数据 👇
+        if (data.shopCategories) lsState.shopCategories = data.shopCategories;
+        if (data.shopMenu) lsState.shopMenu = data.shopMenu;
+        if (data.shopCart) lsState.shopCart = data.shopCart;
+        if (data.shopOrders) lsState.shopOrders = data.shopOrders;
     }
 }
 
@@ -12278,12 +12487,20 @@ async function lsSaveData() {
         qaCurrentSession: lsState.qaCurrentSession,
         qaHistory: lsState.qaHistory,
         letters: lsState.letters,
-        // 👇 新增这一行
         lettersConfig: lsState.lettersConfig,
         timeAlbum: lsState.timeAlbum,
-        decorImages: lsState.decorImages
+        decorImages: lsState.decorImages,
+        inventory: lsState.inventory,
+        coupleAvatars: lsState.coupleAvatars,
+        avatarInviteEnabled: lsState.avatarInviteEnabled,
+        // 👇 新增：保存商城数据 👇
+        shopCategories: lsState.shopCategories,
+        shopMenu: lsState.shopMenu,
+        shopCart: lsState.shopCart,
+        shopOrders: lsState.shopOrders
     });
 }
+
 
 function openLoversSpace() {
     document.getElementById('loversSpaceModal').classList.add('open');
@@ -15305,21 +15522,14 @@ function wcRenderCart() {
             <div class="cart-item">
                 <div class="cart-item-info">
                     <div class="cart-item-title">${item.name}</div>
-                    <div class="cart-item-price">¥${parseFloat(item.price).toFixed(2)}</div>
+                    <div style="color:#FF3B30; font-size:14px; font-weight:bold; margin-top:4px;">♥ ${item.price}</div>
                 </div>
                 <div class="cart-item-remove" onclick="wcRemoveFromCart(${idx})">×</div>
             </div>
         `;
     });
     container.innerHTML = html;
-    document.getElementById('shop-cart-total').innerText = `¥${total.toFixed(2)}`;
-}
-
-function wcRemoveFromCart(idx) {
-    wcState.shopData.cart.splice(idx, 1);
-    wcSaveData();
-    wcUpdateCartBadge();
-    wcRenderCart();
+    document.getElementById('shop-cart-total').innerText = `♥ ${total}`;
 }
 
 // --- 找到 wcCheckoutCart 函数，替换为以下内容 ---
@@ -19247,19 +19457,6 @@ function closeDreamHtmlPreview() {
     document.getElementById('dream-html-preview-modal').classList.remove('active');
 }
 
-// 预览 HTML 状态栏
-function previewDreamHtml(id) {
-    const item = dreamState.ext.html.find(h => h.id === id);
-    if (item) {
-        document.getElementById('dream-html-preview-inner').innerHTML = item.content;
-        document.getElementById('dream-html-preview-modal').classList.add('active');
-    }
-}
-
-function closeDreamHtmlPreview() {
-    document.getElementById('dream-html-preview-modal').classList.remove('active');
-}
-
 // 启用/取消启用
 function toggleDreamExtActive(id) {
     const tab = dreamState.ext.currentTab;
@@ -21888,6 +22085,7 @@ function lsSwitchAlbumTab(tabId) {
 
     if (tabId === 'diary') lsRenderTimeDiary();
     if (tabId === 'decor') lsRenderDecorPreview();
+    if (tabId === 'gallery') lsRenderAvatarGallery();
 }
 
 // --- 时光纪要 (日记) ---
@@ -22034,6 +22232,354 @@ async function lsTriggerDiaryAIComment(entryId) {
         lsSaveData();
         lsRenderTimeDiary();
     }
+}
+// ==========================================
+// 恋人空间：情头图库 (Couple Avatar Gallery) 逻辑
+// ==========================================
+
+let isAvatarEditMode = false;
+let currentEditingDescBox = null;
+
+function lsToggleAvatarInvite(checkbox) {
+    lsState.avatarInviteEnabled = checkbox.checked;
+    lsSaveData();
+}
+
+function lsRenderAvatarGallery() {
+    const toggle = document.getElementById('ls-toggle-avatar-invite');
+    if (toggle) toggle.checked = lsState.avatarInviteEnabled !== false;
+
+    const grid = document.getElementById('ls-avatar-gallery-grid');
+    grid.innerHTML = '';
+
+    if (!lsState.coupleAvatars || lsState.coupleAvatars.length === 0) {
+        grid.innerHTML = '<div style="grid-column: span 2; text-align: center; color: #999; padding: 40px 0; font-size: 13px; font-style: italic;">图库空空如也，快去上传情头吧~</div>';
+        return;
+    }
+
+    lsState.coupleAvatars.forEach((pair, idx) => {
+        const group = document.createElement('div');
+        group.className = `ls-gallery-group ${isAvatarEditMode ? 'edit-mode' : ''}`;
+        group.dataset.index = idx;
+        
+        group.innerHTML = `
+            <input type="checkbox" class="ls-gallery-checkbox" value="${idx}">
+            <div class="ls-gallery-img-box" draggable="true" data-pos="1">
+                <img src="${pair.url1}">
+                <div class="ls-gallery-img-desc">${pair.desc1}</div>
+            </div>
+            <div class="ls-gallery-img-box" draggable="true" data-pos="2">
+                <img src="${pair.url2}">
+                <div class="ls-gallery-img-desc">${pair.desc2}</div>
+            </div>
+        `;
+        
+        lsBindAvatarBoxEvents(group, idx);
+        grid.appendChild(group);
+    });
+}
+
+function lsToggleAvatarEditMode() {
+    isAvatarEditMode = !isAvatarEditMode;
+    const editBtn = document.getElementById('ls-avatar-edit-btn');
+    const deleteBtn = document.getElementById('ls-avatar-delete-btn');
+    
+    if (isAvatarEditMode) {
+        editBtn.innerText = '完成';
+        deleteBtn.style.display = 'block';
+    } else {
+        editBtn.innerText = '编辑图库';
+        deleteBtn.style.display = 'none';
+    }
+    lsRenderAvatarGallery();
+}
+
+function lsDeleteSelectedAvatars() {
+    const checkboxes = document.querySelectorAll('.ls-gallery-checkbox:checked');
+    if (checkboxes.length === 0) return alert("请先选择要删除的情头组");
+    
+    if (confirm(`确定要删除选中的 ${checkboxes.length} 组情头吗？`)) {
+        const indicesToDelete = Array.from(checkboxes).map(cb => parseInt(cb.value)).sort((a, b) => b - a);
+        indicesToDelete.forEach(idx => { lsState.coupleAvatars.splice(idx, 1); });
+        lsSaveData();
+        lsToggleAvatarEditMode(); 
+    }
+}
+
+// URL 批量导入
+function lsOpenAvatarUrlModal() {
+    document.getElementById('ls-avatar-url-textarea').value = '';
+    wcOpenModal('ls-modal-avatar-url');
+}
+
+function lsCloseAvatarUrlModal() {
+    wcCloseModal('ls-modal-avatar-url');
+}
+
+function lsSubmitAvatarUrlUpload() {
+    const text = document.getElementById('ls-avatar-url-textarea').value.trim();
+    if (!text) return alert("请输入图片 URL！");
+    
+    const urls = text.split('\n').map(u => u.trim()).filter(u => u);
+    if (urls.length < 2) return alert("请至少输入 2 个 URL 才能组成一对情头哦！");
+
+    if (!lsState.coupleAvatars) lsState.coupleAvatars = [];
+
+    for (let i = 0; i < urls.length - 1; i += 2) {
+        lsState.coupleAvatars.push({
+            url1: urls[i], desc1: "点击修改描述",
+            url2: urls[i+1], desc2: "点击修改描述"
+        });
+    }
+
+    if (urls.length % 2 !== 0) {
+        alert(`检测到输入了奇数个 URL，最后一个 URL 已被忽略，请凑齐一对后重新添加。`);
+    }
+
+    lsSaveData();
+    lsRenderAvatarGallery();
+    lsCloseAvatarUrlModal();
+}
+
+// 本地多选上传
+async function lsHandleAvatarLocalUpload(event) {
+    const files = Array.from(event.target.files);
+    if (files.length < 2) return alert("请至少选择 2 张图片作为情头！");
+    
+    wcShowLoading("正在处理图片...");
+    if (!lsState.coupleAvatars) lsState.coupleAvatars = [];
+
+    try {
+        for (let i = 0; i < files.length - 1; i += 2) {
+            const base64_1 = await wcCompressImage(files[i]);
+            const base64_2 = await wcCompressImage(files[i+1]);
+            lsState.coupleAvatars.push({
+                url1: base64_1, desc1: "点击修改描述",
+                url2: base64_2, desc2: "点击修改描述"
+            });
+        }
+        
+        if (files.length % 2 !== 0) {
+            alert(`检测到选择了奇数张图片，最后一张已被忽略，请凑齐一对后重新添加。`);
+        }
+        
+        lsSaveData();
+        lsRenderAvatarGallery();
+    } catch (e) {
+        console.error(e);
+        alert("图片处理失败");
+    } finally {
+        wcShowSuccess("上传成功");
+        event.target.value = '';
+    }
+}
+
+// 修改描述
+function lsOpenAvatarDescModal(descBox, pairIdx, pos) {
+    currentEditingDescBox = { pairIdx, pos };
+    const currentText = descBox.innerText;
+    document.getElementById('ls-avatar-desc-input').value = currentText === '点击修改描述' ? '' : currentText;
+    wcOpenModal('ls-modal-avatar-desc');
+    setTimeout(() => document.getElementById('ls-avatar-desc-input').focus(), 100);
+}
+
+function lsCloseAvatarDescModal() {
+    wcCloseModal('ls-modal-avatar-desc');
+    currentEditingDescBox = null;
+}
+
+function lsSubmitAvatarDesc() {
+    if (currentEditingDescBox) {
+        const val = document.getElementById('ls-avatar-desc-input').value.trim() || '点击修改描述';
+        const pair = lsState.coupleAvatars[currentEditingDescBox.pairIdx];
+        if (currentEditingDescBox.pos === '1') pair.desc1 = val;
+        else pair.desc2 = val;
+        
+        lsSaveData();
+        lsRenderAvatarGallery();
+    }
+    lsCloseAvatarDescModal();
+}
+
+// 拖拽交换逻辑
+let lsDraggedAvatarBox = null;
+
+function lsBindAvatarBoxEvents(group, pairIdx) {
+    const boxes = group.querySelectorAll('.ls-gallery-img-box');
+    boxes.forEach(box => {
+        // 点击修改描述
+        box.addEventListener('click', function() {
+            if (!isAvatarEditMode) {
+                lsOpenAvatarDescModal(this.querySelector('.ls-gallery-img-desc'), pairIdx, this.dataset.pos);
+            }
+        });
+
+        // 拖拽
+        box.addEventListener('dragstart', function(e) {
+            if (!isAvatarEditMode) { e.preventDefault(); return; }
+            lsDraggedAvatarBox = { el: this, pairIdx: pairIdx, pos: this.dataset.pos };
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => this.style.opacity = '0.5', 0);
+        });
+
+        box.addEventListener('dragover', function(e) {
+            if (!isAvatarEditMode) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        });
+
+        box.addEventListener('drop', function(e) {
+            if (!isAvatarEditMode) return;
+            e.preventDefault();
+            if (lsDraggedAvatarBox && lsDraggedAvatarBox.el !== this) {
+                const targetPairIdx = pairIdx;
+                const targetPos = this.dataset.pos;
+                
+                const sourcePair = lsState.coupleAvatars[lsDraggedAvatarBox.pairIdx];
+                const targetPair = lsState.coupleAvatars[targetPairIdx];
+                
+                // 交换数据
+                const tempUrl = sourcePair[`url${lsDraggedAvatarBox.pos}`];
+                const tempDesc = sourcePair[`desc${lsDraggedAvatarBox.pos}`];
+                
+                sourcePair[`url${lsDraggedAvatarBox.pos}`] = targetPair[`url${targetPos}`];
+                sourcePair[`desc${lsDraggedAvatarBox.pos}`] = targetPair[`desc${targetPos}`];
+                
+                targetPair[`url${targetPos}`] = tempUrl;
+                targetPair[`desc${targetPos}`] = tempDesc;
+                
+                lsSaveData();
+                lsRenderAvatarGallery();
+            }
+        });
+
+        box.addEventListener('dragend', function() {
+            if (!isAvatarEditMode) return;
+            this.style.opacity = '1';
+            lsDraggedAvatarBox = null;
+        });
+    });
+}
+
+// ==========================================
+// 聊天界面：情头邀请弹窗逻辑
+// ==========================================
+let pendingAvatarInviteData = null;
+
+function lsOpenAvatarInviteModal(charId, msgId, pairIndex) {
+    const msgs = wcState.chats[charId];
+    const msg = msgs.find(m => m.id.toString() === msgId.toString());
+    if (!msg || msg.status !== 'pending') return; // 只有 pending 状态才能点开
+
+    const pair = lsState.coupleAvatars[pairIndex];
+    if (!pair) return alert("该情头组已被删除，无法查看");
+
+    pendingAvatarInviteData = { charId, msgId, pairIndex, selectedPos: null };
+
+    document.getElementById('avatar-invite-img-1').src = pair.url1;
+    document.getElementById('avatar-invite-img-2').src = pair.url2;
+    
+    // 重置状态
+    document.getElementById('avatar-select-1').style.opacity = '1';
+    document.getElementById('avatar-select-2').style.opacity = '1';
+    document.getElementById('avatar-invite-img-1').style.borderColor = 'transparent';
+    document.getElementById('avatar-invite-img-2').style.borderColor = 'transparent';
+    document.getElementById('avatar-invite-label-1').innerText = '未选择';
+    document.getElementById('avatar-invite-label-1').style.color = '#888';
+    document.getElementById('avatar-invite-label-2').innerText = '未选择';
+    document.getElementById('avatar-invite-label-2').style.color = '#888';
+    
+    document.getElementById('avatar-invite-confirm-btn').style.opacity = '0.5';
+    document.getElementById('avatar-invite-confirm-btn').style.pointerEvents = 'none';
+
+    wcOpenModal('ls-modal-avatar-invite');
+}
+
+function lsSelectAvatarRole(pos) {
+    if (!pendingAvatarInviteData) return;
+    pendingAvatarInviteData.selectedPos = pos;
+
+    const char = wcState.characters.find(c => c.id === pendingAvatarInviteData.charId);
+    const charName = char ? char.name : "Ta";
+
+    if (pos === 1) {
+        document.getElementById('avatar-invite-img-1').style.borderColor = '#111';
+        document.getElementById('avatar-invite-label-1').innerText = '我使用 (User)';
+        document.getElementById('avatar-invite-label-1').style.color = '#111';
+        
+        document.getElementById('avatar-invite-img-2').style.borderColor = '#CCC';
+        document.getElementById('avatar-invite-label-2').innerText = `${charName} 使用`;
+        document.getElementById('avatar-invite-label-2').style.color = '#CCC';
+    } else {
+        document.getElementById('avatar-invite-img-2').style.borderColor = '#111';
+        document.getElementById('avatar-invite-label-2').innerText = '我使用 (User)';
+        document.getElementById('avatar-invite-label-2').style.color = '#111';
+        
+        document.getElementById('avatar-invite-img-1').style.borderColor = '#CCC';
+        document.getElementById('avatar-invite-label-1').innerText = `${charName} 使用`;
+        document.getElementById('avatar-invite-label-1').style.color = '#CCC';
+    }
+
+    document.getElementById('avatar-invite-confirm-btn').style.opacity = '1';
+    document.getElementById('avatar-invite-confirm-btn').style.pointerEvents = 'auto';
+}
+
+function lsRejectAvatarInvite() {
+    if (!pendingAvatarInviteData) return;
+    const { charId, msgId } = pendingAvatarInviteData;
+    
+    const msgs = wcState.chats[charId];
+    const msg = msgs.find(m => m.id.toString() === msgId.toString());
+    if (msg) msg.status = 'rejected';
+    
+    wcSaveData();
+    wcRenderMessages(charId);
+    
+    wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): User 拒绝了你的情头更换邀请。]`, { hidden: true });
+    
+    wcCloseModal('ls-modal-avatar-invite');
+    pendingAvatarInviteData = null;
+}
+
+async function lsConfirmAvatarInvite() {
+    if (!pendingAvatarInviteData || !pendingAvatarInviteData.selectedPos) return;
+    
+    const { charId, msgId, pairIndex, selectedPos } = pendingAvatarInviteData;
+    const pair = lsState.coupleAvatars[pairIndex];
+    const char = wcState.characters.find(c => c.id === charId);
+    
+    if (!pair || !char) return;
+
+    // 分配头像
+    if (selectedPos === 1) {
+        wcState.user.avatar = pair.url1;
+        char.avatar = pair.url2;
+    } else {
+        wcState.user.avatar = pair.url2;
+        char.avatar = pair.url1;
+    }
+
+    // 更新消息状态
+    const msgs = wcState.chats[charId];
+    const msg = msgs.find(m => m.id.toString() === msgId.toString());
+    if (msg) msg.status = 'accepted';
+
+    // 同步到恋人空间和设置页
+    if (char.chatConfig) char.chatConfig.userAvatar = wcState.user.avatar;
+    
+    await wcWriteCharactersPersistentSnapshot();
+    try { await wcDb.put('characters', char); } catch (e) {}
+    wcSaveData();
+    
+    wcRenderUser();
+    wcRenderMessages(charId);
+    
+    wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): User 同意了你的情头邀请，你们现在已经换上了新的情侣头像！请在回复中表现出开心或甜蜜。]`, { hidden: true });
+    
+    wcCloseModal('ls-modal-avatar-invite');
+    pendingAvatarInviteData = null;
+    
+    alert("情侣头像更换成功！");
 }
 
 // --- 桌面装修 ---
@@ -26889,10 +27435,13 @@ function initRecipeData(char) {
     if (!char.phoneData) char.phoneData = {};
     if (!char.phoneData.recipe) {
         char.phoneData.recipe = {
-            my: { b: '', l: '', d: '', edits: {} },
-            ta: { b: '', l: '', d: '', edits: {} }
+            my: { b: '', l: '', d: '', edits: {}, history: [] },
+            ta: { b: '', l: '', d: '', edits: {}, history: [] }
         };
     }
+    // 兼容旧数据，补充 history 数组
+    if (!char.phoneData.recipe.my.history) char.phoneData.recipe.my.history = [];
+    if (!char.phoneData.recipe.ta.history) char.phoneData.recipe.ta.history = [];
     return char.phoneData.recipe;
 }
 
@@ -27048,6 +27597,7 @@ function wcSaveRecipeEdit() {
     const newD = document.getElementById('re-input-d').value.trim();
 
     let isModified = false;
+    const currentEdits = {}; // 临时记录本次修改
 
     // 辅助函数：检查并记录修改
     const checkAndRecord = (key, newVal) => {
@@ -27062,6 +27612,7 @@ function wcSaveRecipeEdit() {
                     new: newVal,
                     author: wcState.user.name
                 };
+                currentEdits[key] = { old: oldVal || '无', new: newVal };
             }
             data[key] = newVal; // 更新数据
         }
@@ -27072,6 +27623,44 @@ function wcSaveRecipeEdit() {
     checkAndRecord('d', newD);
 
     if (isModified) {
+        // 构建新版本推入 history
+        if (currentRecipeEditTab === 'ta') {
+            if (!data.history) data.history = [];
+            
+            // 如果之前没有历史记录，先补一个初始版本
+            if (data.history.length === 0) {
+                data.history.push({
+                    version: 1, author: "系统 记录", time: "未知时间", tag: "ORIGINAL",
+                    meals: {
+                        b: { status: 'normal', text: data.edits['b'] ? data.edits['b'].old : (data.b || '无') },
+                        l: { status: 'normal', text: data.edits['l'] ? data.edits['l'].old : (data.l || '无') },
+                        d: { status: 'normal', text: data.edits['d'] ? data.edits['d'].old : (data.d || '无') }
+                    }
+                });
+            }
+
+            // 将之前的 LATEST 标签改为 UPDATED
+            if (data.history.length > 0) {
+                data.history[data.history.length - 1].tag = "UPDATED";
+            }
+
+            const now = new Date();
+            const timeStr = `${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            
+            const newVersion = {
+                version: data.history.length + 1,
+                author: `${wcState.user.name} 修改`,
+                time: timeStr,
+                tag: "LATEST",
+                meals: {
+                    b: currentEdits['b'] ? { status: 'edited', old: currentEdits['b'].old, new: currentEdits['b'].new } : { status: 'normal', text: data.b || '无' },
+                    l: currentEdits['l'] ? { status: 'edited', old: currentEdits['l'].old, new: currentEdits['l'].new } : { status: 'normal', text: data.l || '无' },
+                    d: currentEdits['d'] ? { status: 'edited', old: currentEdits['d'].old, new: currentEdits['d'].new } : { status: 'normal', text: data.d || '无' }
+                }
+            };
+            data.history.push(newVersion);
+        }
+
         wcSaveData();
         wcRenderRecipeContent(currentRecipeEditTab);
 
@@ -27150,7 +27739,23 @@ window.wcGenerateTaRecipe = async function(sendToChat = false, targetCharId = nu
         const recipeData = initRecipeData(char);
         // 保留原有的 autoTime 设置
         const currentAutoTime = recipeData.ta.autoTime || '12:00';
-        recipeData.ta = { b: result.b, l: result.l, d: result.d, edits: {}, autoTime: currentAutoTime };
+        
+        // 构建初始版本记录
+        const now = new Date();
+        const timeStr = `${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        const initialHistory = [{
+            version: 1,
+            author: `${char.name} 创建`,
+            time: timeStr,
+            tag: "ORIGINAL",
+            meals: {
+                b: { status: 'normal', text: result.b || '无' },
+                l: { status: 'normal', text: result.l || '无' },
+                d: { status: 'normal', text: result.d || '无' }
+            }
+        }];
+
+        recipeData.ta = { b: result.b, l: result.l, d: result.d, edits: {}, history: initialHistory, autoTime: currentAutoTime };
         
         // 如果是定时触发，记录今天已经发送过
         if (targetCharId) {
@@ -27192,54 +27797,108 @@ window.wcGenerateTaRecipe = async function(sendToChat = false, targetCharId = nu
     }
 };
 
-// 打开聊天记录中的食谱详情弹窗
+// 全局变量用于食谱翻页
+let currentRecipeHistory = [];
+let currentRecipePage = 0;
+
+// 打开聊天记录中的食谱详情弹窗 (日记本翻页版)
 window.wcOpenRecipeDetail = function(msgId) {
     const msgs = wcState.chats[wcState.activeChatId];
     const msg = msgs.find(m => m.id.toString() === msgId.toString());
     if (!msg || !msg.recipeData) return;
 
-    const data = msg.recipeData;
     document.getElementById('recipe-detail-title').innerText = msg.title;
     
-    const container = document.getElementById('recipe-detail-content');
-    let html = '';
+    const data = msg.recipeData;
+    
+    // 如果有 history 数组，使用翻页逻辑
+    if (data.history && data.history.length > 0) {
+        currentRecipeHistory = data.history;
+        currentRecipePage = currentRecipeHistory.length - 1; // 默认显示最新一页
+    } else {
+        // 兼容旧数据：如果没有 history，动态构造一个单页数据
+        currentRecipeHistory = [{
+            version: 1,
+            author: "系统 记录",
+            time: "未知时间",
+            tag: msg.isEdited ? "UPDATED" : "ORIGINAL",
+            meals: {
+                b: (data.edits && data.edits['b']) ? { status: 'edited', old: data.edits['b'].old, new: data.edits['b'].new, author: data.edits['b'].author } : { status: 'normal', text: data.b || '无' },
+                l: (data.edits && data.edits['l']) ? { status: 'edited', old: data.edits['l'].old, new: data.edits['l'].new, author: data.edits['l'].author } : { status: 'normal', text: data.l || '无' },
+                d: (data.edits && data.edits['d']) ? { status: 'edited', old: data.edits['d'].old, new: data.edits['d'].new, author: data.edits['d'].author } : { status: 'normal', text: data.d || '无' }
+            }
+        }];
+        currentRecipePage = 0;
+    }
 
-    const meals = [
+    wcRenderRecipePage();
+
+    const modal = document.getElementById('wc-modal-recipe-detail');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.wcRenderRecipePage = function() {
+    const data = currentRecipeHistory[currentRecipePage];
+    const renderArea = document.getElementById('recipe-detail-render-area');
+    
+    // 重新触发动画
+    renderArea.classList.remove('rm-fade-content');
+    void renderArea.offsetWidth; 
+    renderArea.classList.add('rm-fade-content');
+
+    let mealsHtml = '';
+    const mealKeys = [
         { key: 'b', label: 'BRKF' },
         { key: 'l', label: 'LNCH' },
         { key: 'd', label: 'DINR' }
     ];
 
-    meals.forEach(m => {
-        let detailHtml = '';
-        if (data.edits && data.edits[m.key]) {
-            // 有修改痕迹
-            const edit = data.edits[m.key];
-            detailHtml = `
+    mealKeys.forEach(m => {
+        const mealData = data.meals[m.key];
+        let contentHtml = '';
+        if (mealData.status === 'edited') {
+            contentHtml = `
                 <div class="rm-edit-group">
-                    <div class="rm-text-old">${edit.old}</div>
-                    <div class="rm-text-new">${edit.new}</div>
-                    <div class="rm-edit-author">${edit.author} 修改了此项</div>
+                    <div class="rm-text-old">${mealData.old}</div>
+                    <div class="rm-text-new">${mealData.new}</div>
+                    ${mealData.author ? `<div class="rm-edit-author">${mealData.author} 修改了此项</div>` : ''}
                 </div>
             `;
         } else {
-            // 正常显示
-            detailHtml = `<div class="rm-text-normal">${data[m.key] || '无'}</div>`;
+            contentHtml = `<div class="rm-text-normal">${mealData.text}</div>`;
         }
 
-        html += `
+        mealsHtml += `
             <div class="rm-meal-item">
                 <div class="rm-meal-label">${m.label}</div>
-                <div class="rm-meal-detail">${detailHtml}</div>
+                <div class="rm-meal-detail">${contentHtml}</div>
             </div>
         `;
     });
 
-    container.innerHTML = html;
-    
-    const modal = document.getElementById('wc-modal-recipe-detail');
-    modal.style.display = 'flex';
-    setTimeout(() => modal.classList.add('active'), 10);
+    const tagBg = data.tag === 'LATEST' ? '#111' : (data.tag === 'ORIGINAL' ? '#34C759' : '#888');
+
+    renderArea.innerHTML = `
+        <div class="rm-version-info">
+            <span class="rm-version-tag" style="background: ${tagBg}">${data.tag}</span>
+            <span class="rm-edit-author">${data.author}</span>
+            <span class="rm-edit-time">${data.time}</span>
+        </div>
+        <div class="rm-content">
+            ${mealsHtml}
+        </div>
+    `;
+
+    // 更新翻页按钮状态
+    document.getElementById('recipe-page-indicator').innerText = `${currentRecipePage + 1} / ${currentRecipeHistory.length}`;
+    document.getElementById('recipe-btn-prev').disabled = currentRecipePage === 0;
+    document.getElementById('recipe-btn-next').disabled = currentRecipePage === currentRecipeHistory.length - 1;
+};
+
+window.wcChangeRecipePage = function(dir) {
+    currentRecipePage += dir;
+    wcRenderRecipePage();
 };
 
 window.wcCloseRecipeDetail = function(e) {
@@ -28173,19 +28832,6 @@ window.wcAssignGroup = function(charId, groupName) {
         window.closeAssignGroupModal();
     }
 };
-
-
-
-// 执行分配分组
-function wcAssignGroup(charId, groupName) {
-    const char = wcState.characters.find(c => c.id === charId);
-    if (char) {
-        char.groupName = groupName;
-        wcSaveData();
-        wcRenderChats();
-    }
-    document.getElementById('wc-modal-assign-group').classList.remove('active');
-}
 // ==========================================
 // 新增：角色会话长按菜单 (置顶 / 分组)
 // ==========================================
@@ -28652,6 +29298,1013 @@ function wcAutoLayoutRelation() {
     wcSaveData();
     wcUpdateRelationPositions();
 }
+// ==========================================
+// 恋人空间：专属商城 (Couple Shop) 逻辑
+// ==========================================
+
+// 初始化默认数据 (分类 + 菜品)
+function lsInitShopData() {
+    if (!lsState.shopCategories || lsState.shopCategories.length === 0) {
+        lsState.shopCategories = [
+            { id: 'cat_1', name: '互动' },
+            { id: 'cat_2', name: '心情' }
+        ];
+        lsState.activeShopCategoryId = 'cat_1';
+    }
+    if (!lsState.shopMenu || lsState.shopMenu.length === 0) {
+        lsState.shopMenu = [
+            { id: 1, categoryId: 'cat_1', name: '聊天', sales: 99 },
+            { id: 2, categoryId: 'cat_1', name: '和好卷', sales: 52 },
+            { id: 3, categoryId: 'cat_1', name: '亲亲卷', sales: 128 },
+            { id: 4, categoryId: 'cat_1', name: '抱抱卷', sales: 88 },
+            { id: 5, categoryId: 'cat_1', name: '打电话', sales: 30 },
+            { id: 6, categoryId: 'cat_2', name: '讨厌', sales: 0 },
+            { id: 7, categoryId: 'cat_2', name: '兴奋', sales: 15 }
+        ];
+    }
+    if (!lsState.activeShopCategoryId && lsState.shopCategories.length > 0) {
+        lsState.activeShopCategoryId = lsState.shopCategories[0].id;
+    }
+    if (!lsState.shopCart) lsState.shopCart = [];
+    if (!lsState.shopOrders) lsState.shopOrders = [];
+    lsState.isShopEditMode = false;
+}
+
+// 打开商城全屏页
+function lsOpenShopView() {
+    if (!lsState.boundCharId) {
+        alert("请先在首页绑定一位恋人哦~");
+        return;
+    }
+    lsInitShopData();
+    document.getElementById('ls-view-main').classList.remove('active');
+    document.getElementById('ls-view-shop').classList.add('active');
+    lsSwitchShopTab('kitchen'); 
+    lsRenderShopSidebar();
+    lsRenderShopMenu();
+    lsUpdateCartBadge();
+}
+
+function lsCloseShopView() {
+    document.getElementById('ls-view-shop').classList.remove('active');
+    document.getElementById('ls-view-main').classList.add('active');
+}
+
+function lsSwitchShopTab(tabId) {
+    document.querySelectorAll('.ls-shop-view-container').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.ls-shop-tab-item').forEach(el => el.classList.remove('active'));
+    
+    const view = document.getElementById(`ls-shop-view-${tabId}`);
+    const tab = document.getElementById(`ls-shop-tab-${tabId}`);
+    
+    if (view) view.classList.add('active');
+    if (tab) tab.classList.add('active');
+
+    if (tabId === 'orders') {
+        lsRenderShopOrders();
+    }
+}
+
+// --- 分类与侧边栏逻辑 ---
+function lsRenderShopSidebar() {
+    const sidebar = document.getElementById('ls-shop-sidebar-list');
+    if (!sidebar) return;
+    sidebar.innerHTML = '';
+
+    lsState.shopCategories.forEach(cat => {
+        const div = document.createElement('div');
+        div.className = `ls-shop-sidebar-item ${lsState.activeShopCategoryId === cat.id ? 'active' : ''}`;
+        div.innerText = cat.name;
+        div.onclick = () => {
+            lsState.activeShopCategoryId = cat.id;
+            lsRenderShopSidebar();
+            lsRenderShopMenu();
+        };
+        sidebar.appendChild(div);
+    });
+}
+
+function lsOpenCategoryManageModal() {
+    const list = document.getElementById('ls-shop-category-list');
+    list.innerHTML = '';
+    
+    lsState.shopCategories.forEach(cat => {
+        const div = document.createElement('div');
+        div.className = 'ls-shop-cat-item';
+        div.innerHTML = `
+            <div class="ls-shop-cat-name">${cat.name}</div>
+            <div class="ls-shop-cat-actions">
+                <div class="ls-shop-cat-btn" onclick="lsEditCategory('${cat.id}')">修改</div>
+                <div class="ls-shop-cat-btn delete" onclick="lsDeleteCategory('${cat.id}')">删除</div>
+            </div>
+        `;
+        list.appendChild(div);
+    });
+    
+    wcOpenModal('ls-shop-category-modal');
+}
+
+function lsAddCategory() {
+    openTextEditModal("添加新分类", "请输入分类名称", "", (val) => {
+        if (val && val.trim() !== "") {
+            const newId = 'cat_' + Date.now();
+            lsState.shopCategories.push({ id: newId, name: val.trim() });
+            lsState.activeShopCategoryId = newId; // 自动选中新分类
+            lsSaveData();
+            lsRenderShopSidebar();
+            lsRenderShopMenu();
+            lsOpenCategoryManageModal(); // 刷新弹窗
+        }
+    });
+}
+
+function lsEditCategory(catId) {
+    const cat = lsState.shopCategories.find(c => c.id === catId);
+    if (!cat) return;
+    openTextEditModal("修改分类名称", "请输入新的分类名称", cat.name, (val) => {
+        if (val && val.trim() !== "") {
+            cat.name = val.trim();
+            lsSaveData();
+            lsRenderShopSidebar();
+            lsRenderShopMenu();
+            lsOpenCategoryManageModal(); // 刷新弹窗
+        }
+    });
+}
+
+function lsDeleteCategory(catId) {
+    if (lsState.shopCategories.length <= 1) {
+        return alert("至少需要保留一个分类哦！");
+    }
+    if (confirm("确定要删除这个分类吗？该分类下的所有菜品也会被删除！")) {
+        lsState.shopCategories = lsState.shopCategories.filter(c => c.id !== catId);
+        lsState.shopMenu = lsState.shopMenu.filter(m => m.categoryId !== catId);
+        
+        if (lsState.activeShopCategoryId === catId) {
+            lsState.activeShopCategoryId = lsState.shopCategories[0].id;
+        }
+        
+        lsSaveData();
+        lsRenderShopSidebar();
+        lsRenderShopMenu();
+        lsOpenCategoryManageModal(); // 刷新弹窗
+    }
+}
+
+// --- 菜品渲染与修改模式逻辑 ---// 修改后
+function lsToggleShopEditMode() {
+    lsState.isShopEditMode = !lsState.isShopEditMode;
+    const editBtn = document.getElementById('ls-shop-edit-btn');
+    const actionText = document.getElementById('ls-shop-edit-menu-text');
+    if (lsState.isShopEditMode) {
+        editBtn.classList.add('active');
+        if(actionText) actionText.innerText = "退出编辑菜品";
+    } else {
+        editBtn.classList.remove('active');
+        if(actionText) actionText.innerText = "编辑菜品";
+    }
+    lsRenderShopMenu();
+}
+
+function lsRenderShopMenu() {
+    const container = document.getElementById('ls-shop-menu-list');
+    const title = document.getElementById('ls-shop-menu-title');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    const currentCat = lsState.shopCategories.find(c => c.id === lsState.activeShopCategoryId);
+    const catName = currentCat ? currentCat.name : '未知';
+    
+    const filteredMenu = lsState.shopMenu.filter(m => m.categoryId === lsState.activeShopCategoryId);
+    title.innerText = `${catName}(${filteredMenu.length})`;
+
+    if (filteredMenu.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px;">该分类下暂无菜品，请点击上方添加</div>';
+        return;
+    }
+
+    filteredMenu.forEach(item => {
+        const div = document.createElement('div');
+        div.className = `ls-shop-product-item ${lsState.isShopEditMode ? 'edit-mode' : ''}`;
+        div.innerHTML = `
+            <div class="ls-shop-product-img">
+                <svg viewBox="0 0 100 100"><path d="M50 20 C30 20 15 35 15 55 C15 75 30 90 50 90 C70 90 85 75 85 55 C85 35 70 20 50 20 Z M35 45 A5 5 0 1 1 35 55 A5 5 0 1 1 35 45 Z M65 45 A5 5 0 1 1 65 55 A5 5 0 1 1 65 45 Z M50 65 C45 65 40 60 40 60 L60 60 C60 60 55 65 50 65 Z" fill="#FFB6C1"/></svg>
+            </div>
+            <div class="ls-shop-product-info">
+                <div class="ls-shop-product-title">${item.name}</div>
+                <div class="stars">
+                    <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    <span style="color:#333; font-size:12px; margin-left:2px;">5.0</span>
+                </div>
+                <div class="ls-shop-product-sales">月销 ${item.sales || 0}</div>
+                <div style="color:#FF3B30; font-weight:bold; font-size:14px; margin-top:4px;">♥ ${item.price !== undefined ? item.price : 52}</div>
+            </div>
+            <div class="ls-shop-add-btn" onclick="lsAddToCart(${item.id})">
+                <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </div>
+            <div class="ls-shop-edit-icon" onclick="lsOpenEditItemModal(${item.id})">
+                <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function lsOpenEditItemModal(itemId) {
+    lsState.editingShopItemId = itemId;
+    wcOpenModal('ls-shop-edit-item-modal');
+}
+
+function lsOpenEditMenuItemDetail() {
+    const item = lsState.shopMenu.find(m => m.id === lsState.editingShopItemId);
+    if (!item) return;
+    wcCloseModal('ls-shop-edit-item-modal');
+    setTimeout(() => {
+        document.getElementById('ls-edit-detail-name').value = item.name;
+        document.getElementById('ls-edit-detail-price').value = item.price || 52;
+        document.getElementById('ls-shop-edit-detail-modal').classList.add('active');
+    }, 300);
+}
+
+function lsSaveMenuItemEdit() {
+    const item = lsState.shopMenu.find(m => m.id === lsState.editingShopItemId);
+    if (!item) return;
+    
+    const newName = document.getElementById('ls-edit-detail-name').value.trim();
+    const newPrice = document.getElementById('ls-edit-detail-price').value.trim();
+    
+    if (!newName || !newPrice) return alert("请填写名称和价格");
+    
+    item.name = newName;
+    item.price = parseInt(newPrice) || 52;
+    
+    lsSaveData();
+    lsRenderShopMenu();
+    document.getElementById('ls-shop-edit-detail-modal').classList.remove('active');
+    alert("修改成功！");
+}
+
+function lsDeleteMenuItem() {
+    if (confirm("确定要删除这个菜品吗？")) {
+        lsState.shopMenu = lsState.shopMenu.filter(m => m.id !== lsState.editingShopItemId);
+        lsSaveData();
+        lsRenderShopMenu();
+        wcCloseModal('ls-shop-edit-item-modal');
+    }
+}
+// --- 渲染商城历史订单记录 ---
+function lsRenderShopOrders() {
+    const container = document.getElementById('ls-shop-order-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!lsState.shopOrders || lsState.shopOrders.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px;">暂无购买记录哦~</div>';
+        return;
+    }
+
+    lsState.shopOrders.forEach(order => {
+        const dateStr = new Date(order.time).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        let itemsHtml = '';
+        let totalCost = 0;
+
+        order.items.forEach(item => {
+            totalCost += item.price !== undefined ? parseInt(item.price) : 52;
+            itemsHtml += `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #333;">
+                    <span>${item.name}</span>
+                    <span style="font-weight: bold;">♥${item.price !== undefined ? item.price : 52}</span>
+                </div>
+            `;
+        });
+
+        const div = document.createElement('div');
+        div.style.cssText = 'background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); border: 1px solid #F9F9F9;';
+        div.innerHTML = `
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #E5E5EA; padding-bottom: 10px; margin-bottom: 10px;">
+                <span style="font-size: 11px; color: #888; font-family: monospace;">ORD-${order.id.toString().slice(-6)}</span>
+                <span style="font-size: 11px; color: #888;">${dateStr}</span>
+            </div>
+            <div style="margin-bottom: 12px;">
+                ${itemsHtml}
+            </div>
+            <div style="display: flex; justify-content: flex-end; font-weight: bold; color: #FF3B30; font-size: 15px;">
+                总计: ♥${totalCost}
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// --- 购物车逻辑 ---
+function lsAddToCart(itemId) {
+    const item = lsState.shopMenu.find(m => m.id === itemId);
+    if (!item) return;
+    lsState.shopCart.push({ ...item, cartId: Date.now() + Math.random() });
+    lsSaveData();
+    lsUpdateCartBadge();
+    
+    const badge = document.getElementById('ls-shop-cart-badge');
+    badge.style.transform = 'translate(20%, -20%) scale(1.5)';
+    setTimeout(() => badge.style.transform = 'translate(20%, -20%) scale(1)', 200);
+}
+
+function lsRandomAddToCart() {
+    const filteredMenu = lsState.shopMenu.filter(m => m.categoryId === lsState.activeShopCategoryId);
+    if (filteredMenu.length === 0) return alert("当前分类下没有菜品哦~");
+    const randomItem = filteredMenu[Math.floor(Math.random() * filteredMenu.length)];
+    lsAddToCart(randomItem.id);
+    alert(`已随机将【${randomItem.name}】加入购物车！`);
+}
+// --- 邀请下单逻辑 ---
+function lsInviteCharOrder() {
+    const charId = lsState.boundCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return alert("请先绑定恋人哦~");
+
+    const currentCat = lsState.shopCategories.find(c => c.id === lsState.activeShopCategoryId);
+    const catName = currentCat ? currentCat.name : '互动';
+    const filteredMenu = lsState.shopMenu.filter(m => m.categoryId === lsState.activeShopCategoryId);
+    
+    if (filteredMenu.length === 0) return alert("当前分类下没有商品哦~");
+
+    const menuItemsStr = filteredMenu.map(m => `${m.name}(♥${m.price !== undefined ? m.price : 52})`).join('、');
+    
+    // 将商品数据转为 JSON 字符串，以便传递给 onclick 函数
+    const itemsJson = JSON.stringify(filteredMenu.map(m => ({ name: m.name, price: m.price || 52 }))).replace(/"/g, '&quot;');
+
+    // 构造黑金高奢风商城邀请卡片 HTML
+    const cardHtml = `
+        <div class="ins-shop-invite-card-dark" onclick="wcOpenShopInviteDetail('${catName}', '${itemsJson}')">
+            <div class="ins-shop-invite-dark-tag">EXCLUSIVE INVITATION</div>
+            <div class="ins-shop-invite-dark-title">For You.</div>
+            <div class="ins-shop-invite-dark-desc">为您呈上专属【${catName}】清单<br><span style="font-size: 9px; opacity: 0.6; margin-top: 6px; display: block;">(点击查看详情)</span></div>
+            <div class="ins-shop-invite-dark-footer">BALANCE: ♥${lsState.qaScore}</div>
+        </div>
+    `;
+
+    // 发送卡片到聊天
+    wcAddMessage(charId, 'me', 'receipt', cardHtml);
+
+    // 给 AI 发送隐藏的系统提示
+    const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚向你发送了一张商城邀请卡片，邀请你在【${catName}】分类里挑选礼物/特权。
+当前你们的共同账户余额为：${lsState.qaScore} 心动值。
+可选商品及价格：${menuItemsStr}。
+请在接下来的回复中，使用 "shop_order" 指令挑选你想要的商品（注意看余额够不够！如果不够你可以撒娇让User去赚积分，或者挑便宜的）。]`;
+    
+    wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
+
+    lsState.shopCart = []; // 清空购物车
+    lsUpdateCartBadge();
+    
+    // 关闭商城，回到聊天
+    document.getElementById('ls-view-shop').classList.remove('active');
+    document.getElementById('ls-view-main').classList.add('active');
+    closeLoversSpace();
+    openWechat();
+    wcOpenChat(lsState.boundCharId);
+    
+    alert("已将商城邀请卡片发送给 Ta！");
+    // wcTriggerAI(charId); // 取消自动调取API，等待用户手动点击小飞机
+}
+function lsUpdateCartBadge() {
+    const badge = document.getElementById('ls-shop-cart-badge');
+    if (!badge) return;
+    const count = lsState.shopCart.length;
+    badge.innerText = count;
+    badge.style.display = count > 0 ? 'block' : 'none';
+}
+
+function lsOpenCartModal() {
+    const container = document.getElementById('ls-shop-cart-list');
+    container.innerHTML = '';
+    
+    if (lsState.shopCart.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0;">购物车是空的哦~</div>';
+    } else {
+        lsState.shopCart.forEach((item, idx) => {
+            const div = document.createElement('div');
+            div.className = 'ls-shop-cart-item';
+            div.innerHTML = `
+                <div class="ls-shop-cart-item-left">
+                    <div class="ls-shop-cart-item-img">
+                        <svg viewBox="0 0 100 100"><path d="M50 20 C30 20 15 35 15 55 C15 75 30 90 50 90 C70 90 85 75 85 55 C85 35 70 20 50 20 Z M35 45 A5 5 0 1 1 35 55 A5 5 0 1 1 35 45 Z M65 45 A5 5 0 1 1 65 55 A5 5 0 1 1 65 45 Z M50 65 C45 65 40 60 40 60 L60 60 C60 60 55 65 50 65 Z" fill="#FFB6C1"/></svg>
+                    </div>
+                    <div class="ls-shop-cart-item-title">${item.name}</div>
+                    <div style="color:#FF3B30; font-size:12px; font-weight:bold; margin-top:4px;">♥ ${item.price !== undefined ? item.price : 52}</div>
+                </div>
+                <div class="ls-shop-cart-item-delete" onclick="lsRemoveFromCart(${idx})">×</div>
+            `;
+            container.appendChild(div);
+        });
+    }
+    wcOpenModal('ls-shop-cart-modal');
+}
+// ==========================================
+// 新增：商城邀请卡片点击查看详情弹窗逻辑
+// ==========================================
+window.wcOpenShopInviteDetail = function(catName, itemsJsonStr) {
+    document.getElementById('shop-invite-detail-title').innerText = `【${catName}】特权清单`;
+    const listContainer = document.getElementById('shop-invite-detail-list');
+    listContainer.innerHTML = '';
+    
+    try {
+        const items = JSON.parse(itemsJsonStr);
+        items.forEach(item => {
+            listContainer.innerHTML += `
+                <div class="shop-invite-detail-item">
+                    <span class="shop-invite-detail-name">${item.name}</span>
+                    <span class="shop-invite-detail-price">♥${item.price}</span>
+                </div>
+            `;
+        });
+    } catch(e) {
+        console.error("解析商品列表失败", e);
+    }
+    
+    const modal = document.getElementById('wc-modal-shop-invite-detail');
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.wcCloseShopInviteDetail = function() {
+    const modal = document.getElementById('wc-modal-shop-invite-detail');
+    if (!modal) return;
+    
+    // 👈 核心修复：使用 requestAnimationFrame 确保动画帧同步，丝滑关闭
+    requestAnimationFrame(() => {
+        modal.classList.remove('active');
+        setTimeout(() => {
+            modal.style.display = 'none';
+            modal.classList.add('hidden');
+        }, 250); // 👈 与 CSS 的 0.25s 保持一致
+    });
+};
+
+function lsRemoveFromCart(idx) {
+    lsState.shopCart.splice(idx, 1);
+    lsSaveData();
+    lsUpdateCartBadge();
+    lsOpenCartModal(); 
+}
+
+// --- 下单并触发 AI 互动 ---
+function lsCheckoutCart() {
+    if (lsState.shopCart.length === 0) return alert("购物车是空的哦~");
+    
+    const charId = lsState.boundCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    // 计算总心动值
+    let totalCost = 0;
+    lsState.shopCart.forEach(item => {
+        totalCost += item.price !== undefined ? parseInt(item.price) : 52;
+    });
+
+    // 检查积分余额
+    if (lsState.qaScore < totalCost) {
+        return alert(`心动值不足！需要 ♥${totalCost}，当前仅有 ♥${lsState.qaScore}。\n快去扭蛋机抽奖或完成默契挑战获取吧！`);
+    }
+
+    // 扣除积分
+    lsState.qaScore -= totalCost;
+
+    const orderItems = [...lsState.shopCart];
+    const itemNames = orderItems.map(i => i.name).join('、');
+    
+    // 加入历史订单
+    lsState.shopOrders.unshift({ id: Date.now(), time: Date.now(), items: orderItems });
+    
+    // 【核心】：加入特权背包
+    if (!lsState.inventory) lsState.inventory = [];
+    orderItems.forEach(item => {
+        lsState.inventory.unshift({
+            id: Date.now() + Math.random(),
+            name: item.name,
+            desc: item.desc || '专属互动特权',
+            time: Date.now()
+        });
+    });
+    
+    lsState.shopCart = [];
+    lsSaveData();
+    lsUpdateCartBadge();
+    wcCloseModal('ls-shop-cart-modal');
+    
+    // 刷新金库 UI
+    if (typeof lsRenderVault === 'function') lsRenderVault();
+    
+    const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚在你们的专属情侣商城里花费了 ${totalCost} 心动值，购买了以下互动特权：【${itemNames}】。请在接下来的回复中，根据你的人设对 User 的购买行为做出反应（比如：心疼积分、期待互动、或者调侃 User）。]`;
+    
+    wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
+    wcAddMessage(charId, 'system', 'system', `[系统提示: 你花费 ♥${totalCost} 购买了 ${itemNames}，已存入特权背包]`, { style: 'transparent' });
+    
+    // 已删除 wcTriggerAI(charId); 不再自动调取 API
+    
+    alert(`购买成功！消耗 ♥${totalCost}。\n物品已存入【羁绊金库-特权背包】！`);
+}
+// --- 手动添加菜品逻辑 ---
+function lsManualAddMenuItem() {
+    if (!lsState.activeShopCategoryId) return alert("请先选择或创建一个分类");
+    wcCloseModal('ls-shop-add-menu-modal');
+    
+    // 延迟打开我们刚刚在 HTML 里写好的专属弹窗
+    setTimeout(() => {
+        document.getElementById('ls-add-detail-name').value = '';
+        document.getElementById('ls-add-detail-price').value = '';
+        document.getElementById('ls-shop-add-detail-modal').classList.add('active');
+    }, 300);
+}
+
+// 保存手动添加的菜品
+function lsSaveNewMenuItem() {
+    const name = document.getElementById('ls-add-detail-name').value.trim();
+    const priceStr = document.getElementById('ls-add-detail-price').value.trim();
+
+    if (!name || !priceStr) return alert("请填写名称和价格哦~");
+
+    const parsedPrice = parseInt(priceStr);
+
+    lsState.shopMenu.push({
+        id: Date.now(),
+        categoryId: lsState.activeShopCategoryId,
+        name: name,
+        price: isNaN(parsedPrice) ? 52 : parsedPrice, // 👈 完美支持 0 积分
+        sales: 0
+    });
+
+    lsSaveData();
+    lsRenderShopMenu();
+    document.getElementById('ls-shop-add-detail-modal').classList.remove('active');
+    alert("添加成功！");
+}
+
+// 保存修改后的菜品
+function lsSaveMenuItemEdit() {
+    const item = lsState.shopMenu.find(m => m.id === lsState.editingShopItemId);
+    if (!item) return;
+    
+    const newName = document.getElementById('ls-edit-detail-name').value.trim();
+    const priceStr = document.getElementById('ls-edit-detail-price').value.trim();
+    
+    if (!newName || !priceStr) return alert("请填写名称和价格");
+    
+    const parsedPrice = parseInt(priceStr);
+    
+    item.name = newName;
+    item.price = isNaN(parsedPrice) ? 52 : parsedPrice; // 👈 完美支持 0 积分
+    
+    lsSaveData();
+    lsRenderShopMenu();
+    document.getElementById('ls-shop-edit-detail-modal').classList.remove('active');
+    alert("修改成功！");
+}
+
+// --- AI 生成菜品逻辑 (带积分输入) ---
+function lsAIGenerateMenuItems() {
+    if (!lsState.activeShopCategoryId) return alert("请先选择或创建一个分类");
+    wcCloseModal('ls-shop-add-menu-modal');
+
+    // 先弹出一个输入框，让用户输入这批 AI 菜品的统一积分
+    setTimeout(() => {
+        wcOpenGeneralInput("请输入这批菜品的统一积分价格", async (priceVal) => {
+            const targetPrice = parseInt(priceVal) || 52;
+            await _executeAIGenerateMenuItems(targetPrice);
+        });
+    }, 300);
+}
+
+// 内部执行 AI 生成的函数
+async function _executeAIGenerateMenuItems(targetPrice) {
+    const charId = lsState.boundCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await getActiveApiConfig('npc');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("AI 正在根据你们的日常生成专属菜单...");
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-30).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
+
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+        
+        const currentCat = lsState.shopCategories.find(c => c.id === lsState.activeShopCategoryId);
+        const catName = currentCat ? currentCat.name : '互动';
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `现在 User 想要在你们的“情侣专属互动商城”的【${catName}】分类里添加 5 个新的互动特权（菜品）。\n`;
+        prompt += `请根据你的人设、User的设定、你们最近的聊天氛围，以及当前的分类名称【${catName}】，生成 5 个有趣、暧昧或搞笑的互动特权名称。\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 名称要简短（不超过8个字），比如：罚站十分钟、无条件原谅券、叫一声哥哥等。\n`;
+        prompt += `2. 必须符合你们的关系状态和当前分类的主题。\n`;
+        prompt += `3. 返回纯 JSON 数组，格式如下：\n`;
+        prompt += `[
+  {"name": "特权名称1"},
+  {"name": "特权名称2"},
+  {"name": "特权名称3"},
+  {"name": "特权名称4"},
+  {"name": "特权名称5"}
+]\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 2000
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const newItems = JSON.parse(content);
+        
+        if (Array.isArray(newItems)) {
+            newItems.forEach(item => {
+                if (item.name) {
+                    lsState.shopMenu.push({ 
+                        id: Date.now() + Math.random(), 
+                        categoryId: lsState.activeShopCategoryId, 
+                        name: item.name, 
+                        price: targetPrice, // 👈 注入用户刚刚填写的积分
+                        sales: Math.floor(Math.random() * 100) 
+                    });
+                }
+            });
+            lsSaveData();
+            lsRenderShopMenu();
+            wcShowSuccess("专属菜单生成成功！");
+        } else {
+            throw new Error("格式错误");
+        }
+
+    } catch (e) {
+        console.error(e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[菜单生成失败] ${e.message}`);
+        else wcShowError("生成失败，请重试");
+    }
+}
+
+// 扭蛋机抽奖逻辑
+function lsPlayGacha() {
+    // 1. 检查微信钱包余额
+    const cost = 5.20;
+    if (wcState.wallet.balance < cost) {
+        alert("微信零钱余额不足 ¥5.20，请先前往「我-钱包」充值哦~");
+        return;
+    }
+
+    // 2. 扣除余额并记录账单
+    wcState.wallet.balance -= cost;
+    wcState.wallet.transactions.push({
+        id: Date.now(), type: 'payment', amount: cost, note: '心动扭蛋机抽奖', time: Date.now()
+    });
+    wcSaveData();
+
+    const knob = document.querySelector('.ls-shop-gacha-knob');
+    if (!knob) return;
+    
+    knob.style.transform = 'rotate(180deg)';
+    
+    setTimeout(() => {
+        knob.style.transform = 'rotate(0deg)';
+        
+        // 3. 随机获得 10 - 50 心动值 (积分)
+        const wonScore = Math.floor(Math.random() * 41) + 10;
+        lsState.qaScore += wonScore;
+        lsSaveData();
+        
+        // 4. 更新弹窗 UI
+        const modal = document.getElementById('ls-shop-gacha-modal');
+        const titleEl = document.querySelector('.ls-shop-result-title');
+        const descEl = document.querySelector('.ls-shop-result-desc');
+        
+        if (titleEl) titleEl.innerText = `恭喜抽中 ${wonScore} 心动值！`;
+        if (descEl) descEl.innerHTML = `已存入羁绊金库。<br>当前总心动值：${lsState.qaScore}`;
+        
+        if (modal) modal.classList.add('active');
+        
+        // 5. 同步刷新金库 UI
+        lsRenderVault();
+    }, 500);
+}
+
+function lsCloseGacha() {
+    const modal = document.getElementById('ls-shop-gacha-modal');
+    if (modal) modal.classList.remove('active');
+}
+// ==========================================
+// 羁绊金库 (Bond Vault) & 特权背包 核心逻辑 (修复重构版)
+// ==========================================
+
+// 切换金库内部的 Tab (合并了背包渲染逻辑)
+function lsSwitchVaultTab(tabId, element) {
+    document.querySelectorAll('.vault-tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.vault-view-section').forEach(view => view.classList.remove('active'));
+    
+    element.classList.add('active');
+    document.getElementById('vault-view-' + tabId).classList.add('active');
+    
+    if (tabId === 'inventory') {
+        lsRenderInventory();
+    }
+}
+
+// 渲染金库数据
+function lsRenderVault() {
+    const scoreDisplay = document.getElementById('vault-score-display');
+    if (scoreDisplay) {
+        scoreDisplay.innerText = lsState.qaScore || 0;
+    }
+    
+    const dateDisplay = document.getElementById('vault-date-display');
+    if (dateDisplay && lsState.startDate) {
+        const d = new Date(lsState.startDate);
+        dateDisplay.innerText = `SINCE ${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}`;
+    }
+
+    const levelDisplay = document.getElementById('vault-level-display');
+    if (levelDisplay) {
+        const score = lsState.qaScore || 0;
+        let level = "LV.1 互生情愫";
+        if (score >= 100) level = "LV.2 心有灵犀";
+        if (score >= 300) level = "LV.3 难舍难分";
+        if (score >= 500) level = "LV.4 亲密无间";
+        if (score >= 1000) level = "LV.5 灵魂伴侣";
+        levelDisplay.innerText = level;
+    }
+}
+
+// 拦截商城 Tab 切换，如果是切换到 "me" (金库)，则触发渲染
+const originalLsSwitchShopTab = lsSwitchShopTab;
+lsSwitchShopTab = function(tabId) {
+    originalLsSwitchShopTab(tabId);
+    if (tabId === 'me') {
+        lsRenderVault();
+        lsRenderInventory();
+    }
+};
+
+// 渲染特权背包
+function lsRenderInventory() {
+    const container = document.getElementById('vault-inventory-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!lsState.inventory || lsState.inventory.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px;">背包空空如也，快去商城购买吧~</div>';
+        return;
+    }
+
+    lsState.inventory.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = 'vault-coupon-item';
+        div.innerHTML = `
+            <div class="vault-coupon-left">
+                <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                <span style="font-size: 10px; font-weight: bold;">ITEM</span>
+            </div>
+            <div class="vault-coupon-right">
+                <div class="vault-coupon-title">${item.name}</div>
+                <div class="vault-coupon-desc">${item.desc}</div>
+                <button class="vault-coupon-use-btn" onclick="lsUseInventoryItem(${idx})">对 Ta 使用</button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// 使用背包物品
+async function lsUseInventoryItem(idx) {
+    const item = lsState.inventory[idx];
+    if (!item) return;
+
+    const charId = lsState.boundCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return alert("请先绑定恋人哦~");
+
+    if (confirm(`确定要对 ${char.name} 使用【${item.name}】吗？使用后物品将消失。`)) {
+        // 从背包移除
+        lsState.inventory.splice(idx, 1);
+        lsSaveData();
+        lsRenderInventory();
+
+        // 构造极简黑金高奢风特权卡片 HTML (严格锁定 200x80px，完美居中防拉伸)
+        const safeDesc = item.desc ? item.desc.replace(/'/g, "\\'").replace(/"/g, "&quot;") : '';
+        const descHtml = safeDesc ? `<div style="color: #888888; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 4px 0 0 0; line-height: 1;">"${safeDesc}"</div>` : '';
+
+        const cardHtml = `
+            <div style="width: 200px; height: 80px; background: #1a1a1a; border-radius: 12px; border: 1px solid #D4AF37; display: flex; position: relative; overflow: hidden; box-sizing: border-box; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2);">
+                <!-- 右侧加深背景 -->
+                <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 50px; background: rgba(0,0,0,0.4); z-index: 0;"></div>
+                <!-- 虚线分割 -->
+                <div style="position: absolute; right: 50px; top: 0; bottom: 0; border-left: 1px dashed #D4AF37; opacity: 0.5; z-index: 1;"></div>
+                
+                <!-- 左侧文字区域 -->
+                <div style="flex: 1; padding: 0 12px; display: flex; flex-direction: column; justify-content: center; z-index: 2; overflow: hidden; height: 100%;">
+                    <div style="color: #D4AF37; font-size: 9px; letter-spacing: 1px; margin: 0 0 4px 0; font-family: serif; line-height: 1;">PRIVILEGE USED</div>
+                    <div style="font-size: 15px; font-weight: bold; color: #FFFFFF; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; line-height: 1.2;">
+                        ${item.name}
+                    </div>
+                    ${descHtml}
+                </div>
+                
+                <!-- 右侧图标区域 (金色五角星) -->
+                <div style="width: 50px; height: 100%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; z-index: 2;">
+                    <div style="width: 28px; height: 28px; border-radius: 50%; border: 1px solid #D4AF37; display: flex; align-items: center; justify-content: center;">
+                        <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: #D4AF37;">
+                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 使用 receipt 类型发送卡片，确保背景透明无边框
+        wcAddMessage(charId, 'me', 'receipt', cardHtml);
+        
+        // 发送隐藏的系统提示给 AI
+        const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚对你使用了一个专属互动特权道具：【${item.name}】（描述：${item.desc}）。请你立刻在回复中，根据你的人设，对 User 使用这个特权的行为做出真实的反应（必须服从特权内容，但可以傲娇、害羞、无奈或主动配合）。]`;
+        wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
+        
+        alert(`已使用【${item.name}】！快去微信看看吧~`);
+        // 依然保持不自动调取 API
+    }
+}
+
+// 情绪典当 (换取积分)
+async function lsPawnEmotion() {
+    const text = document.getElementById('vault-emotion-input').value.trim();
+    if (!text) return alert("请先写下你的情绪哦~");
+
+    const charId = lsState.boundCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await getActiveApiConfig('npc');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("老板正在评估你的情绪价值...");
+
+    try {
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
+        prompt += `【情境】：User 今天心情不好，在“情绪典当行”里写下了一段坏情绪卖给你：\n“${text}”\n`;
+        prompt += `请你化身典当行老板，评估这段坏情绪，并给 User 开出一张【情绪收据】。\n`;
+        prompt += `要求：\n1. 语气要符合你的人设（霸道、温柔或搞笑安慰）。\n2. 随机给出一个 10-50 之间的收购价（心动值）。\n`;
+        prompt += `返回纯 JSON 对象：\n{"comment": "老板批注(安慰的话)", "price": 30}`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        // 增加积分
+        const price = parseInt(result.price) || 20;
+        lsState.qaScore += price;
+        lsSaveData();
+        lsRenderVault();
+
+        // 清空输入框
+        document.getElementById('vault-emotion-input').value = '';
+
+        // 弹窗提示
+        alert(`【情绪收据】\n\n老板批注：${result.comment}\n\n收购价：+${price} 心动值`);
+        wcShowSuccess("典当成功！");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("典当失败");
+    }
+}
+
+// 生成恋爱账单
+async function lsGenerateLoveBill() {
+    const charId = lsState.boundCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return alert("请先绑定恋人哦~");
+
+    const apiConfig = await getActiveApiConfig('npc');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("正在扫描你们的聊天记录...");
+
+    try {
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-40).map(m => {
+            if (m.isError || m.type === 'system') return null;
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return `${m.sender==='me'?'User':char.name}: ${content}`;
+        }).filter(Boolean).join('\n');
+
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n`;
+        prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
+        prompt += `请根据最近的聊天记录，生成一份趣味性的【恋爱账单报告】。\n`;
+        prompt += `要求：\n1. 总结 User 最近的情绪支出（如：惹我生气次数）和甜蜜收入（如：撒娇次数）。\n`;
+        prompt += `2. 给出最终的综合评估和建议（如：本月盈余，建议今晚请我吃宵夜）。\n`;
+        prompt += `返回纯 JSON 对象：\n{"report": "完整的账单报告文本"}`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(content);
+
+        alert(`【专属恋爱账单】\n\n${result.report}`);
+        wcShowSuccess("账单生成成功！");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("账单生成失败");
+    }
+}
+
+// 扭蛋机逻辑 (扣除微信余额，增加心动值)
+function lsPlayGacha() {
+    // 1. 检查微信钱包余额
+    const cost = 5.20;
+    if (wcState.wallet.balance < cost) {
+        alert("微信零钱余额不足 ¥5.20，请先前往「我-钱包」充值哦~");
+        return;
+    }
+
+    // 2. 扣除余额并记录账单
+    wcState.wallet.balance -= cost;
+    wcState.wallet.transactions.push({
+        id: Date.now(), type: 'payment', amount: cost, note: '心动扭蛋机抽奖', time: Date.now()
+    });
+    wcSaveData();
+
+    const knob = document.querySelector('.ls-shop-gacha-knob');
+    if (!knob) return;
+    
+    knob.style.transform = 'rotate(180deg)';
+    
+    setTimeout(() => {
+        knob.style.transform = 'rotate(0deg)';
+        
+        // 3. 随机获得 10 - 50 心动值 (积分)
+        const wonScore = Math.floor(Math.random() * 41) + 10;
+        lsState.qaScore += wonScore;
+        lsSaveData();
+        
+        // 4. 更新弹窗 UI
+        const modal = document.getElementById('ls-shop-gacha-modal');
+        const titleEl = document.querySelector('.ls-shop-result-title');
+        const descEl = document.querySelector('.ls-shop-result-desc');
+        
+        if (titleEl) titleEl.innerText = `恭喜抽中 ${wonScore} 心动值！`;
+        if (descEl) descEl.innerHTML = `已存入羁绊金库。<br>当前总心动值：${lsState.qaScore}`;
+        
+        if (modal) modal.classList.add('active');
+        
+        // 5. 同步刷新金库 UI
+        lsRenderVault();
+    }, 500);
+}
+
 // ==========================================
 // 新增：同步离线消息与自动续期函数 (防僵尸任务版)
 // ==========================================

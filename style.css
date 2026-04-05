@@ -5398,23 +5398,207 @@ input::-webkit-inner-spin-button {
 .wc-ios-app-icon svg { color: #111111 !important; } /* 图标全黑 */
 .wc-ios-app-name { color: #333 !important; text-shadow: none !important; font-weight: 600; margin-top: 8px; }
 
-/* 2. 微信 (Message) 极简重构 */
-#wc-phone-app-message { background: #F9F9F9 !important; }
-#wc-phone-app-header {
-    background: rgba(255,255,255,0.8) !important;
-    backdrop-filter: blur(15px);
-    border-bottom: none !important;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.02) !important;
+/* 2. 微信 (Message) 极简重构 - 新版 UI */
+#wc-phone-app-message { background: #F7F7F9 !important; }
+
+.sim-wechat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    position: relative;
+    background: transparent;
+    z-index: 10;
 }
-#wc-phone-app-header div { color: #111111 !important; font-weight: 700 !important; }
-.wc-phone-app-tabbar {
-    background: rgba(255,255,255,0.9) !important;
-    backdrop-filter: blur(15px);
-    border-top: none !important;
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.03) !important;
+.sim-wechat-header-left {
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+    font-weight: 600;
+    color: #111;
+    cursor: pointer;
 }
-.wc-phone-tab-item.active { color: #111111 !important; transform: scale(1.05); transition: 0.2s; }
-.wc-phone-tab-item { color: #C6C6C8 !important; }
+.sim-wechat-header-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+}
+.sim-wechat-header-title {
+    font-family: 'Georgia', serif;
+    font-style: italic;
+    font-size: 18px;
+    font-weight: bold;
+    color: #111;
+}
+.sim-wechat-header-subtitle {
+    font-size: 8px;
+    color: #999;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+.sim-wechat-header-subtitle::before, .sim-wechat-header-subtitle::after {
+    content: '';
+    height: 1px;
+    width: 20px;
+    background: #ddd;
+}
+.sim-wechat-header-icon {
+    width: 24px;
+    height: 24px;
+    background: #000;
+    border-radius: 50%;
+    position: relative;
+    cursor: pointer;
+}
+.sim-wechat-header-icon::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border-radius: 50%;
+}
+
+.sim-wechat-search-bar {
+    margin: 10px 20px 15px;
+    background: #fff;
+    border-radius: 20px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    font-size: 14px;
+    color: #999;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+    flex-shrink: 0;
+}
+.sim-wechat-search-bar svg {
+    margin-right: 8px;
+}
+
+.sim-wechat-bottom-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 90px;
+    background: #fff;
+    border-radius: 40px 40px 0 0;
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.05);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 20px 10px;
+    box-sizing: border-box;
+    z-index: 100;
+}
+.sim-wechat-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: #888;
+    font-size: 10px;
+    font-weight: bold;
+    width: 60px;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+.sim-wechat-nav-item.active {
+    color: #111;
+}
+.sim-wechat-nav-icon {
+    width: 24px;
+    height: 24px;
+    fill: currentColor;
+}
+.sim-wechat-nav-center {
+    position: relative;
+    top: -25px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+}
+.sim-wechat-center-avatar-wrap {
+    width: 64px;
+    height: 64px;
+    background: #fff;
+    border-radius: 50%;
+    padding: 4px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    margin-bottom: 6px;
+    transition: transform 0.2s;
+}
+.sim-wechat-nav-center.active .sim-wechat-center-avatar-wrap {
+    transform: scale(1.05);
+    border: 2px solid #111;
+}
+.sim-wechat-center-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.sim-wechat-center-text {
+    font-size: 9px;
+    font-weight: 800;
+    color: #888;
+    letter-spacing: 1px;
+}
+.sim-wechat-nav-center.active .sim-wechat-center-text {
+    color: #111;
+}
+
+/* 覆盖模拟器内部的列表样式以匹配新UI */
+#wc-phone-app-content .wc-list-item {
+    background: #fff !important;
+    border-radius: 20px !important;
+    padding: 16px !important;
+    margin-bottom: 12px !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03) !important;
+    border: none !important;
+}
+#wc-phone-app-content .wc-avatar {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 14px !important;
+}
+#wc-phone-app-content .wc-item-title {
+    font-size: 16px !important;
+    font-weight: bold !important;
+    color: #111 !important;
+}
+#wc-phone-app-content .wc-item-subtitle {
+    font-size: 13px !important;
+    color: #888 !important;
+}
+/* 新增：通讯录居中分隔线样式 */
+.sim-wechat-contacts-divider {
+    font-size: 10px;
+    color: #999;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 20px 0 10px;
+    font-weight: bold;
+}
+.sim-wechat-contacts-divider::before, .sim-wechat-contacts-divider::after {
+    content: '';
+    height: 1px;
+    width: 30px;
+    background: #D1D1D6;
+}
 
 /* 微信聊天详情页 (黑白气泡) */
 #wc-phone-sim-chat-detail { background: #F9F9F9 !important; }
@@ -9467,7 +9651,7 @@ input::-webkit-inner-spin-button {
         @keyframes pulseDot { 0% { transform: scale(0.8); opacity: 0.8; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(0.8); opacity: 0.8; } }
         .r-tag.updated { color: #111; background: #F5F5F5; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
 
-/* 详情弹窗 */
+/* 详情弹窗 (日记本翻页版) */
 .recipe-modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -9475,27 +9659,66 @@ input::-webkit-inner-spin-button {
     opacity: 0; transition: opacity 0.3s ease;
 }
 .recipe-modal-overlay.active { display: flex; opacity: 1; }
-.recipe-modal-box {
-    width: 85%; max-width: 320px; background: #FFFFFF; border-radius: 24px;
-    padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+
+.recipe-notebook-modal {
+    width: 320px; height: 480px; background: #FDFBF7; border-radius: 4px 16px 16px 4px;
+    box-shadow: 15px 20px 40px rgba(0,0,0,0.2), inset -5px 0 15px rgba(0,0,0,0.02);
+    position: relative; display: flex; flex-direction: column;
     transform: scale(0.95) translateY(10px); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    border: 1px solid #F0F0F0;
 }
-.recipe-modal-overlay.active .recipe-modal-box { transform: scale(1) translateY(0); }
-.rm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #F5F5F5; padding-bottom: 16px; }
-.rm-title { font-size: 18px; font-weight: 700; color: #111; letter-spacing: 0.5px; }
-.rm-close { width: 28px; height: 28px; background: #F5F5F5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #888; }
-.rm-close svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
-.rm-content { display: flex; flex-direction: column; gap: 16px; max-height: 60vh; overflow-y: auto; }
+.recipe-modal-overlay.active .recipe-notebook-modal { transform: scale(1) translateY(0); }
+
+.recipe-notebook-binding {
+    position: absolute; top: 0; left: 0; width: 24px; height: 100%;
+    background: linear-gradient(to right, #EAEAEA, #FDFBF7);
+    border-right: 1px solid rgba(0,0,0,0.05); border-radius: 4px 0 0 4px; z-index: 10;
+}
+.recipe-notebook-binding::before {
+    content: ''; position: absolute; top: 20px; bottom: 20px; left: 6px; width: 8px;
+    background-image: radial-gradient(circle, #333 3px, transparent 3.5px);
+    background-size: 8px 24px; background-repeat: repeat-y; opacity: 0.8;
+}
+.recipe-notebook-binding::after {
+    content: ''; position: absolute; top: 20px; bottom: 20px; left: -4px; width: 16px;
+    background-image: linear-gradient(to bottom, #b0b0b0 2px, transparent 2px);
+    background-size: 16px 24px; background-repeat: repeat-y; filter: drop-shadow(2px 2px 1px rgba(0,0,0,0.2));
+}
+
+.recipe-notebook-page {
+    flex: 1; margin-left: 24px; padding: 24px 20px 20px 20px;
+    display: flex; flex-direction: column; position: relative;
+    background-image: repeating-linear-gradient(transparent, transparent 39px, rgba(212, 196, 183, 0.3) 39px, rgba(212, 196, 183, 0.3) 40px);
+    background-attachment: local;
+}
+
+.rm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.rm-title { font-family: 'Georgia', serif; font-size: 20px; font-weight: bold; color: #4A413E; font-style: italic; }
+.rm-close { font-size: 24px; color: #C28E7E; cursor: pointer; line-height: 1; }
+
+.rm-version-info { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+.rm-version-tag { background: #4A413E; color: #FFF; font-size: 10px; font-weight: bold; padding: 4px 8px; border-radius: 6px; letter-spacing: 1px; text-transform: uppercase; }
+.rm-edit-author { font-size: 12px; color: #007AFF; background: rgba(0,122,255,0.1); padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+.rm-edit-time { font-size: 11px; color: #9E948F; font-family: monospace; }
+
+.rm-content { flex: 1; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; padding-right: 5px; }
 .rm-meal-item { display: flex; align-items: flex-start; gap: 12px; }
-.rm-meal-label { width: 40px; font-size: 12px; font-weight: 800; color: #CCC; text-transform: uppercase; letter-spacing: 1px; padding-top: 2px; }
-.rm-meal-detail { flex: 1; background: #F9F9F9; padding: 12px; border-radius: 12px; border: 1px solid #F0F0F0; }
-.rm-text-normal { font-size: 14px; color: #333; line-height: 1.5; }
-.rm-edit-group { display: flex; flex-direction: column; gap: 6px; }
-.rm-text-old { font-size: 12px; color: #999; text-decoration: line-through; text-decoration-color: #FF3B30; opacity: 0.7; }
+.rm-meal-label { width: 36px; font-size: 11px; font-weight: 800; color: #C28E7E; text-transform: uppercase; letter-spacing: 1px; padding-top: 2px; }
+.rm-meal-detail { flex: 1; background: rgba(255,255,255,0.6); padding: 12px; border-radius: 12px; border: 1px solid rgba(212, 196, 183, 0.5); }
+
+.rm-text-normal { font-size: 14px; color: #3A3533; line-height: 1.5; }
+.rm-edit-group { display: flex; flex-direction: column; gap: 4px; }
+.rm-text-old { font-size: 12px; color: #999; text-decoration: line-through; text-decoration-color: #FF3B30; margin-bottom: 4px; }
 .rm-text-new { font-size: 14px; color: #111; font-weight: 600; line-height: 1.5; display: flex; align-items: flex-start; gap: 6px; }
 .rm-text-new::before { content: '↳'; color: #007AFF; font-weight: bold; font-family: monospace; }
-.rm-edit-author { font-size: 10px; color: #007AFF; background: rgba(0,122,255,0.1); padding: 2px 6px; border-radius: 4px; align-self: flex-start; margin-top: 4px; }
+
+.rm-pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(212, 196, 183, 0.3); }
+.rm-page-btn { background: transparent; border: none; font-family: 'Georgia', serif; font-size: 13px; font-weight: bold; color: #4A413E; cursor: pointer; padding: 5px 10px; transition: color 0.2s; }
+.rm-page-btn:disabled { color: #CCC; cursor: not-allowed; }
+.rm-page-btn:not(:disabled):active { color: #C28E7E; }
+.rm-page-num { font-size: 12px; color: #9E948F; font-family: monospace; letter-spacing: 1px; font-weight: bold; }
+
+.rm-fade-content { animation: rmFadeIn 0.3s ease; }
+@keyframes rmFadeIn { from { opacity: 0; transform: translateX(5px); } to { opacity: 1; transform: translateX(0); } }
 /* ========================================== */
 /* 🌟 新增：聊天卡片 (极简票据风 200x120) 🌟 */
 /* ========================================== */
@@ -10406,3 +10629,316 @@ input::-webkit-inner-spin-button {
 }
 .rcpt-circle-btn.main svg { width: 28px; height: 28px; } /* 主图标放大 */
 .rcpt-circle-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+/* ========================================== */
+/* 恋人空间：专属商城 (Couple Shop) 样式 */
+/* ========================================== */
+#ls-view-shop { display: none; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+#ls-view-shop.active { display: flex; animation: wcSlideInRight 0.3s ease; }
+
+.ls-shop-view-container { display: none; flex: 1; overflow: hidden; flex-direction: column; background: #F7F7F7; }
+.ls-shop-view-container.active { display: flex; animation: shopFadeIn 0.2s ease; }
+@keyframes shopFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.ls-shop-header { height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0 16px; background: #FFF; flex-shrink: 0; margin-top: env(safe-area-inset-top, 20px); position: relative; }
+.ls-shop-header-left { display: flex; align-items: center; font-size: 15px; font-weight: 500; gap: 4px; cursor: pointer; }
+.ls-shop-header-center { display: flex; align-items: center; gap: 8px; flex: 1; justify-content: flex-end; margin-right: 5px; }
+
+/* 修复：让历史订单、扭蛋机、专属档案的标题完美绝对居中 */
+#ls-shop-view-orders .ls-shop-header-center,
+#ls-shop-view-discover .ls-shop-header-center,
+#ls-shop-view-me .ls-shop-header-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    justify-content: center;
+    margin: 0;
+    width: max-content;
+}
+.ls-shop-search-box { position: relative; display: flex; align-items: center; flex: 0 1 auto; margin-left: 8px; }
+.ls-shop-search-box svg { position: absolute; left: 10px; width: 14px; height: 14px; stroke: #999; stroke-width: 2; fill: none; pointer-events: none; z-index: 2; }
+input[type="text"].ls-shop-search-input { background: #F5F5F5; border: none; border-radius: 16px; padding: 6px 12px 6px 30px !important; font-size: 13px !important; width: 75px !important; outline: none; transition: width 0.2s; margin: 0; }
+input[type="text"].ls-shop-search-input:focus { width: 115px !important; }
+
+.ls-shop-capsule { display: flex; align-items: center; background: rgba(0,0,0,0.05); border-radius: 16px; padding: 4px 8px; gap: 8px; border: 1px solid rgba(0,0,0,0.05); }
+.ls-shop-capsule svg { width: 16px; height: 16px; fill: #000; }
+.ls-shop-capsule-divider { width: 1px; height: 12px; background: rgba(0,0,0,0.1); }
+
+/* 厨房头部新样式 */
+.ls-shop-header-left { display: flex; align-items: center; gap: 16px; }
+.ls-shop-header-tab { font-size: 16px; color: #999; font-weight: 500; cursor: pointer; position: relative; padding-bottom: 4px; }
+.ls-shop-header-tab.active { color: #333; font-weight: bold; }
+.ls-shop-header-tab.active::after { content: ''; position: absolute; bottom: -2px; left: 10%; width: 80%; height: 3px; background: #FF9A9E; border-radius: 2px; }
+.ls-shop-add-recipe-btn { font-size: 12px; color: #FF9A9E; border: 1px solid #FF9A9E; padding: 4px 10px; border-radius: 12px; font-weight: bold; cursor: pointer; background: #FFF0F5; white-space: nowrap; }
+
+/* 厨房侧边栏新样式 */
+.ls-shop-body { display: flex; flex: 1; overflow: hidden; background: #FFF; }
+.ls-shop-sidebar-wrapper { width: 85px; background: #F7F7F7; display: flex; flex-direction: column; border-right: 1px solid #F0F0F0; }
+.ls-shop-sidebar { flex: 1; overflow-y: auto; scrollbar-width: none; }
+.ls-shop-sidebar::-webkit-scrollbar { display: none; }
+.ls-shop-sidebar-item { padding: 16px 10px; font-size: 13px; color: #666; text-align: center; position: relative; cursor: pointer; word-break: break-all; }
+.ls-shop-sidebar-item.active { background: #FFF; color: #333; font-weight: bold; }
+.ls-shop-sidebar-item.active::before { content: ''; position: absolute; left: 0; top: 30%; bottom: 30%; width: 4px; background: #FF9A9E; border-radius: 0 2px 2px 0; }
+/* 删除了 .ls-shop-sidebar-manage 相关的样式 */
+
+.ls-shop-main-content { flex: 1; background: #FFF; overflow-y: auto; padding: 10px 12px; padding-bottom: 80px; }
+
+/* 菜品编辑模式样式 */
+.ls-shop-product-item.edit-mode .ls-shop-add-btn { display: none; }
+.ls-shop-product-item.edit-mode .ls-shop-edit-icon { display: flex; }
+.ls-shop-edit-icon { width: 24px; height: 24px; background: #F5F5F5; border-radius: 50%; display: none; align-items: center; justify-content: center; color: #888; cursor: pointer; flex-shrink: 0; }
+.ls-shop-edit-icon svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+/* 分类管理列表样式 */
+.ls-shop-cat-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #F0F0F0; }
+.ls-shop-cat-name { font-size: 15px; color: #333; font-weight: 500; }
+.ls-shop-cat-actions { display: flex; gap: 15px; }
+.ls-shop-cat-btn { font-size: 13px; color: #007AFF; cursor: pointer; }
+.ls-shop-cat-btn.delete { color: #FF3B30; }
+.ls-shop-category-title { font-size: 13px; font-weight: bold; color: #333; margin-bottom: 12px; }
+.ls-shop-product-item { display: flex; align-items: center; margin-bottom: 20px; }
+.ls-shop-product-img { width: 65px; height: 65px; background: #FFF0F5; border-radius: 8px; margin-right: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.ls-shop-product-img svg { width: 40px; height: 40px; fill: #FFB6C1; }
+.ls-shop-product-info { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.ls-shop-product-title { font-size: 15px; font-weight: bold; color: #333; margin-bottom: 4px; }
+/* 👇 新增：限制商品信息中的 SVG（如星级评分）大小，防止巨大化 👇 */
+.ls-shop-product-info svg { width: 12px; height: 12px; fill: #FFD700; margin-right: 2px; }
+.ls-shop-product-stars { display: flex; align-items: center; margin-top: 2px; }
+/* 👆 新增结束 👆 */
+.ls-shop-product-sales { font-size: 11px; color: #999; margin-top: 4px; }
+.ls-shop-add-btn { width: 24px; height: 24px; background: #FF9A9E; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FFF; cursor: pointer; flex-shrink: 0; }
+.ls-shop-add-btn svg { width: 14px; height: 14px; stroke: #FFF; stroke-width: 2; fill: none; }
+
+.ls-shop-cart-bar { 
+    position: absolute; 
+    bottom: 60px; 
+    left: 12px; 
+    right: 12px; 
+    height: 50px; 
+    background: rgba(255,255,255,0.95); 
+    backdrop-filter: blur(10px); 
+    border-radius: 25px; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08); 
+    display: flex; 
+    align-items: center; 
+    padding: 0 15px; 
+    z-index: 20; 
+    border: 1px solid #F0F0F0; 
+    /* 👇 核心修复：锁死硬件加速层，去除所有位移动画，防止弹跳 👇 */
+    transform: translateZ(0);
+    transition: none !important;
+}
+.ls-shop-cart-icon { position: relative; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; margin-right: auto; }
+.ls-shop-cart-icon svg { width: 24px; height: 24px; stroke: #FF9A9E; stroke-width: 2; fill: none; }
+.ls-shop-cart-badge { position: absolute; top: 0; right: 0; background: #FF3B30; color: #FFF; font-size: 10px; font-weight: bold; padding: 2px 5px; border-radius: 10px; line-height: 1; transform: translate(20%, -20%); }
+.ls-shop-cart-actions { display: flex; gap: 8px; }
+.ls-shop-cart-btn { padding: 8px 14px; border-radius: 16px; font-size: 13px; font-weight: bold; cursor: pointer; border: none; }
+.ls-shop-cart-btn.outline { background: transparent; color: #999; }
+.ls-shop-cart-btn.solid { background: #F5F5F5; color: #CCC; }
+
+/* 订单 */
+.ls-shop-order-header-bg { background: linear-gradient(to bottom, #FFF0F5, #F7F7F7); padding-bottom: 20px; }
+.ls-shop-order-card { background: #FFF; border-radius: 12px; margin: 12px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); margin-top: -20px; position: relative; z-index: 2; }
+.ls-shop-order-user { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.ls-shop-order-user-left { display: flex; align-items: center; gap: 10px; }
+.ls-shop-order-avatar { width: 36px; height: 36px; border-radius: 50%; background: #FFF0F5; display: flex; align-items: center; justify-content: center; }
+.ls-shop-order-avatar svg { width: 24px; height: 24px; fill: #FFB6C1; }
+.ls-shop-order-name { font-size: 15px; font-weight: bold; color: #333; }
+.ls-shop-order-count { font-size: 13px; color: #999; }
+.ls-shop-order-item { border: 1px dashed #E5E5EA; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.ls-shop-order-item-top { display: flex; align-items: center; }
+.ls-shop-order-item-img { width: 50px; height: 50px; background: #FFF0F5; border-radius: 8px; margin-right: 12px; display: flex; align-items: center; justify-content: center; }
+.ls-shop-order-item-img svg { width: 30px; height: 30px; fill: #FFB6C1; }
+.ls-shop-order-item-title { font-size: 15px; font-weight: bold; color: #333; flex: 1; }
+.ls-shop-order-item-qty { font-size: 14px; color: #666; }
+.ls-shop-order-divider { display: flex; align-items: center; text-align: center; color: #333; font-size: 13px; font-weight: bold; margin: 20px 0 16px 0; }
+.ls-shop-order-divider::before, .ls-shop-order-divider::after { content: ''; flex: 1; border-bottom: 1px solid #F0F0F0; }
+.ls-shop-order-divider::before { margin-right: 10px; }
+.ls-shop-order-divider::after { margin-left: 10px; }
+.ls-shop-order-actions-row { display: flex; justify-content: flex-end; gap: 10px; }
+.ls-shop-order-btn { padding: 8px 16px; border-radius: 4px; font-size: 13px; cursor: pointer; border: 1px solid #E5E5EA; background: #FFF; color: #333; }
+.ls-shop-order-btn.green { border-color: #34C759; color: #34C759; }
+
+/* 购物车列表样式 */
+.ls-shop-cart-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px dashed #F0F0F0; }
+.ls-shop-cart-item-left { display: flex; align-items: center; gap: 12px; }
+.ls-shop-cart-item-img { width: 40px; height: 40px; background: #FFF0F5; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.ls-shop-cart-item-img svg { width: 24px; height: 24px; fill: #FFB6C1; }
+.ls-shop-cart-item-title { font-size: 15px; font-weight: bold; color: #333; }
+.ls-shop-cart-item-delete { color: #999; font-size: 20px; cursor: pointer; padding: 0 10px; }
+
+/* 发现 (扭蛋机) */
+.ls-shop-gacha-container { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 20px; overflow-y: auto; }
+.ls-shop-gacha-header { text-align: center; margin-bottom: 30px; }
+.ls-shop-gacha-title { font-size: 22px; font-weight: bold; color: #333; margin-bottom: 8px; }
+.ls-shop-gacha-subtitle { font-size: 13px; color: #888; }
+.ls-shop-gacha-machine { width: 240px; height: 320px; position: relative; margin-bottom: 40px; }
+.ls-shop-gacha-glass { width: 200px; height: 200px; background: rgba(255,255,255,0.6); border: 4px solid #FFB6C1; border-radius: 50%; position: absolute; top: 0; left: 20px; z-index: 2; overflow: hidden; box-shadow: inset -10px -10px 20px rgba(0,0,0,0.05); }
+.ls-shop-gacha-base { width: 240px; height: 140px; background: #FF9A9E; border-radius: 20px 20px 30px 30px; position: absolute; bottom: 0; left: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; box-shadow: 0 10px 20px rgba(255,154,158,0.3); }
+.ls-shop-gacha-knob { width: 60px; height: 60px; background: #FFF; border-radius: 50%; margin-top: 20px; border: 4px solid #FFB6C1; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.3s; }
+.ls-shop-gacha-knob:active { transform: rotate(90deg); }
+.ls-shop-gacha-knob-inner { width: 40px; height: 10px; background: #FFB6C1; border-radius: 5px; }
+.ls-shop-gacha-exit { width: 80px; height: 40px; background: #333; border-radius: 20px 20px 0 0; margin-top: auto; position: relative; }
+.ls-shop-gacha-ball { width: 40px; height: 40px; border-radius: 50%; position: absolute; z-index: 3; }
+.ls-shop-gacha-ball.ball-1 { background: linear-gradient(to bottom, #FFD700 50%, #FFF 50%); top: 120px; left: 40px; transform: rotate(20deg); }
+.ls-shop-gacha-ball.ball-2 { background: linear-gradient(to bottom, #87CEFA 50%, #FFF 50%); top: 140px; left: 90px; transform: rotate(-15deg); }
+.ls-shop-gacha-ball.ball-3 { background: linear-gradient(to bottom, #98FB98 50%, #FFF 50%); top: 110px; left: 130px; transform: rotate(45deg); }
+.ls-shop-gacha-btn { background: #FFF; color: #FF9A9E; border: 2px solid #FF9A9E; padding: 12px 30px; border-radius: 25px; font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(255,154,158,0.2); transition: transform 0.1s; }
+.ls-shop-gacha-btn:active { transform: scale(0.95); }
+
+/* 我 (偏好档案) */
+.ls-shop-me-container { flex: 1; overflow-y: auto; padding: 16px; }
+.ls-shop-profile-card { background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 100%); border-radius: 20px; padding: 20px; color: #FFF; display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(255,154,158,0.3); }
+.ls-shop-profile-info { display: flex; flex-direction: column; }
+.ls-shop-profile-name { font-size: 20px; font-weight: bold; margin-bottom: 4px; }
+.ls-shop-profile-days { font-size: 13px; opacity: 0.9; }
+.ls-shop-pref-section { background: #FFF; border-radius: 16px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); }
+.ls-shop-pref-header { display: flex; align-items: center; margin-bottom: 16px; gap: 8px; }
+.ls-shop-pref-header svg { width: 20px; height: 20px; stroke: #FF9A9E; stroke-width: 2; fill: none; }
+.ls-shop-pref-title { font-size: 16px; font-weight: bold; color: #333; }
+.ls-shop-pref-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.ls-shop-pref-tag { background: #FFF0F5; color: #FF6B81; font-size: 12px; padding: 4px 10px; border-radius: 12px; font-weight: 500; }
+.ls-shop-pref-tag.bad { background: #F5F5F5; color: #888; }
+
+/* Tabbar */
+.ls-shop-tabbar { height: 50px; background: #FFF; border-top: 1px solid #F0F0F0; display: flex; justify-content: space-around; align-items: center; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
+.ls-shop-tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #999; font-size: 10px; cursor: pointer; transition: color 0.2s; }
+.ls-shop-tab-item.active { color: #FF9A9E; }
+.ls-shop-tab-item svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 2; fill: none; }
+.ls-shop-tab-item.active svg { fill: currentColor; }
+
+/* 扭蛋机弹窗 */
+.ls-shop-gacha-modal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s; }
+.ls-shop-gacha-modal.active { display: flex; opacity: 1; }
+.ls-shop-gacha-result-card { width: 260px; background: #FFF; border-radius: 20px; padding: 30px 20px; text-align: center; transform: scale(0.8); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.ls-shop-gacha-modal.active .ls-shop-gacha-result-card { transform: scale(1); }
+.ls-shop-result-icon { width: 60px; height: 60px; background: #FFF0F5; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px; }
+.ls-shop-result-icon svg { width: 30px; height: 30px; fill: #FF9A9E; }
+.ls-shop-result-title { font-size: 18px; font-weight: bold; color: #333; margin-bottom: 8px; }
+.ls-shop-result-desc { font-size: 13px; color: #666; margin-bottom: 24px; line-height: 1.5; }
+.ls-shop-result-btn { width: 100%; padding: 12px; background: #FF9A9E; color: #FFF; border: none; border-radius: 20px; font-size: 15px; font-weight: bold; cursor: pointer; }
+/* ========================================== */
+/* 羁绊金库 (Bond Vault) 专属样式 - 萌系粉色可爱风 */
+/* ========================================== */
+.vault-black-card {
+    background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 100%);
+    border-radius: 24px; padding: 24px; color: #FFF;
+    box-shadow: 0 10px 30px rgba(255, 154, 158, 0.3); position: relative; overflow: hidden;
+    margin-bottom: 24px; border: 2px solid #FFF;
+}
+.vault-black-card::after {
+    content: '♥'; position: absolute; top: -20px; right: -10px;
+    font-size: 120px; color: rgba(255,255,255,0.2);
+    pointer-events: none; transform: rotate(15deg);
+}
+.vault-card-logo { font-family: 'Comic Sans MS', cursive, sans-serif; font-size: 14px; font-weight: bold; letter-spacing: 1px; margin-bottom: 20px; opacity: 0.9; }
+.vault-card-balance-label { font-size: 11px; color: rgba(255,255,255,0.8); font-weight: bold; letter-spacing: 1px; text-transform: uppercase; }
+.vault-card-balance { font-size: 36px; font-weight: 900; font-family: 'Comic Sans MS', cursive, sans-serif; margin-bottom: 15px; color: #FFF; text-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+.vault-card-footer { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; opacity: 0.9; font-family: 'Comic Sans MS', cursive, sans-serif; }
+
+.vault-tabs { display: flex; background: #FFF0F5; border-radius: 16px; padding: 4px; margin-bottom: 20px; border: 1px solid #FFE4E1; }
+.vault-tab-btn { flex: 1; text-align: center; padding: 10px 0; font-size: 14px; font-weight: bold; color: #FF9A9E; cursor: pointer; border-radius: 12px; transition: all 0.2s; }
+.vault-tab-btn.active { background: #FF9A9E; color: #FFF; box-shadow: 0 4px 10px rgba(255, 154, 158, 0.3); }
+
+.vault-view-section { display: none; animation: wcFadeIn 0.3s ease; }
+.vault-view-section.active { display: block; }
+
+.vault-coupon-item {
+    background: #FFF; border-radius: 16px; display: flex; align-items: center;
+    margin-bottom: 12px; border: 2px dashed #FFE4E1; overflow: hidden;
+    box-shadow: 0 4px 15px rgba(255, 182, 193, 0.1);
+}
+.vault-coupon-left {
+    background: #FFF0F5; color: #FF9A9E; padding: 20px 15px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; border-right: 2px dashed #FFE4E1;
+}
+.vault-coupon-left svg { width: 28px; height: 28px; fill: #FF9A9E; margin-bottom: 4px; }
+.vault-coupon-right { padding: 15px; flex: 1; }
+.vault-coupon-title { font-size: 16px; font-weight: 800; color: #FF6B81; margin-bottom: 4px; }
+.vault-coupon-desc { font-size: 12px; color: #999; margin-bottom: 10px; }
+.vault-coupon-use-btn {
+    background: #FF9A9E; color: #FFF; border: none; padding: 8px 16px; border-radius: 16px;
+    font-size: 13px; font-weight: bold; cursor: pointer; transition: transform 0.2s;
+    box-shadow: 0 4px 10px rgba(255, 154, 158, 0.3);
+}
+.vault-coupon-use-btn:active { transform: scale(0.95); }
+
+.vault-pawn-box { background: #FFF; border-radius: 20px; padding: 20px; border: 2px dashed #FFE4E1; box-shadow: 0 4px 15px rgba(255, 182, 193, 0.1); }
+.vault-pawn-title { font-size: 16px; font-weight: 800; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #FF6B81; justify-content: center; }
+.vault-pawn-title svg { stroke: #FF6B81; }
+.vault-pawn-textarea {
+    width: 100%; height: 100px; background: #FFF0F5; border: 1px solid #FFE4E1; border-radius: 16px;
+    padding: 12px; font-size: 14px; resize: none; outline: none; margin-bottom: 15px; color: #FF6B81; font-family: inherit;
+}
+.vault-pawn-btn {
+    width: 100%; background: #FF9A9E; color: #FFF; border: none; padding: 14px; border-radius: 16px;
+    font-size: 15px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;
+    box-shadow: 0 4px 15px rgba(255, 154, 158, 0.3);
+}
+.vault-pawn-btn:active { transform: scale(0.98); }
+
+.vault-bill-box { background: #FFF; border-radius: 20px; padding: 24px; border: 2px dashed #FFE4E1; text-align: center; box-shadow: 0 4px 15px rgba(255, 182, 193, 0.1); }
+.vault-bill-icon { width: 56px; height: 56px; background: #FFF0F5; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px; }
+.vault-bill-icon svg { width: 28px; height: 28px; stroke: #FF9A9E; fill: none; stroke-width: 2; }
+.vault-bill-desc { font-size: 13px; color: #999; margin-bottom: 20px; line-height: 1.6; }
+/* ========================================== */
+/* 新增：黑金高奢风商城邀请卡片与弹窗 (精致缩小版) */
+/* ========================================== */
+.ins-shop-invite-card-dark {
+    width: 180px; /* 🔪 宽度从 240px 缩小到 180px */
+    background: linear-gradient(145deg, #2A2A2A 0%, #111111 100%);
+    border-radius: 12px;
+    padding: 16px; /* 🔪 内边距从 24px 缩小到 16px */
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    cursor: pointer;
+    transition: transform 0.2s;
+    position: relative;
+    box-sizing: border-box;
+    line-height: normal; /* 🔪 防止被外部聊天气泡的行高拉伸产生黑边 */
+    display: flex;
+    flex-direction: column;
+}
+.ins-shop-invite-card-dark::before {
+    content: ''; position: absolute; top: 4px; left: 4px; right: 4px; bottom: 4px; /* 🔪 虚线框向内收缩 */
+    border: 1px dashed rgba(212, 175, 55, 0.3); border-radius: 8px; pointer-events: none;
+}
+.ins-shop-invite-card-dark:active { transform: scale(0.96); }
+.ins-shop-invite-dark-tag {
+    text-align: center; font-size: 8px; color: #D4AF37; letter-spacing: 2px; margin-bottom: 12px; font-weight: bold;
+}
+.ins-shop-invite-dark-title {
+    text-align: center; font-family: 'Georgia', serif; font-size: 16px; font-style: italic; color: #FFF; margin-bottom: 8px; font-weight: bold;
+}
+.ins-shop-invite-dark-desc {
+    text-align: center; font-size: 10px; color: #999; margin-bottom: 12px; line-height: 1.3;
+}
+.ins-shop-invite-dark-footer {
+    text-align: center; font-size: 10px; color: #D4AF37; font-family: monospace; font-weight: bold; margin-top: auto;
+}
+
+/* 邀请详情弹窗 */
+.shop-invite-detail-card {
+    width: 85%; max-width: 320px; background: #111; border-radius: 20px; padding: 24px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 1px solid rgba(212, 175, 55, 0.3);
+    transform: scale(0.95) translateY(10px); 
+    opacity: 0; /* 👈 新增：初始透明度 */
+    transition: transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.25s ease; /* 👈 优化：加快动画，增加透明度过渡 */
+    will-change: transform, opacity; /* 👈 核心修复：开启 GPU 硬件加速，彻底告别卡顿 */
+    display: flex; flex-direction: column; position: relative;
+}
+.wc-modal-overlay.active .shop-invite-detail-card { 
+    transform: scale(1) translateY(0); 
+    opacity: 1; /* 👈 新增：显示时完全不透明 */
+}
+.shop-invite-detail-close {
+    position: absolute; top: 16px; right: 16px; width: 28px; height: 28px;
+    background: rgba(255,255,255,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #D4AF37; transition: background 0.2s; font-size: 18px; line-height: 1;
+}
+.shop-invite-detail-close:active { background: rgba(255,255,255,0.2); }
+.shop-invite-detail-title { font-size: 18px; font-weight: bold; color: #D4AF37; margin-bottom: 16px; text-align: center; font-family: 'Georgia', serif; font-style: italic; }
+.shop-invite-detail-list { display: flex; flex-direction: column; gap: 12px; max-height: 300px; overflow-y: auto; padding-right: 5px; }
+.shop-invite-detail-list::-webkit-scrollbar { display: none; }
+.shop-invite-detail-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); }
+.shop-invite-detail-name { font-size: 14px; font-weight: 600; color: #FFF; }
+.shop-invite-detail-price { font-size: 14px; font-weight: bold; color: #D4AF37; font-family: 'Georgia', serif; }

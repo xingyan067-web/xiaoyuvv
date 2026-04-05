@@ -285,6 +285,14 @@
     <div class="ls-album-card-title">未来信件</div>
     <div class="ls-album-card-desc">Time Mailbox</div>
 </div>
+<!-- 专属商城入口卡片 -->
+<div class="ls-album-card" onclick="lsOpenShopView()">
+    <div class="ls-album-card-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+    </div>
+    <div class="ls-album-card-title">专属商城</div>
+    <div class="ls-album-card-desc">Couple Shop</div>
+</div>
 </div>
 </div> <!-- 👈 宝宝，就是在这里补上这行闭合标签！ -->
                     <!-- Tab 3: 设置 -->
@@ -464,6 +472,9 @@
                     </div>
                     <div class="ta-capsule-tabs">
                         <div class="ta-cap-tab active" id="ta-tab-diary" onclick="lsSwitchAlbumTab('diary')">时光纪要</div>
+                        <div class="ta-cap-tab" id="ta-tab-gallery" onclick="lsSwitchAlbumTab('gallery')">
+                            <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;margin-bottom:-2px;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        </div>
                         <div class="ta-cap-tab" id="ta-tab-decor" onclick="lsSwitchAlbumTab('decor')">桌面装修</div>
                     </div>
                 </div>
@@ -481,6 +492,60 @@
                         <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </div>
                     <input type="file" id="ta-diary-upload" accept="image/*" class="hidden-file-input" onchange="lsHandleDiaryUpload(event)">
+                </div>
+
+                <!-- 视图：情头图库 (五角星) -->
+                <div class="ta-content-view" id="ta-view-gallery">
+                    <!-- AI 主动邀请开关 -->
+                    <div style="background: #FFFFFF; border-radius: 16px; padding: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); border: 1px solid #F0F0F0;">
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <div style="font-size: 15px; font-weight: 600; color: #111;">允许 Ta 主动邀请更换情头</div>
+                            <div style="font-size: 12px; color: #888;">开启后，Ta 会根据聊天氛围主动挑选图库情头</div>
+                        </div>
+                        <input type="checkbox" id="ls-toggle-avatar-invite" class="ls-toggle" onchange="lsToggleAvatarInvite(this)">
+                    </div>
+
+                    <!-- 操作按钮区 -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <button class="ta-action-btn" style="flex: 1; padding: 12px 0; font-size: 14px; background: #FFF; color: #111; border: 1px solid #EAEAEA; box-shadow: none;" onclick="document.getElementById('ls-avatar-local-upload').click()">本地多选</button>
+                        <input type="file" id="ls-avatar-local-upload" multiple accept="image/*" style="display: none;" onchange="lsHandleAvatarLocalUpload(event)">
+                        
+                        <button class="ta-action-btn" style="flex: 1; padding: 12px 0; font-size: 14px; background: #FFF; color: #111; border: 1px solid #EAEAEA; box-shadow: none;" onclick="lsOpenAvatarUrlModal()">URL导入</button>
+                        <button class="ta-action-btn" id="ls-avatar-edit-btn" style="flex: 1; padding: 12px 0; font-size: 14px; background: #111; color: #FFF;" onclick="lsToggleAvatarEditMode()">编辑图库</button>
+                        <button class="ta-action-btn" id="ls-avatar-delete-btn" style="flex: 1; padding: 12px 0; font-size: 14px; background: #FF3B30; color: #FFF; display: none;" onclick="lsDeleteSelectedAvatars()">删除所选</button>
+                    </div>
+
+                    <!-- 图库网格 -->
+                    <div id="ls-avatar-gallery-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding-bottom: 20px;">
+                        <!-- 动态渲染 -->
+                    </div>
+                </div>
+
+                <!-- URL 批量导入模态框 -->
+                <div class="wc-modal hidden" id="ls-modal-avatar-url" style="z-index: 6000;">
+                    <div class="wc-modal-content" style="background: #FFF; padding: 24px; border-radius: 20px; width: 90%; max-width: 340px;">
+                        <div style="font-size: 18px; font-weight: 700; text-align: center; margin-bottom: 20px; color: #111;">批量导入情头 (URL)</div>
+                        <div style="margin-bottom: 16px; background: #F9F9F9; padding: 12px; border-radius: 12px; border: 1px solid #F0F0F0;">
+                            <span style="font-size: 12px; font-weight: 800; color: #888; margin-bottom: 8px; display: block;">每行输入一个图片 URL (自动两两配对)</span>
+                            <textarea id="ls-avatar-url-textarea" style="width: 100%; height: 120px; padding: 10px; background: #FFF; border: 1px solid #EAEAEA; border-radius: 8px; font-size: 13px; outline: none; resize: none; line-height: 1.5;" placeholder="https://example.com/img1.jpg&#10;https://example.com/img2.jpg"></textarea>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button class="wc-btn-secondary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; font-weight: bold;" onclick="lsCloseAvatarUrlModal()">取消</button>
+                            <button class="wc-btn-primary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; background: #111; font-weight: bold;" onclick="lsSubmitAvatarUrlUpload()">确认导入</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 修改描述模态框 -->
+                <div class="wc-modal hidden" id="ls-modal-avatar-desc" style="z-index: 6000;">
+                    <div class="wc-modal-content" style="background: #FFF; padding: 24px; border-radius: 20px; width: 85%; max-width: 280px;">
+                        <div style="font-size: 18px; font-weight: 700; text-align: center; margin-bottom: 20px; color: #111;">修改图片描述</div>
+                        <input type="text" id="ls-avatar-desc-input" style="width: 100%; padding: 12px; background: #F5F5F5; border: none; border-radius: 10px; font-size: 15px; outline: none; text-align: center;" placeholder="输入描述 (如：User的头像)">
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button class="wc-btn-secondary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; font-weight: bold;" onclick="lsCloseAvatarDescModal()">取消</button>
+                            <button class="wc-btn-primary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; background: #111; font-weight: bold;" onclick="lsSubmitAvatarDesc()">保存</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 视图 2：桌面装修 -->
@@ -567,8 +632,332 @@
                 </div>
             </div>
 
+            <!-- 7. 专属商城全屏页 -->
+            <div id="ls-view-shop" class="ls-view" style="z-index: 5600; position: absolute; top: 0; left: 0; background: #F7F7F7;">
+                <!-- 视图容器 -->
+                <div class="ls-shop-view-container active" id="ls-shop-view-kitchen">
+                    <div class="ls-shop-header">
+                        <!-- 修改后 -->
+<div class="ls-shop-header-left">
+    <div class="ls-shop-header-tab active">点单</div>
+    <div class="ls-shop-header-tab" onclick="wcOpenModal('ls-shop-edit-action-sheet')" id="ls-shop-edit-btn">修改</div>
+</div>
+                        <div class="ls-shop-header-center">
+                            <div class="ls-shop-add-recipe-btn" onclick="wcOpenModal('ls-shop-add-menu-modal')">添加菜谱</div>
+                            <div class="ls-shop-search-box">
+                                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                <input type="text" class="ls-shop-search-input" placeholder="搜索">
+                            </div>
+                        </div>
+                        <div class="ls-shop-header-right">
+                            <div class="ls-shop-capsule" onclick="lsCloseShopView()" style="cursor: pointer;">
+                                <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg>
+                                <div class="ls-shop-capsule-divider"></div>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2" fill="currentColor"></circle></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ls-shop-body">
+                        <div class="ls-shop-sidebar-wrapper">
+                            <div class="ls-shop-sidebar" id="ls-shop-sidebar-list">
+                                <!-- 动态渲染分类 -->
+                            </div>                   
+                        </div>
+                        <div class="ls-shop-main-content">
+                            <div class="ls-shop-category-title" id="ls-shop-menu-title">互动(0)</div>
+                            <!-- 动态渲染菜品列表 -->
+                            <div id="ls-shop-menu-list"></div>
+                        </div>
+                    </div>
+                    <div class="ls-shop-cart-bar">
+                        <div class="ls-shop-cart-icon" onclick="lsOpenCartModal()" style="cursor: pointer;">
+                            <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                            <div class="ls-shop-cart-badge" id="ls-shop-cart-badge" style="display: none;">0</div>
+                        </div>
+                        <div class="ls-shop-cart-actions">
+                            <button class="ls-shop-cart-btn outline" onclick="lsRandomAddToCart()">随机选菜</button>
+                            <button class="ls-shop-cart-btn outline" onclick="lsInviteCharOrder()">邀请下单</button>
+                            <button class="ls-shop-cart-btn solid" onclick="lsOpenCartModal()" style="background: #FF9A9E; color: #FFF;">下单</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ls-shop-view-container" id="ls-shop-view-orders">
+                    <div class="ls-shop-order-header-bg">
+                        <div class="ls-shop-header" style="background: transparent;">
+                            <div class="ls-shop-header-left" onclick="lsSwitchShopTab('kitchen')">
+                                <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#333;stroke-width:2;fill:none;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            </div>
+                            <div class="ls-shop-header-center" style="font-size: 16px; font-weight: bold;">历史订单</div>
+                            <div class="ls-shop-header-right"></div>
+                        </div>
+                    </div>
+                    <!-- 动态渲染订单列表 -->
+                    <div id="ls-shop-order-list" style="margin-top: -20px; position: relative; z-index: 2; padding-bottom: 80px; overflow-y: auto;"></div>
+                </div>
+
+                <div class="ls-shop-view-container" id="ls-shop-view-discover">
+                    <div class="ls-shop-header"><div class="ls-shop-header-center" style="font-size: 16px; font-weight: bold;">心动扭蛋机</div></div>
+                    <div class="ls-shop-gacha-container">
+                        <div class="ls-shop-gacha-header">
+                            <div class="ls-shop-gacha-title">抽取今日特权</div>
+                            <div class="ls-shop-gacha-subtitle">不知道做什么？交给命运吧！</div>
+                        </div>
+                        <div class="ls-shop-gacha-machine">
+                            <div class="ls-shop-gacha-glass">
+                                <div class="ls-shop-gacha-ball ball-1"></div>
+                                <div class="ls-shop-gacha-ball ball-2"></div>
+                                <div class="ls-shop-gacha-ball ball-3"></div>
+                            </div>
+                            <div class="ls-shop-gacha-base">
+                                <div class="ls-shop-gacha-knob" onclick="lsPlayGacha()">
+                                    <div class="ls-shop-gacha-knob-inner"></div>
+                                </div>
+                                <div class="ls-shop-gacha-exit"></div>
+                            </div>
+                        </div>
+                        <button class="ls-shop-gacha-btn" onclick="lsPlayGacha()">支付 ¥5.20 抽取心动值</button>
+                    </div>
+                </div>
+
+                <div class="ls-shop-view-container" id="ls-shop-view-me">
+                    <div class="ls-shop-header">
+                        <div class="ls-shop-header-center" style="font-size: 16px; font-weight: bold;">羁绊金库</div>
+                    </div>
+                    
+                    <div class="ls-shop-me-container" style="padding: 20px;">
+                        <!-- 恋爱黑卡 -->
+                        <div class="vault-black-card">
+                            <div class="vault-card-logo">BOND VAULT</div>
+                            <div class="vault-card-balance-label">心动值余额 (Heartbeats)</div>
+                            <div class="vault-card-balance" id="vault-score-display">0</div>
+                            <div class="vault-card-footer">
+                                <span id="vault-level-display">LV.1 互生情愫</span>
+                                <span id="vault-date-display">SINCE 2023.10.24</span>
+                            </div>
+                        </div>
+
+                        <!-- 交互 Tabs -->
+                        <div class="vault-tabs">
+                            <div class="vault-tab-btn active" onclick="lsSwitchVaultTab('inventory', this)">特权背包</div>
+                            <div class="vault-tab-btn" onclick="lsSwitchVaultTab('pawnshop', this)">情绪典当</div>
+                            <div class="vault-tab-btn" onclick="lsSwitchVaultTab('bill', this)">恋爱账单</div>
+                        </div>
+
+                        <!-- 视图 1：特权背包 -->
+                        <div id="vault-view-inventory" class="vault-view-section active">
+                            <div id="vault-inventory-list">
+                                <!-- 背包物品将由 JS 动态渲染在这里 -->
+                            </div>
+                        </div>
+
+                        <!-- 视图 2：情绪典当行 -->
+                        <div id="vault-view-pawnshop" class="vault-view-section">
+                            <div class="vault-pawn-box">
+                                <div class="vault-pawn-title">
+                                    <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: #111; stroke-width: 2;"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                                    典当你的坏情绪
+                                </div>
+                                <textarea class="vault-pawn-textarea" id="vault-emotion-input" placeholder="今天遇到了什么不开心的事？写下来卖给 Ta 吧..."></textarea>
+                                <button class="vault-pawn-btn" onclick="lsPawnEmotion()">
+                                    <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: none; stroke: #FFF; stroke-width: 2;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    确认典当
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 视图 3：恋爱账单 -->
+                        <div id="vault-view-bill" class="vault-view-section">
+                            <div class="vault-bill-box">
+                                <div class="vault-bill-icon">
+                                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                </div>
+                                <div class="vault-pawn-title" style="justify-content: center;">生成近期恋爱账单</div>
+                                <div class="vault-bill-desc">AI 将扫描你们最近的聊天记录和互动，生成一份专属的情感收支报告。</div>
+                                <button class="vault-pawn-btn" onclick="lsGenerateLoveBill()">开始扫描</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- 底部 Tabbar -->
+                <div class="ls-shop-tabbar">
+                    <div class="ls-shop-tab-item active" id="ls-shop-tab-kitchen" onclick="lsSwitchShopTab('kitchen')">
+                        <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>厨房
+                    </div>
+                    <div class="ls-shop-tab-item" id="ls-shop-tab-orders" onclick="lsSwitchShopTab('orders')">
+                        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>订单
+                    </div>
+                    <div class="ls-shop-tab-item" id="ls-shop-tab-discover" onclick="lsSwitchShopTab('discover')">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="4"></circle></svg>发现
+                    </div>
+                    <div class="ls-shop-tab-item" id="ls-shop-tab-me" onclick="lsSwitchShopTab('me')">
+                        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>我
+                    </div>
+                </div>
+
+                <!-- 扭蛋机弹窗 -->
+                <div class="ls-shop-gacha-modal" id="ls-shop-gacha-modal">
+                    <div class="ls-shop-gacha-result-card">
+                        <div class="ls-shop-result-icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
+                        <div class="ls-shop-result-title">恭喜抽中特权！</div>
+                        <div class="ls-shop-result-desc">【无条件原谅券】<br>无论做错什么，都可以获得一次无条件原谅的机会哦！</div>
+                        <button class="ls-shop-result-btn" onclick="lsCloseGacha()">收下特权</button>
+                    </div>
+                </div>
+
+                <!-- 购物车弹窗 -->
+                <div id="ls-shop-cart-modal" class="wc-modal hidden" style="z-index: 6000; align-items: flex-end;">
+                    <div class="wc-modal-content" style="height: 70vh; border-radius: 24px 24px 0 0; background: #FFF; display: flex; flex-direction: column; width: 100%; max-width: 100%;">
+                        <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0;">
+                            <h3 style="color: #333;">已选菜品</h3>
+                            <button class="wc-close-btn" onclick="wcCloseModal('ls-shop-cart-modal')">&times;</button>
+                        </div>
+                        <div class="wc-modal-body" id="ls-shop-cart-list" style="flex: 1; overflow-y: auto; padding: 15px;">
+                            <!-- 购物车列表 -->
+                        </div>
+                        <div style="padding: 15px 20px; border-top: 1px solid #F0F0F0; background: #FFF;">
+                            <button class="wc-btn-primary" style="background: #FF9A9E; color: #FFF; border-radius: 20px; margin: 0;" onclick="lsCheckoutCart()">确认下单并发送给 Ta</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 添加菜谱选择弹窗 -->
+                <div id="ls-shop-add-menu-modal" class="wc-modal hidden" style="z-index: 6000; align-items: flex-end;">
+                    <div class="wc-modal-content" style="border-radius: 24px 24px 0 0; background: transparent; width: 100%; max-width: 100%;">
+                        <div class="wc-ios-list-group" style="margin: 0 15px 15px 15px; border-radius: 16px; overflow: hidden; background: #FFF;">
+                            <div class="wc-list-item center-content" onclick="lsManualAddMenuItem()" style="height: 56px; border-bottom: 1px solid #F0F0F0;">
+                                <span style="font-size: 16px; color: #333; font-weight: 500;">手动添加菜品</span>
+                            </div>
+                            <div class="wc-list-item center-content" onclick="lsAIGenerateMenuItems()" style="height: 56px;">
+                                <span style="font-size: 16px; color: #FF9A9E; font-weight: bold;">AI 智能生成专属菜单 (5个)</span>
+                            </div>
+                        </div>
+                        <div class="wc-ios-list-group" style="margin: 0 15px 25px 15px; border-radius: 16px; overflow: hidden; background: #FFF;">
+                            <div class="wc-list-item center-content" onclick="wcCloseModal('ls-shop-add-menu-modal')" style="height: 56px;">
+                                <span style="font-size: 16px; font-weight: bold; color: #999;">取消</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>                
+                <!-- 👇 新增：手动添加菜品详情弹窗 👇 -->
+                <div class="add-modal-overlay" id="ls-shop-add-detail-modal" style="z-index: 6200;">
+                    <div class="add-card">
+                        <h3 id="ls-add-detail-title">添加新菜品</h3>
+                        <input type="text" id="ls-add-detail-name" class="add-input" placeholder="菜品名称">
+                        <input type="number" id="ls-add-detail-price" class="add-input" placeholder="积分价格 (如 52)">
+                        <button class="add-btn" onclick="lsSaveNewMenuItem()">保存</button>
+                        <button class="add-btn cancel" onclick="document.getElementById('ls-shop-add-detail-modal').classList.remove('active')">取消</button>
+                    </div>
+                </div>
+ 
+<!-- 新增：商城修改操作选择弹窗 -->
+<div id="ls-shop-edit-action-sheet" class="wc-modal hidden" style="z-index: 6000; align-items: flex-end;">
+    <div class="wc-modal-content" style="border-radius: 24px 24px 0 0; background: transparent; width: 100%; max-width: 100%;">
+        <div class="wc-ios-list-group" style="margin: 0 15px 15px 15px; border-radius: 16px; overflow: hidden; background: #FFF;">
+            <div class="wc-list-item center-content" onclick="lsOpenCategoryManageModal(); wcCloseModal('ls-shop-edit-action-sheet');" style="height: 56px; border-bottom: 1px solid #F0F0F0;">
+                <span style="font-size: 16px; color: #333; font-weight: 500;">管理分类</span>
+            </div>
+            <div class="wc-list-item center-content" onclick="lsToggleShopEditMode(); wcCloseModal('ls-shop-edit-action-sheet');" style="height: 56px;">
+                <span style="font-size: 16px; color: #333; font-weight: 500;" id="ls-shop-edit-menu-text">编辑菜品</span>
+            </div>
+        </div>
+        <div class="wc-ios-list-group" style="margin: 0 15px 25px 15px; border-radius: 16px; overflow: hidden; background: #FFF;">
+            <div class="wc-list-item center-content" onclick="wcCloseModal('ls-shop-edit-action-sheet')" style="height: 56px;">
+                <span style="font-size: 16px; font-weight: bold; color: #999;">取消</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+                <!-- 分类管理弹窗 -->
+                <div id="ls-shop-category-modal" class="wc-modal hidden" style="z-index: 6000; align-items: flex-end;">
+                    <div class="wc-modal-content" style="height: 60vh; border-radius: 24px 24px 0 0; background: #FFF; display: flex; flex-direction: column; width: 100%; max-width: 100%;">
+                        <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0;">
+                            <h3 style="color: #333;">分类管理</h3>
+                            <button class="wc-close-btn" onclick="wcCloseModal('ls-shop-category-modal')">&times;</button>
+                        </div>
+                        <div class="wc-modal-body" id="ls-shop-category-list" style="flex: 1; overflow-y: auto; padding: 15px;">
+                            <!-- 分类列表 -->
+                        </div>
+                        <div style="padding: 15px 20px; border-top: 1px solid #F0F0F0; background: #FFF;">
+                            <button class="wc-btn-primary" style="background: #F5F5F5; color: #333; border-radius: 20px; margin: 0;" onclick="lsAddCategory()">+ 添加新分类</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 菜品编辑操作弹窗 -->
+                <div id="ls-shop-edit-item-modal" class="wc-modal hidden" style="z-index: 6100; align-items: flex-end;">
+                    <div class="wc-modal-content" style="border-radius: 24px 24px 0 0; background: transparent; width: 100%; max-width: 100%;">
+                        <div class="wc-ios-list-group" style="margin: 0 15px 15px 15px; border-radius: 16px; overflow: hidden; background: #FFF;">
+                            <div class="wc-list-item center-content" onclick="lsOpenEditMenuItemDetail()" style="height: 56px; border-bottom: 1px solid #F0F0F0;">
+                                <span style="font-size: 16px; color: #333; font-weight: 500;">修改菜品信息</span>
+                            </div>
+                            <div class="wc-list-item center-content" onclick="lsDeleteMenuItem()" style="height: 56px;">
+                                <span style="font-size: 16px; color: #FF3B30; font-weight: bold;">删除该菜品</span>
+                            </div>
+                        </div>
+                        <div class="wc-ios-list-group" style="margin: 0 15px 25px 15px; border-radius: 16px; overflow: hidden; background: #FFF;">
+                            <div class="wc-list-item center-content" onclick="wcCloseModal('ls-shop-edit-item-modal')" style="height: 56px;">
+                                <span style="font-size: 16px; font-weight: bold; color: #999;">取消</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 菜品编辑详情弹窗 (新增) -->
+                <div class="add-modal-overlay" id="ls-shop-edit-detail-modal" style="z-index: 6200;">
+                    <div class="add-card">
+                        <h3 id="ls-edit-detail-title">编辑菜品</h3>
+                        <input type="text" id="ls-edit-detail-name" class="add-input" placeholder="菜品名称">
+                        <input type="number" id="ls-edit-detail-price" class="add-input" placeholder="积分价格 (如 52)">
+                        <button class="add-btn" onclick="lsSaveMenuItemEdit()">保存</button>
+                        <button class="add-btn cancel" onclick="document.getElementById('ls-shop-edit-detail-modal').classList.remove('active')">取消</button>
+                    </div>
+                </div>
+            </div>
+    <!-- 商城邀请详情弹窗 (黑金高奢风) -->
+    <div id="wc-modal-shop-invite-detail" class="wc-modal-overlay hidden" style="z-index: 26000; align-items: center; justify-content: center; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); background: rgba(0,0,0,0.6);" onclick="if(event.target===this) wcCloseShopInviteDetail()">
+        <div class="shop-invite-detail-card">
+            <div class="shop-invite-detail-close" onclick="wcCloseShopInviteDetail()">×</div>
+            <div class="shop-invite-detail-title" id="shop-invite-detail-title">可选商品</div>
+            <div class="shop-invite-detail-list" id="shop-invite-detail-list">
+                <!-- 动态注入 -->
+            </div>
+        </div>
+    </div>
+
+        <!-- 聊天界面：情头邀请选择弹窗 -->
+        <div id="ls-modal-avatar-invite" class="wc-modal hidden" style="z-index: 4000; align-items: center; justify-content: center;">
+            <div class="wc-modal-content" style="width: 90%; max-width: 340px; background: #FFF; border-radius: 24px; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.15);">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <div style="font-size: 10px; font-weight: 800; color: #888; letter-spacing: 2px; margin-bottom: 8px;">COUPLE AVATAR</div>
+                    <div style="font-size: 18px; font-weight: 700; color: #111;">Ta 邀请你更换情侣头像</div>
+                    <div style="font-size: 13px; color: #666; margin-top: 6px;">请点击选择你要使用的那一张</div>
+                </div>
+                
+                <div style="display: flex; gap: 15px; margin-bottom: 24px; justify-content: center;">
+                    <div class="avatar-select-box" id="avatar-select-1" onclick="lsSelectAvatarRole(1)" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+                        <img id="avatar-invite-img-1" src="" style="width: 100px; height: 100px; border-radius: 16px; object-fit: cover; border: 3px solid transparent; transition: all 0.2s;">
+                        <span id="avatar-invite-label-1" style="font-size: 12px; font-weight: bold; color: #888;">未选择</span>
+                    </div>
+                    <div class="avatar-select-box" id="avatar-select-2" onclick="lsSelectAvatarRole(2)" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;">
+                        <img id="avatar-invite-img-2" src="" style="width: 100px; height: 100px; border-radius: 16px; object-fit: cover; border: 3px solid transparent; transition: all 0.2s;">
+                        <span id="avatar-invite-label-2" style="font-size: 12px; font-weight: bold; color: #888;">未选择</span>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px;">
+                    <button class="wc-btn-secondary" style="flex: 1; margin: 0; border-radius: 14px; padding: 14px; font-weight: bold;" onclick="lsRejectAvatarInvite()">残忍拒绝</button>
+                    <button class="wc-btn-primary" id="avatar-invite-confirm-btn" style="flex: 1; margin: 0; border-radius: 14px; padding: 14px; background: #111; font-weight: bold; opacity: 0.5; pointer-events: none;" onclick="lsConfirmAvatarInvite()">同意并更换</button>
+                </div>
+            </div>
+        </div>
+
         <!-- ========================================== -->
         <!-- Phone Simulator View (移出 WeChat，置于顶层) -->
+
         <!-- ========================================== -->
         <div id="wc-view-phone-sim">
             <div class="wc-phone-bezel">
@@ -636,33 +1025,49 @@
                     </div>
 
                     <!-- Phone App: Message (微信内部) -->
-                    <div id="wc-phone-app-message" class="wc-phone-app-view" style="display: none; flex-direction: column;">
-                        <!-- 动态 Header -->
-                        <div class="wc-phone-sim-navbar" id="wc-phone-app-header" style="background: #F7F7F7; color: #000; border-bottom: 0.5px solid #C6C6C8; justify-content: space-between; padding: 0 10px; flex-shrink: 0;">
-                            <!-- 左侧按钮 (JS 动态注入) -->
-                            <div id="wc-phone-header-left"></div>
-                            <!-- 标题 -->
-                            <div style="font-weight: 600;" id="wc-phone-header-title">微信</div>
-                            <!-- 右侧关闭 -->
-                            <div onclick="wcClosePhoneApp()" style="cursor: pointer; font-size: 14px;">关闭</div>
+                    <div id="wc-phone-app-message" class="wc-phone-app-view" style="display: none; flex-direction: column; background: #F7F7F9;">
+                        <!-- 静态高级 Header -->
+                        <div class="sim-wechat-header">
+                            <div class="sim-wechat-header-left" onclick="wcClosePhoneApp()">
+                                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 2px;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                Back
+                            </div>
+                            <div class="sim-wechat-header-center">
+                                <div class="sim-wechat-header-title">wechat☆</div>
+                                <div class="sim-wechat-header-subtitle">ZERO_VESPRINI</div>
+                            </div>
+                            <!-- 右上角生成按钮 -->
+                            <div class="sim-wechat-header-right" id="sim-wechat-header-right-btn">
+                                <div class="sim-wechat-header-icon" onclick="wcConfirmGenerateChats()"></div>
+                            </div>
+                        </div>
+
+                        <!-- 搜索栏 -->
+                        <div class="sim-wechat-search-bar" id="sim-wechat-search-bar">
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            Search...
                         </div>
                         
                         <!-- 内容区域 -->
-                        <div class="wc-phone-app-content" id="wc-phone-app-content" style="background: #fff;"></div>
+                        <div class="wc-phone-app-content" id="wc-phone-app-content" style="background: transparent; padding: 0 15px;"></div>
 
                         <!-- 底部 Tab -->
-                        <div class="wc-phone-app-tabbar">
-                            <div class="wc-phone-tab-item active" id="wc-phone-tab-chat" onclick="wcSwitchPhoneTab('chat')">
-                                <svg class="wc-icon" style="width: 20px; height: 20px;" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                                <span>微信</span>
+                        <div class="sim-wechat-bottom-nav">
+                            <div class="sim-wechat-nav-item active" id="wc-phone-tab-chat" onclick="wcSwitchPhoneTab('chat')">
+                                <svg class="sim-wechat-nav-icon" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                                Chat
                             </div>
-                            <div class="wc-phone-tab-item" id="wc-phone-tab-contacts" onclick="wcSwitchPhoneTab('contacts')">
-                                <svg class="wc-icon" style="width: 20px; height: 20px;" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                                <span>通讯录</span>
+                            
+                            <div class="sim-wechat-nav-center" id="wc-phone-tab-me" onclick="wcSwitchPhoneTab('me')">
+                                <div class="sim-wechat-center-avatar-wrap">
+                                    <img src="" id="sim-wechat-center-avatar" class="sim-wechat-center-avatar">
+                                </div>
+                                <div class="sim-wechat-center-text">Profile</div>
                             </div>
-                            <div class="wc-phone-tab-item" id="wc-phone-tab-me" onclick="wcSwitchPhoneTab('me')">
-                                <svg class="wc-icon" style="width: 20px; height: 20px;" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                                <span>我</span>
+
+                            <div class="sim-wechat-nav-item" id="wc-phone-tab-contacts" onclick="wcSwitchPhoneTab('contacts')">
+                                <svg class="sim-wechat-nav-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                Contacts
                             </div>
                         </div>
                         
@@ -2523,15 +2928,27 @@
 
                 </main>
 
-                <!-- 食谱详情弹窗 (带修改痕迹) -->
+                <!-- 食谱详情弹窗 (日记本翻页版) -->
                 <div class="recipe-modal-overlay" id="wc-modal-recipe-detail" onclick="wcCloseRecipeDetail(event)">
-                    <div class="recipe-modal-box" onclick="event.stopPropagation()">
-                        <div class="rm-header">
-                            <div class="rm-title" id="recipe-detail-title">食谱详情</div>
-                            <div class="rm-close" onclick="wcCloseRecipeDetail()"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div>
-                        </div>
-                        <div class="rm-content" id="recipe-detail-content">
-                            <!-- 详情由 JS 动态注入 -->
+                    <div class="recipe-notebook-modal" onclick="event.stopPropagation()">
+                        <div class="recipe-notebook-binding"></div>
+                        <div class="recipe-notebook-page">
+                            <div class="rm-header">
+                                <div class="rm-title" id="recipe-detail-title">食谱详情</div>
+                                <div class="rm-close" onclick="wcCloseRecipeDetail()">×</div>
+                            </div>
+                            
+                            <!-- 动态渲染区域 -->
+                            <div id="recipe-detail-render-area" class="rm-fade-content" style="flex: 1; display: flex; flex-direction: column;">
+                                <!-- 内容由 JS 注入 -->
+                            </div>
+
+                            <!-- 底部翻页器 -->
+                            <div class="rm-pagination">
+                                <button class="rm-page-btn" id="recipe-btn-prev" onclick="wcChangeRecipePage(-1)">← 上一版</button>
+                                <span class="rm-page-num" id="recipe-page-indicator">1 / 1</span>
+                                <button class="rm-page-btn" id="recipe-btn-next" onclick="wcChangeRecipePage(1)">下一版 →</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -3233,7 +3650,7 @@
                             <!-- Cart Items -->
                         </div>
                         <div style="padding: 20px; background: #fff; border-top: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -4px 15px rgba(0,0,0,0.02);">
-                            <div style="font-size: 18px; font-weight: bold; color: #4a413e;">合计: <span style="color: #c28e7e; font-family: 'Georgia', serif; font-style: italic;" id="shop-cart-total">¥0.00</span></div>
+                            <div style="font-size: 18px; font-weight: bold; color: #4a413e;">合计: <span style="color: #FF3B30; font-family: 'Georgia', serif; font-style: italic;" id="shop-cart-total">♥ 0</span></div>
                             <button class="wc-btn-primary" style="width: 120px; margin: 0; background: #5d5350;" onclick="wcCheckoutCart()">去结算</button>
                         </div>
                     </div>
