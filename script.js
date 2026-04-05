@@ -17164,14 +17164,16 @@ async function musicImportPlaylist() {
     btn.innerText = "Importing...";
     
     try {
-        // 1. 获取歌单详情
-        const resDetail = await fetch(`https://zm.armoe.cn/playlist/detail?id=${plId}`);
+        // 👇 新增：动态获取当前选中的音乐接口
+        const baseUrl = getMusicApiBaseUrl();
+        
+        // 1. 获取歌单详情 (使用动态接口)
+        const resDetail = await fetch(`${baseUrl}/playlist/detail?id=${plId}`);
         const dataDetail = await resDetail.json();
         
         if (dataDetail.code === 200 && dataDetail.playlist) {
-            // 2. 获取歌单所有歌曲
-            // 👇 就是修改下面这一行，把 limit=50 改成 limit=1000 👇
-            const resTracks = await fetch(`https://zm.armoe.cn/playlist/track/all?id=${plId}&limit=1000`);
+            // 2. 获取歌单所有歌曲 (使用动态接口)
+            const resTracks = await fetch(`${baseUrl}/playlist/track/all?id=${plId}&limit=1000`);
             const dataTracks = await resTracks.json();
             
             let tracks = [];
