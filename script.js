@@ -17451,121 +17451,178 @@ window.musicSavePlaylistInfo = function() {
 };
 
 // ==========================================
-// 新增：UID 歌单提取与导入逻辑
+// 新增：网易云 UID 登录与主页渲染逻辑
 // ==========================================
 
-// 1. 切换导入 Tab
-window.musicToggleImportTab = function(tab) {
-    document.getElementById('music-seg-import-link').classList.toggle('active', tab === 'link');
-    document.getElementById('music-seg-import-uid').classList.toggle('active', tab === 'uid');
-    document.getElementById('music-area-import-link').style.display = tab === 'link' ? 'block' : 'none';
-    document.getElementById('music-area-import-uid').style.display = tab === 'uid' ? 'block' : 'none';
+// 1. 打开登录弹窗
+window.musicOpenWyyLogin = function() {
+    wcCloseModal('music-modal-playlist-options');
+    setTimeout(() => {
+        document.getElementById('wyy-uid-input').value = '';
+        wcOpenModal('music-modal-wyy-login');
+    }, 300);
 };
 
-// ==========================================
-// 新增：UID 歌单提取与导入逻辑
-// ==========================================
-
-// 1. 切换导入 Tab
-window.musicToggleImportTab = function(tab) {
-    document.getElementById('music-seg-import-link').classList.toggle('active', tab === 'link');
-    document.getElementById('music-seg-import-uid').classList.toggle('active', tab === 'uid');
-    document.getElementById('music-area-import-link').style.display = tab === 'link' ? 'block' : 'none';
-    document.getElementById('music-area-import-uid').style.display = tab === 'uid' ? 'block' : 'none';
-};
-
-// 2. 通过 UID 获取歌单列表 (包含真实背景图获取 - 终极防缓存版)
-window.musicFetchPlaylistsByUid = async function() {
-    const uid = document.getElementById('music-import-uid-input').value.trim();
+// 2. 执行登录并拉取数据
+window.musicDoWyyLogin = async function() {
+    const uid = document.getElementById('wyy-uid-input').value.trim();
     if (!uid) return alert("请输入网易云 UID！");
-
-    const listContainer = document.getElementById('music-uid-result-list');
-    listContainer.innerHTML = '<div style="text-align:center; padding:20px;"><div class="wc-ios-spinner" style="margin:0 auto;"></div><div style="color:#888; font-size:12px; margin-top:10px;">正在拉取歌单...</div></div>';
-
+    
+    const btn = document.querySelector('#music-modal-wyy-login .wc-btn-primary');
+    const originalText = btn.innerText;
+    btn.innerText = "正在连接网易云...";
+    btn.disabled = true;
+    
     try {
-        const baseUrl = getMusicApiBaseUrl(); // 动态获取当前选择的音乐源
+        const baseUrl = getMusicApiBaseUrl();
+        const timestamp = Date.now(); // 强制打破缓存
         
-        // 1. 先拉取歌单列表 (加上 timestamp 强制打破缓存)
-        const res = await fetch(`${baseUrl}/user/playlist?uid=${uid}&timestamp=${Date.now()}`);
-        const data = await res.json();
-
-        if (data.code === 200 && data.playlist) {
-            if (data.playlist.length === 0) {
-                listContainer.innerHTML = '<div style="text-align:center; color:#888; font-size:13px; padding:20px;">该用户没有公开的歌单哦~</div>';
-                return;
+        // A. 获取用户详情 (真实背景、头像、昵称)
+        let profileData = null;
+        try {
+            const detailRes = await fetch(`${baseUrl}/user/detail?uid=${uid}&timestamp=${timestamp}`);
+            const detailJson = await detailRes.json();
+            if (detailJson.code === 200 && detailJson.profile) {
+                profileData = detailJson.profile;
             }
-
-            // 👇 核心修复：额外请求用户详情接口，并强制打破缓存获取最新封面 👇
-            const syncProfileCb = document.getElementById('music-sync-profile-cb');
-            if (syncProfileCb && syncProfileCb.checked) {
-                try {
-                    // 请求专属的用户详情接口 (加上 timestamp 强制拉取最新封面)
-                    const userDetailRes = await fetch(`${baseUrl}/user/detail?uid=${uid}&timestamp=${Date.now()}`);
-                    const userDetailData = await userDetailRes.json();
-                    
-                    if (userDetailData.code === 200 && userDetailData.profile) {
-                        const profile = userDetailData.profile;
-                        let isUpdated = false;
-                        
-                        if (profile.nickname) {
-                            musicState.profile.name = profile.nickname;
-                            isUpdated = true;
-                        }
-                        if (profile.avatarUrl) {
-                            musicState.profile.avatar = profile.avatarUrl;
-                            isUpdated = true;
-                        }
-                        
-                        // 核心：获取网易云主页封面 (backgroundUrl)
-                        if (profile.backgroundUrl) { 
-                            musicState.profile.bg = profile.backgroundUrl;
-                            isUpdated = true;
-                        } else if (data.playlist[0] && data.playlist[0].coverImgUrl) {
-                            // 兜底：如果真的没有封面图，用“我喜欢的音乐”歌单封面作为背景
-                            musicState.profile.bg = data.playlist[0].coverImgUrl;
-                            isUpdated = true;
-                        }
-                        
-                        if (isUpdated) {
-                            musicSaveData();
-                            musicRenderProfile(); // 刷新主页 UI
-                        }
-                    }
-                } catch (err) {
-                    console.warn("获取真实封面图失败，降级使用缓存数据", err);
-                    // 兜底：如果详情接口挂了，还是用歌单里附带的旧数据
-                    if (data.playlist[0] && data.playlist[0].creator) {
-                        const creator = data.playlist[0].creator;
-                        if (creator.nickname) musicState.profile.name = creator.nickname;
-                        if (creator.avatarUrl) musicState.profile.avatar = creator.avatarUrl;
-                        if (creator.backgroundUrl) musicState.profile.bg = creator.backgroundUrl;
-                        musicSaveData();
-                        musicRenderProfile();
-                    }
-                }
+        } catch(e) { console.warn("获取用户详情失败", e); }
+        
+        // B. 获取歌单列表
+        const plRes = await fetch(`${baseUrl}/user/playlist?uid=${uid}&timestamp=${timestamp}`);
+        const plJson = await plRes.json();
+        
+        if (plJson.code === 200 && plJson.playlist) {
+            // 提取装扮数据
+            const creator = plJson.playlist[0]?.creator || {};
+            const name = profileData?.nickname || creator.nickname || "网易云用户";
+            const avatar = profileData?.avatarUrl || creator.avatarUrl || "https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg";
+            const bg = profileData?.backgroundUrl || plJson.playlist[0]?.coverImgUrl || "https://i.postimg.cc/kgD9CsbW/IMG-8012.jpg";
+            
+            // 渲染到居中卡片 UI
+            document.getElementById('wyy-profile-name').innerText = name;
+            document.getElementById('wyy-profile-avatar').src = avatar;
+            
+            // 暂存装扮和歌单数据，供一键登录使用
+            window.tempWyyProfile = { name, avatar, bg, playlists: plJson.playlist };
+            
+            // 渲染歌单列表
+            const container = document.getElementById('wyy-playlist-container');
+            container.innerHTML = '';
+            
+            if (plJson.playlist.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px;">Ta 还没有公开的歌单哦~</div>';
+            } else {
+                plJson.playlist.forEach(pl => {
+                    const div = document.createElement('div');
+                    div.style.cssText = "display: flex; align-items: center; background: #FFF; padding: 10px; border-radius: 12px; border: 1px solid #F0F0F0; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.02);";
+                    div.innerHTML = `
+                        <img src="${pl.coverImgUrl}?param=100y100" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover; margin-right: 12px; flex-shrink: 0; border: 1px solid #F5F5F5;">
+                        <div style="flex: 1; overflow: hidden;">
+                            <div style="font-size: 14px; font-weight: bold; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${pl.name}</div>
+                            <div style="font-size: 11px; color: #888;">共 ${pl.trackCount} 首</div>
+                        </div>
+                        <button style="background: #F5F5F5; color: #111; border: 1px solid #EAEAEA; padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; cursor: pointer; flex-shrink: 0; margin-left: 10px;" onclick="musicImportSinglePlaylistById('${pl.id}', this)">导入</button>
+                    `;
+                    container.appendChild(div);
+                });
             }
-            // 👆 修复结束 👆
-
-            listContainer.innerHTML = '';
-            data.playlist.forEach(pl => {
-                const div = document.createElement('div');
-                div.style.cssText = "display: flex; align-items: center; background: #F9F9F9; padding: 10px; border-radius: 12px; border: 1px solid #F0F0F0;";
-                div.innerHTML = `
-                    <img src="${pl.coverImgUrl}?param=100y100" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover; margin-right: 12px; flex-shrink: 0;">
-                    <div style="flex: 1; overflow: hidden;">
-                        <div style="font-size: 14px; font-weight: bold; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${pl.name}</div>
-                        <div style="font-size: 11px; color: #888;">共 ${pl.trackCount} 首</div>
-                    </div>
-                    <button style="background: #111; color: #FFF; border: none; padding: 6px 14px; border-radius: 14px; font-size: 12px; font-weight: bold; cursor: pointer; flex-shrink: 0; margin-left: 10px;" onclick="musicImportSinglePlaylistById('${pl.id}', this)">导入</button>
-                `;
-                listContainer.appendChild(div);
-            });
+            
+            // 关闭登录框，打开主页框
+            wcCloseModal('music-modal-wyy-login');
+            setTimeout(() => wcOpenModal('music-modal-wyy-profile'), 300);
+            
         } else {
-            listContainer.innerHTML = `<div style="color:#FF3B30; font-size:13px; text-align:center; padding:20px;">获取失败：${data.message || '未知错误'}</div>`;
+            alert("获取歌单失败：" + (plJson.message || "未知错误"));
         }
     } catch (e) {
         console.error(e);
-        listContainer.innerHTML = `<div style="color:#FF3B30; font-size:13px; text-align:center; padding:20px;">网络请求失败，请检查 API 节点是否可用。</div>`;
+        alert("网络请求失败，请检查 API 节点是否可用。");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+};
+
+// 3. 一键登录并同步装扮与歌单
+window.musicSyncWyyProfileAndPlaylists = async function() {
+    if (!window.tempWyyProfile) return;
+    
+    const btn = document.querySelector('#music-modal-wyy-profile .wc-btn-primary');
+    const originalText = btn.innerText;
+    btn.innerText = "正在同步...";
+    btn.disabled = true;
+
+    try {
+        // 1. 同步装扮
+        musicState.profile.name = window.tempWyyProfile.name;
+        musicState.profile.avatar = window.tempWyyProfile.avatar;
+        musicState.profile.bg = window.tempWyyProfile.bg;
+        
+        // 2. 批量导入歌单
+        const playlists = window.tempWyyProfile.playlists;
+        const baseUrl = getMusicApiBaseUrl();
+        
+        let successCount = 0;
+        
+        // 限制最多一键导入 10 个歌单，防止 API 封禁卡死
+        const maxImport = Math.min(playlists.length, 10);
+        
+        for (let i = 0; i < maxImport; i++) {
+            const pl = playlists[i];
+            btn.innerText = `导入歌单 (${i+1}/${maxImport})...`;
+            
+            try {
+                const resDetail = await fetch(`${baseUrl}/playlist/detail?id=${pl.id}`);
+                const dataDetail = await resDetail.json();
+                
+                if (dataDetail.code === 200 && dataDetail.playlist) {
+                    const resTracks = await fetch(`${baseUrl}/playlist/track/all?id=${pl.id}&limit=1000`);
+                    const dataTracks = await resTracks.json();
+                    
+                    let tracks = [];
+                    if (dataTracks.code === 200 && dataTracks.songs) {
+                        tracks = dataTracks.songs.map(song => ({
+                            id: song.id,
+                            title: song.name,
+                            artist: song.ar.map(a => a.name).join(', '),
+                            cover: song.al.picUrl + '?param=100y100'
+                        }));
+                    }
+                    
+                    // 查重，防止重复导入
+                    const exists = musicState.playlists.find(p => p.id === dataDetail.playlist.id);
+                    if (!exists) {
+                        musicState.playlists.push({
+                            id: dataDetail.playlist.id,
+                            name: dataDetail.playlist.name,
+                            cover: dataDetail.playlist.coverImgUrl,
+                            tracks: tracks
+                        });
+                        successCount++;
+                    }
+                }
+            } catch (err) {
+                console.warn(`歌单 ${pl.name} 导入失败`, err);
+            }
+        }
+        
+        musicSaveData();
+        musicRenderProfile();
+        
+        wcCloseModal('music-modal-wyy-profile');
+        
+        if (playlists.length > 10) {
+            alert(`登录成功！已同步头像、名称、背景，并成功导入前 ${successCount} 个歌单（为防止卡顿，最多一键导入10个，其余可手动导入）。`);
+        } else {
+            alert(`登录成功！已同步头像、名称、背景，并成功导入 ${successCount} 个歌单！`);
+        }
+        
+    } catch (e) {
+        console.error(e);
+        alert("同步过程中发生错误");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
     }
 };
 
