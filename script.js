@@ -22401,64 +22401,132 @@ function lsSubmitAvatarDesc() {
     lsCloseAvatarDescModal();
 }
 
-// 拖拽交换逻辑
-let lsDraggedAvatarBox = null;
+// 兼容移动端的丝滑拖拽交换逻辑
+let lsGalleryDrag = {
+    active: false,
+    sourceEl: null,
+    ghostEl: null,
+    sourcePairIdx: null,
+    sourcePos: null,
+    offsetX: 0,
+    offsetY: 0
+};
 
 function lsBindAvatarBoxEvents(group, pairIdx) {
     const boxes = group.querySelectorAll('.ls-gallery-img-box');
     boxes.forEach(box => {
-        // 点击修改描述
-        box.addEventListener('click', function() {
+        // 点击修改描述 (非编辑模式)
+        box.addEventListener('click', function(e) {
             if (!isAvatarEditMode) {
                 lsOpenAvatarDescModal(this.querySelector('.ls-gallery-img-desc'), pairIdx, this.dataset.pos);
             }
         });
 
-        // 拖拽
-        box.addEventListener('dragstart', function(e) {
-            if (!isAvatarEditMode) { e.preventDefault(); return; }
-            lsDraggedAvatarBox = { el: this, pairIdx: pairIdx, pos: this.dataset.pos };
-            e.dataTransfer.effectAllowed = 'move';
-            setTimeout(() => this.style.opacity = '0.5', 0);
-        });
-
-        box.addEventListener('dragover', function(e) {
-            if (!isAvatarEditMode) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-        });
-
-        box.addEventListener('drop', function(e) {
-            if (!isAvatarEditMode) return;
-            e.preventDefault();
-            if (lsDraggedAvatarBox && lsDraggedAvatarBox.el !== this) {
-                const targetPairIdx = pairIdx;
-                const targetPos = this.dataset.pos;
-                
-                const sourcePair = lsState.coupleAvatars[lsDraggedAvatarBox.pairIdx];
-                const targetPair = lsState.coupleAvatars[targetPairIdx];
-                
-                // 交换数据
-                const tempUrl = sourcePair[`url${lsDraggedAvatarBox.pos}`];
-                const tempDesc = sourcePair[`desc${lsDraggedAvatarBox.pos}`];
-                
-                sourcePair[`url${lsDraggedAvatarBox.pos}`] = targetPair[`url${targetPos}`];
-                sourcePair[`desc${lsDraggedAvatarBox.pos}`] = targetPair[`desc${targetPos}`];
-                
-                targetPair[`url${targetPos}`] = tempUrl;
-                targetPair[`desc${targetPos}`] = tempDesc;
-                
-                lsSaveData();
-                lsRenderAvatarGallery();
-            }
-        });
-
-        box.addEventListener('dragend', function() {
-            if (!isAvatarEditMode) return;
-            this.style.opacity = '1';
-            lsDraggedAvatarBox = null;
-        });
+        // 绑定触摸和鼠标按下事件 (编辑模式拖拽)
+        box.addEventListener('touchstart', handleGalleryDragStart, { passive: false });
+        box.addEventListener('mousedown', handleGalleryDragStart);
     });
+}
+
+function handleGalleryDragStart(e) {
+    if (!isAvatarEditMode) return;
+    if (e.touches && e.touches.length > 1) return; // 防止多指触控干扰
+    if (e.target.classList.contains('ls-gallery-checkbox')) return; // 忽略复选框点击
+
+    e.preventDefault(); // 阻止默认滚动
+
+    const touch = e.touches ? e.touches[0] : e;
+    const targetBox = e.currentTarget;
+    
+    lsGalleryDrag.active = true;
+    lsGalleryDrag.sourceEl = targetBox;
+    lsGalleryDrag.sourcePairIdx = targetBox.closest('.ls-gallery-group').dataset.index;
+    lsGalleryDrag.sourcePos = targetBox.dataset.pos;
+
+    // 计算手指点击位置与元素左上角的偏移量
+    const rect = targetBox.getBoundingClientRect();
+    lsGalleryDrag.offsetX = touch.clientX - rect.left;
+    lsGalleryDrag.offsetY = touch.clientY - rect.top;
+
+    // 创建跟随手指的幽灵元素
+    lsGalleryDrag.ghostEl = targetBox.cloneNode(true);
+    lsGalleryDrag.ghostEl.style.position = 'fixed';
+    lsGalleryDrag.ghostEl.style.zIndex = '99999';
+    lsGalleryDrag.ghostEl.style.opacity = '0.8';
+    lsGalleryDrag.ghostEl.style.pointerEvents = 'none'; // 关键：让事件穿透幽灵元素，才能检测到下方的目标
+    lsGalleryDrag.ghostEl.style.width = rect.width + 'px';
+    lsGalleryDrag.ghostEl.style.height = rect.height + 'px';
+    lsGalleryDrag.ghostEl.style.boxShadow = '0 10px 25px rgba(0,0,0,0.3)';
+    lsGalleryDrag.ghostEl.style.transform = 'scale(1.05)';
+    
+    document.body.appendChild(lsGalleryDrag.ghostEl);
+    updateGalleryGhostPosition(touch.clientX, touch.clientY);
+    
+    targetBox.style.opacity = '0.3'; // 原元素变暗
+
+    // 绑定全局移动和松开事件
+    document.addEventListener('touchmove', handleGalleryDragMove, { passive: false });
+    document.addEventListener('mousemove', handleGalleryDragMove);
+    document.addEventListener('touchend', handleGalleryDragEnd);
+    document.addEventListener('mouseup', handleGalleryDragEnd);
+}
+
+function updateGalleryGhostPosition(x, y) {
+    if (lsGalleryDrag.ghostEl) {
+        lsGalleryDrag.ghostEl.style.left = (x - lsGalleryDrag.offsetX) + 'px';
+        lsGalleryDrag.ghostEl.style.top = (y - lsGalleryDrag.offsetY) + 'px';
+    }
+}
+
+function handleGalleryDragMove(e) {
+    if (!lsGalleryDrag.active) return;
+    e.preventDefault(); // 拖拽时禁止页面滚动
+    const touch = e.touches ? e.touches[0] : e;
+    updateGalleryGhostPosition(touch.clientX, touch.clientY);
+}
+
+function handleGalleryDragEnd(e) {
+    if (!lsGalleryDrag.active) return;
+    
+    const touch = e.changedTouches ? e.changedTouches[0] : e;
+    
+    // 获取手指松开位置下方的元素
+    const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+    const targetBox = elemBelow ? elemBelow.closest('.ls-gallery-img-box') : null;
+
+    // 如果落在了另一个图片框上，执行数据交换
+    if (targetBox && targetBox !== lsGalleryDrag.sourceEl) {
+        const targetPairIdx = targetBox.closest('.ls-gallery-group').dataset.index;
+        const targetPos = targetBox.dataset.pos;
+        
+        const sourcePair = lsState.coupleAvatars[lsGalleryDrag.sourcePairIdx];
+        const targetPair = lsState.coupleAvatars[targetPairIdx];
+        
+        // 交换数据
+        const tempUrl = sourcePair[`url${lsGalleryDrag.sourcePos}`];
+        const tempDesc = sourcePair[`desc${lsGalleryDrag.sourcePos}`];
+        
+        sourcePair[`url${lsGalleryDrag.sourcePos}`] = targetPair[`url${targetPos}`];
+        sourcePair[`desc${lsGalleryDrag.sourcePos}`] = targetPair[`desc${targetPos}`];
+        
+        targetPair[`url${targetPos}`] = tempUrl;
+        targetPair[`desc${targetPos}`] = tempDesc;
+        
+        lsSaveData();
+    }
+
+    // 清理拖拽状态和 DOM
+    if (lsGalleryDrag.sourceEl) lsGalleryDrag.sourceEl.style.opacity = '1';
+    if (lsGalleryDrag.ghostEl) lsGalleryDrag.ghostEl.remove();
+    
+    lsGalleryDrag = { active: false, sourceEl: null, ghostEl: null, sourcePairIdx: null, sourcePos: null, offsetX: 0, offsetY: 0 };
+    
+    document.removeEventListener('touchmove', handleGalleryDragMove);
+    document.removeEventListener('mousemove', handleGalleryDragMove);
+    document.removeEventListener('touchend', handleGalleryDragEnd);
+    document.removeEventListener('mouseup', handleGalleryDragEnd);
+    
+    lsRenderAvatarGallery(); // 重新渲染刷新视图
 }
 
 // ==========================================
