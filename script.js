@@ -5289,6 +5289,11 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             // 👇【修改这一行】：强制 AI 多人发言，并允许群成员互相回复
             groupPrompt += `【活跃群聊铁律】：这是一个多人活跃群聊！当 User 发话时，绝对不能只有一个人回复！你必须让群里**至少 2 个不同的成员**出来接话。群成员之间也必须互相回复、吐槽、接梗，同时也不要只围着 User 转！如果某个成员说了一句话，其他成员可以针对这句话进行反驳或赞同，但是也不能完全不理User！禁止自说自话！严禁冷场！\n`;            
             groupPrompt += `【角色扮演铁律 (最高防串戏警告)】：你必须严格区分每个人的性格和身份，请严格扮演每个角色的人设，不同角色之间应有明显的性格和语气差异绝对，禁止角色串台词！\n`;
+            
+            // 👇 新增：绝对禁止扮演 User
+            const tempUserName = config.userName || wcState.user.name;
+            groupPrompt += `【绝对禁止扮演User】：你绝对不能以【${tempUserName}】(User) 的身份发言！User 的话由玩家自己输入，你只能扮演群里的其他 Char 成员！\n`;
+
             groupPrompt += `> 警告：如果 "senderName" 是 "张三"，那么 "content" 必须且只能是张三会说的话，绝对不能包含李四的设定、记忆或语气！\n`;
             groupPrompt += `> 每次生成回复前，必须核对当前发言人的名字和设定，确保 100% 匹配！\n`;
             groupPrompt += `【丰富互动】：群里的每一个成员都可以发送文本(text)、表情包(sticker)、图片(image)、语音(voice)或转账(transfer)。\n`;
