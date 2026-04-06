@@ -14233,7 +14233,7 @@ function wcRenderPhoneBrowserContent() {
     const browserData = (char.phoneData && char.phoneData.browser) ? char.phoneData.browser : null;
 
     if (!browserData) {
-        content.innerHTML = '<div style="padding: 40px 20px; text-align: center; color: #8E8E93; font-size: 14px;">点击左上角「刷新」<br>偷偷查看 Ta 的浏览器记录...</div>';
+        content.innerHTML = '<div style="padding: 40px 20px; text-align: center; color: #8E8E93; font-size: 14px;">点击底栏中间的「刷新」<br>偷偷查看 Ta 的浏览器记录...</div>';
         return;
     }
 

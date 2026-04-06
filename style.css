@@ -5406,7 +5406,7 @@ input::-webkit-inner-spin-button {
     justify-content: space-between;
     align-items: center;
     /* 👇 修改这里：增加 padding-top 将内容往下推，同时加高了整个顶栏 */
-    padding: 50px 20px 15px 20px; 
+    padding: 40px 20px 15px 20px; 
     position: relative;
     background: transparent;
     z-index: 10;
