@@ -5107,6 +5107,11 @@ async function wcTriggerAI(charIdOverride = null) {
         // ==========================================
 
         const msgs = wcState.chats[charId] || [];
+        
+        // 👇 核心修复：将 limit 和 recentMsgs 的定义提前到这里 👇
+        let limit = config.contextLimit > 0 ? config.contextLimit : 30;
+        const recentMsgs = msgs.slice(-limit);
+        
         const timeGapPrompt = wcGenerateTimeGapPrompt(msgs, now.getTime());
 
         // --- 新增：时间感知开关逻辑 ---
@@ -5448,9 +5453,6 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             systemPrompt += `你可以一边在微信里回复 User 的消息，一边给 Ta 的朋友圈点赞/评论！\n`;
             systemPrompt += `示例：\n[\n  {"type":"text", "content":"我看到你发的朋友圈啦~"}, \n  {"type":"moment_like", "content": 123456}, \n  {"type":"moment_comment", "momentId": 123456, "content":"拍得真好看！"}\n]\n\n`;
         }
-
-        let limit = config.contextLimit > 0 ? config.contextLimit : 30;
-        const recentMsgs = msgs.slice(-limit);
         
         // 👇 新增：将角色的生活状态注入到 System Prompt 中 👇
         if (!char.lifeStatus) {
