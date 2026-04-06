@@ -5130,7 +5130,10 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         let avatarGalleryPrompt = "";
         let galleryVisionMessage = null;
         if (typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId && lsState.avatarInviteEnabled && lsState.coupleAvatars && lsState.coupleAvatars.length > 0) {
-            const lastUserMsg = recentMsgs[recentMsgs.length - 1] || "";
+            // 👇 修复：提取消息对象中的 content 字符串 👇
+            const lastMsgObj = recentMsgs[recentMsgs.length - 1];
+            const lastUserMsg = (lastMsgObj && typeof lastMsgObj.content === 'string') ? lastMsgObj.content : "";
+            
             const triggerWords = ["头像", "情头", "换", "照片"];
             // 15% 概率随机触发，或者用户主动提及时触发
             const isTriggered = triggerWords.some(w => lastUserMsg.includes(w)) || Math.random() < 0.15;
