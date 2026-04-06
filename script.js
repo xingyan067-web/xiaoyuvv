@@ -11168,7 +11168,8 @@ async function wcGeneratePhoneContacts() {
 
         const realFriends = wcState.characters.filter(c => 
             c.id !== char.id && !c.isGroup && 
-            (c.groupName === char.groupName || relCharIds.has(c.id)) && 
+            c.groupName === char.groupName && 
+            relCharIds.has(c.id) && 
             c.groupName !== 'All'
         );
 
