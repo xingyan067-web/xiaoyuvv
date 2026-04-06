@@ -2469,20 +2469,98 @@
                 </div>
             </div>
         </div>
+        <!-- 音乐 APP 弹窗：歌单操作菜单 (Action Sheet) -->
+        <div id="music-modal-playlist-action-sheet" class="wc-modal hidden" style="z-index: 3900; align-items: flex-end;">
+            <div class="wc-modal-content" style="height: auto; border-radius: 14px 14px 0 0; width: 100%; max-width: 100%; background-color: transparent;">
+                <div class="wc-ios-list-group" style="margin: 0 10px; border-radius: 14px; overflow: hidden; background: #FFF;">
+                    <div class="wc-list-item center-content" onclick="musicOpenEditPlaylistInfo()" style="height: 56px;">
+                        <span style="font-size: 16px; color: #111; font-weight: 500;">编辑歌单信息</span>
+                    </div>
+                    <div class="wc-list-item center-content" onclick="musicDeletePlaylistFromSheet()" style="height: 56px; border-top: 1px solid #EAEAEA;">
+                        <span style="font-size: 16px; color: #FF3B30; font-weight: 500;">删除歌单</span>
+                    </div>
+                </div>
+                <div class="wc-ios-list-group" style="margin: 10px 10px 20px 10px; border-radius: 14px; overflow: hidden; background: #FFF;">
+                    <div class="wc-list-item center-content" onclick="wcCloseModal('music-modal-playlist-action-sheet')" style="height: 56px;">
+                        <span style="font-size: 16px; font-weight: bold; color: #007AFF;">取消</span>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-        <!-- 音乐 APP 弹窗：导入歌单 -->
-        <div id="music-modal-import-playlist" class="wc-modal hidden" style="z-index: 3600;">
-            <div class="wc-modal-content" style="background: #FFF;">
-                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0;">
-                    <h3 style="color: #111; font-weight: 700;">Import Playlist</h3>
+        <!-- 音乐 APP 弹窗：编辑歌单信息 (居中版) -->
+        <div id="music-modal-edit-playlist-info" class="wc-modal hidden" style="z-index: 3600; align-items: center; justify-content: center;">
+            <div class="wc-modal-content" style="background: #FFF; border-radius: 24px; width: 90%; max-width: 340px; box-shadow: 0 20px 50px rgba(0,0,0,0.15);">
+                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                    <h3 style="color: #111; font-weight: 700; font-size: 18px; margin: 0;">编辑歌单</h3>
+                    <button class="wc-close-btn" onclick="wcCloseModal('music-modal-edit-playlist-info')">&times;</button>
+                </div>
+                <div class="wc-modal-body" style="padding: 20px;">
+                    <div class="wc-form-group">
+                        <label class="wc-form-label" style="color: #888;">歌单名称</label>
+                        <input type="text" id="music-edit-pl-name" class="wc-form-input" style="background: #F5F5F5; border: none;">
+                    </div>
+                    <div class="wc-form-group">
+                        <label class="wc-form-label" style="color: #888;">歌单封面 (URL 或 本地上传)</label>
+                        <input type="text" id="music-edit-pl-cover" class="wc-form-input" placeholder="Image URL" style="background: #F5F5F5; border: none; margin-bottom: 8px;">
+                        <button class="wc-btn-secondary" style="width: 100%; padding: 10px; border-radius: 12px; background: #E5E5EA; color: #111; border: none; font-weight: bold;" onclick="document.getElementById('music-upload-edit-pl-cover').click()">上传本地图片</button>
+                        <input type="file" id="music-upload-edit-pl-cover" style="display: none;" accept="image/*" onchange="musicHandleFileUpload(this, 'edit-pl-cover')">
+                    </div>
+                    <button class="wc-btn-primary" style="background: #111; color: #FFF; border-radius: 16px; margin: 10px 0 0 0;" onclick="musicSavePlaylistInfo()">保存修改</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 音乐 APP 弹窗：导入歌单 (支持链接与UID双模式 - 居中版) -->
+        <div id="music-modal-import-playlist" class="wc-modal hidden" style="z-index: 3600; align-items: center; justify-content: center;">
+            <div class="wc-modal-content" style="background: #FFF; height: 75vh; max-height: 600px; border-radius: 24px; display: flex; flex-direction: column; width: 90%; max-width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.15);">
+                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                    <h3 style="color: #111; font-weight: 700; font-size: 18px; margin: 0;">导入歌单</h3>
                     <button class="wc-close-btn" onclick="wcCloseModal('music-modal-import-playlist')">&times;</button>
                 </div>
-                <div class="wc-modal-body">
-                    <div class="wc-form-group">
-                        <label class="wc-form-label" style="color: #888;">NetEase Music Link</label>
-                        <textarea id="music-import-pl-link" class="wc-form-textarea" placeholder="这里是网易云链接或ID导入歌单，导入歌单前注意要先前往网易云设置把歌单公开哦，导入完就可以继续隐藏了哦^^" style="background: #F5F5F5; border: none; height: 80px;"></textarea>
+                
+                <!-- 分段控制器 -->
+                <div style="padding: 15px 20px 0;">
+                    <div class="wc-segmented-control" style="background: #F5F5F5; margin-bottom: 0;">
+                        <div class="wc-segment-btn active" id="music-seg-import-link" onclick="musicToggleImportTab('link')">链接导入</div>
+                        <div class="wc-segment-btn" id="music-seg-import-uid" onclick="musicToggleImportTab('uid')">UID 提取</div>
                     </div>
-                    <button class="wc-btn-primary" style="background: #111; color: #FFF;" onclick="musicImportPlaylist()">Import</button>
+                </div>
+
+                <div class="wc-modal-body" style="flex: 1; overflow-y: auto; padding: 20px;">
+                    <!-- 链接导入区域 -->
+                    <div id="music-area-import-link">
+                        <div class="wc-form-group">
+                            <label class="wc-form-label" style="color: #888;">网易云歌单链接 / ID</label>
+                            <textarea id="music-import-pl-link" class="wc-form-textarea" placeholder="请粘贴网易云歌单分享链接，或直接输入歌单 ID。&#10;注意：导入前请确保歌单已在网易云设置为公开！" style="background: #F5F5F5; border: none; height: 100px;"></textarea>
+                        </div>
+                        <button class="wc-btn-primary" style="background: #111; color: #FFF; border-radius: 16px; margin: 0;" onclick="musicImportPlaylist()">解析并导入</button>
+                    </div>
+
+                    <!-- UID 提取区域 -->
+                    <div id="music-area-import-uid" style="display: none;">
+                        <div class="wc-form-group" style="margin-bottom: 10px;">
+                            <label class="wc-form-label" style="color: #888;">网易云用户 UID</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="number" id="music-import-uid-input" class="wc-form-input" placeholder="输入 UID (如: 32953014)" style="background: #F5F5F5; border: none; margin: 0;">
+                                <button class="wc-btn-primary" style="background: #111; color: #FFF; width: 80px; margin: 0; border-radius: 12px; padding: 0;" onclick="musicFetchPlaylistsByUid()">获取</button>
+                            </div>
+                            <div style="font-size: 11px; color: #999; margin-top: 8px; line-height: 1.4;">
+                                获取方法：网易云APP -> 个人主页 -> 用户id。
+                            </div>
+                        </div>
+                        
+                        <!-- 同步头像、昵称和背景的勾选框 -->
+                        <div class="wc-form-group" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                            <input type="checkbox" id="music-sync-profile-cb" checked style="width: 16px; height: 16px; accent-color: #111; margin: 0;">
+                            <label for="music-sync-profile-cb" style="font-size: 13px; color: #333; margin: 0; cursor: pointer;">同步网易云头像、昵称和背景</label>
+                        </div>
+                        
+                        <!-- 提取结果列表 -->
+                        <div id="music-uid-result-list" style="margin-top: 10px; display: flex; flex-direction: column; gap: 12px;">
+                            <!-- 动态注入歌单列表 -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

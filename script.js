@@ -17285,14 +17285,28 @@ function musicRenderProfile() {
     musicState.playlists.forEach((pl, idx) => {
         const card = document.createElement('div');
         card.className = 'ins-music-playlist-card';
+        // 核心：复用朋友圈的向左弹出菜单样式
         card.innerHTML = `
             <img src="${pl.cover}" class="ins-music-playlist-cover">
             <div class="ins-music-playlist-info">
                 <div class="ins-music-playlist-name">${pl.name}</div>
                 <div class="ins-music-playlist-count">${pl.tracks ? pl.tracks.length : 0} tracks</div>
             </div>
-            <div class="ins-music-btn-icon" style="background: transparent; border: none; color: #888;" onclick="musicDeletePlaylist(event, ${idx})">
-                <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            <div style="position: relative; display: flex; align-items: center;">
+                <!-- 向左弹出的深色高级菜单 -->
+                <div class="wc-moment-popover" id="music-playlist-popover-${idx}" style="right: 36px; top: -4px;">
+                    <div class="wc-moment-popover-item" onclick="event.stopPropagation(); musicOpenEditPlaylistInfo(${idx})" title="编辑">
+                        <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    </div>
+                    <div style="width: 1px; height: 16px; background: rgba(255,255,255,0.2); margin: 0 10px;"></div>
+                    <div class="wc-moment-popover-item" onclick="event.stopPropagation(); musicDeletePlaylistAction(${idx})" title="删除">
+                        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                    </div>
+                </div>
+                <!-- 三个点按钮 -->
+                <div class="ins-music-btn-icon" style="background: transparent; border: none; color: #888; width: 28px; height: 28px;" onclick="musicTogglePlaylistMenu(event, ${idx})">
+                    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg>
+                </div>
             </div>
         `;
         card.onclick = () => musicOpenPlaylistDetail(idx);
@@ -17322,6 +17336,9 @@ function musicHandleFileUpload(input, type) {
             } else if (type === 'pl-cover') {
                 document.getElementById('music-create-pl-cover').value = 'Local Image Selected';
                 musicState.tempPlCover = e.target.result;
+            } else if (type === 'edit-pl-cover') {
+                document.getElementById('music-edit-pl-cover').value = '已选择本地图片';
+                musicState.tempEditPlCover = e.target.result;
             }
         };
         reader.readAsDataURL(file);
@@ -17366,29 +17383,208 @@ function musicCreatePlaylist() {
     musicRenderProfile();
     wcCloseModal('music-modal-create-playlist');
 }
+// ==========================================
+// 新增：歌单编辑与删除 (向左弹出菜单版)
+// ==========================================
+let currentActionPlaylistIdx = -1;
 
-async function musicImportPlaylist() {
-    const link = document.getElementById('music-import-pl-link').value.trim();
-    if (!link) return alert("Please paste a link.");
+// 控制弹出菜单的显示与隐藏
+window.musicTogglePlaylistMenu = function(e, idx) {
+    e.stopPropagation();
+    // 先关闭其他所有打开的菜单 (复用朋友圈的类名)
+    document.querySelectorAll('.wc-moment-popover').forEach(el => {
+        if (el.id !== `music-playlist-popover-${idx}`) el.classList.remove('active');
+    });
+    // 切换当前菜单
+    const popover = document.getElementById(`music-playlist-popover-${idx}`);
+    if (popover) popover.classList.toggle('active');
+};
+
+// 删除歌单
+window.musicDeletePlaylistAction = function(idx) {
+    document.getElementById(`music-playlist-popover-${idx}`).classList.remove('active');
+    if (confirm("确定要删除这个歌单吗？")) {
+        musicState.playlists.splice(idx, 1);
+        musicSaveData();
+        musicRenderProfile();
+    }
+};
+
+// 打开编辑弹窗
+window.musicOpenEditPlaylistInfo = function(idx) {
+    document.getElementById(`music-playlist-popover-${idx}`).classList.remove('active');
+    currentActionPlaylistIdx = idx; // 记录当前编辑的索引
+    const pl = musicState.playlists[idx];
+    if (!pl) return;
     
-    const match = link.match(/id=(\d+)/);
-    if (!match) return alert("Invalid NetEase Music link.");
+    // 预填当前数据
+    document.getElementById('music-edit-pl-name').value = pl.name;
+    document.getElementById('music-edit-pl-cover').value = ''; // 默认不显示长长的base64
+    musicState.tempEditPlCover = null; // 清空临时变量
     
-    const plId = match[1];
-    const btn = document.querySelector('#music-modal-import-playlist .wc-btn-primary');
-    const originalText = btn.innerText;
-    btn.innerText = "Importing...";
+    wcOpenModal('music-modal-edit-playlist-info');
+};
+
+// 保存修改
+window.musicSavePlaylistInfo = function() {
+    const pl = musicState.playlists[currentActionPlaylistIdx];
+    if (!pl) return;
+
+    const newName = document.getElementById('music-edit-pl-name').value.trim();
+    const newCoverUrl = document.getElementById('music-edit-pl-cover').value.trim();
+
+    if (!newName) return alert("歌单名称不能为空哦~");
+
+    // 更新名称
+    pl.name = newName;
     
+    // 更新封面
+    if (newCoverUrl && newCoverUrl !== '已选择本地图片') {
+        pl.cover = newCoverUrl;
+    } else if (musicState.tempEditPlCover) {
+        pl.cover = musicState.tempEditPlCover;
+    }
+
+    musicSaveData();
+    musicRenderProfile();
+    wcCloseModal('music-modal-edit-playlist-info');
+};
+
+// ==========================================
+// 新增：UID 歌单提取与导入逻辑
+// ==========================================
+
+// 1. 切换导入 Tab
+window.musicToggleImportTab = function(tab) {
+    document.getElementById('music-seg-import-link').classList.toggle('active', tab === 'link');
+    document.getElementById('music-seg-import-uid').classList.toggle('active', tab === 'uid');
+    document.getElementById('music-area-import-link').style.display = tab === 'link' ? 'block' : 'none';
+    document.getElementById('music-area-import-uid').style.display = tab === 'uid' ? 'block' : 'none';
+};
+
+// ==========================================
+// 新增：UID 歌单提取与导入逻辑
+// ==========================================
+
+// 1. 切换导入 Tab
+window.musicToggleImportTab = function(tab) {
+    document.getElementById('music-seg-import-link').classList.toggle('active', tab === 'link');
+    document.getElementById('music-seg-import-uid').classList.toggle('active', tab === 'uid');
+    document.getElementById('music-area-import-link').style.display = tab === 'link' ? 'block' : 'none';
+    document.getElementById('music-area-import-uid').style.display = tab === 'uid' ? 'block' : 'none';
+};
+
+// 2. 通过 UID 获取歌单列表 (包含真实背景图获取 - 终极防缓存版)
+window.musicFetchPlaylistsByUid = async function() {
+    const uid = document.getElementById('music-import-uid-input').value.trim();
+    if (!uid) return alert("请输入网易云 UID！");
+
+    const listContainer = document.getElementById('music-uid-result-list');
+    listContainer.innerHTML = '<div style="text-align:center; padding:20px;"><div class="wc-ios-spinner" style="margin:0 auto;"></div><div style="color:#888; font-size:12px; margin-top:10px;">正在拉取歌单...</div></div>';
+
     try {
-        // 👇 新增：动态获取当前选中的音乐接口
-        const baseUrl = getMusicApiBaseUrl();
+        const baseUrl = getMusicApiBaseUrl(); // 动态获取当前选择的音乐源
         
-        // 1. 获取歌单详情 (使用动态接口)
+        // 1. 先拉取歌单列表 (加上 timestamp 强制打破缓存)
+        const res = await fetch(`${baseUrl}/user/playlist?uid=${uid}&timestamp=${Date.now()}`);
+        const data = await res.json();
+
+        if (data.code === 200 && data.playlist) {
+            if (data.playlist.length === 0) {
+                listContainer.innerHTML = '<div style="text-align:center; color:#888; font-size:13px; padding:20px;">该用户没有公开的歌单哦~</div>';
+                return;
+            }
+
+            // 👇 核心修复：额外请求用户详情接口，并强制打破缓存获取最新封面 👇
+            const syncProfileCb = document.getElementById('music-sync-profile-cb');
+            if (syncProfileCb && syncProfileCb.checked) {
+                try {
+                    // 请求专属的用户详情接口 (加上 timestamp 强制拉取最新封面)
+                    const userDetailRes = await fetch(`${baseUrl}/user/detail?uid=${uid}&timestamp=${Date.now()}`);
+                    const userDetailData = await userDetailRes.json();
+                    
+                    if (userDetailData.code === 200 && userDetailData.profile) {
+                        const profile = userDetailData.profile;
+                        let isUpdated = false;
+                        
+                        if (profile.nickname) {
+                            musicState.profile.name = profile.nickname;
+                            isUpdated = true;
+                        }
+                        if (profile.avatarUrl) {
+                            musicState.profile.avatar = profile.avatarUrl;
+                            isUpdated = true;
+                        }
+                        
+                        // 核心：获取网易云主页封面 (backgroundUrl)
+                        if (profile.backgroundUrl) { 
+                            musicState.profile.bg = profile.backgroundUrl;
+                            isUpdated = true;
+                        } else if (data.playlist[0] && data.playlist[0].coverImgUrl) {
+                            // 兜底：如果真的没有封面图，用“我喜欢的音乐”歌单封面作为背景
+                            musicState.profile.bg = data.playlist[0].coverImgUrl;
+                            isUpdated = true;
+                        }
+                        
+                        if (isUpdated) {
+                            musicSaveData();
+                            musicRenderProfile(); // 刷新主页 UI
+                        }
+                    }
+                } catch (err) {
+                    console.warn("获取真实封面图失败，降级使用缓存数据", err);
+                    // 兜底：如果详情接口挂了，还是用歌单里附带的旧数据
+                    if (data.playlist[0] && data.playlist[0].creator) {
+                        const creator = data.playlist[0].creator;
+                        if (creator.nickname) musicState.profile.name = creator.nickname;
+                        if (creator.avatarUrl) musicState.profile.avatar = creator.avatarUrl;
+                        if (creator.backgroundUrl) musicState.profile.bg = creator.backgroundUrl;
+                        musicSaveData();
+                        musicRenderProfile();
+                    }
+                }
+            }
+            // 👆 修复结束 👆
+
+            listContainer.innerHTML = '';
+            data.playlist.forEach(pl => {
+                const div = document.createElement('div');
+                div.style.cssText = "display: flex; align-items: center; background: #F9F9F9; padding: 10px; border-radius: 12px; border: 1px solid #F0F0F0;";
+                div.innerHTML = `
+                    <img src="${pl.coverImgUrl}?param=100y100" style="width: 48px; height: 48px; border-radius: 8px; object-fit: cover; margin-right: 12px; flex-shrink: 0;">
+                    <div style="flex: 1; overflow: hidden;">
+                        <div style="font-size: 14px; font-weight: bold; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">${pl.name}</div>
+                        <div style="font-size: 11px; color: #888;">共 ${pl.trackCount} 首</div>
+                    </div>
+                    <button style="background: #111; color: #FFF; border: none; padding: 6px 14px; border-radius: 14px; font-size: 12px; font-weight: bold; cursor: pointer; flex-shrink: 0; margin-left: 10px;" onclick="musicImportSinglePlaylistById('${pl.id}', this)">导入</button>
+                `;
+                listContainer.appendChild(div);
+            });
+        } else {
+            listContainer.innerHTML = `<div style="color:#FF3B30; font-size:13px; text-align:center; padding:20px;">获取失败：${data.message || '未知错误'}</div>`;
+        }
+    } catch (e) {
+        console.error(e);
+        listContainer.innerHTML = `<div style="color:#FF3B30; font-size:13px; text-align:center; padding:20px;">网络请求失败，请检查 API 节点是否可用。</div>`;
+    }
+};
+
+// 3. 核心导入逻辑 (修复了 not defined 的报错)
+window.musicImportSinglePlaylistById = async function(plId, btnElement) {
+    const originalText = btnElement.innerText;
+    btnElement.innerText = "导入中...";
+    btnElement.disabled = true;
+    btnElement.style.opacity = "0.5";
+
+    try {
+        const baseUrl = getMusicApiBaseUrl(); // 动态获取当前选择的音乐源
+        
+        // 1. 获取歌单详情
         const resDetail = await fetch(`${baseUrl}/playlist/detail?id=${plId}`);
         const dataDetail = await resDetail.json();
         
         if (dataDetail.code === 200 && dataDetail.playlist) {
-            // 2. 获取歌单所有歌曲 (使用动态接口)
+            // 2. 获取歌单所有歌曲
             const resTracks = await fetch(`${baseUrl}/playlist/track/all?id=${plId}&limit=1000`);
             const dataTracks = await resTracks.json();
             
@@ -17411,18 +17607,24 @@ async function musicImportPlaylist() {
             
             musicSaveData();
             musicRenderProfile();
-            wcCloseModal('music-modal-import-playlist');
-            alert("Playlist imported successfully!");
+            
+            btnElement.innerText = "已导入";
+            btnElement.style.background = "#34C759"; // 变成绿色
+            btnElement.style.opacity = "1";
         } else {
-            alert("Failed to fetch playlist details.");
+            alert("获取歌单详情失败！");
+            btnElement.innerText = originalText;
+            btnElement.disabled = false;
+            btnElement.style.opacity = "1";
         }
     } catch (e) {
-        alert("Network error during import.");
-    } finally {
-        btn.innerText = originalText;
-        document.getElementById('music-import-pl-link').value = '';
+        console.error(e);
+        alert("导入失败，网络异常。");
+        btnElement.innerText = originalText;
+        btnElement.disabled = false;
+        btnElement.style.opacity = "1";
     }
-}
+};
 
 function musicDeletePlaylist(e, idx) {
     e.stopPropagation();
