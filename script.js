@@ -3540,7 +3540,8 @@ const wcState = {
         charId: null,
         startTime: 0,
         timerInterval: null,
-        isSpeaking: false
+        isSpeaking: false,
+        transcript: [] // 👈 新增：专门用于存储当前通话记录的数组
     }
 };
 
@@ -4498,12 +4499,23 @@ function wcRenderMessages(charId, preserveScroll = false) {
                 ? `<svg viewBox="0 0 24 24" style="fill:${iconColor};"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" transform="rotate(135 12 12)"/></svg>`
                 : `<svg viewBox="0 0 24 24" style="fill:none; stroke:${iconColor}; stroke-width:2;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>`;
             
+            // 👈 修改：如果有 transcript，增加点击事件和“查看记录”提示
+            let actionHtml = '';
+            let clickAttr = '';
+            if (msg.transcript && msg.transcript.length > 0) {
+                actionHtml = `<div style="font-size: 11px; color: #007AFF; margin-top: 4px; font-weight: bold;">查看记录 &gt;</div>`;
+                clickAttr = `onclick="wcOpenCallTranscript(${msg.id})" style="cursor: pointer;"`;
+            }
+
             contentHtml = `
-                <div class="wc-bubble call-record ${msg.sender === 'me' ? 'me' : 'them'}">
-                    <div class="ins-call-record-card">
-                        ${iconSvg}
-                        <span class="ins-call-record-text">${msg.content}</span>
-                        ${msg.duration ? `<span class="ins-call-record-time">${msg.duration}</span>` : ''}
+                <div class="wc-bubble call-record ${msg.sender === 'me' ? 'me' : 'them'}" ${clickAttr}>
+                    <div class="ins-call-record-card" style="flex-direction: column; align-items: flex-start;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            ${iconSvg}
+                            <span class="ins-call-record-text">${msg.content}</span>
+                            ${msg.duration ? `<span class="ins-call-record-time">${msg.duration}</span>` : ''}
+                        </div>
+                        ${actionHtml}
                     </div>
                 </div>`;
         // 👆 新增的代码到这里结束 👆
@@ -5114,6 +5126,13 @@ async function wcTriggerAI(charIdOverride = null) {
         
         const timeGapPrompt = wcGenerateTimeGapPrompt(msgs, now.getTime());
 
+        // 👇 新增：如果正在打语音电话，强行把通话记录塞给 AI，让它知道你们在聊什么 👇
+        let ongoingCallPrompt = "";
+        if (wcState.callState.isActive && wcState.callState.charId === charId && wcState.callState.transcript && wcState.callState.transcript.length > 0) {
+            const callLog = wcState.callState.transcript.map(t => `${t.sender === 'me' ? 'User' : char.name}: ${t.text}`).join('\n');
+            ongoingCallPrompt = `\n【⚠️ 核心情境：你们现在正在打语音电话！】\n你和 User 正在语音通话中，同时 User 在微信里给你发了文字消息。请结合你们正在进行的语音通话内容来回复文字消息。\n[当前语音通话记录]：\n${callLog}\n`;
+        }
+
         // --- 新增：时间感知开关逻辑 ---
         const isTimePerceptionEnabled = config.timePerceptionEnabled !== false;
         let timeContextPrompt = "";
@@ -5267,8 +5286,8 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             groupPrompt += `这是一个名为【${char.name}】的微信群聊。\n`;
             groupPrompt += `群成员设定如下：\n${groupMembersInfo}\n`;
             
-            // 👇【新增这一行】：强制 AI 多人发言
-            groupPrompt += `【活跃群聊铁律】：这是一个多人活跃群聊！当 User 发话时，绝对不能只有一个人回复！你必须让群里**至少 2 到 3 个不同的成员**出来接话、互相吐槽或回应 User。严禁冷场！\n`;            
+            // 👇【修改这一行】：强制 AI 多人发言，并允许群成员互相回复
+            groupPrompt += `【活跃群聊铁律】：这是一个多人活跃群聊！当 User 发话时，绝对不能只有一个人回复！你必须让群里**至少 2 个不同的成员**出来接话。群成员之间也必须互相回复、吐槽、接梗，同时也不要只围着 User 转！如果某个成员说了一句话，其他成员可以针对这句话进行反驳或赞同，但是也不能完全不理User！禁止自说自话！严禁冷场！\n`;            
             groupPrompt += `【角色扮演铁律 (最高防串戏警告)】：你必须严格区分每个人的性格和身份，请严格扮演每个角色的人设，不同角色之间应有明显的性格和语气差异绝对，禁止角色串台词！\n`;
             groupPrompt += `> 警告：如果 "senderName" 是 "张三"，那么 "content" 必须且只能是张三会说的话，绝对不能包含李四的设定、记忆或语气！\n`;
             groupPrompt += `> 每次生成回复前，必须核对当前发言人的名字和设定，确保 100% 匹配！\n`;
@@ -5282,10 +5301,25 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
          // 👇👇👇 强化 AI 角色：五大核心支柱 (XML结构化优化版) 👇👇👇
         let memoryText = "暂无特殊记忆。";
         if (char.memories && char.memories.length > 0) {
-            const readCount = config.aiMemoryCount !== undefined ? config.aiMemoryCount : 5;
-            if (readCount > 0) {
-                const recentMemories = char.memories.slice(0, readCount);
-                memoryText = recentMemories.map(m => `👉 ${m.content.replace(/^\[.*?\]\s*/, '')}`).join('\n');
+            // 👈 修改：分离核心记忆和普通记忆
+            const coreMemories = char.memories.filter(m => m.isCore);
+            const normalMemories = char.memories.filter(m => !m.isCore);
+            
+            const readCount = (char.chatConfig && char.chatConfig.aiMemoryCount !== undefined) ? char.chatConfig.aiMemoryCount : 5;
+            const recentNormal = normalMemories.slice(0, readCount);
+            
+            let combinedMemories = [];
+            if (coreMemories.length > 0) {
+                combinedMemories.push("【🌟 核心永久记忆 (最高优先级)】:");
+                coreMemories.forEach(m => combinedMemories.push(`👉 ${m.content.replace(/^\[.*?\]\s*/, '')}`));
+            }
+            if (recentNormal.length > 0) {
+                combinedMemories.push("【近期普通记忆】:");
+                recentNormal.forEach(m => combinedMemories.push(`👉 ${m.content.replace(/^\[.*?\]\s*/, '')}`));
+            }
+            
+            if (combinedMemories.length > 0) {
+                memoryText = combinedMemories.join('\n');
             }
         }
 
@@ -5319,6 +5353,7 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
 
         systemPrompt += `<context_info>\n`;
         systemPrompt += `${timeContextPrompt}\n`;
+        if (ongoingCallPrompt) systemPrompt += `${ongoingCallPrompt}\n`; // 👈 注入通话记录
         systemPrompt += `</context_info>\n\n`;
 
         // 3. 逻辑规则与特殊状态注入
@@ -5965,6 +6000,11 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 // 找到发起私聊的那个单人角色
                 const privateChar = wcState.characters.find(c => c.name === action.senderName && !c.isGroup);
                 if (privateChar) {
+                    // 👇 新增：给私聊角色注入群聊上下文，防止私聊时失忆或OOC
+                    const groupName = char.name; // 当前群聊名称
+                    const contextPrompt = `[系统内部信息(仅AI可见): 你刚刚在群聊【${groupName}】中，因为群里发生的事情，决定私下找 User 聊天。你主动给 User 发送了第一条私聊消息: "${action.content}"。请在接下来的私聊中，保持你的人设，并自然地衔接这个话题，禁止做出不符合人设的行为和发言！。]`;
+                    wcAddMessage(privateChar.id, 'system', 'system', contextPrompt, { hidden: true });
+
                     // 1. 向该角色的私聊记录中添加消息 (这会自动触发系统的未读红点和横幅通知)
                     wcAddMessage(privateChar.id, 'them', 'text', action.content);
                     
@@ -7412,9 +7452,18 @@ function wcRenderMemories() {
 
             const safeContent = content.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
 
+            // 👈 修改：核心记忆的空心/实心五角星 SVG
+            const starColor = mem.isCore ? '#FFD700' : 'rgba(255,255,255,0.5)';
+            const svgContent = mem.isCore 
+                ? `<svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: ${starColor}; stroke: none; filter: drop-shadow(0 0 4px rgba(255,215,0,0.5));"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`
+                : `<svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: none; stroke: ${starColor}; stroke-width: 2;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
+                
+            const starIcon = `<div onclick="wcToggleCoreMemory(event, ${mem.id})" style="position: absolute; bottom: 8px; left: 8px; cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.8)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">${svgContent}</div>`;
+
             rowHtml += `
                 <div class="ins-mem-card ${colorClass}" onclick="insOpenMemDetail(${mem.id}, '${title}', '${safeContent}', '${dateKey} ${timeStr}')">
                     <div class="ins-mem-delete-btn" onclick="wcDeleteMemory(event, ${mem.id})">×</div>
+                    ${starIcon}
                     <div class="ins-mem-card-title">${title}</div>
                     <div class="ins-mem-card-time">${timeStr}</div>
                 </div>
@@ -18645,12 +18694,15 @@ function dreamRenderCards() {
     const container = document.getElementById('dream-card-container');
     container.innerHTML = '';
     
-    if (dreamState.cards.length === 0) {
+    // 👇 新增：过滤出属于当前角色的卡片 (兼容旧数据：如果没有 charId 则默认都显示)
+    const currentCards = dreamState.cards.filter(c => !c.charId || c.charId === wcState.activeChatId);
+
+    if (currentCards.length === 0) {
         container.innerHTML = '<div class="dream-empty-state">No dreams yet.<br><span style="font-size:10px; color:#E5E5EA;">点击下方进入梦境</span></div>';
         return;
     }
 
-    const sortedCards = [...dreamState.cards].sort((a, b) => b.time - a.time);
+    const sortedCards = [...currentCards].sort((a, b) => b.time - a.time);
     
     sortedCards.forEach((card, idx) => {
         const dateStr = new Date(card.time).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -18789,7 +18841,8 @@ async function endDreamAndSummarize() {
             id: Date.now(),
             time: Date.now(),
             content: `${summaryPrefix} ${summary}`,
-            chatHistory: JSON.parse(JSON.stringify(dreamState.currentChat))
+            chatHistory: JSON.parse(JSON.stringify(dreamState.currentChat)),
+            charId: wcState.activeChatId // 👈 新增：绑定当前角色ID，防止串线
         });
         await dreamSaveData();
 
@@ -26258,7 +26311,8 @@ async function wcProcessCallDecision(char) {
 
         if (decision.accept) {
             wcStartActiveCall();
-            wcAddMessage(wcState.callState.charId, 'system', 'system', `[语音通话已接通] ${char.name} 说: "${decision.content}"`, { hidden: true });
+            // 👈 修改：存入专属通话记录，不再污染主聊天
+            wcState.callState.transcript.push({ sender: 'them', text: decision.content });
             
             // 开启说话状态
             wcState.callState.isSpeaking = true;
@@ -26396,13 +26450,21 @@ window.wcHangUpCall = function(reason, aiReason = "") {
         const s = (diff % 60).toString().padStart(2, '0');
         const durationStr = `${m}:${s}`;
         
-        wcAddMessage(charId, 'me', 'call_record', '通话时长', { duration: durationStr, status: 'ended' });
+        // 👈 修改：把 transcript 绑定到这条消息上，方便点击查看
+        const finalTranscript = JSON.parse(JSON.stringify(wcState.callState.transcript));
+        wcAddMessage(charId, 'me', 'call_record', '通话时长', { duration: durationStr, status: 'ended', transcript: finalTranscript });
         
         const memoryPrompt = `[系统强制提示：你们刚刚结束了一通长达 ${durationStr} 的语音通话。在接下来的文字聊天中，请你自然地顺延刚刚电话里聊过的话题或情绪，不要表现得像刚认识一样！]`;
         wcAddMessage(charId, 'system', 'system', memoryPrompt, { hidden: true });
+
+        // 👈 新增：触发后台自动总结通话记录
+        if (finalTranscript.length > 0) {
+            wcAutoSummarizeCall(charId, durationStr, finalTranscript);
+        }
     }
 
     wcState.callState.isActive = false;
+    wcState.callState.transcript = []; // 👈 清空记录
     wcState.callState.charId = null;
     wcState.callState.isSpeaking = false;
     document.getElementById('ins-call-avatar-wrapper').classList.remove('speaking');
@@ -26415,7 +26477,8 @@ window.wcSendCallMessage = function() {
     if (!text) return;
 
     wcAddCallMessage('me', text);
-    wcAddMessage(wcState.callState.charId, 'system', 'system', `[语音通话中] User 说: "${text}"`, { hidden: true });
+    // 👈 修改：存入专属通话记录
+    wcState.callState.transcript.push({ sender: 'me', text: text });
 
     input.value = '';
     // 删除了 setTimeout(wcTriggerCallAI, 500); 
@@ -26493,7 +26556,8 @@ window.wcTriggerCallAI = async function() {
         const reply = JSON.parse(content);
 
         if (wcState.callState.isActive) {
-            wcAddMessage(charId, 'system', 'system', `[语音通话中] ${char.name} 回复: ${reply.content}`, { hidden: true });
+            // 👈 修改：存入专属通话记录
+            wcState.callState.transcript.push({ sender: 'them', text: reply.content });
             
             document.getElementById('ins-call-status').innerText = "对方正在说话...";
             playCallSequence(reply.content);
@@ -26732,20 +26796,18 @@ window.regenerateCallMsg = function(e) {
         lastChild = container.lastElementChild;
     }
 
-    // 2. 从底层数据中移除最后一次 AI 的隐藏记录
+    // 2. 从专属通话记录中移除最后一次 AI 的回复
     const charId = wcState.callState.charId;
-    if (charId && wcState.chats[charId]) {
-        const msgs = wcState.chats[charId];
-        while (msgs.length > 0) {
-            const lastMsg = msgs[msgs.length - 1];
-            // 移除 AI 在通话中产生的隐藏系统消息
-            if (lastMsg.sender === 'system' && lastMsg.content.includes('[语音通话中]')) {
-                msgs.pop();
+    if (charId && wcState.callState.transcript) {
+        const trans = wcState.callState.transcript;
+        while (trans.length > 0) {
+            const lastMsg = trans[trans.length - 1];
+            if (lastMsg.sender === 'them') {
+                trans.pop();
             } else {
                 break;
             }
         }
-        wcSaveData();
     }
 
     // 3. 重新触发 AI 回复
@@ -30696,6 +30758,136 @@ async function syncOfflineMessages() {
         }
     } catch (e) {
         console.error("同步离线消息失败", e);
+    }
+}
+// ==========================================
+// 新增：通话记录独立展示与自动总结逻辑
+// ==========================================
+
+// 切换核心记忆状态
+window.wcToggleCoreMemory = function(event, memId) {
+    event.stopPropagation();
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char || !char.memories) return;
+    
+    const mem = char.memories.find(m => m.id === memId);
+    if (mem) {
+        mem.isCore = !mem.isCore;
+        wcSaveData();
+        wcRenderMemories();
+        if (mem.isCore) {
+            alert("已设为核心记忆！AI 将永远记住这件事。");
+        }
+    }
+};
+
+// 打开通话记录弹窗
+window.wcOpenCallTranscript = function(msgId) {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+    const msg = wcState.chats[char.id].find(m => m.id === msgId);
+    if (!msg || !msg.transcript) return;
+
+    let modal = document.getElementById('wc-modal-call-transcript');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'wc-modal-call-transcript';
+        modal.className = 'modal-overlay';
+        // 注入专属 CSS
+        modal.innerHTML = `
+            <style>
+                .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); display: none; align-items: flex-end; justify-content: center; z-index: 35000; opacity: 0; transition: opacity 0.3s; }
+                .modal-overlay.active { display: flex; opacity: 1; }
+                .modal-card { width: 100%; height: 85%; background: #FFF; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+                .modal-overlay.active .modal-card { transform: translateY(0); }
+                .modal-header { padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #F0F0F0; }
+                .modal-title { font-size: 18px; font-weight: bold; color: #111; }
+                .modal-close { width: 30px; height: 30px; background: #F5F5F5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #888; font-size: 16px; }
+                .transcript-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; background: #FAFAFA; }
+                .t-row { display: flex; flex-direction: column; gap: 6px; }
+                .t-name { font-size: 12px; font-weight: bold; color: #888; }
+                .t-content { font-size: 15px; color: #111; line-height: 1.5; background: #FFF; padding: 12px 16px; border-radius: 12px; border: 1px solid #EAEAEA; width: fit-content; max-width: 85%; }
+                .t-row.me { align-items: flex-end; }
+                .t-row.me .t-content { background: #111; color: #FFF; border: none; }
+            </style>
+            <div class="modal-card">
+                <div class="modal-header">
+                    <div class="modal-title">通话记忆档案</div>
+                    <div class="modal-close" onclick="document.getElementById('wc-modal-call-transcript').classList.remove('active'); setTimeout(()=>document.getElementById('wc-modal-call-transcript').style.display='none', 300);">✕</div>
+                </div>
+                <div class="transcript-body" id="transcript-content-area"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    const area = document.getElementById('transcript-content-area');
+    let html = `<div style="text-align: center; font-size: 12px; color: #999; margin-bottom: 10px;">${new Date(msg.time).toLocaleString()}</div>`;
+    
+    msg.transcript.forEach(t => {
+        const isMe = t.sender === 'me';
+        const name = isMe ? '我' : char.name;
+        html += `
+            <div class="t-row ${isMe ? 'me' : 'them'}">
+                <div class="t-name">${name}</div>
+                <div class="t-content">${t.text}</div>
+            </div>
+        `;
+    });
+    
+    html += `<div style="text-align: center; font-size: 12px; color: #999; margin-top: 10px;">通话结束，时长 ${msg.duration}</div>`;
+    area.innerHTML = html;
+
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+// 后台自动总结通话记录
+async function wcAutoSummarizeCall(charId, durationStr, transcript) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char || transcript.length === 0) return;
+
+    const apiConfig = await getActiveApiConfig('chat');
+    if (!apiConfig || !apiConfig.key) return;
+
+    try {
+        let prompt = `请总结以下语音通话的主要内容，提取关键信息和情感变化，字数控制在200字以内。\n`;
+        prompt += `【通话记录】\n`;
+        transcript.forEach(t => {
+            const sender = t.sender === 'me' ? '用户' : char.name;
+            prompt += `${sender}: ${t.text}\n`;
+        });
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.5
+            })
+        });
+
+        const data = await response.json();
+        let summary = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+
+        if (!char.memories) char.memories = [];
+        char.memories.unshift({
+            id: Date.now(),
+            type: 'summary',
+            content: `[语音通话总结 (${durationStr})] ${summary}`,
+            time: Date.now(),
+            isCore: false // 默认不是核心记忆
+        });
+        
+        wcSaveData();
+        if (document.getElementById('wc-view-memory').classList.contains('active')) {
+            wcRenderMemories(); 
+        }
+        console.log("通话自动总结完成");
+
+    } catch (e) {
+        console.error("通话自动总结失败", e);
     }
 }
 
