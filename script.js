@@ -29478,7 +29478,7 @@ function lsOpenCategoryManageModal() {
 }
 
 function lsAddCategory() {
-    openTextEditModal("添加新分类", "请输入分类名称", "", (val) => {
+    wcOpenGeneralInput("添加新分类", (val) => {
         if (val && val.trim() !== "") {
             const newId = 'cat_' + Date.now();
             lsState.shopCategories.push({ id: newId, name: val.trim() });
@@ -29494,7 +29494,7 @@ function lsAddCategory() {
 function lsEditCategory(catId) {
     const cat = lsState.shopCategories.find(c => c.id === catId);
     if (!cat) return;
-    openTextEditModal("修改分类名称", "请输入新的分类名称", cat.name, (val) => {
+    wcOpenGeneralInput("修改分类名称", (val) => {
         if (val && val.trim() !== "") {
             cat.name = val.trim();
             lsSaveData();
@@ -29503,6 +29503,11 @@ function lsEditCategory(catId) {
             lsOpenCategoryManageModal(); // 刷新弹窗
         }
     });
+    // 预填当前名称
+    setTimeout(() => {
+        const inputField = document.getElementById('wc-general-input-field');
+        if (inputField) inputField.value = cat.name;
+    }, 50);
 }
 
 function lsDeleteCategory(catId) {
