@@ -17897,6 +17897,80 @@ function musicDeletePlaylist(e, idx) {
         musicRenderProfile();
     }
 }
+// ==========================================
+// 新增：解析链接并导入歌单逻辑
+// ==========================================
+window.musicImportPlaylist = async function() {
+    const inputVal = document.getElementById('music-import-pl-link').value.trim();
+    if (!inputVal) return alert("请输入网易云歌单链接或 ID！");
+
+    let plId = "";
+    // 尝试从链接中提取 ID (例如: https://music.163.com/playlist?id=123456789)
+    const idMatch = inputVal.match(/id=(\d+)/);
+    if (idMatch) {
+        plId = idMatch[1];
+    } else if (/^\d+$/.test(inputVal)) {
+        // 纯数字 ID
+        plId = inputVal;
+    } else {
+        return alert("无法识别歌单 ID，请检查链接格式。");
+    }
+
+    const btn = document.querySelector('#music-modal-import-playlist .wc-btn-primary');
+    const originalText = btn.innerText;
+    btn.innerText = "正在解析并导入...";
+    btn.disabled = true;
+
+    try {
+        const baseUrl = getMusicApiBaseUrl();
+        
+        // 1. 获取歌单详情
+        const resDetail = await fetch(`${baseUrl}/playlist/detail?id=${plId}`);
+        const dataDetail = await resDetail.json();
+        
+        if (dataDetail.code === 200 && dataDetail.playlist) {
+            // 2. 获取歌单所有歌曲
+            const resTracks = await fetch(`${baseUrl}/playlist/track/all?id=${plId}&limit=1000`);
+            const dataTracks = await resTracks.json();
+            
+            let tracks = [];
+            if (dataTracks.code === 200 && dataTracks.songs) {
+                tracks = dataTracks.songs.map(song => ({
+                    id: song.id,
+                    title: song.name,
+                    artist: song.ar.map(a => a.name).join(', '),
+                    cover: song.al.picUrl + '?param=100y100'
+                }));
+            }
+            
+            // 查重，防止重复导入
+            const exists = musicState.playlists.find(p => p.id === dataDetail.playlist.id);
+            if (!exists) {
+                musicState.playlists.push({
+                    id: dataDetail.playlist.id,
+                    name: dataDetail.playlist.name,
+                    cover: dataDetail.playlist.coverImgUrl,
+                    tracks: tracks
+                });
+                musicSaveData();
+                musicRenderProfile();
+                alert("导入成功！");
+                wcCloseModal('music-modal-import-playlist');
+                document.getElementById('music-import-pl-link').value = ''; // 清空输入框
+            } else {
+                alert("该歌单已存在，请勿重复导入！");
+            }
+        } else {
+            alert("获取歌单详情失败，请确保歌单已在网易云设置为公开！");
+        }
+    } catch (e) {
+        console.error(e);
+        alert("导入失败，网络异常或接口不可用。");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+};
 
 // --- 歌单内歌曲管理 ---
 function musicOpenPlaylistDetail(idx) {
