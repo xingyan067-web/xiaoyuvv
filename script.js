@@ -5133,6 +5133,16 @@ async function wcTriggerAI(charIdOverride = null) {
             ongoingCallPrompt = `\n【⚠️ 核心情境：你们现在正在打语音电话！】\n你和 User 正在语音通话中，同时 User 在微信里给你发了文字消息。请结合你们正在进行的语音通话内容来回复文字消息。\n[当前语音通话记录]：\n${callLog}\n`;
         }
 
+        // 👇 终极修复：提取刚刚挂断的最新通话记录，强行塞入系统指令，防止鬼打墙 👇
+        let latestCallRecordPrompt = "";
+        if (!wcState.callState.isActive) {
+            const latestCallRecord = [...recentMsgs].reverse().find(m => m.type === 'call_record' && m.status === 'ended' && m.transcript && m.transcript.length > 0);
+            if (latestCallRecord) {
+                const callLog = latestCallRecord.transcript.map(t => `${t.sender === 'me' ? 'User' : char.name}: ${t.text}`).join('\n');
+                latestCallRecordPrompt = `\n【⚠️ 核心情境：你们刚刚结束了一次语音通话！】\n以下是刚才的通话记录：\n${callLog}\n请务必顺着刚才电话里聊到的话题或情绪继续往下聊，绝对不要重复电话接通前的话题！\n`;
+            }
+        }
+
         // --- 新增：时间感知开关逻辑 ---
         const isTimePerceptionEnabled = config.timePerceptionEnabled !== false;
         let timeContextPrompt = "";
@@ -5358,7 +5368,8 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
 
         systemPrompt += `<context_info>\n`;
         systemPrompt += `${timeContextPrompt}\n`;
-        if (ongoingCallPrompt) systemPrompt += `${ongoingCallPrompt}\n`; // 👈 注入通话记录
+        if (ongoingCallPrompt) systemPrompt += `${ongoingCallPrompt}\n`; // 👈 注入进行中的通话记录
+        if (latestCallRecordPrompt) systemPrompt += `${latestCallRecordPrompt}\n`; // 👈 注入刚挂断的通话记录
         systemPrompt += `</context_info>\n\n`;
 
         // 3. 逻辑规则与特殊状态注入
@@ -5400,11 +5411,13 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         systemPrompt += `【最高优先级绝对强制】：你的回复 **必须且只能** 是一个合法的、可被 JSON.parse() 完美解析的 JSON 数组。\n`;
         systemPrompt += `- 必须使用双引号 " 包裹键名和字符串值。\n`;
         systemPrompt += `- 严禁输出损坏的 JSON，严禁在 JSON 数组外部输出任何多余的字符。\n`;
-        systemPrompt += `- 绝对禁止长文本：必须将长回复拆分成多条短消息（1-4条），保持回复消息数量的随机性和多样性。\n`;
         
-        systemPrompt += `- 必须模拟真人打字聊天习惯/线上聊天的碎片化习惯，保持对话口语化、碎片化。\n`;        
-        systemPrompt += `- 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n\n`;
-        
+        // 👇 新增：动态注入气泡数量限制 👇
+        const rMin = config.replyMin !== undefined ? config.replyMin : 1;
+        const rMax = config.replyMax !== undefined ? config.replyMax : 4;
+        systemPrompt += `- 绝对禁止长文本：【强制气泡数量】你本次回复必须严格拆分为 ${rMin} 到 ${rMax} 条短消息（即 JSON 数组的长度必须在 ${rMin} 到 ${rMax} 之间）！严禁把所有话挤在一个气泡回复里！\n`;        
+        systemPrompt += `- 必须模拟真人打字聊天习惯/线上聊天的碎片化习惯，保持对话口语化、碎片化，保持回复气泡的随机性和多样性！\n`;        
+        systemPrompt += `- 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n\n`;        
         systemPrompt += `【JSON数组中的每个元素代表一条消息、表情包或动作指令，你可以根据聊天上下文，根据聊天氛围，聊天情绪**按需使用**JSON 数组，请把JSON数组的特殊格式视为增强互动的“调味剂”，请遵循**自然、主动触发逻辑**，不要每轮都发，也不要用户不提就一直不发。请严格遵守以下结构】：\n`;
         systemPrompt += `1. 文本消息: {"type":"text", "content":"完整的一句话。", "quote":"(可选)引用的内容"}\n`;
         systemPrompt += `2. 表情包(按需使用/可选功能):{"type":"sticker", "content":"表情包名称"}\n`;
@@ -5573,6 +5586,14 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
                 content = `[系统提示: 用户向你发送了“一起听歌”邀请，歌曲名：《${m.songTitle || '未知'}》。请根据你的人设和当前心情决定是否同意，并在回复中自然地表达出来，可以评价一下这首歌或者表达你想和User一起听歌的心情，请务必回复 {"type":"music_accept", "content":"符合你人设的同意话语"} 或 {"type":"music_reject", "content":"符合你人设的拒绝话语"}。]`;                                    
             } else if (m.type === 'receipt') {
                 content = `[发送了一张应用内卡片]`; // 修复：防止发送大量 HTML 导致 400 错误
+            } else if (m.type === 'call_record') {
+                // 👇 核心修复：把隐藏在通话记录卡片里的具体对话内容提取出来，喂给主聊天的 AI
+                if (m.status === 'ended' && m.transcript && m.transcript.length > 0) {
+                    const callLog = m.transcript.map(t => `${t.sender === 'me' ? 'User' : char.name}: ${t.text}`).join('\n');
+                    content = `[系统提示：你们刚刚进行了一次语音通话，通话内容如下：\n${callLog}\n请顺着刚才语音通话里聊到的话题继续往下聊！]`;
+                } else {
+                    content = `[语音通话记录: ${m.content}]`;
+                }
             }
                            
             if (m.type === 'image') {
@@ -5851,7 +5872,28 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         // 👆 修复结束 👆
     }
 
-    // 移除强制拆分逻辑，完全信任 AI 的 JSON 结构，防止一句话被错误切断
+    // 👇 新增：强制拆分兜底逻辑 (如果 AI 偷懒没有按要求拆分气泡，用 JS 强行切断) 👇
+    const rMin = char.chatConfig?.replyMin !== undefined ? char.chatConfig.replyMin : 1;
+    if (actions.length > 0 && actions.length < rMin) {
+        let newActions = [];
+        actions.forEach(act => {
+            // 如果是文本，且长度超过 20 个字，强行按标点符号切分
+            if (act && act.type === 'text' && act.content.length > 20) {
+                const sentences = act.content.match(/[^。！？.!?]+[。！？.!?]*/g);
+                if (sentences && sentences.length > 1) {
+                    sentences.forEach(s => {
+                        if (s.trim()) newActions.push({ ...act, content: s.trim() });
+                    });
+                } else {
+                    newActions.push(act);
+                }
+            } else {
+                newActions.push(act);
+            }
+        });
+        actions = newActions;
+    }
+    // 👆 兜底逻辑结束 👆
 
     // 👇 新增：智能拦截兜底，防止 AI 忘了发邀请指令 👇
     let hasMusicInvite = actions.some(a => a && (a.type === 'music_invite_user' || a.type === 'music_invite'));
@@ -7455,7 +7497,8 @@ function wcRenderMemories() {
                 title = '手动添加'; 
             }
 
-            const safeContent = content.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+            // 👇 核心修复：增加对换行符 \n 和 \r 的转义，防止破坏 onclick 的 HTML 语法导致无法点击
+            const safeContent = content.replace(/'/g, "&#39;").replace(/"/g, "&quot;").replace(/\n/g, "\\n").replace(/\r/g, "");
 
             // 👈 修改：核心记忆的空心/实心五角星 SVG
             const starColor = mem.isCore ? '#FFD700' : 'rgba(255,255,255,0.5)';
@@ -11711,6 +11754,9 @@ function wcOpenChatSettings() {
     });
 
     document.getElementById('wc-setting-context-limit').value = char.chatConfig.contextLimit || 0;
+    // 👇 新增：读取气泡数限制 👇
+    document.getElementById('wc-setting-reply-min').value = char.chatConfig.replyMin !== undefined ? char.chatConfig.replyMin : 1;
+    document.getElementById('wc-setting-reply-max').value = char.chatConfig.replyMax !== undefined ? char.chatConfig.replyMax : 4;
     
     // 【修复】：正确读取双语设置到界面，而不是覆盖数据
     document.getElementById('wc-setting-bilingual-toggle').checked = char.chatConfig.bilingualEnabled || false;
@@ -11874,6 +11920,9 @@ async function wcSaveChatSettings() {
     }
 
     char.chatConfig.contextLimit = parseInt(document.getElementById('wc-setting-context-limit').value) || 0;
+    // 👇 新增：保存气泡数限制 👇
+    char.chatConfig.replyMin = parseInt(document.getElementById('wc-setting-reply-min').value) || 1;
+    char.chatConfig.replyMax = parseInt(document.getElementById('wc-setting-reply-max').value) || 4;
     
     // 【修复】：在这里真正保存双语设置
     char.chatConfig.bilingualEnabled = document.getElementById('wc-setting-bilingual-toggle').checked;
@@ -26531,12 +26580,20 @@ window.wcTriggerCallAI = async function() {
             return null;
         }).filter(Boolean).join('\n');
 
+        // 👇 核心修复：提取专属的语音通话记录 👇
+        let callTranscriptText = "暂无通话记录。";
+        if (wcState.callState.transcript && wcState.callState.transcript.length > 0) {
+            callTranscriptText = wcState.callState.transcript.map(t => {
+                return `${t.sender === 'me' ? 'User' : char.name}: ${t.text}`;
+            }).join('\n');
+        }
+
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定/面具】：${userPersona}\n`;
         prompt += `【你们的共同记忆】：\n${memoryText}\n\n`;
         prompt += `【当前情境】：你正在和 User 打语音电话。\n`;
-        prompt += `【最近的文字与语音聊天记录】：\n${recentMsgs}\n\n`;
-        
+        prompt += `【最近的文字聊天记录（作为背景参考）】：\n${recentMsgs}\n\n`;
+        prompt += `【⚠️ 当前正在进行的语音通话记录（重点读取，顺着这个聊）】：\n${callTranscriptText}\n\n`;        
         prompt += `请根据你的人设、记忆、世界观以及上下文，回复 User 的话。\n`;
         prompt += `【核心表现要求】：\n`;
         prompt += `1. 语气要像真实的语音通话一样自然、口语化，可以带点语气词（嗯、啊、哦），绝对不要像机器或客服！不要太死板！\n`;
