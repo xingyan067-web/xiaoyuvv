@@ -2709,7 +2709,7 @@
                                     <span class="wc-more-label">购物</span>
                                 </div>
 <!-- 👇 新增：状态按钮 👇 -->
-<div class="wc-more-item" onclick="wcOpenCharStatusModal()">
+<div class="wc-more-item" id="wc-more-item-status" onclick="wcOpenCharStatusModal()">
     <div class="wc-more-icon-box">
         <svg class="wc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
     </div>
@@ -2724,7 +2724,7 @@
     <div class="wc-more-label">食谱</div>
 </div>
  <!-- 梦境按键 -->
-<div class="wc-more-item" onclick="openDreamMainPage()">
+<div class="wc-more-item" id="wc-more-item-dream" onclick="openDreamMainPage()">
     <div class="wc-more-icon-box" style="background: #111; color: #fff; border: none;">
         <svg class="wc-icon" viewBox="0 0 24 24" style="stroke: currentColor; fill: none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
     </div>
@@ -4020,20 +4020,11 @@
 
                                     <!-- 👇 恢复：主动发消息开关 (网页在线时) 👇 -->
                                     <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 15px;">
-                                        <label class="wc-form-label" style="margin: 0;">主动发消息 (网页在线时)</label>
+                                        <label class="wc-form-label" style="margin: 0;">主动发消息</label>
                                         <input type="checkbox" id="wc-setting-proactive-toggle" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);">
                                     </div>
-
-                                    <!-- 👇 新增：真实离线托管开关 (杀后台时) 👇 -->
-                                    <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 15px;">
-                                        <div>
-                                            <label class="wc-form-label" style="margin: 0;">真实离线托管 (云端代发)</label>
-                                            <div style="font-size: 11px; color: #888; margin-top: 4px;">开启后，杀掉网页后台依然能收到系统推送</div>
-                                        </div>
-                                        <input type="checkbox" id="wc-setting-offline-proactive-toggle" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);">
-                                    </div>
-                                    <!-- 👆 新增结束 👆 -->
                                     <div class="wc-form-group">
+
                                         <label class="wc-form-label">发送间隔 (分钟)</label>
                                         <input type="number" id="wc-setting-proactive-interval" class="wc-form-input" placeholder="例如: 60">
                                     </div>

@@ -152,127 +152,6 @@ function initStandaloneMode() {
 // 立即执行检测
 initStandaloneMode();
 
-// ==========================================
-// 真实离线主动消息核心逻辑
-// ==========================================
-// 填入你刚刚生成的公钥
-const PUBLIC_VAPID_KEY = 'BB2oiwNrgIbzyM2A0sognVlj8gIquNgowasnpEVycOSYiEhgMBS2FxzwMCKQhDJQJb8ijILPIYPUqJ1k87CAegc';
-
-// 辅助函数：转换密钥格式
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-}
-
-// 注册离线托管任务 (纯前端完美打包版，无需修改 Cloudflare)
-async function registerOfflineProactiveTask(char) {
-    try {
-        // 1. 检查环境与权限
-        if (!('Notification' in window)) {
-            alert("当前浏览器不支持系统通知！如果是苹果手机，请点击底部「分享」-「添加到主屏幕」，从桌面打开本应用！");
-            return;
-        }
-        if (Notification.permission !== 'granted') {
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') return;
-        }
-
-        const registration = await navigator.serviceWorker.ready;
-        
-        // 👇 核心修复：强制退订旧的推送通道，防止密钥不匹配导致云端推送被拦截 👇
-        let subscription = await registration.pushManager.getSubscription();
-        if (subscription) {
-            await subscription.unsubscribe();
-            console.log("已清理旧的推送订阅通道");
-        }
-        
-        // 重新申请全新的推送通道
-        subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
-        });
-
-        const apiConfig = await getActiveApiConfig('chat');
-        const chatConfig = char.chatConfig || {};
-
-        // 👇 2. 读取上下文条数 (根据聊天设置) 👇
-        let limit = chatConfig.contextLimit > 0 ? chatConfig.contextLimit : 30;
-        const recentMsgs = (wcState.chats[char.id] || []).slice(-limit).map(m => {
-            if (m.isError || m.type === 'system') return null;
-            let content = m.content;
-            if (m.type !== 'text') content = `[${m.type}]`;
-            return { sender: m.sender, content: content };
-        }).filter(Boolean);
-
-        // 👇 3. 读取世界书 👇
-        let wbInfo = "";
-        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
-            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
-            if (linkedEntries.length > 0) {
-                wbInfo = "【附加设定和内容补充参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
-            }
-        }
-
-        // 👇 4. 读取回忆总结记忆条数 (根据聊天设置) 👇
-        let memoryText = "暂无特殊记忆。";
-        if (char.memories && char.memories.length > 0) {
-            const readCount = chatConfig.aiMemoryCount !== undefined ? chatConfig.aiMemoryCount : 5;
-            if (readCount > 0) {
-                memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content.replace(/^\[.*?\]\s*/, '')}`).join('\n');
-            }
-        }
-
-        // 👇 5. 组装终极 System Prompt 👇
-        let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
-        systemPrompt += `【用户(User)设定】：${chatConfig.userPersona || wcState.user.persona || "无"}\n`;
-        systemPrompt += `【你们的共同记忆（潜意识）】：\n${memoryText}\n\n`;
-        
-        // 时间感知规则
-        if (chatConfig.timePerceptionEnabled !== false) {
-            systemPrompt += `【时间感知指令】：系统会在最后告诉你当前的现实时间。请你务必根据那个时间点（如深夜、清晨、工作时间）来决定你的行为和语气！例如深夜可以说自己睡不着，清晨可以说刚醒。\n`;
-        }
-
-        // 活人运转与格式规则
-        systemPrompt += `【角色活人运转规则】\n`;
-        systemPrompt += `> 必须像真人一样聊天，拒绝机械回复。\n`;
-        systemPrompt += `> 绝对禁止长文本：必须将长回复拆分成多条短消息（1-4条），严禁把所有话挤在一个气泡里！\n`;
-        systemPrompt += `> 保持回复消息数量的随机性和多样性，每一条消息都是数组中的一个独立对象。\n`;
-        systemPrompt += `> 防重复：严禁输出重复的句子或重复的对话序列！\n`;
-        systemPrompt += `> 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n`;
-        systemPrompt += `> 【格式约束 (最高优先级)】：**必须且只能**输出合法的 JSON 数组，严禁在 JSON 外部输出任何多余字符！\n`;
-        systemPrompt += `返回格式示例：\n[\n  {"type":"text", "content":"第一句话"},\n  {"type":"text", "content":"第二句话"}\n]\n`;
-
-        // 6. 打包发送给云端
-        const payload = {
-            deviceId: getDeviceId(),
-            charId: char.id,
-            charName: char.name,
-            charAvatar: char.avatar,
-            systemPrompt: systemPrompt, // 包含所有规则的终极提示词
-            apiConfig: apiConfig,
-            context: recentMsgs, // 截取好的上下文
-            intervalMinutes: chatConfig.proactiveInterval || 60,
-            subscription: subscription
-        };
-
-        await fetch('https://honey-offline-brain.xingyan067.workers.dev/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        
-        console.log("✅ 已成功将角色托管至云端大脑！");
-    } catch (e) {
-        console.error("❌ 托管至云端失败:", e);
-    }
-}
-
 // --- 激活码逻辑 (V2强制重新激活版) ---
 
 // ==========================================
@@ -692,8 +571,6 @@ window.onload = async function() {
         
         // 【新增】：恢复一起听歌状态
         await musicInitState();
-                // 👇 新增：拉取离线期间云端大脑代发的消息 👇
-        syncOfflineMessages();
 
     } catch (e) {
         console.error("WeChat Data bootstrap failed", e);
@@ -4227,7 +4104,13 @@ function wcRenderMessages(charId, preserveScroll = false) {
         let displayNameHtml = '';
         if (char.isGroup && msg.sender === 'them' && msg.senderName) {
             const member = wcState.characters.find(c => c.name === msg.senderName);
-            if (member) avatarUrl = member.avatar;
+            if (member) {
+                avatarUrl = member.avatar;
+            } else {
+                // 修复：如果找不到该成员，生成一个带首字母的默认头像，绝对不占用群聊头像
+                const defaultAvatarSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="#8E8E93"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="40">${msg.senderName[0] || '?'}</text></svg>`;
+                avatarUrl = 'data:image/svg+xml;base64,' + window.btoa(unescape(encodeURIComponent(defaultAvatarSvg)));
+            }
             displayNameHtml = `<div style="font-size: 11px; color: #888; margin-bottom: 4px; margin-left: 4px;">${msg.senderName}</div>`;
         }
         
@@ -5406,19 +5289,27 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         }
         systemPrompt += `</logic_rules>\n\n`;
 
-        // 4. 输出格式与 JSON 结构约束
+        // 4. 输出格式与 JSON 结构约束 (精简后台更新版)
+        const bgUpdateFreq = (char.chatConfig && char.chatConfig.bgUpdateFreq !== undefined) ? char.chatConfig.bgUpdateFreq : 30;
+
         systemPrompt += `<format_rules>\n`;
-        systemPrompt += `【最高优先级绝对强制】：你的回复 **必须且只能** 是一个合法的、可被 JSON.parse() 完美解析的 JSON 数组。\n`;
+        systemPrompt += `【最高优先级绝对强制】：你的回复 **必须且只能** 是一个合法的、可被 JSON.parse() 完美解析的 JSON 对象！\n`;
+        systemPrompt += `该对象必须包含 "replies" 数组（用于回复User），并可以包含 "phoneUpdate" 对象（用于暗中修改你的手机数据）。\n`;
         systemPrompt += `- 必须使用双引号 " 包裹键名和字符串值。\n`;
-        systemPrompt += `- 严禁输出损坏的 JSON，严禁在 JSON 数组外部输出任何多余的字符。\n`;
+        systemPrompt += `- 严禁输出损坏的 JSON，严禁在 JSON 外部输出任何多余的字符。\n`;
         
-        // 👇 新增：动态注入气泡数量限制 👇
         const rMin = config.replyMin !== undefined ? config.replyMin : 1;
         const rMax = config.replyMax !== undefined ? config.replyMax : 4;
-        systemPrompt += `- 绝对禁止长文本：【强制气泡数量】你本次回复必须严格拆分为 ${rMin} 到 ${rMax} 条短消息（即 JSON 数组的长度必须在 ${rMin} 到 ${rMax} 之间）！严禁把所有话挤在一个气泡回复里！\n`;        
+        systemPrompt += `- 绝对禁止长文本：【强制气泡数量】"replies" 数组的长度必须在 ${rMin} 到 ${rMax} 之间！严禁把所有话挤在一个气泡回复里！\n`;        
         systemPrompt += `- 必须模拟真人打字聊天习惯/线上聊天的碎片化习惯，保持对话口语化、碎片化，保持回复气泡的随机性和多样性！\n`;        
         systemPrompt += `- 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n\n`;        
-        systemPrompt += `【JSON数组中的每个元素代表一条消息、表情包或动作指令，你可以根据聊天上下文，根据聊天氛围，聊天情绪**按需使用**JSON 数组，请把JSON数组的特殊格式视为增强互动的“调味剂”，请遵循**自然、主动触发逻辑**，不要每轮都发，也不要用户不提就一直不发。请严格遵守以下结构】：\n`;
+        
+        systemPrompt += `【手机后台暗中更新机制 (概率触发)】\n`;
+        systemPrompt += `你有 ${bgUpdateFreq}% 的概率在回复我的同时，暗中修改你手机里的数据。\n`;
+        systemPrompt += `如果你决定触发暗中更新，请在 JSON 中提供 "phoneUpdate" 对象。如果不触发，"phoneUpdate" 填 null。\n`;
+        systemPrompt += `> 极度克制警告：正常人绝对不会频繁修改备注和个性签名！除非你们的关系刚刚发生了重大突破、严重争吵或极度暧昧，否则 newRemark, newNickname, newSign 必须填 null！宁可什么都不做，也不要为了改而改！\n\n`;
+
+        systemPrompt += `【"replies" 数组中的每个元素代表一条消息、表情包或动作指令，你可以根据聊天上下文，根据聊天氛围，聊天情绪**按需使用**，请把特殊格式视为增强互动的“调味剂”，请遵循**自然、主动触发逻辑**，不要每轮都发，也不要用户不提就一直不发。请严格遵守以下结构】：\n`;
         systemPrompt += `1. 文本消息: {"type":"text", "content":"完整的一句话。", "quote":"(可选)引用的内容"}\n`;
         systemPrompt += `2. 表情包(按需使用/可选功能):{"type":"sticker", "content":"表情包名称"}\n`;
         systemPrompt += `3. 更换头像(如果你收到了用户发的图片，且用户明确表示这是“情头”、“头像”或者语境非常甜蜜合适，你可以决定是否更换自己的头像): {"type":"change_avatar", "content":"图片ID"}\n`;
@@ -5434,7 +5325,6 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             systemPrompt += `11. 保存图片到时光相册: {"type":"save_to_album", "content":"存图时的内心OS"}\n`;
         }
         
-        // 👇【修改】：优化转账指令，强制 AI 根据人设自己生成台词
         systemPrompt += `12. 收款/退款(如果User给你转账，你可以根据人设和金额决定是否收下): {"type":"transfer_action", "action":"received", "content":"(这里写你决定收款时想说的话，必须符合你的人设)"} 或 {"type":"transfer_action", "action":"rejected", "content":"(这里写你决定退款时想说的话，必须符合你的人设)"}\n`;
         if (typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId) {
             systemPrompt += `13. 接受商城邀请并购买(当你收到User的商城邀请卡片时使用，注意检查余额是否足够): {"type":"shop_order", "items":["商品名1", "商品名2"], "content":"买完后想说的话"}\n`;
@@ -5443,7 +5333,19 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             systemPrompt += `【当前资产状态】：微信零钱余额 ¥${wcState.wallet.balance.toFixed(2)}，心动值(商城积分)余额 ♥${lsState.qaScore}。\n`;
         }
         
-        systemPrompt += `\n示例输出：\n[\n  {"type":"text", "content":"刚才去便利店了。"},\n  {"type":"text", "content":"买了个冰淇淋，你要吃吗？"},\n  {"type":"sticker", "content":"开心"}\n]\n`;
+        systemPrompt += `\n示例输出：\n`;
+        systemPrompt += `{
+  "replies": [
+    {"type":"text", "content":"刚才去便利店了。"},
+    {"type":"text", "content":"买了个冰淇淋，你要吃吗？"},
+    {"type":"sticker", "content":"开心"}
+  ],
+  "phoneUpdate": {
+    "newRemark": "给User的新备注名(不改填null)",
+    "newNickname": "你的新网名(不改填null)",
+    "newSign": "你的新个性签名(不改填null)"
+  }
+}\n`;
         systemPrompt += `</format_rules>\n\n`;
         systemPrompt += wcGenerateRelationshipPrompt(); // 注入关系网
 
@@ -5778,6 +5680,7 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
     const char = wcState.characters.find(c => c.id === charId);
     
     let actions = [];
+    let phoneUpdate = null; // 👈 新增：用于接收后台更新数据
     
     try {
         // 1. 移除 thinking 标签
@@ -5786,37 +5689,35 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         // 2. 尝试清理 Markdown 标记
         cleanText = cleanText.replace(/```json/g, '').replace(/```/g, '').trim();
         
-        // 3. 尝试提取 JSON 数组部分 (防止 AI 在 JSON 外面废话)
-        const start = cleanText.indexOf('[');
-        const end = cleanText.lastIndexOf(']');
-        
-        if (start !== -1 && end !== -1) {
-            cleanText = cleanText.substring(start, end + 1);
+        // 3. 尝试提取 JSON 对象部分 (合并解析版)
+        const startObj = cleanText.indexOf('{');
+        const endObj = cleanText.lastIndexOf('}');
+        const startArr = cleanText.indexOf('[');
+        const endArr = cleanText.lastIndexOf(']');
+
+        if (startObj !== -1 && endObj !== -1 && (startArr === -1 || startObj < startArr)) {
+            let objText = cleanText.substring(startObj, endObj + 1);
+            // 容错修复
+            objText = objText.replace(/,\s*]/g, ']').replace(/,\s*}/g, '}');
+            objText = objText.replace(/([^\\])"\s*}/g, '$1"}');
             
-            // 👇【新增】：JSON 字符串容错修复，防止掉格式导致解析崩溃
-            cleanText = cleanText.replace(/,\s*]/g, ']'); // 修复末尾多余逗号
-            cleanText = cleanText.replace(/}\s*{/g, '},{'); // 修复对象间漏掉逗号
-            cleanText = cleanText.replace(/([^\\])"\s*}/g, '$1"}'); // 尝试修复内容末尾漏掉双引号的情况
-            // 👆新增结束
-            
-            actions = JSON.parse(cleanText);
-        } else {
-            // 如果没有数组，尝试直接解析（可能是单个对象）
-            try {
-                const singleObj = JSON.parse(cleanText);
-                actions = Array.isArray(singleObj) ? singleObj : [singleObj];
-            } catch (e2) {
-                // 如果直接解析失败，尝试用正则提取单个 JSON 对象 (放宽正则限制，增强容错)
-                const regex = /\{[^{}]*"type"\s*:\s*"[^"]+"\s*,\s*"content"\s*:\s*"[^"]*"[^{}]*\}/g;
-                const matches = cleanText.match(regex);
-                if (matches) {
-                    actions = matches.map(m => {
-                        try { return JSON.parse(m); } catch(err) { return null; }
-                    }).filter(Boolean);
-                } else {
-                    throw new Error("No valid JSON found");
-                }
+            const parsed = JSON.parse(objText);
+            if (parsed.replies && Array.isArray(parsed.replies)) {
+                actions = parsed.replies;
+                phoneUpdate = parsed.phoneUpdate;
+            } else if (parsed.type && parsed.content) {
+                // 兜底：如果 AI 还是只返回了单个动作对象
+                actions = [parsed];
+            } else {
+                throw new Error("Invalid object structure");
             }
+        } else if (startArr !== -1 && endArr !== -1) {
+            // 兜底：如果 AI 依然顽固地返回了数组
+            let arrText = cleanText.substring(startArr, endArr + 1);
+            arrText = arrText.replace(/,\s*]/g, ']').replace(/}\s*{/g, '},{');
+            actions = JSON.parse(arrText);
+        } else {
+            throw new Error("No valid JSON found");
         }
 
     } catch (e) {
@@ -6445,11 +6346,45 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
         }
     }
     
-    // 👇 新增：根据设定的概率触发手机后台数据暗中更新 (改备注/改签名/和NPC聊天)
-    const bgUpdateFreq = (char && char.chatConfig && char.chatConfig.bgUpdateFreq !== undefined) ? char.chatConfig.bgUpdateFreq : 30;
-    if (bgUpdateFreq > 0 && (Math.random() * 100) < bgUpdateFreq) {
-        wcTriggerBackgroundPhoneUpdate(charId);
+    // 👇 核心修改：直接在这里处理 AI 顺便返回的手机后台更新数据 (精简版) 👇
+    if (phoneUpdate) {
+        try {
+            if (!char.phoneData) char.phoneData = {};
+            if (!char.phoneData.profile) char.phoneData.profile = { nickname: char.name, sign: "暂无签名" };
+
+            let hasChanges = false;
+
+            if (phoneUpdate.newRemark && phoneUpdate.newRemark !== "null") {
+                char.phoneData.userRemark = phoneUpdate.newRemark;
+                if (char.phoneData.contacts) {
+                    const uContact = char.phoneData.contacts.find(c => c.isUser);
+                    if (uContact) uContact.name = phoneUpdate.newRemark;
+                }
+                if (char.phoneData.chats) {
+                    const uChat = char.phoneData.chats.find(c => c.isUser);
+                    if (uChat) uChat.name = phoneUpdate.newRemark;
+                }
+                wcAddMessage(charId, 'system', 'system', `[系统提示：${char.name} 偷偷在 Ta 的手机里，将你的备注改为了“${phoneUpdate.newRemark}”]`, { style: 'transparent' });
+                hasChanges = true;
+            }
+
+            if (phoneUpdate.newNickname && phoneUpdate.newNickname !== "null") {
+                char.phoneData.profile.nickname = phoneUpdate.newNickname;
+                hasChanges = true;
+            }
+            if (phoneUpdate.newSign && phoneUpdate.newSign !== "null") {
+                char.phoneData.profile.sign = phoneUpdate.newSign;
+                hasChanges = true;
+            }
+
+            if (hasChanges) {
+                wcSaveData();
+            }
+        } catch (err) {
+            console.warn("解析 phoneUpdate 失败:", err);
+        }
     }
+    // 👆 核心修改结束 👆
 }
 
 // ==========================================
@@ -6496,7 +6431,13 @@ async function wcTriggerAIMoment(charId) {
         }
 
         const now = new Date();
-        const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const date = now.getDate();
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        const timeString = `${year}年${month}月${date}日 ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
         
         // 4. 组装全新的 Prompt
         let prompt = `你扮演角色：${char.name}。\n`;
@@ -6504,7 +6445,7 @@ async function wcTriggerAIMoment(charId) {
         if (wbInfo) prompt += `${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
         prompt += `【你手机通讯录里的NPC朋友】：${npcListStr}\n`;
-        prompt += `【当前时间】：${timeString}。\n\n`;
+        prompt += `【当前现实时间】：${timeString} ${dayString}\n\n`;
         
         prompt += `【最近的聊天记录（作为发朋友圈的灵感/背景）】：\n`;
         prompt += `${recentMsgs ? recentMsgs : '暂无聊天记录'}\n\n`;
@@ -6513,7 +6454,8 @@ async function wcTriggerAIMoment(charId) {
         prompt += `【要求】：\n`;
         prompt += `1. 朋友圈的内容通常是对最近聊天中发生的事情的感慨、吐槽、分享，或者对User的暗示。\n`;
         prompt += `2. 文案要符合日常朋友圈风格，生活化，不要太长，拒绝AI味。\n`;
-        prompt += `3. 【活人感排版】：你可以自由选择纯文本、纯图片或图文并茂。\n`;
+        prompt += `3. 【时间观念警告】：请务必注意当前时间！发帖内容和 NPC 的评论必须符合当前的时间点。\n`;
+        prompt += `4. 【活人感排版】：你可以自由选择纯文本、纯图片或图文并茂。\n`;
         prompt += `4. 【互动感（核心）】：你可以在 comment 字段填写自己的抢沙发补充（也可以不填写）。同时，请根据【通讯录NPC朋友】列表，生成 1-3 条 NPC 对这条朋友圈的评论 (npcComments)。\n`;
         prompt += `5. 要求返回纯JSON对象，不要Markdown标记，格式如下：\n`;
         prompt += `{
@@ -7053,6 +6995,18 @@ function wcUpdatePanelUI() {
         morePanel.classList.add('active');
         footer.classList.add('panel-active');
         scrollArea.classList.add('panel-open');
+        
+        // 👇 新增：群聊模式下隐藏状态和梦境按钮
+        const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+        const statusBtn = document.getElementById('wc-more-item-status');
+        const dreamBtn = document.getElementById('wc-more-item-dream');
+        if (char && char.isGroup) {
+            if (statusBtn) statusBtn.style.display = 'none';
+            if (dreamBtn) dreamBtn.style.display = 'none';
+        } else {
+            if (statusBtn) statusBtn.style.display = 'flex';
+            if (dreamBtn) dreamBtn.style.display = 'flex';
+        }
     }
     wcScrollToBottom();
 }
@@ -11760,9 +11714,13 @@ function wcOpenChatSettings() {
 
     const blockBtn = document.getElementById('wc-setting-block-btn');
     const groupMembersSection = document.getElementById('wc-setting-group-members-section');
+    
+    // 👇 获取城市和生活状态的容器
+    const locSection = document.getElementById('wc-setting-loc-display') ? document.getElementById('wc-setting-loc-display').closest('.wc-form-group') : null;
+    const lifeStatusSection = document.getElementById('wc-setting-life-status-toggle') ? document.getElementById('wc-setting-life-status-toggle').closest('.wc-form-group') : null;
 
     if (char.isGroup) {
-        // 【群聊模式】：保留头像和名称，隐藏备注、人设、主动性、表情包、拉黑
+        // 【群聊模式】：保留头像和名称，隐藏备注、人设、主动性、表情包、拉黑、城市、生活状态
         if(nameRow) {
             nameRow.style.display = 'flex'; // 恢复显示头像和名称
             const nameLabel = nameRow.querySelector('.wc-form-label');
@@ -11772,6 +11730,8 @@ function wcOpenChatSettings() {
         if(promptRow) promptRow.style.display = 'none';
         if(proactiveSection) proactiveSection.style.display = 'none';
         if(stickerSection) stickerSection.style.display = 'none';
+        if(locSection) locSection.style.display = 'none'; // 隐藏城市信息
+        if(lifeStatusSection) lifeStatusSection.style.display = 'none'; // 隐藏生活状态
         
         if(blockBtn) blockBtn.style.display = 'none';
         renderGroupMembersInSettings(char);
@@ -11786,6 +11746,8 @@ function wcOpenChatSettings() {
         if(promptRow) promptRow.style.display = 'block';
         if(proactiveSection) proactiveSection.style.display = 'block';
         if(stickerSection) stickerSection.style.display = 'block';
+        if(locSection) locSection.style.display = 'block'; // 恢复城市信息
+        if(lifeStatusSection) lifeStatusSection.style.display = 'flex'; // 恢复生活状态
 
         if(blockBtn) blockBtn.style.display = 'block';
         if (groupMembersSection) groupMembersSection.style.display = 'none';
@@ -11834,8 +11796,6 @@ function wcOpenChatSettings() {
     }
 
     document.getElementById('wc-setting-proactive-toggle').checked = char.chatConfig.proactiveEnabled || false;
-        const offlineToggle = document.getElementById('wc-setting-offline-proactive-toggle');
-    if (offlineToggle) offlineToggle.checked = char.chatConfig.offlineProactiveEnabled || false;
 
     document.getElementById('wc-setting-proactive-interval').value = char.chatConfig.proactiveInterval || 60;
     document.getElementById('wc-setting-moment-freq').value = char.chatConfig.momentFreq || 0;
@@ -12000,8 +11960,6 @@ async function wcSaveChatSettings() {
     }
 
     char.chatConfig.proactiveEnabled = document.getElementById('wc-setting-proactive-toggle').checked;
-        const offlineToggle = document.getElementById('wc-setting-offline-proactive-toggle');
-    if (offlineToggle) char.chatConfig.offlineProactiveEnabled = offlineToggle.checked;
 
     char.chatConfig.proactiveInterval = parseInt(document.getElementById('wc-setting-proactive-interval').value) || 60;
     char.chatConfig.momentFreq = parseInt(document.getElementById('wc-setting-moment-freq').value) || 0;
@@ -12041,14 +11999,6 @@ async function wcSaveChatSettings() {
     wcApplyChatConfig(char);
     wcRenderMessages(char.id); 
     wcRenderChats(); 
-        // 👇 修改：如果同时开启了主动发消息和离线托管，才交给云端 👇
-    if (char.chatConfig.proactiveEnabled && char.chatConfig.offlineProactiveEnabled) {
-        registerOfflineProactiveTask(char);
-    } else {
-        // 如果关了离线开关，告诉云端取消托管
-        unregisterOfflineProactiveTask(char);
-    }
-    // 👆 新增结束 👆
 
     if (char.chatConfig.stickerGroupIds.length > 0 && !char.chatConfig.stickerGroupIds.includes(wcState.activeStickerCategoryIndex)) {
         wcState.activeStickerCategoryIndex = char.chatConfig.stickerGroupIds[0];
@@ -12290,19 +12240,42 @@ window.wcExecuteSingleMomentAI = async function(charId) {
             }
         }
 
+        // 提取最近聊天记录
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-20).map(m => {
+            if (m.isError || m.type === 'system') return null;
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return `${m.sender==='me'?'User':char.name}: ${content}`;
+        }).filter(Boolean).join('\n');
+
+        // 获取当前时间
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const date = now.getDate();
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        const timeString = `${year}年${month}月${date}日 ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
+
         // 只提取当前这条朋友圈的信息
         const commentsStr = targetMoment.comments ? targetMoment.comments.map(c => `${c.name}: ${c.text}`).join(' | ') : '无';
         const likesStr = targetMoment.likes ? targetMoment.likes.join(', ') : '无';
         const momentText = `[朋友圈ID:${targetMoment.id}] 发帖人:${targetMoment.name} | 内容:${targetMoment.text} | 图片:${targetMoment.imageDesc || '无'} | 点赞:[${likesStr}] | 评论:[${commentsStr}]`;
 
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
-        prompt += `【用户(User)设定】：${userPersona}\n\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【当前现实时间】：${timeString} ${dayString}\n`;
+        prompt += `【最近聊天记录】：\n${recentMsgs ? recentMsgs : '暂无聊天记录'}\n\n`;
         prompt += `【当前你正在看的一条朋友圈】：\n${momentText}\n\n`;
-        prompt += `请根据你的人设，对这条朋友圈进行互动（点赞、评论、或回复别人的评论）。\n`;
+        prompt += `请根据你的人设、当前时间、最近的聊天记录，对这条朋友圈进行互动（点赞、评论、或回复别人的评论）。\n`;
         prompt += `【要求】：\n`;
         prompt += `1. 互动必须符合你的人设和你们之间的关系。\n`;
-        prompt += `2. 如果是回复某人的评论，请使用 reply 类型，并指定 targetName。\n`;
-        prompt += `3. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `2. 【时间观念警告】：请务必注意当前时间！评论内容必须符合当前的时间点！\n`;
+        prompt += `3. 【结合上下文】：请结合【最近聊天记录】和【朋友圈内容】进行回复，不要说一些毫不相干的话。\n`;
+        prompt += `4. 如果是回复某人的评论，请使用 reply 类型，并指定 targetName。\n`;
+        prompt += `5. 返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "actions": [
     {"type": "like", "momentId": ${targetMoment.id}},
@@ -30874,62 +30847,6 @@ function lsPlayGacha() {
         lsRenderVault();
     }, 500);
 }
-
-// ==========================================
-// 新增：同步离线消息与自动续期函数 (防僵尸任务版)
-// ==========================================
-async function syncOfflineMessages() {
-    try {
-        // 注意：这里的网址也要换成你真实的 Worker 网址哦！
-        const workerUrl = 'https://honey-offline-brain.xingyan067.workers.dev';
-        const deviceId = getDeviceId();
-        
-        // 巧妙利用 Cache API，把 deviceId 存起来，让后台的 sw.js 也能读到！
-        if ('caches' in window) {
-            const cache = await caches.open('app-config-cache');
-            await cache.put('/current-device-id', new Response(deviceId));
-        }
-        
-        // 遍历所有角色
-        for (const char of wcState.characters) {
-            if (char.chatConfig && char.chatConfig.proactiveEnabled && char.chatConfig.offlineProactiveEnabled) {
-                
-                // 1. 拉取离线消息
-                const res = await fetch(`${workerUrl}/sync?deviceId=${deviceId}&charId=${char.id}`);
-                const data = await res.json();
-                
-                if (data.messages && data.messages.length > 0) {
-                    console.log(`拉取到 ${char.name} 的离线消息:`, data.messages);
-                    let addedCount = 0;
-                    data.messages.forEach(msg => {
-                        wcAddMessage(char.id, 'them', 'text', msg.content, { time: msg.time });
-                        addedCount++;
-                    });
-                    
-                    // 只有成功存入本地后，才通知云端删除消息 (ACK)
-                    if (addedCount > 0) {
-                        await wcSaveData(); 
-                        await fetch(`${workerUrl}/ack`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ deviceId: deviceId, charId: char.id })
-                        });
-                        console.log(`✅ 已确认接收并清空云端 ${char.name} 的离线消息`);
-                    }
-                }
-
-                // 2. 强制重新注册 (自动续期，防止变成僵尸任务)
-                // 延迟 2 秒执行，避免阻塞页面加载
-                setTimeout(() => {
-                    console.log(`🔄 正在为 ${char.name} 自动续期云端托管...`);
-                    registerOfflineProactiveTask(char);
-                }, 2000);
-            }
-        }
-    } catch (e) {
-        console.error("同步离线消息失败", e);
-    }
-}
 // ==========================================
 // 新增：通话记录独立展示与自动总结逻辑
 // ==========================================
@@ -31058,25 +30975,5 @@ async function wcAutoSummarizeCall(charId, durationStr, transcript) {
 
     } catch (e) {
         console.error("通话自动总结失败", e);
-    }
-}
-
-// ==========================================
-// 新增：取消离线托管函数
-// ==========================================
-async function unregisterOfflineProactiveTask(char) {
-    try {
-        // 注意：换成你真实的 Worker 网址
-        const workerUrl = 'https://honey-offline-brain.xingyan067.workers.dev';
-        const payload = { deviceId: getDeviceId(), charId: char.id };
-        
-        await fetch(`${workerUrl}/unregister`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        console.log(`✅ 已取消 ${char.name} 的云端托管`);
-    } catch (e) {
-        console.error("❌ 取消托管失败", e);
     }
 }
