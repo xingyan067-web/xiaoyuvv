@@ -10623,27 +10623,74 @@ async function wcGeneratePhoneChats() {
                 model: apiConfig.model,
                 messages: [{ role: "user", content: prompt }],
                 temperature: parseFloat(apiConfig.temp) || 0.8,
-                max_tokens: 6000
+                max_tokens: 4000 // 👈 修复1：改为 4000，适配绝大多数模型
             })
         });
 
         const data = await response.json();
+        
+        // 👇 修复2：新增严格的错误拦截，如果报错会弹出精美的错误卡片
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。详细报错：" + JSON.stringify(data));
+        }
+        // 👆 修复结束 👆
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
         
-        let chatsData;
+        let chatsData = [];
         try {
-            chatsData = JSON.parse(content);
-        } catch (parseErr) {
-            // 尝试修复常见的 JSON 错误
-            content = content.replace(/,\s*]/g, ']');
-            content = content.replace(/}\s*{/g, '},{');
-            try {
-                chatsData = JSON.parse(content);
-            } catch (e2) {
-                throw new Error("AI 返回的 JSON 格式错误，请重试。返回内容：" + content.substring(0, 100) + "...");
+            let tempContent = content;
+            if (!tempContent.endsWith(']')) {
+                let openBrackets = (tempContent.match(/\[/g) || []).length;
+                let closeBrackets = (tempContent.match(/\]/g) || []).length;
+                let openBraces = (tempContent.match(/\{/g) || []).length;
+                let closeBraces = (tempContent.match(/\}/g) || []).length;
+                while (openBraces > closeBraces) { tempContent += '}'; closeBraces++; }
+                while (openBrackets > closeBrackets) { tempContent += ']'; closeBrackets++; }
             }
+            tempContent = tempContent.replace(/,\s*]/g, ']');
+            tempContent = tempContent.replace(/,\s*}/g, '}');
+            chatsData = JSON.parse(tempContent);
+        } catch (parseErr) {
+            console.warn("JSON 解析失败，启动终极碎片提取模式兜底...");
+            let extracted = [];
+            let depth = 0; let start = -1; let inString = false; let escapeNext = false;
+            for (let i = 0; i < content.length; i++) {
+                const charStr = content[i];
+                if (escapeNext) { escapeNext = false; continue; }
+                if (charStr === '\\') { escapeNext = true; continue; }
+                if (charStr === '"') { inString = !inString; continue; }
+                if (!inString) {
+                    if (charStr === '{') { if (depth === 0) start = i; depth++; }
+                    else if (charStr === '}') {
+                        depth--;
+                        if (depth === 0 && start !== -1) {
+                            let objStr = content.substring(start, i + 1);
+                            try {
+                                objStr = objStr.replace(/\n/g, '\\n').replace(/\r/g, '');
+                                let obj = JSON.parse(objStr);
+                                if (obj.name && Array.isArray(obj.history)) extracted.push(obj);
+                            } catch(err) {}
+                            start = -1;
+                        }
+                    }
+                }
+            }
+            if (extracted.length > 0) {
+                chatsData = extracted;
+            } else {
+                throw new Error("AI 输出的内容过于混乱，已尽力挽救但失败。返回内容片段：" + content.substring(0, 100) + "...");
+            }
+        }
+
+        if (!Array.isArray(chatsData)) {
+            if (chatsData.name && Array.isArray(chatsData.history)) chatsData = [chatsData];
+            else throw new Error("AI 返回的数据不是有效的聊天列表数组。");
         }
 
         if (!char.phoneData) char.phoneData = {};
@@ -11317,7 +11364,24 @@ async function wcGeneratePhoneContacts() {
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-        const result = JSON.parse(content);
+        
+        let result;
+        try {
+            let tempContent = content;
+            if (!tempContent.endsWith('}')) {
+                let openBrackets = (tempContent.match(/\[/g) || []).length;
+                let closeBrackets = (tempContent.match(/\]/g) || []).length;
+                let openBraces = (tempContent.match(/\{/g) || []).length;
+                let closeBraces = (tempContent.match(/\}/g) || []).length;
+                while (openBrackets > closeBrackets) { tempContent += ']'; closeBrackets++; }
+                while (openBraces > closeBraces) { tempContent += '}'; closeBraces++; }
+            }
+            tempContent = tempContent.replace(/,\s*]/g, ']');
+            tempContent = tempContent.replace(/,\s*}/g, '}');
+            result = JSON.parse(tempContent);
+        } catch (e) {
+            throw new Error("AI 返回的 JSON 格式严重损坏，已尽力挽救但失败。请重试。");
+        }
 
         if (!char.phoneData) char.phoneData = {};
         char.phoneData.userRemark = result.userRemark || userName;
@@ -15631,14 +15695,21 @@ function wcRenderCart() {
             <div class="cart-item">
                 <div class="cart-item-info">
                     <div class="cart-item-title">${item.name}</div>
-                    <div style="color:#FF3B30; font-size:14px; font-weight:bold; margin-top:4px;">♥ ${item.price}</div>
+                    <div style="color:#FF3B30; font-size:14px; font-weight:bold; margin-top:4px;">¥ ${parseFloat(item.price).toFixed(2)}</div>
                 </div>
                 <div class="cart-item-remove" onclick="wcRemoveFromCart(${idx})">×</div>
             </div>
         `;
     });
     container.innerHTML = html;
-    document.getElementById('shop-cart-total').innerText = `♥ ${total}`;
+    document.getElementById('shop-cart-total').innerText = `¥ ${total.toFixed(2)}`;
+}
+function wcRemoveFromCart(idx) {
+    if (!wcState.shopData.cart) return;
+    wcState.shopData.cart.splice(idx, 1);
+    wcSaveData();
+    wcUpdateCartBadge();
+    wcRenderCart();
 }
 
 // --- 找到 wcCheckoutCart 函数，替换为以下内容 ---
@@ -15657,6 +15728,14 @@ function wcCheckoutCart() {
     wcOpenModal('wc-modal-shop-checkout-card');
 }
 
+// 新增：微信商城购物车删除商品逻辑
+window.wcRemoveFromCart = function(idx) {
+    if (!wcState.shopData.cart) return;
+    wcState.shopData.cart.splice(idx, 1);
+    wcSaveData();
+    wcUpdateCartBadge();
+    wcRenderCart();
+};
 
 // --- 找到 wcOpenDeliveryTypeModal 函数，替换为以下内容 ---
 function wcOpenDeliveryTypeModal(method) {
@@ -15771,23 +15850,39 @@ function wcPayAndSend(method, deliveryText) {
     };
 
     if (method === 'gift') {
+        // 👇 核心修复：调用通用输入框，并开启密码模式 (true)
         wcOpenGeneralInput(`支付 ¥${total.toFixed(2)} (输入支付密码)`, (pass) => {
-            if (pass !== wcState.wallet.password) return alert("密码错误！");
-            if (wcState.wallet.balance < total) return alert("余额不足！请先充值。");
+            // 1. 校验密码
+            if (pass !== wcState.wallet.password) {
+                alert("密码错误！");
+                return;
+            }
+            // 2. 校验余额
+            if (wcState.wallet.balance < total) {
+                alert("余额不足！请先前往「我-钱包」充值哦~");
+                return;
+            }
             
+            // 3. 扣除余额并记录账单
             wcState.wallet.balance -= total;
             wcState.wallet.transactions.push({
-                id: Date.now(), type: 'payment', amount: total,
-                note: `商城购物赠送`, time: Date.now()
+                id: Date.now(), 
+                type: 'payment', 
+                amount: total,
+                note: `商城购物赠送`, 
+                time: Date.now()
             });
             
+            // 4. 清空购物车并保存
             wcState.shopData.cart = [];
             wcSaveData();
             wcUpdateCartBadge();
+            
+            // 5. 关闭相关弹窗
             wcCloseModal('wc-modal-shop-cart');
             wcCloseShoppingPage();
 
-            // 支付成功后，弹出留言输入框
+            // 6. 支付成功后，弹出留言输入框
             setTimeout(() => {
                 wcOpenGeneralInput("给 Ta 留个言吧 (选填)", (customMsg) => {
                     receiptData.msg = customMsg || "“给你买了一点小礼物，希望你喜欢。”";
@@ -15805,7 +15900,7 @@ function wcPayAndSend(method, deliveryText) {
                 });
             }, 300);
             
-        }, true);
+        }, true); // 👈 这里的 true 表示这是一个密码输入框
 
     } else if (method === 'daifu') {
         wcCloseModal('wc-modal-shop-cart');
@@ -15834,6 +15929,7 @@ function wcPayAndSend(method, deliveryText) {
         }, 300);
     }
 }
+
 // ==========================================================================
 // 新增：手机模拟器 - 购物车 (Cart) 逻辑
 // ==========================================================================
@@ -21237,6 +21333,16 @@ const apiConfig = await getActiveApiConfig('npc');
         });
 
         const data = await response.json();
+        
+        // 👇 新增：严格的错误拦截，防止 undefined 报错
+        if (!response.ok) {
+            throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        }
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error("API 返回数据异常，请检查模型名称是否正确。详细报错：" + JSON.stringify(data));
+        }
+        // 👆 新增结束
+
         let content = data.choices[0].message.content;
         content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         content = content.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -25229,46 +25335,47 @@ async function forumGenerateAIPosts(type, min = 6, max = 10, selectedPostIds = [
         
         let generatedPosts = [];
         try {
-            // 尝试直接解析
-            // 简单的补全括号容错
             let tempContent = content;
             if (!tempContent.endsWith(']')) {
                 let openBrackets = (tempContent.match(/\[/g) || []).length;
                 let closeBrackets = (tempContent.match(/\]/g) || []).length;
                 let openBraces = (tempContent.match(/\{/g) || []).length;
                 let closeBraces = (tempContent.match(/\}/g) || []).length;
-                
-                // 补齐缺失的 } 和 ]
                 while (openBraces > closeBraces) { tempContent += '}'; closeBraces++; }
                 while (openBrackets > closeBrackets) { tempContent += ']'; closeBrackets++; }
             }
+            tempContent = tempContent.replace(/,\s*]/g, ']');
+            tempContent = tempContent.replace(/,\s*}/g, '}');
             generatedPosts = JSON.parse(tempContent);
         } catch (e) {
-            console.warn("JSON 解析失败，启用智能括号栈提取兜底", e);
-            // 智能提取完整闭合的 JSON 对象
+            console.warn("JSON 解析失败，启用终极碎片提取模式兜底", e);
             let extracted = [];
-            let depth = 0;
-            let start = -1;
+            let depth = 0; let start = -1; let inString = false; let escapeNext = false;
             for (let i = 0; i < content.length; i++) {
-                if (content[i] === '{') {
-                    if (depth === 0) start = i;
-                    depth++;
-                } else if (content[i] === '}') {
-                    depth--;
-                    if (depth === 0 && start !== -1) {
-                        let objStr = content.substring(start, i + 1);
-                        try {
-                            let obj = JSON.parse(objStr);
-                            if (obj.authorName) extracted.push(obj);
-                        } catch(err) {}
-                        start = -1;
+                const charStr = content[i];
+                if (escapeNext) { escapeNext = false; continue; }
+                if (charStr === '\\') { escapeNext = true; continue; }
+                if (charStr === '"') { inString = !inString; continue; }
+                if (!inString) {
+                    if (charStr === '{') { if (depth === 0) start = i; depth++; }
+                    else if (charStr === '}') {
+                        depth--;
+                        if (depth === 0 && start !== -1) {
+                            let objStr = content.substring(start, i + 1);
+                            try {
+                                objStr = objStr.replace(/\n/g, '\\n').replace(/\r/g, '');
+                                let obj = JSON.parse(objStr);
+                                if (typeof obj === 'object' && obj !== null) extracted.push(obj);
+                            } catch(err) {}
+                            start = -1;
+                        }
                     }
                 }
             }
             if (extracted.length > 0) {
                 generatedPosts = extracted;
             } else {
-                throw new Error("JSON 解析彻底失败，请尝试更换模型或缩短生成要求");
+                throw new Error("JSON 解析彻底失败，AI 输出的内容过于混乱。");
             }
         }
 
@@ -25513,46 +25620,47 @@ async function _executeGenFanfic(basePrompt, min = 2, max = 3, keepPosts = false
         
         let generatedPosts = [];
         try {
-            // 尝试直接解析
-            // 简单的补全括号容错
             let tempContent = content;
             if (!tempContent.endsWith(']')) {
                 let openBrackets = (tempContent.match(/\[/g) || []).length;
                 let closeBrackets = (tempContent.match(/\]/g) || []).length;
                 let openBraces = (tempContent.match(/\{/g) || []).length;
                 let closeBraces = (tempContent.match(/\}/g) || []).length;
-                
-                // 补齐缺失的 } 和 ]
                 while (openBraces > closeBraces) { tempContent += '}'; closeBraces++; }
                 while (openBrackets > closeBrackets) { tempContent += ']'; closeBrackets++; }
             }
+            tempContent = tempContent.replace(/,\s*]/g, ']');
+            tempContent = tempContent.replace(/,\s*}/g, '}');
             generatedPosts = JSON.parse(tempContent);
         } catch (e) {
-            console.warn("JSON 解析失败，启用智能括号栈提取兜底", e);
-            // 智能提取完整闭合的 JSON 对象
+            console.warn("JSON 解析失败，启用终极碎片提取模式兜底", e);
             let extracted = [];
-            let depth = 0;
-            let start = -1;
+            let depth = 0; let start = -1; let inString = false; let escapeNext = false;
             for (let i = 0; i < content.length; i++) {
-                if (content[i] === '{') {
-                    if (depth === 0) start = i;
-                    depth++;
-                } else if (content[i] === '}') {
-                    depth--;
-                    if (depth === 0 && start !== -1) {
-                        let objStr = content.substring(start, i + 1);
-                        try {
-                            let obj = JSON.parse(objStr);
-                            if (obj.authorName) extracted.push(obj);
-                        } catch(err) {}
-                        start = -1;
+                const charStr = content[i];
+                if (escapeNext) { escapeNext = false; continue; }
+                if (charStr === '\\') { escapeNext = true; continue; }
+                if (charStr === '"') { inString = !inString; continue; }
+                if (!inString) {
+                    if (charStr === '{') { if (depth === 0) start = i; depth++; }
+                    else if (charStr === '}') {
+                        depth--;
+                        if (depth === 0 && start !== -1) {
+                            let objStr = content.substring(start, i + 1);
+                            try {
+                                objStr = objStr.replace(/\n/g, '\\n').replace(/\r/g, '');
+                                let obj = JSON.parse(objStr);
+                                if (typeof obj === 'object' && obj !== null) extracted.push(obj);
+                            } catch(err) {}
+                            start = -1;
+                        }
                     }
                 }
             }
             if (extracted.length > 0) {
                 generatedPosts = extracted;
             } else {
-                throw new Error("JSON 解析彻底失败，请尝试更换模型或缩短生成要求");
+                throw new Error("JSON 解析彻底失败，AI 输出的内容过于混乱。");
             }
         }
 
