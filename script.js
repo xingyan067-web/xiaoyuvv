@@ -512,7 +512,13 @@ const idb = {
             const store = tx.objectStore(this.storeName);
             store.put(value, key);
             // 【iOS 核心修复】：必须监听 tx.oncomplete 确保数据物理写入磁盘
-            tx.oncomplete = () => resolve();
+            tx.oncomplete = () => {
+                // 👇 新增：触发云端备份脏标记
+                if (typeof window.needCloudBackup !== 'undefined') {
+                    window.needCloudBackup = true;
+                }
+                resolve();
+            };
             tx.onerror = () => reject(tx.error);
         });
     },
@@ -5332,8 +5338,8 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         systemPrompt += `- 必须使用双引号 " 包裹键名和字符串值。\n`;
         systemPrompt += `- 严禁输出损坏的 JSON，严禁在 JSON 外部输出任何多余的字符。\n`;
         
-        const rMin = config.replyMin !== undefined ? config.replyMin : 1;
-        const rMax = config.replyMax !== undefined ? config.replyMax : 4;
+        const rMin = config.replyMin !== undefined ? config.replyMin : 3;
+        const rMax = config.replyMax !== undefined ? config.replyMax : 8;
         systemPrompt += `- 绝对禁止长文本：【强制气泡数量】"replies" 数组的长度必须在 ${rMin} 到 ${rMax} 之间！严禁把所有话挤在一个气泡回复里！\n`;        
         systemPrompt += `- 必须模拟真人打字聊天习惯/线上聊天的碎片化习惯，保持对话口语化、碎片化，保持回复气泡的随机性和多样性！\n`;        
         systemPrompt += `- 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n\n`;        
@@ -5808,7 +5814,7 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
     }
 
     // 👇 新增：强制拆分兜底逻辑 (如果 AI 偷懒没有按要求拆分气泡，用 JS 强行切断) 👇
-    const rMin = char.chatConfig?.replyMin !== undefined ? char.chatConfig.replyMin : 1;
+    const rMin = char.chatConfig?.replyMin !== undefined ? char.chatConfig.replyMin : 3;
     if (actions.length > 0 && actions.length < rMin) {
         let newActions = [];
         actions.forEach(act => {
@@ -11815,8 +11821,8 @@ function wcOpenChatSettings() {
 
     document.getElementById('wc-setting-context-limit').value = char.chatConfig.contextLimit || 0;
     // 👇 新增：读取气泡数限制 👇
-    document.getElementById('wc-setting-reply-min').value = char.chatConfig.replyMin !== undefined ? char.chatConfig.replyMin : 1;
-    document.getElementById('wc-setting-reply-max').value = char.chatConfig.replyMax !== undefined ? char.chatConfig.replyMax : 4;
+    document.getElementById('wc-setting-reply-min').value = char.chatConfig.replyMin !== undefined ? char.chatConfig.replyMin : 3;
+    document.getElementById('wc-setting-reply-max').value = char.chatConfig.replyMax !== undefined ? char.chatConfig.replyMax : 8;
     
     // 【修复】：正确读取双语设置到界面，而不是覆盖数据
     document.getElementById('wc-setting-bilingual-toggle').checked = char.chatConfig.bilingualEnabled || false;
@@ -11979,8 +11985,8 @@ async function wcSaveChatSettings() {
 
     char.chatConfig.contextLimit = parseInt(document.getElementById('wc-setting-context-limit').value) || 0;
     // 👇 新增：保存气泡数限制 👇
-    char.chatConfig.replyMin = parseInt(document.getElementById('wc-setting-reply-min').value) || 1;
-    char.chatConfig.replyMax = parseInt(document.getElementById('wc-setting-reply-max').value) || 4;
+    char.chatConfig.replyMin = parseInt(document.getElementById('wc-setting-reply-min').value) || 3;
+    char.chatConfig.replyMax = parseInt(document.getElementById('wc-setting-reply-max').value) || 8;
     
     // 【修复】：在这里真正保存双语设置
     char.chatConfig.bilingualEnabled = document.getElementById('wc-setting-bilingual-toggle').checked;
@@ -31112,3 +31118,318 @@ async function wcAutoSummarizeCall(charId, durationStr, transcript) {
         console.error("通话自动总结失败", e);
     }
 }
+// ==========================================
+// 👇 新增：云端同步系统 (纯文本覆盖式) 👇
+// ==========================================
+
+window.needCloudBackup = false; // 脏标记：记录数据是否有变动
+let isCloudSyncEnabled = localStorage.getItem('ios_theme_cloud_sync') === 'true';
+
+// 替换为你部署的 Cloudflare Worker 接口地址
+const CLOUD_SYNC_API = 'https://xiaoyuan-backup.xingyan067.workers.dev';
+
+// 1. 页面交互逻辑
+function openCloudSyncSettings() {
+    document.getElementById('toggle-cloud-sync').checked = isCloudSyncEnabled;
+    document.getElementById('cloudSyncSettingsModal').classList.add('open');
+}
+
+function closeCloudSyncSettings() {
+    document.getElementById('cloudSyncSettingsModal').classList.remove('open');
+}
+
+function handleCloudSyncToggle(checkbox) {
+    isCloudSyncEnabled = checkbox.checked;
+    localStorage.setItem('ios_theme_cloud_sync', isCloudSyncEnabled);
+    if (isCloudSyncEnabled) {
+        alert("已开启云端同步！\n每次退出网页时，系统会自动将最新的纯文本数据同步到云端。");
+        window.needCloudBackup = true; // 开启时强制标记为需要备份一次
+    }
+}
+
+// 2. 递归剔除 Base64 图片的函数 (核心脱水逻辑)
+function stripImagesFromData(obj) {
+    if (typeof obj === 'string') {
+        // 如果是 base64 图片，直接替换为空字符串
+        if (obj.startsWith('data:image/')) return "";
+        return obj;
+    }
+    if (Array.isArray(obj)) {
+        return obj.map(item => stripImagesFromData(item));
+    }
+    if (typeof obj === 'object' && obj !== null) {
+        const newObj = {};
+        for (let key in obj) {
+            newObj[key] = stripImagesFromData(obj[key]);
+        }
+        return newObj;
+    }
+    return obj;
+}
+
+// 3. 深度合并云端数据与本地数据 (保留本地图片)
+function mergeCloudDataWithLocal(local, cloud) {
+    if (cloud === null || cloud === undefined) return local;
+    if (typeof cloud !== 'object') {
+        // 如果云端是空字符串，且本地是 data:image，则保留本地图片
+        if (cloud === "" && typeof local === 'string' && local.startsWith('data:image/')) {
+            return local;
+        }
+        return cloud;
+    }
+    if (Array.isArray(cloud)) {
+        const result = [];
+        for (let i = 0; i < cloud.length; i++) {
+            result[i] = mergeCloudDataWithLocal(local ? local[i] : undefined, cloud[i]);
+        }
+        return result;
+    }
+    const result = { ...local };
+    for (let key in cloud) {
+        result[key] = mergeCloudDataWithLocal(local ? local[key] : undefined, cloud[key]);
+    }
+    return result;
+}
+
+// 4. 收集所有数据并执行上传
+async function executeCloudBackup() {
+    if (!isCloudSyncEnabled || !window.needCloudBackup) return;
+    
+    const qq = localStorage.getItem('current_bound_qq');
+    const deviceId = localStorage.getItem('ios_theme_device_id');
+    if (!qq || !deviceId) return;
+
+    try {
+        const data = {};
+        
+        // 收集 Theme Studio 数据
+        const keys = await idb.getAllKeys();
+        for (let key of keys) {
+            if (key.startsWith('ios_theme_')) data[key] = await idb.get(key);
+        }
+
+        // 收集 WeChat 数据
+        const wechatData = {};
+        if (wcDb.instance) {
+            wechatData.user = await wcDb.get('kv_store', 'user');
+            wechatData.wallet = await wcDb.get('kv_store', 'wallet');
+            wechatData.stickerCategories = await wcDb.get('kv_store', 'sticker_categories');
+            wechatData.cssPresets = await wcDb.get('kv_store', 'css_presets');
+            wechatData.chatBgPresets = await wcDb.get('kv_store', 'chat_bg_presets');
+            wechatData.phonePresets = await wcDb.get('kv_store', 'phone_presets');
+            wechatData.shopData = await wcDb.get('kv_store', 'shop_data');
+            wechatData.characters = await wcDb.getAll('characters');
+            wechatData.masks = await wcDb.getAll('masks');
+            wechatData.moments = await wcDb.getAll('moments');
+            
+            const allChats = await wcDb.getAll('chats');
+            const chatsObj = {};
+            if (allChats) {
+                allChats.forEach(item => { chatsObj[item.charId] = item.messages; });
+            }
+            wechatData.chats = chatsObj;
+        }
+        data['wechat_backup'] = wechatData;
+
+        // 收集其他 APP 数据
+        data['ls_data'] = await idb.get('ls_data');
+        data['ins_music_data'] = await idb.get('ins_music_data');
+        data['dream_space_data'] = await idb.get('dream_space_data');
+        data['ins_forum_data'] = await idb.get('ins_forum_data');
+
+        // 核心：剔除所有图片，大幅减小体积
+        const cleanData = stripImagesFromData(data);
+
+        // 使用 keepalive 确保页面关闭时请求也能发出去
+        fetch(`${CLOUD_SYNC_API}/backup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                qq: qq,
+                deviceId: deviceId,
+                timestamp: Date.now(),
+                data: cleanData
+            }),
+            keepalive: true 
+        }).catch(e => console.warn("云备份请求发送失败", e));
+
+        // 重置脏标记
+        window.needCloudBackup = false;
+        console.log("已触发云端同步 (纯文本)");
+
+    } catch (error) {
+        console.error("云端同步准备失败:", error);
+    }
+}
+
+// 5. 查找云端备份
+async function searchCloudBackup() {
+    const qq = document.getElementById('cloud-search-qq').value.trim();
+    if (!qq) return alert("请输入 QQ 号");
+
+    const resultsContainer = document.getElementById('cloud-search-results');
+    resultsContainer.innerHTML = '<div style="text-align: center; color: #8e8e93; font-size: 13px; padding: 20px 0;">正在查找...</div>';
+
+    try {
+        const response = await fetch(`${CLOUD_SYNC_API}/list?qq=${qq}`);
+        const result = await response.json();
+
+        if (result.success && result.backups && result.backups.length > 0) {
+            resultsContainer.innerHTML = '';
+            result.backups.forEach(backup => {
+                const dateStr = new Date(backup.timestamp).toLocaleString('zh-CN');
+                const div = document.createElement('div');
+                div.style.cssText = "background: #fff; border: 1px solid #e5e5ea; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;";
+                div.innerHTML = `
+                    <div>
+                        <div style="font-size: 15px; font-weight: bold; color: #111; margin-bottom: 4px;">设备: ${backup.deviceId}</div>
+                        <div style="font-size: 12px; color: #888;">备份时间: ${dateStr}</div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="wc-btn-secondary" style="flex: 1; margin: 0; padding: 8px; border-radius: 8px; font-size: 13px;" onclick="downloadCloudBackup('${qq}', '${backup.deviceId}')">下载 JSON</button>
+                        <button class="wc-btn-primary" style="flex: 1; margin: 0; padding: 8px; border-radius: 8px; font-size: 13px; background: #34c759;" onclick="restoreCloudBackup('${qq}', '${backup.deviceId}')">直接使用</button>
+                    </div>
+                `;
+                resultsContainer.appendChild(div);
+            });
+        } else {
+            resultsContainer.innerHTML = '<div style="text-align: center; color: #8e8e93; font-size: 13px; padding: 20px 0;">未找到该 QQ 的备份记录</div>';
+        }
+    } catch (e) {
+        resultsContainer.innerHTML = '<div style="text-align: center; color: #ff3b30; font-size: 13px; padding: 20px 0;">网络请求失败，请检查 API</div>';
+    }
+}
+
+// 6. 下载云端备份
+async function downloadCloudBackup(qq, deviceId) {
+    try {
+        wcShowLoading("正在获取备份数据...");
+        const response = await fetch(`${CLOUD_SYNC_API}/get?qq=${qq}&deviceId=${deviceId}`);
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            const exportObj = { signature: 'ios_theme_studio_full_backup', timestamp: result.timestamp, data: result.data };
+            const blob = new Blob([JSON.stringify(exportObj)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; 
+            a.download = `cloud_backup_${qq}_${deviceId}.json`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+            wcShowSuccess("下载成功");
+        } else {
+            wcShowError("获取数据失败");
+        }
+    } catch (e) {
+        wcShowError("网络异常");
+    }
+}
+
+// 7. 直接使用 (恢复) 云端备份
+async function restoreCloudBackup(qq, deviceId) {
+    if (!confirm("这将使用云端数据覆盖当前数据（本地已有的图片会尽量保留）。确定要恢复吗？")) return;
+
+    try {
+        wcShowLoading("正在恢复数据...");
+        const response = await fetch(`${CLOUD_SYNC_API}/get?qq=${qq}&deviceId=${deviceId}`);
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            const cloudData = result.data;
+            
+            // 1. 恢复 Theme Studio 数据
+            for (let key in cloudData) {
+                if (key !== 'wechat_backup' && key !== 'ls_data' && key !== 'ins_music_data' && key !== 'dream_space_data') {
+                    const localVal = await idb.get(key);
+                    const mergedVal = mergeCloudDataWithLocal(localVal, cloudData[key]);
+                    await idb.set(key, mergedVal);
+                }
+            }
+
+            // 2. 恢复 WeChat 数据
+            if (cloudData['wechat_backup']) {
+                const wd = cloudData['wechat_backup'];
+                
+                const safeGet = async (storeName, key) => await wcDb.get(storeName, key).catch(() => null);
+                const safeGetAll = async (storeName) => await wcDb.getAll(storeName).catch(() => []);
+
+                if (wd.user) await wcDb.put('kv_store', mergeCloudDataWithLocal(await safeGet('kv_store', 'user'), wd.user), 'user');
+                if (wd.wallet) await wcDb.put('kv_store', wd.wallet, 'wallet');
+                if (wd.stickerCategories) await wcDb.put('kv_store', wd.stickerCategories, 'sticker_categories');
+                if (wd.cssPresets) await wcDb.put('kv_store', wd.cssPresets, 'css_presets');
+                if (wd.chatBgPresets) await wcDb.put('kv_store', mergeCloudDataWithLocal(await safeGet('kv_store', 'chat_bg_presets'), wd.chatBgPresets), 'chat_bg_presets');
+                if (wd.phonePresets) await wcDb.put('kv_store', mergeCloudDataWithLocal(await safeGet('kv_store', 'phone_presets'), wd.phonePresets), 'phone_presets');
+                if (wd.shopData) await wcDb.put('kv_store', wd.shopData, 'shop_data');
+                
+                // 恢复 Characters (需要合并头像)
+                const localChars = await safeGetAll('characters');
+                const importedCharacters = Array.isArray(wd.characters) ? wd.characters : [];
+                await wcClearStore('characters');
+                for (const c of importedCharacters) {
+                    const localC = localChars.find(lc => lc.id === c.id);
+                    await wcDb.put('characters', mergeCloudDataWithLocal(localC, c));
+                }
+
+                // 恢复 Masks
+                const localMasks = await safeGetAll('masks');
+                await wcClearStore('masks');
+                if (wd.masks) {
+                    for (const m of wd.masks) {
+                        const localM = localMasks.find(lm => lm.id === m.id);
+                        await wcDb.put('masks', mergeCloudDataWithLocal(localM, m));
+                    }
+                }
+
+                // 恢复 Moments
+                const localMoments = await safeGetAll('moments');
+                await wcClearStore('moments');
+                if (wd.moments) {
+                    for (const m of wd.moments) {
+                        const localM = localMoments.find(lm => lm.id === m.id);
+                        await wcDb.put('moments', mergeCloudDataWithLocal(localM, m));
+                    }
+                }
+
+                // 恢复 Chats
+                await wcClearStore('chats');
+                if (wd.chats) {
+                    for (const charId in wd.chats) {
+                        const parsedId = parseInt(charId);
+                        if (!isNaN(parsedId)) {
+                            await wcDb.put('chats', { charId: parsedId, messages: wd.chats[charId] }).catch(e => console.warn(e));
+                        }
+                    }
+                }
+                await wcSyncCharactersSnapshotFromList(importedCharacters, Date.now());
+            }
+
+            // 3. 恢复其他 APP 数据
+            const apps = ['ls_data', 'ins_music_data', 'dream_space_data', 'ins_forum_data'];
+            for (let appKey of apps) {
+                if (cloudData[appKey]) {
+                    const localVal = await idb.get(appKey);
+                    const mergedVal = mergeCloudDataWithLocal(localVal, cloudData[appKey]);
+                    await idb.set(appKey, mergedVal);
+                }
+            }
+
+            wcShowSuccess("恢复成功！即将刷新页面");
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            wcShowError("获取数据失败");
+        }
+    } catch (e) {
+        console.error(e);
+        wcShowError("恢复失败，网络异常");
+    }
+}
+
+// 8. 监听页面隐藏/退出事件，触发备份
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        executeCloudBackup();
+    }
+});
+window.addEventListener('pagehide', () => {
+    executeCloudBackup();
+});
+// 👆 新增结束 👆
