@@ -3419,7 +3419,8 @@ const wcState = {
         timerInterval: null,
         isSpeaking: false,
         transcript: [] // 👈 新增：专门用于存储当前通话记录的数组
-    }
+    },
+    showHiddenMessages: false // 👈 新增：是否显示隐藏的系统提示
 };
 
 document.addEventListener('visibilitychange', () => {
@@ -4062,7 +4063,8 @@ function wcRenderMessages(charId, preserveScroll = false) {
     let lastTime = 0;
 
     msgs.forEach((msg) => {
-        if (msg.hidden) return;
+        // 👇 核心修改 1：如果是隐藏消息，且当前不是多选模式，才跳过渲染
+        if (msg.hidden && !wcState.isMultiSelectMode) return;
 
         // 🔪 修复：如果是第一条消息 (lastTime === 0) 或者 距离上一条超过 10 分钟，都显示时间戳
         if (lastTime === 0 || (msg.time - lastTime > 10 * 60 * 1000)) {
@@ -4079,7 +4081,17 @@ function wcRenderMessages(charId, preserveScroll = false) {
         
         if (msg.type === 'system') {
             row.className = 'wc-message-row system';
-            row.innerHTML = `<div class="wc-system-msg-text ${msg.style || ''}">${msg.content}</div>`;
+            
+            // 👇 核心修改 2：为系统消息补充多选框 HTML
+            let sysCheckboxHtml = '';
+            if (wcState.isMultiSelectMode) {
+                sysCheckboxHtml = `<div class="wc-msg-checkbox ${wcState.multiSelectedIds.includes(msg.id) ? 'checked' : ''}" onclick="wcToggleMultiSelectMsg(${msg.id})"></div>`;
+            }
+            
+            // 👇 核心修改 3：如果是隐藏消息，加上醒目的红色 [隐藏] 标签
+            let hiddenTag = msg.hidden ? '<span style="color:#FF3B30; font-weight:bold; margin-right:4px;">[隐藏]</span>' : '';
+            
+            row.innerHTML = `${sysCheckboxHtml}<div class="wc-system-msg-text ${msg.style || ''}">${hiddenTag}${msg.content}</div>`;
             
             // 核心修改：让系统消息也可以长按呼出菜单进行删除
             const sysText = row.querySelector('.wc-system-msg-text');
@@ -4829,11 +4841,33 @@ function wcExitMultiSelectMode() {
     wcRenderMessages(wcState.activeChatId);
 }
 
+let wcBackspaceCount = 0;
+let wcBackspaceTimer = null;
+
 function wcHandleEnter(e) {
     if (e.key === 'Enter') {
         if (!e.shiftKey) {
             e.preventDefault();
             wcSendMsg();
+        }
+    } else if (e.key === 'Backspace') {
+        // 👇 新增：连续按 5 次退格键触发隐藏消息显示
+        const input = document.getElementById('wc-chat-input');
+        if (input && input.value === '') {
+            wcBackspaceCount++;
+            if (wcBackspaceTimer) clearTimeout(wcBackspaceTimer);
+            wcBackspaceTimer = setTimeout(() => { wcBackspaceCount = 0; }, 1000); // 1秒内连续按才有效
+            
+            if (wcBackspaceCount >= 5) {
+                wcBackspaceCount = 0;
+                wcState.showHiddenMessages = !wcState.showHiddenMessages;
+                if (typeof showMainSystemNotification === 'function') {
+                    showMainSystemNotification("开发者模式", wcState.showHiddenMessages ? "已开启隐藏提示显示" : "已关闭隐藏提示显示");
+                } else {
+                    alert(wcState.showHiddenMessages ? "已开启隐藏提示显示" : "已关闭隐藏提示显示");
+                }
+                wcRenderMessages(wcState.activeChatId, true); // 保持滚动位置刷新
+            }
         }
     }
 }
@@ -26661,35 +26695,42 @@ window.wcTriggerCallAI = async function() {
             return null;
         }).filter(Boolean).join('\n');
 
-        // 👇 核心修复：提取专属的语音通话记录 👇
-        let callTranscriptText = "暂无通话记录。";
-        if (wcState.callState.transcript && wcState.callState.transcript.length > 0) {
-            callTranscriptText = wcState.callState.transcript.map(t => {
-                return `${t.sender === 'me' ? 'User' : char.name}: ${t.text}`;
-            }).join('\n');
-        }
+        // 👇 核心修复：重构 Prompt 结构，赋予 AI 真实的对话身份 👇
+        let systemPrompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
+        systemPrompt += `【用户(User)设定/面具】：${userPersona}\n`;
+        systemPrompt += `【你们的共同记忆】：\n${memoryText}\n\n`;
+        systemPrompt += `【当前情境】：你正在和 User 打语音电话。\n`;
+        systemPrompt += `【最近的文字聊天记录（作为背景参考）】：\n${recentMsgs}\n\n`;
+        systemPrompt += `【核心表现要求（最高优先级）】：\n`;
+        systemPrompt += `1. 语气要像真实的语音通话一样自然、口语化，可以带点语气词（嗯、啊、哦），绝对不要像机器或客服！不要太死板！\n`;
+        systemPrompt += `2. 必须包含动作描写和语言描写，并且可以像小说一样互相穿插。\n`;
+        systemPrompt += `3. 动作描写绝对不要使用括号！语言描写必须使用中文双引号“”包裹！\n`;
+        systemPrompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
+        systemPrompt += `5. 【防重复/防鬼打墙约束】：绝对不要重复你刚才已经说过的话题、提议或动作！必须结合前面的对话，顺着最后一句对话继续往下聊，推动剧情发展！\n`;
+        systemPrompt += `返回纯 JSON 对象，格式如下：\n`;
+        systemPrompt += `{"content": "微微低头，看着你的眼睛。“我一直都在这里陪着你。”轻轻握住你的手，“无论发生什么事情，都不会离开。”"}\n`;
 
-        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
-        prompt += `【用户(User)设定/面具】：${userPersona}\n`;
-        prompt += `【你们的共同记忆】：\n${memoryText}\n\n`;
-        prompt += `【当前情境】：你正在和 User 打语音电话。\n`;
-        prompt += `【最近的文字聊天记录（作为背景参考）】：\n${recentMsgs}\n\n`;
-        prompt += `【⚠️ 当前正在进行的语音通话记录（重点读取，顺着这个聊）】：\n${callTranscriptText}\n\n`;        
-        prompt += `请根据你的人设、记忆、世界观以及上下文，回复 User 的话。\n`;
-        prompt += `【核心表现要求】：\n`;
-        prompt += `1. 语气要像真实的语音通话一样自然、口语化，可以带点语气词（嗯、啊、哦），绝对不要像机器或客服！不要太死板！\n`;
-        prompt += `2. 必须包含动作描写和语言描写，并且可以像小说一样互相穿插。\n`;
-        prompt += `3. 动作描写绝对不要使用括号！语言描写必须使用中文双引号“”包裹！\n`;
-        prompt += `4. 【绝对禁止】：全文严禁使用任何 emoji 表情符号！严禁出现颜文字！\n`;
-        prompt += `返回纯 JSON 对象，格式如下：\n`;
-        prompt += `{"content": "微微低头，看着你的眼睛。“我一直都在这里陪着你。”轻轻握住你的手，“无论发生什么事情，都不会离开。”"}\n`;
+        let messages = [{ role: "system", content: systemPrompt }];
+        
+        // 将通话记录拆分为真实的对话历史喂给 AI，彻底解决意思重复的问题
+        if (wcState.callState.transcript && wcState.callState.transcript.length > 0) {
+            wcState.callState.transcript.forEach(t => {
+                messages.push({
+                    role: t.sender === 'me' ? 'user' : 'assistant',
+                    content: t.text
+                });
+            });
+        } else {
+            // 兜底，如果没有任何记录，模拟用户说了一句喂
+            messages.push({ role: "user", content: "喂？" });
+        }
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
             body: JSON.stringify({
                 model: apiConfig.model,
-                messages: [{ role: "user", content: prompt }],
+                messages: messages, // 👈 使用组装好的真实对话历史
                 temperature: 0.8
             })
         });
@@ -29138,7 +29179,7 @@ function wcGenerateChatHeaderHTML() {
     let tabsHtml = `<div class="new-tab ${wcState.activeChatGroup === 'All' ? 'active' : ''}" onclick="wcSwitchChatGroup('All')">All</div>`;
     
     (wcState.chatGroups || []).forEach(g => {
-        tabsHtml += `<div class="new-tab ${wcState.activeChatGroup === g ? 'active' : ''}" onclick="wcSwitchChatGroup('${g}')" ontouchstart="wcGroupTouchStart(event, '${g}')" ontouchmove="wcGroupTouchEnd()" ontouchend="wcGroupTouchEnd()">${g}</div>`;
+        tabsHtml += `<div class="new-tab ${wcState.activeChatGroup === g ? 'active' : ''}" onclick="wcSwitchChatGroup('${g}')" ontouchstart="wcGroupTouchStart(event, '${g}')" ontouchmove="wcGroupTouchMove(event)" ontouchend="wcGroupTouchEnd()">${g}</div>`;
     });
     
     return `
@@ -29190,19 +29231,39 @@ function wcAddChatGroup() {
 }
 
 // 长按分组触发菜单
-function wcGroupTouchStart(e, groupName) {
-    wcState.groupLongPressTimer = setTimeout(() => {
-        const touch = e.touches[0];
-        wcShowGroupContextMenu(touch.clientX, touch.clientY, groupName);
-    }, 500);
-}
+let wcGroupTouchStartX = 0;
+let wcGroupTouchStartY = 0;
 
-function wcGroupTouchEnd() {
+window.wcGroupTouchStart = function(e, groupName) {
+    const touch = e.touches[0];
+    wcGroupTouchStartX = touch.clientX;
+    wcGroupTouchStartY = touch.clientY;
+    
+    wcState.groupLongPressTimer = setTimeout(() => {
+        wcShowGroupContextMenu(touch.clientX, touch.clientY, groupName);
+        wcState.groupLongPressTimer = null;
+    }, 500);
+};
+
+window.wcGroupTouchMove = function(e) {
+    if (wcState.groupLongPressTimer) {
+        const touch = e.touches[0];
+        const dx = Math.abs(touch.clientX - wcGroupTouchStartX);
+        const dy = Math.abs(touch.clientY - wcGroupTouchStartY);
+        // 如果滑动超过 10px，取消长按，允许原生滑动
+        if (dx > 10 || dy > 10) {
+            clearTimeout(wcState.groupLongPressTimer);
+            wcState.groupLongPressTimer = null;
+        }
+    }
+};
+
+window.wcGroupTouchEnd = function() {
     if (wcState.groupLongPressTimer) {
         clearTimeout(wcState.groupLongPressTimer);
         wcState.groupLongPressTimer = null;
     }
-}
+};
 
 // 显示分组菜单
 function wcShowGroupContextMenu(x, y, groupName) {
