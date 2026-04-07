@@ -303,6 +303,7 @@ function verifyActivation() {
                 // 验证通过，且设备未超限
                 localStorage.setItem('ios_theme_activation_v2_fallback', 'true');
                 localStorage.setItem('current_bound_qq', qq); // 记录当前QQ，解绑时用
+                localStorage.setItem('current_activation_code', userCode); // 👈 新增：记录激活码，用于云端备份验证
                 
                 const overlay = document.getElementById('activation-overlay');
                 if (overlay) overlay.style.display = 'none';
@@ -31191,13 +31192,14 @@ function mergeCloudDataWithLocal(local, cloud) {
     return result;
 }
 
-// 4. 收集所有数据并执行上传
+// 4. 收集所有数据并执行上传 (退出即备份 + 凌晨定时备份)
 async function executeCloudBackup() {
     if (!isCloudSyncEnabled || !window.needCloudBackup) return;
     
     const qq = localStorage.getItem('current_bound_qq');
     const deviceId = localStorage.getItem('ios_theme_device_id');
-    if (!qq || !deviceId) return;
+    const code = localStorage.getItem('current_activation_code');
+    if (!qq || !deviceId || !code) return;
 
     try {
         const data = {};
@@ -31247,31 +31249,34 @@ async function executeCloudBackup() {
             body: JSON.stringify({
                 qq: qq,
                 deviceId: deviceId,
+                code: code,
                 timestamp: Date.now(),
                 data: cleanData
             }),
             keepalive: true 
+        }).then(res => {
+            if (res.ok) {
+                window.needCloudBackup = false; // 重置脏标记
+                console.log("云端自动同步已完成 (纯文本)");
+            }
         }).catch(e => console.warn("云备份请求发送失败", e));
-
-        // 重置脏标记
-        window.needCloudBackup = false;
-        console.log("已触发云端同步 (纯文本)");
 
     } catch (error) {
         console.error("云端同步准备失败:", error);
     }
 }
 
-// 5. 查找云端备份
+// 5. 查找云端备份 (双重验证)
 async function searchCloudBackup() {
     const qq = document.getElementById('cloud-search-qq').value.trim();
-    if (!qq) return alert("请输入 QQ 号");
+    const code = document.getElementById('cloud-search-code').value.trim();
+    if (!qq || !code) return alert("请输入 QQ 号和激活码");
 
     const resultsContainer = document.getElementById('cloud-search-results');
-    resultsContainer.innerHTML = '<div style="text-align: center; color: #8e8e93; font-size: 13px; padding: 20px 0;">正在查找...</div>';
+    resultsContainer.innerHTML = '<div style="text-align: center; color: #8e8e93; font-size: 13px; padding: 20px 0;">正在安全查找...</div>';
 
     try {
-        const response = await fetch(`${CLOUD_SYNC_API}/list?qq=${qq}`);
+        const response = await fetch(`${CLOUD_SYNC_API}/list?qq=${qq}&code=${code}`);
         const result = await response.json();
 
         if (result.success && result.backups && result.backups.length > 0) {
@@ -31286,25 +31291,25 @@ async function searchCloudBackup() {
                         <div style="font-size: 12px; color: #888;">备份时间: ${dateStr}</div>
                     </div>
                     <div style="display: flex; gap: 10px;">
-                        <button class="wc-btn-secondary" style="flex: 1; margin: 0; padding: 8px; border-radius: 8px; font-size: 13px;" onclick="downloadCloudBackup('${qq}', '${backup.deviceId}')">下载 JSON</button>
-                        <button class="wc-btn-primary" style="flex: 1; margin: 0; padding: 8px; border-radius: 8px; font-size: 13px; background: #34c759;" onclick="restoreCloudBackup('${qq}', '${backup.deviceId}')">直接使用</button>
+                        <button class="wc-btn-secondary" style="flex: 1; margin: 0; padding: 8px; border-radius: 8px; font-size: 13px;" onclick="downloadCloudBackup('${qq}', '${code}', '${backup.deviceId}')">下载 JSON</button>
+                        <button class="wc-btn-primary" style="flex: 1; margin: 0; padding: 8px; border-radius: 8px; font-size: 13px; background: #34c759;" onclick="restoreCloudBackup('${qq}', '${code}', '${backup.deviceId}')">直接使用</button>
                     </div>
                 `;
                 resultsContainer.appendChild(div);
             });
         } else {
-            resultsContainer.innerHTML = '<div style="text-align: center; color: #8e8e93; font-size: 13px; padding: 20px 0;">未找到该 QQ 的备份记录</div>';
+            resultsContainer.innerHTML = '<div style="text-align: center; color: #ff3b30; font-size: 13px; padding: 20px 0;">未找到记录，或 QQ/激活码 不匹配</div>';
         }
     } catch (e) {
         resultsContainer.innerHTML = '<div style="text-align: center; color: #ff3b30; font-size: 13px; padding: 20px 0;">网络请求失败，请检查 API</div>';
     }
 }
 
-// 6. 下载云端备份
-async function downloadCloudBackup(qq, deviceId) {
+// 6. 下载云端备份 (双重验证)
+async function downloadCloudBackup(qq, code, deviceId) {
     try {
-        wcShowLoading("正在获取备份数据...");
-        const response = await fetch(`${CLOUD_SYNC_API}/get?qq=${qq}&deviceId=${deviceId}`);
+        wcShowLoading("正在验证并获取数据...");
+        const response = await fetch(`${CLOUD_SYNC_API}/get?qq=${qq}&code=${code}&deviceId=${deviceId}`);
         const result = await response.json();
         
         if (result.success && result.data) {
@@ -31317,20 +31322,20 @@ async function downloadCloudBackup(qq, deviceId) {
             document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
             wcShowSuccess("下载成功");
         } else {
-            wcShowError("获取数据失败");
+            wcShowError(result.message || "验证失败或数据为空");
         }
     } catch (e) {
         wcShowError("网络异常");
     }
 }
 
-// 7. 直接使用 (恢复) 云端备份
-async function restoreCloudBackup(qq, deviceId) {
+// 7. 直接使用 (恢复) 云端备份 (双重验证)
+async function restoreCloudBackup(qq, code, deviceId) {
     if (!confirm("这将使用云端数据覆盖当前数据（本地已有的图片会尽量保留）。确定要恢复吗？")) return;
 
     try {
-        wcShowLoading("正在恢复数据...");
-        const response = await fetch(`${CLOUD_SYNC_API}/get?qq=${qq}&deviceId=${deviceId}`);
+        wcShowLoading("正在验证并恢复数据...");
+        const response = await fetch(`${CLOUD_SYNC_API}/get?qq=${qq}&code=${code}&deviceId=${deviceId}`);
         const result = await response.json();
         
         if (result.success && result.data) {
@@ -31415,7 +31420,7 @@ async function restoreCloudBackup(qq, deviceId) {
             wcShowSuccess("恢复成功！即将刷新页面");
             setTimeout(() => location.reload(), 1500);
         } else {
-            wcShowError("获取数据失败");
+            wcShowError(result.message || "验证失败或数据为空");
         }
     } catch (e) {
         console.error(e);
@@ -31432,4 +31437,25 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', () => {
     executeCloudBackup();
 });
+
+// 👇 新增：每天凌晨 0:00 定时备份逻辑 👇
+function scheduleMidnightBackup() {
+    const now = new Date();
+    // 计算下一个凌晨 0:00 的时间
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+    const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+
+    setTimeout(() => {
+        if (isCloudSyncEnabled) {
+            console.log("触发凌晨 0:00 定时云端备份");
+            window.needCloudBackup = true; // 强制标记为需要备份
+            executeCloudBackup();
+        }
+        // 备份完后，重新调度下一个凌晨
+        scheduleMidnightBackup();
+    }, msUntilMidnight);
+}
+
+// 启动定时器
+scheduleMidnightBackup();
 // 👆 新增结束 👆
