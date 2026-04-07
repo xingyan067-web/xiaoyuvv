@@ -6158,9 +6158,19 @@ input::-webkit-inner-spin-button {
     cursor: pointer;
     margin-top: 20px;
     margin-bottom: 20px;
-    transition: background 0.2s;
+    /* 👇 核心修复：加快动画速度，增加缩放和透明度过渡，消除移动端点击延迟 */
+    transition: background 0.1s ease, transform 0.1s ease, opacity 0.1s ease;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
-.sim-load-more-btn:active { background: #EAEAEA; }
+.sim-load-more-btn:active { 
+    background: #EAEAEA; 
+    /* 👇 核心修复：点击瞬间缩小并变透明，给予强烈的物理按压反馈 */
+    transform: scale(0.95);
+    opacity: 0.7;
+}
 /* ========================================== */
 /* 查手机 Settings 五角星切换按钮 */
 /* ========================================== */
