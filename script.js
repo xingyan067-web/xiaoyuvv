@@ -31253,7 +31253,7 @@ async function executeCloudBackup() {
         // 核心：剔除所有图片，大幅减小体积
         const cleanData = stripImagesFromData(data);
 
-        // 使用 keepalive 确保页面关闭时请求也能发出去
+        // 发送备份请求 (移除 keepalive 以突破 64KB 限制)
         fetch(`${CLOUD_SYNC_API}/backup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -31263,8 +31263,7 @@ async function executeCloudBackup() {
                 code: code,
                 timestamp: Date.now(),
                 data: cleanData
-            }),
-            keepalive: true 
+            })
         }).then(res => {
             if (res.ok) {
                 // 👇 备份成功后，记录当前时间戳，重新开始计算冷却
