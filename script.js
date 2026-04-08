@@ -31148,11 +31148,17 @@ function handleCloudSyncToggle(checkbox) {
     }
 }
 
-// 2. 递归剔除 Base64 图片的函数 (核心脱水逻辑)
+// 2. 递归剔除 Base64 图片的函数 (强化正则脱水版)
 function stripImagesFromData(obj) {
     if (typeof obj === 'string') {
-        // 如果是 base64 图片，直接替换为空字符串
+        // 1. 如果整个字符串就是 base64 图片，直接清空
         if (obj.startsWith('data:image/')) return "";
+        
+        // 2. 如果字符串内部潜伏了 base64 (比如 <img src="data:image/..."> 或 url('data:image/...') )
+        // 使用正则表达式，把 data:image/ 后面跟着的所有 base64 字符全部替换为空！
+        if (obj.includes('data:image/')) {
+            return obj.replace(/data:image\/[^"'\s\)]+/g, "");
+        }
         return obj;
     }
     if (Array.isArray(obj)) {
