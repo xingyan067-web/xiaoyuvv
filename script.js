@@ -4641,6 +4641,37 @@ function wcSendMsg() {
     const text = input.value.trim();
     if (!text) return;
 
+    // 👇 新增：主动发送消息时的时间感知记录
+    const charId = wcState.activeChatId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (char && (!char.chatConfig || char.chatConfig.timePerceptionEnabled !== false)) {
+        const msgs = wcState.chats[charId] || [];
+        const validMsgs = msgs.filter(m => m.type !== 'system' && !m.isError);
+        if (validMsgs.length > 0) {
+            const lastMsg = validMsgs[validMsgs.length - 1];
+            const now = Date.now();
+            const gapMs = now - lastMsg.time;
+            
+            if (gapMs >= 10 * 60 * 1000) { // 超过10分钟触发时间感知
+                const gapMinutes = Math.floor(gapMs / 60000);
+                const gapHours = Math.floor(gapMinutes / 60);
+                const gapDays = Math.floor(gapHours / 24);
+                
+                const remainHours = gapHours % 24;
+                const remainMinutes = gapMinutes % 60;
+
+                let timeGapStr = "";
+                if (gapDays > 0) timeGapStr += `${gapDays}天`;
+                if (remainHours > 0) timeGapStr += `${remainHours}小时`;
+                if (remainMinutes > 0 || timeGapStr === "") timeGapStr += `${remainMinutes}分钟`;
+
+                const prompt = `[系统通知：距离上次互动已过去 ${timeGapStr}。请注意时间流逝。]`;
+                wcAddMessage(charId, 'system', 'system', prompt, { hidden: true });
+            }
+        }
+    }
+    // 👆 新增结束
+
     let extra = {};
     if (wcState.replyingToMsgId) {
         const msgs = wcState.chats[wcState.activeChatId];
