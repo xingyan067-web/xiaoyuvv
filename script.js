@@ -31192,7 +31192,7 @@ function mergeCloudDataWithLocal(local, cloud) {
     return result;
 }
 
-// 4. 收集所有数据并执行上传 (退出即备份 + 凌晨定时备份)
+// 4. 收集所有数据并执行上传 (打开页面备份 + 每8小时备份 + 退出兜底备份)
 async function executeCloudBackup() {
     if (!isCloudSyncEnabled || !window.needCloudBackup) return;
     
@@ -31200,6 +31200,17 @@ async function executeCloudBackup() {
     const deviceId = localStorage.getItem('ios_theme_device_id');
     const code = localStorage.getItem('current_activation_code');
     if (!qq || !deviceId || !code) return;
+
+    // 👇 核心防刷机制：10分钟冷却时间，防止频繁刷新/切后台导致滥用额度 👇
+    const lastBackupTime = parseInt(localStorage.getItem('ios_theme_last_cloud_backup_time') || '0');
+    const now = Date.now();
+    const cooldownMs = 10 * 60 * 1000; // 10分钟冷却
+    
+    if (now - lastBackupTime < cooldownMs) {
+        console.log(`云备份冷却中... 距离下次可备份还剩 ${Math.ceil((cooldownMs - (now - lastBackupTime)) / 1000 / 60)} 分钟`);
+        return; // 还在冷却期，直接拦截
+    }
+    // 👆 防刷机制结束 👆
 
     try {
         const data = {};
@@ -31256,6 +31267,8 @@ async function executeCloudBackup() {
             keepalive: true 
         }).then(res => {
             if (res.ok) {
+                // 👇 备份成功后，记录当前时间戳，重新开始计算冷却
+                localStorage.setItem('ios_theme_last_cloud_backup_time', Date.now().toString());
                 window.needCloudBackup = false; // 重置脏标记
                 console.log("云端自动同步已完成 (纯文本)");
             }
@@ -31428,34 +31441,28 @@ async function restoreCloudBackup(qq, code, deviceId) {
     }
 }
 
-// 8. 监听页面隐藏/退出事件，触发备份
+// 8. 触发机制：退出/切后台兜底备份
 document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        executeCloudBackup();
-    }
+    if (document.hidden) executeCloudBackup();
 });
 window.addEventListener('pagehide', () => {
     executeCloudBackup();
 });
 
-// 👇 新增：每天凌晨 0:00 定时备份逻辑 👇
-function scheduleMidnightBackup() {
-    const now = new Date();
-    // 计算下一个凌晨 0:00 的时间
-    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
-    const msUntilMidnight = nextMidnight.getTime() - now.getTime();
-
+// 9. 触发机制：打开页面时备份 (延迟 5 秒，确保本地数据已完全加载)
+window.addEventListener('load', () => {
     setTimeout(() => {
         if (isCloudSyncEnabled) {
-            console.log("触发凌晨 0:00 定时云端备份");
             window.needCloudBackup = true; // 强制标记为需要备份
             executeCloudBackup();
         }
-        // 备份完后，重新调度下一个凌晨
-        scheduleMidnightBackup();
-    }, msUntilMidnight);
-}
+    }, 5000);
+});
 
-// 启动定时器
-scheduleMidnightBackup();
-// 👆 新增结束 👆
+// 10. 触发机制：每隔 8 小时自动备份一次
+setInterval(() => {
+    if (isCloudSyncEnabled) {
+        window.needCloudBackup = true; // 强制标记为需要备份
+        executeCloudBackup();
+    }
+}, 8 * 60 * 60 * 1000); // 8小时 = 8 * 60 * 60 * 1000 毫秒
