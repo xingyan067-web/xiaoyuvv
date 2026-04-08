@@ -1391,19 +1391,7 @@
                             <div class="ios-item-right">API 配置<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
                         </div>
                     </div>
-                    
-                    <!-- 👇 新增：API 日志与报错控制台入口 👇 -->
-                    <div class="ios-list-item" onclick="openApiLogConsole()">
-                        <div class="ios-icon-box" style="background:#111111">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-                        </div>
-                        <div class="ios-item-content">
-                            <span class="ios-item-label">控制台</span>
-                            <div class="ios-item-right">API 日志与报错<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
-                        </div>
-                    </div>
-                    <!-- 👆 新增结束 👆 -->
-
+                 
                       <!-- 新增：声音与触感 -->
                     <div class="ios-list-item" onclick="openSoundSettings()">
                         <div class="ios-icon-box" style="background:#ff2d55">
@@ -1796,34 +1784,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- 👇 新增：API 日志与报错控制台页面 👇 -->
-        <div class="settings-modal sub-page" id="apiLogConsoleModal" style="background: #F2F2F7; padding: 0;">
-            <!-- 极简头部：左上角大标题兼退出按钮 -->
-            <div style="padding: calc(env(safe-area-inset-top, 40px) + 10px) 20px 10px; display: flex; justify-content: space-between; align-items: flex-end; flex-shrink: 0;">
-                <div onclick="closeApiLogConsole()" style="font-size: 28px; font-weight: 800; color: #000; letter-spacing: 0.5px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                    API日志
-                </div>
-                <div onclick="clearCurrentLogs()" style="font-size: 14px; font-weight: 600; color: #007AFF; cursor: pointer; padding-bottom: 4px;">清空</div>
-            </div>
-
-            <!-- 分段选择器 -->
-            <div style="padding: 10px 20px 20px; flex-shrink: 0;">
-                <div style="display: flex; background: #E3E3E8; border-radius: 8px; padding: 2px; position: relative;">
-                    <div class="log-segment-btn active" id="btn-log-api" onclick="switchApiLogTab('api')">API 记录</div>
-                    <div class="log-segment-btn" id="btn-log-console" onclick="switchApiLogTab('console')">网页报错</div>
-                </div>
-            </div>
-
-            <!-- 列表容器 -->
-            <div style="flex: 1; overflow-y: auto; padding: 0 20px 40px; display: flex; flex-direction: column; gap: 16px;">
-                <!-- API 记录视图 (动态渲染) -->
-                <div class="log-list-view active" id="view-log-api"></div>
-                <!-- 网页报错视图 (动态渲染) -->
-                <div class="log-list-view" id="view-log-console"></div>
-            </div>
-        </div>
-        <!-- 👆 新增结束 👆 -->
 
         <!-- API 设置页面 (极简黑白灰 iOS 风 + 底部额度查询) -->
         <div class="settings-modal sub-page" id="apiSettingsModal" style="background: #F2F2F7;">

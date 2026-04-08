@@ -10135,55 +10135,6 @@ input::-webkit-inner-spin-button {
     transition: color 0.2s;
 }
 .html-card-actions span:active { color: #111; }
-
-/* ========================================== */
-/* 新增：API 日志与报错控制台样式 */
-/* ========================================== */
-.log-segment-btn {
-    flex: 1; text-align: center; padding: 6px 0; font-size: 14px; font-weight: 600;
-    color: #8E8E93; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; z-index: 1;
-}
-.log-segment-btn.active {
-    color: #000; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-.log-list-view {
-    display: none; flex-direction: column; gap: 16px; animation: wcFadeIn 0.3s ease;
-}
-.log-list-view.active { display: flex; }
-
-.log-card {
-    background: #FFFFFF; border-radius: 16px; padding: 16px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 10px;
-    position: relative; overflow: hidden; border: 1px solid #F9F9F9;
-}
-.log-card::before {
-    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #34C759;
-}
-.log-card.error::before { background: #FF3B30; }
-.log-card.warn::before { background: #FFCC00; }
-
-.log-header { display: flex; justify-content: space-between; align-items: flex-start; }
-.log-title { font-size: 15px; font-weight: 700; color: #000; display: flex; align-items: center; gap: 8px; word-break: break-all; padding-right: 10px; }
-.log-time { font-size: 11px; color: #8E8E93; font-family: 'Courier New', Courier, monospace; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
-
-.log-tag { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; flex-shrink: 0; }
-.log-tag.post { background: rgba(0, 122, 255, 0.1); color: #007AFF; }
-.log-tag.get { background: rgba(52, 199, 89, 0.1); color: #34C759; }
-.log-tag.js-error { background: rgba(255, 59, 48, 0.1); color: #FF3B30; }
-
-.log-meta { display: flex; gap: 12px; font-size: 12px; color: #8E8E93; font-weight: 500; }
-.log-status-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
-.log-status-badge.success { background: rgba(52, 199, 89, 0.1); color: #34C759; }
-.log-status-badge.error { background: rgba(255, 59, 48, 0.1); color: #FF3B30; }
-
-.log-details {
-    background: #F9F9F9; border-radius: 10px; padding: 12px;
-    font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #333;
-    white-space: pre-wrap; word-break: break-all; border: 1px solid #E5E5EA;
-    max-height: 200px; overflow-y: auto; line-height: 1.5;
-}
-.log-error-highlight { color: #FF3B30; font-weight: bold; margin-bottom: 4px; display: block; }
 /* ========================================== */
 /* 消息编辑弹窗：快速格式修复按钮样式 (黑白灰 INS 风) */
 /* ========================================== */
