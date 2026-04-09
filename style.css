@@ -1819,231 +1819,184 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-amount-out { color: #000; }
 
 /* ========================================== */
-/* 回忆日记 (Memory) - iOS 黑白灰星空宇宙风 */
+/* 回忆日记 (Memory) - 低饱和书架风 */
 /* ========================================== */
 #wc-view-memory { 
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-    background: #050505; /* 极深邃的纯黑底色 */
+    background: #F5F2EB; /* 燕麦底色 */
     z-index: 1400; display: none; flex-direction: column; 
     font-family: 'Georgia', 'Times New Roman', 'Kaiti', 'STKaiti', serif;
-    color: #FFFFFF;
+    color: #3A3533;
     overflow: hidden;
 }
 #wc-view-memory.active { display: flex; animation: wcSlideInRight 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
 
-/* --- 宇宙星光与流苏背景动画 --- */
-.ins-mem-universe-bg {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; overflow: hidden;
+.mem-header {
+    padding: calc(env(safe-area-inset-top, 20px) + 20px) 20px 20px 20px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    position: relative; z-index: 10;
 }
-/* 动态星光 */
-.ins-mem-star {
-    position: absolute; background: #FFF; border-radius: 50%;
-    box-shadow: 0 0 10px 2px rgba(255,255,255,0.8);
-    animation: twinkle var(--duration) infinite ease-in-out alternate;
-}
-@keyframes twinkle { 0% { opacity: 0.2; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1.2); } }
-/* 光影流苏 (从顶部垂下的细线) */
-.ins-mem-tassel {
-    position: absolute; top: -50px; width: 1px; height: 150px;
-    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.5), rgba(255,255,255,0));
-    animation: fall var(--duration) infinite linear;
-}
-@keyframes fall { 0% { transform: translateY(-100px); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(100vh); opacity: 0; } }
 
-/* 顶部不对称标题与延伸线 */
-.ins-mem-header {
-    position: relative; z-index: 10; display: flex; align-items: center; 
-    padding: calc(env(safe-area-inset-top, 20px) + 20px) 20px 20px 20px; flex-shrink: 0;
+.mem-title-box {
+    display: flex; flex-direction: column; font-size: 26px; font-weight: bold;
+    letter-spacing: 4px; cursor: pointer; line-height: 1.1; color: #3A3533;
+    transition: opacity 0.2s;
 }
-.ins-mem-title-box {
-    display: flex; flex-direction: column; font-size: 26px; font-weight: bold; letter-spacing: 4px; cursor: pointer; line-height: 1.1; transition: opacity 0.2s; color: #FFF; text-shadow: 0 0 15px rgba(255,255,255,0.3);
-}
-.ins-mem-title-box:active { opacity: 0.5; }
-.ins-mem-title-1 { align-self: flex-start; }
-.ins-mem-title-2 { align-self: flex-start; margin-left: 28px; }
-.ins-mem-line { flex: 1; height: 1px; background-color: rgba(255,255,255,0.3); margin: 15px 15px 0 15px; }
-.ins-mem-icons { display: flex; gap: 15px; margin-top: 15px; }
-.ins-mem-icon-btn { width: 24px; height: 24px; cursor: pointer; color: #FFF; transition: transform 0.2s; opacity: 0.8; }
-.ins-mem-icon-btn:active { transform: scale(0.8); opacity: 1; }
-.ins-mem-icon-btn svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; filter: drop-shadow(0 0 5px rgba(255,255,255,0.5)); }
+.mem-title-box:active { opacity: 0.5; }
+.mem-title-line-1 { align-self: flex-start; }
+.mem-title-line-2 { align-self: flex-start; margin-left: 28px; }
 
-/* 主体时间轴与卡片流 */
-.ins-mem-main { position: relative; z-index: 10; flex: 1; overflow-y: auto; padding-left: 20px; padding-bottom: 50px; scrollbar-width: none; }
-.ins-mem-main::-webkit-scrollbar { display: none; }
-.ins-mem-row { display: flex; align-items: flex-start; margin-bottom: 30px; position: relative; }
+.mem-header-icons { display: flex; gap: 15px; margin-top: 5px; }
+.mem-icon-btn {
+    width: 28px; height: 28px; color: #8A827E; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.2s;
+}
+.mem-icon-btn:active { transform: scale(0.8); color: #3A3533; }
+.mem-icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; }
 
-/* 左侧时间节点 */
-.ins-mem-time-node {
-    width: 50px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; position: relative; z-index: 2; padding-top: 15px; cursor: pointer; transition: transform 0.2s;
+.mem-main-content {
+    flex: 1; overflow-y: auto; padding-left: 20px; padding-bottom: 50px; position: relative;
 }
-.ins-mem-time-node:active { transform: scale(0.9); }
-.ins-mem-time-node::before {
-    content: ''; position: absolute; top: 0; bottom: -50px; left: 50%; transform: translateX(-50%); width: 1px; background-color: rgba(255,255,255,0.15); z-index: -1;
-}
-.ins-mem-node-icon {
-    width: 16px; height: 16px; background: #050505; color: #FFF; margin-bottom: 8px; animation: insMemPulse 2.5s infinite ease-in-out;
-}
-.ins-mem-node-icon svg { width: 100%; height: 100%; fill: currentColor; stroke: none; filter: drop-shadow(0 0 8px rgba(255,255,255,0.8)); }
-@keyframes insMemPulse { 0%, 100% { transform: scale(0.8); opacity: 0.6; } 50% { transform: scale(1.2); opacity: 1; } }
-.ins-mem-date-text { font-family: 'Courier New', Courier, monospace; font-size: 11px; font-weight: bold; color: #8E8E93; text-align: center; }
-.ins-mem-date-hint { font-size: 8px; color: #555; margin-top: 4px; transform: scale(0.8); font-family: sans-serif; }
 
-/* 右侧横向滑动区 */
-.ins-mem-cards-scroll {
-    flex: 1; display: flex; gap: 12px; overflow-x: auto; padding: 10px 20px 10px 10px; scroll-behavior: smooth; scrollbar-width: none;
+.mem-timeline-line {
+    position: absolute; top: 0; bottom: 0; left: 44px; width: 1px;
+    background-color: #D4C4B7; z-index: 0;
 }
-.ins-mem-cards-scroll::-webkit-scrollbar { display: none; }
 
-/* 50x180px 竖向卡片 (黑白灰毛玻璃) */
-.ins-mem-card {
-    width: 50px; height: 180px; border-radius: 0; flex-shrink: 0; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px 0 15px 0; cursor: pointer; 
-    background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #FFF;
-    transition: transform 0.2s, background 0.2s;
+.mem-timeline-row {
+    display: flex; align-items: flex-start; margin-bottom: 40px; position: relative; z-index: 1;
 }
-.ins-mem-card:active { transform: scale(0.96); background: rgba(255, 255, 255, 0.1); }
-.ins-mem-delete-btn {
-    position: absolute; top: 4px; left: 4px; font-family: -apple-system, sans-serif; font-size: 14px; color: rgba(255,255,255,0.3); cursor: pointer; line-height: 1; transition: color 0.2s; z-index: 10;
-}
-.ins-mem-delete-btn:active { color: #FF3B30; }
-.ins-mem-card-title {
-    writing-mode: vertical-rl; font-size: 13px; font-weight: bold; letter-spacing: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 100px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-}
-.ins-mem-card-time { font-family: 'Courier New', Courier, monospace; font-size: 10px; font-weight: bold; opacity: 0.5; }
 
-/* 动态分配的黑白灰透明度类 */
-.ins-bg-white { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.3); }
-.ins-bg-gray  { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); }
-.ins-bg-pink  { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.1); }
-.ins-bg-blue  { background: rgba(200, 200, 200, 0.05); border-color: rgba(200, 200, 200, 0.1); }
-.ins-bg-green { background: rgba(150, 150, 150, 0.05); border-color: rgba(150, 150, 150, 0.1); }
-
-/* 塔罗牌堆叠视图 (深色星空版) */
-.ins-tarot-overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 5, 5, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); display: none; align-items: center; justify-content: center; z-index: 2000; opacity: 0; transition: opacity 0.3s ease;
+.mem-time-node {
+    width: 50px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; padding-top: 15px;
 }
-.ins-tarot-overlay.active { display: flex; opacity: 1; }
-.ins-tarot-close { position: absolute; top: calc(env(safe-area-inset-top, 20px) + 20px); right: 30px; font-size: 24px; color: #FFF; cursor: pointer; z-index: 2010; font-family: sans-serif; opacity: 0.6; }
-.ins-tarot-date-title { position: absolute; top: calc(env(safe-area-inset-top, 20px) + 30px); left: 30px; font-family: 'Georgia', serif; font-size: 24px; font-weight: bold; color: #FFF; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
-.ins-tarot-container { position: relative; width: 100%; height: 350px; display: flex; align-items: center; justify-content: center; perspective: 1000px; }
-.ins-tarot-card {
-    position: absolute; width: 160px; height: 280px; border-radius: 0; 
-    background: rgba(20, 20, 20, 0.8); border: 1px solid rgba(255,255,255,0.2); 
-    box-shadow: 0 15px 35px rgba(0,0,0,0.5), inset 0 0 20px rgba(255,255,255,0.05); 
-    display: flex; flex-direction: column; padding: 20px; color: #FFF;
-    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease; cursor: pointer;
+.mem-node-icon {
+    width: 12px; height: 12px; background: #F5F2EB; border: 2px solid #D4C4B7;
+    border-radius: 50%; margin-bottom: 8px;
 }
-.ins-tarot-card-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
-.ins-tarot-card-desc { font-size: 13px; line-height: 1.6; flex: 1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; text-align: justify; font-family: -apple-system, sans-serif; color: #CCC; }
-.ins-tarot-card-time { font-family: 'Courier New', monospace; font-size: 11px; text-align: right; margin-top: 10px; opacity: 0.4; }
+.mem-date-text { font-family: 'Courier New', monospace; font-size: 11px; font-weight: bold; color: #8A827E; }
+.mem-time-text { font-size: 9px; color: #999; margin-top: 2px; font-family: sans-serif; }
 
-/* ========================================== */
-/* 300x500px 详情编辑弹窗 (动态几何蕾丝边框版) */
-/* ========================================== */
-.ins-mem-detail-overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-    background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    display: none; align-items: center; justify-content: center; z-index: 3000; 
-    opacity: 0; transition: opacity 0.3s ease;
-}
-.ins-mem-detail-overlay.active { display: flex; opacity: 1; }
-
-/* 卡片主体：深色毛玻璃底 */
-.ins-mem-detail-card {
-    width: 300px; height: 500px; 
-    background: rgba(15, 15, 15, 0.85); /* 半透明深黑底色 */
-    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border-radius: 0; /* 绝对无圆角 */
-    display: flex; flex-direction: column; padding: 24px; 
-    transform: translateY(20px); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1); 
-    color: #FFFFFF;
+.mem-books-scroll {
+    flex: 1; display: flex; gap: 15px; overflow-x: auto; 
+    padding: 10px 20px 0 15px; /* 底部 padding 归零，让书贴着书架 */
+    scrollbar-width: none;
+    align-items: flex-end; /* 确保书本底部对齐贴在书架上 */
+    
+    /* 🌟 书架层板效果 🌟 */
+    border-bottom: 8px solid #D4C4B7; 
+    border-radius: 2px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    margin-bottom: 10px; 
     position: relative;
-    /* 移除原本的实线边框和阴影，交给伪元素处理 */
-    border: none; 
-    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
 }
-.ins-mem-detail-overlay.active .ins-mem-detail-card { transform: translateY(0); }
+.mem-books-scroll::-webkit-scrollbar { display: none; }
 
-/* 🌟 动态几何蕾丝边框 - 外层流动斜纹光影 🌟 */
-.ins-mem-detail-card::before {
-    content: '';
-    position: absolute;
-    top: -2px; left: -2px; right: -2px; bottom: -2px;
-    z-index: -1;
-    background: repeating-linear-gradient(
-        45deg,
-        transparent,
-        transparent 4px,
-        rgba(255, 255, 255, 0.4) 4px,
-        rgba(255, 255, 255, 0.4) 5px
-    );
-    /* 利用 mask 裁剪出边框形状 */
-    -webkit-mask: 
-        linear-gradient(#fff 0 0) content-box, 
-        linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    padding: 2px; /* 边框厚度 */
-    animation: laceFlow 15s linear infinite;
+/* 书架木板的顶部高光，增加立体感 */
+.mem-books-scroll::after {
+    content: ''; position: sticky; left: 0; bottom: -8px; width: 100%; height: 2px;
+    background: rgba(255,255,255,0.5); pointer-events: none;
 }
 
-/* 🌟 动态几何蕾丝边框 - 内层呼吸虚线框 🌟 */
-.ins-mem-detail-card::after {
-    content: '';
-    position: absolute;
-    top: 6px; left: 6px; right: 6px; bottom: 6px;
-    border: 1px dashed rgba(255, 255, 255, 0.3);
-    pointer-events: none;
-    animation: lacePulse 2.5s infinite alternate ease-in-out;
+.mem-book-spine {
+    width: 44px; height: 180px; flex-shrink: 0; 
+    border-radius: 3px 3px 0 0; /* 底部变平直，完美贴合书架 */
+    cursor: pointer;
+    position: relative; display: flex; flex-direction: column; align-items: center;
+    justify-content: space-between; padding: 15px 0;
+    box-shadow: 3px 0 10px rgba(0,0,0,0.08), inset 2px 0 5px rgba(255,255,255,0.3);
+    transition: transform 0.2s ease;
+    transform-origin: bottom center; /* 按压时以底部书架为基准缩放 */
+}
+.mem-book-spine:active { transform: scaleY(0.98) scaleX(0.95); }
+
+.mem-spine-bg-1 { background: linear-gradient(to right, #A3B1B6 0%, #B8C5C9 20%, #A3B1B6 80%, #8A989D 100%); }
+.mem-spine-bg-2 { background: linear-gradient(to right, #C2B8B2 0%, #D6CCC6 20%, #C2B8B2 80%, #A89E98 100%); }
+.mem-spine-bg-3 { background: linear-gradient(to right, #9CA89E 0%, #B0BCB2 20%, #9CA89E 80%, #828E84 100%); }
+
+.mem-spine-decor {
+    width: 70%; height: 3px; border-top: 1px solid rgba(255,255,255,0.4); border-bottom: 1px solid rgba(0,0,0,0.1);
 }
 
-/* 边框动画定义 */
-@keyframes laceFlow {
-    0% { background-position: 0 0; }
-    100% { background-position: 100px 100px; }
-}
-@keyframes lacePulse {
-    0% { opacity: 0.3; border-color: rgba(255, 255, 255, 0.1); }
-    100% { opacity: 1; border-color: rgba(255, 255, 255, 0.6); }
+.mem-spine-title {
+    writing-mode: vertical-rl; text-orientation: mixed; font-size: 13px; font-weight: bold;
+    letter-spacing: 3px; color: #333; text-shadow: 0 1px 1px rgba(255,255,255,0.5);
+    max-height: 110px; overflow: hidden;
 }
 
-/* 内部元素排版 */
-.ins-mem-detail-header { 
-    display: flex; justify-content: space-between; align-items: center; 
-    margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 10px; 
-    position: relative; z-index: 10;
+.mem-bookmark-ribbon {
+    display: none; position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+    width: 10px; height: 30px; background: #C28E7E; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 10;
 }
-.ins-mem-detail-date { font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #A0A0A0; letter-spacing: 1px; }
-.ins-mem-detail-close { font-size: 22px; cursor: pointer; color: #FFFFFF; line-height: 1; font-family: sans-serif; opacity: 0.6; transition: opacity 0.2s; }
-.ins-mem-detail-close:active { opacity: 1; }
+.mem-bookmark-ribbon::after {
+    content: ''; position: absolute; bottom: -4px; left: 0;
+    border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid #C28E7E;
+}
+/* 修改为：只要是核心记忆(core)就显示书签 */
+.mem-book-spine.core .mem-bookmark-ribbon { display: block; }
 
-/* 修复：强制输入框文字为白色，防止被全局污染 */
-.ins-mem-detail-title { 
-    width: 100%; border: none; font-family: inherit; font-size: 18px; font-weight: bold; 
-    color: #FFFFFF !important; /* 强制白字 */
-    margin-bottom: 15px; outline: none; background: transparent !important; 
-    position: relative; z-index: 10;
+.mem-delete-btn {
+    position: absolute; top: 4px; left: 4px; font-family: -apple-system, sans-serif; font-size: 14px; color: rgba(0,0,0,0.3); cursor: pointer; line-height: 1; transition: color 0.2s; z-index: 10;
 }
-.ins-mem-detail-title::placeholder { color: rgba(255,255,255,0.3); font-weight: normal; }
+.mem-delete-btn:active { color: #FF3B30; }
 
-.ins-mem-detail-textarea { 
-    flex: 1; width: 100%; border: none; resize: none; outline: none; 
-    font-family: 'Kaiti', 'STKaiti', '楷体', serif; /* 衬线体增加日记感 */
-    font-size: 15px; line-height: 1.8; 
-    color: #E0E0E0 !important; /* 强制浅灰白字 */
-    background: transparent !important; text-align: justify; 
-    position: relative; z-index: 10;
+/* 仿书页弹窗 */
+.book-modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4); backdrop-filter: blur(3px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 2000; opacity: 0; transition: opacity 0.3s ease;
 }
-.ins-mem-detail-textarea::placeholder { color: rgba(255,255,255,0.2); font-family: sans-serif; }
+.book-modal-overlay.active { display: flex; opacity: 1; }
 
-.ins-mem-detail-footer { margin-top: 15px; display: flex; justify-content: flex-end; position: relative; z-index: 10; }
-.ins-mem-detail-save { 
-    background: #FFFFFF; color: #111111; border: none; padding: 8px 24px; 
-    font-family: inherit; font-size: 13px; font-weight: bold; letter-spacing: 1px;
-    cursor: pointer; border-radius: 0; transition: transform 0.2s, background 0.2s; 
+.book-page {
+    width: 88%; max-width: 360px; height: 70vh; background: #FCFAF5;
+    border-radius: 4px 12px 12px 4px; box-shadow: 10px 15px 30px rgba(0,0,0,0.15), inset -5px 0 15px rgba(0,0,0,0.02);
+    display: flex; flex-direction: column; position: relative;
+    transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    background-image: repeating-linear-gradient(transparent, transparent 29px, rgba(212, 196, 183, 0.2) 29px, rgba(212, 196, 183, 0.2) 30px);
+    background-attachment: local;
 }
-.ins-mem-detail-save:active { background: #CCCCCC; transform: scale(0.95); }
+.book-modal-overlay.active .book-page { transform: scale(1); }
+
+.book-page::before {
+    content: ''; position: absolute; top: 0; left: 0; bottom: 0; width: 20px;
+    background: linear-gradient(to right, rgba(0,0,0,0.08), transparent);
+    border-radius: 4px 0 0 4px; pointer-events: none;
+}
+
+.page-header { padding: 20px 20px 10px 30px; display: flex; justify-content: space-between; align-items: center; }
+.page-date { font-family: monospace; font-size: 12px; color: #8A827E; }
+.page-close { font-size: 24px; color: #8A827E; cursor: pointer; line-height: 1; }
+
+.page-content-area { flex: 1; overflow-y: auto; padding: 0 20px 20px 30px; display: flex; flex-direction: column; }
+.page-title { font-size: 20px; font-weight: bold; color: #3A3533; margin-bottom: 15px; font-style: italic; }
+.page-text { font-size: 15px; line-height: 30px; color: #4A413E; text-align: justify; white-space: pre-wrap; }
+
+.highlight-text { background: rgba(212, 175, 55, 0.3); padding: 2px 0; }
+.annotation-note { font-size: 12px; color: #C28E7E; font-family: sans-serif; margin-top: 10px; padding-left: 10px; border-left: 2px solid #C28E7E; font-style: italic; }
+
+.page-footer { padding: 15px 20px 15px 30px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(212, 196, 183, 0.3); }
+.page-btn { background: transparent; border: none; font-family: 'Georgia', serif; font-size: 14px; font-weight: bold; color: #8A827E; cursor: pointer; transition: color 0.2s; }
+.page-btn:active { color: #3A3533; }
+.page-btn.edit { color: #C28E7E; }
+
+.edit-view { display: none; flex-direction: column; height: 100%; padding: 20px 20px 20px 30px; }
+.edit-view.active { display: flex; }
+.page-content-area.hidden { display: none; }
+
+.edit-toolbar { display: flex; gap: 10px; margin-bottom: 15px; }
+.tool-btn { padding: 4px 10px; font-size: 12px; border: 1px solid #D4C4B7; border-radius: 4px; background: #FFF; color: #3A3533; cursor: pointer; }
+
+/* 修改：让 div 表现得像 textarea，支持滚动和富文本显示 */
+.edit-textarea { 
+    flex: 1; width: 100%; background: transparent; border: none; outline: none; 
+    font-family: 'Kaiti', 'STKaiti', serif; font-size: 15px; line-height: 30px; color: #4A413E; 
+    overflow-y: auto; text-align: justify; white-space: pre-wrap; word-break: break-word;
+}
+
+.edit-footer { display: flex; justify-content: flex-end; gap: 15px; margin-top: 15px; }
 
 #wc-modal-char-detail .wc-modal-content { width: 320px; height: 450px; border-radius: 20px; position: relative; bottom: auto; margin: auto; display: flex; flex-direction: column; align-items: center; padding: 0; background: #fff; }
 .wc-contact-card-header { width: 100%; height: 240px; position: relative; }

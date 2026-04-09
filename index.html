@@ -2873,29 +2873,63 @@
 
                     <!-- Memory Full Page (New Full Screen) -->
                     <div id="wc-view-memory">
-                        <div class="wc-navbar">
-                            <div class="wc-nav-left">
-                                <button class="wc-nav-btn" onclick="wcCloseMemoryPage()">
-                                    <svg class="wc-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                                    返回
-                                </button>
+                        <header class="mem-header">
+                            <div class="mem-title-box" onclick="wcCloseMemoryPage()">
+                                <span class="mem-title-line-1">回忆</span>
+                                <span class="mem-title-line-2">档案室</span>
                             </div>
-                            <div class="wc-nav-title">回忆总结</div>
-                            <div class="wc-nav-right">
-                                <!-- 设置按钮：关联世界书 & 自动总结条数 -->
-                                <button class="wc-nav-btn" onclick="wcOpenMemorySettingsModal()">
-                                    <svg class="wc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-
-                                </button>
-                                <!-- 更多操作：手动添加/生成 -->
-                                <button class="wc-nav-btn" onclick="wcOpenModal('wc-modal-memory-actions')">
-                                    <svg class="wc-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-                                </button>
+                            <div class="mem-header-icons">
+                                <!-- 替换为精致的羽毛笔图标 -->
+                                <div class="mem-icon-btn" onclick="wcOpenModal('wc-modal-memory-actions')" title="更多操作">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                </div>
+                                <!-- 替换为极简调音台图标 -->
+                                <div class="mem-icon-btn" onclick="wcOpenMemorySettingsModal()" title="回忆设置">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                                </div>
                             </div>
-                        </div>
-                        <div class="wc-main-content" style="padding-top: 64px; background: #F2F2F7;">
-                            <div id="wc-memory-list-container" style="padding: 16px;">
+                        </header>
+                        <main class="mem-main-content">
+                            <div class="mem-timeline-line"></div>
+                            <div id="wc-memory-list-container">
                                 <!-- Memories injected here -->
+                            </div>
+                        </main>
+                        
+                        <!-- 仿书页弹窗 -->
+                        <div class="book-modal-overlay" id="bookModal">
+                            <div class="book-page">
+                                <!-- 阅读视图 -->
+                                <div id="readView" style="display: flex; flex-direction: column; height: 100%;">
+                                    <div class="page-header">
+                                        <span class="page-date" id="bookPageDate"></span>
+                                        <span class="page-close" onclick="closeBookModal()">×</span>
+                                    </div>
+                                    <div class="page-content-area">
+                                        <div class="page-title" id="bookPageTitle"></div>
+                                        <div class="page-text" id="bookPageText"></div>
+                                    </div>
+                                    <div class="page-footer">
+                                        <button class="page-btn" onclick="bookPagePrev()">← 上一页</button>
+                                        <button class="page-btn edit" onclick="toggleBookEditMode(true)">编辑</button>
+                                        <button class="page-btn" onclick="bookPageNext()">下一页 →</button>
+                                    </div>
+                                </div>
+
+                                <!-- 编辑视图 (富文本所见即所得) -->
+                                <div id="editView" class="edit-view">
+                                    <div class="edit-toolbar">
+                                        <button class="tool-btn" onclick="applyBookHighlight()">高光划线</button>
+                                        <button class="tool-btn" onclick="removeBookHighlight()">取消高光</button>
+                                        <button class="tool-btn" onclick="applyBookAnnotation()">添加批注</button>
+                                    </div>
+                                    <!-- 将 textarea 改为 contenteditable 的 div -->
+                                    <div class="edit-textarea" id="bookEditDiv" contenteditable="true"></div>
+                                    <div class="edit-footer">
+                                        <button class="page-btn" onclick="toggleBookEditMode(false)">取消</button>
+                                        <button class="page-btn edit" onclick="saveBookEdit()">保存</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -3487,7 +3521,7 @@
                     <div class="wc-modal-content" style="height: auto; border-radius: 12px 12px 0 0; width: 100%; max-width: 100%; background-color: transparent;">
                         <div class="wc-ios-list-group" style="margin: 0 10px; border-radius: 12px; overflow: hidden;">
                             <div class="wc-list-item center-content" onclick="wcOpenMemorySummaryModal(); wcCloseModal('wc-modal-memory-actions');" style="background: white; height: 56px;">
-                                <span style="font-size: 18px; color: #007AFF;">自动总结聊天</span>
+                                <span style="font-size: 18px; color: #007AFF;">手动总结聊天</span>
                             </div>
                             <div class="wc-list-item center-content" onclick="wcOpenModal('wc-modal-memory-add'); wcCloseModal('wc-modal-memory-actions');" style="background: white; height: 56px;">
                                 <span style="font-size: 18px; color: #007AFF;">手动添加记忆</span>

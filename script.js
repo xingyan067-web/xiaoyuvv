@@ -5028,7 +5028,6 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
          // 👇👇👇 强化 AI 角色：五大核心支柱 (XML结构化优化版) 👇👇👇
         let memoryText = "暂无特殊记忆。";
         if (char.memories && char.memories.length > 0) {
-            // 👈 修改：分离核心记忆和普通记忆
             const coreMemories = char.memories.filter(m => m.isCore);
             const normalMemories = char.memories.filter(m => !m.isCore);
             
@@ -5038,11 +5037,19 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             let combinedMemories = [];
             if (coreMemories.length > 0) {
                 combinedMemories.push("【🌟 核心永久记忆 (最高优先级)】:");
-                coreMemories.forEach(m => combinedMemories.push(`👉 ${m.content.replace(/^\[.*?\]\s*/, '')}`));
+                coreMemories.forEach(m => {
+                    // 👇 核心修改：调用翻译器，保留全文但标记重点
+                    const textToFeed = formatMemoryForAI(m.content).replace(/^\[.*?\]\s*/, '');
+                    combinedMemories.push(`👉 ${textToFeed}`);
+                });
             }
             if (recentNormal.length > 0) {
                 combinedMemories.push("【近期普通记忆】:");
-                recentNormal.forEach(m => combinedMemories.push(`👉 ${m.content.replace(/^\[.*?\]\s*/, '')}`));
+                recentNormal.forEach(m => {
+                    // 👇 核心修改：调用翻译器
+                    const textToFeed = formatMemoryForAI(m.content).replace(/^\[.*?\]\s*/, '');
+                    combinedMemories.push(`👉 ${textToFeed}`);
+                });
             }
             
             if (combinedMemories.length > 0) {
@@ -5628,33 +5635,59 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
     // 👇 新增：智能拦截兜底，防止 AI 忘了发邀请指令 👇
     let hasMusicInvite = actions.some(a => a && (a.type === 'music_invite_user' || a.type === 'music_invite'));
     if (!hasMusicInvite) {
-        // 检查文本中是否包含强烈的听歌暗示
         const textContent = actions.map(a => a ? a.content : '').join(' ');
         if (textContent.includes('一起听歌') || textContent.includes('听首歌') || textContent.includes('分享一首歌')) {
             console.log("拦截到 AI 听歌暗示，自动补全邀请卡片指令");
-            actions.push({
-                type: 'music_invite_user',
-                songName: '随机推荐',
-                content: '' // 文本已经在前面的气泡里了，这里留空防止重复
-            });
+            actions.push({ type: 'music_invite_user', songName: '随机推荐', content: '' });
         }
     }
     // 👆 兜底逻辑结束 👆
+
+    // 👇【终极修复】：将混杂在一起的 [表情]、[引用] 和 文本 强行拆分成独立的动作
+    let splitActions = [];
+    actions.forEach(act => {
+        if (act && act.type === 'text' && act.content) {
+            // 1. 提取并清理引用 (Quote)
+            let quoteMatch = act.content.match(/[\[【](?:引用|回复)(?:了?消息)?[：:]?\s*(.*?)[\]】]/);
+            if (quoteMatch) {
+                act.quote = quoteMatch[1].trim();
+                act.content = act.content.replace(quoteMatch[0], '').trim();
+            }
+
+            // 2. 拆分表情包和普通文本
+            const stickerRegex = /([\[【].*?表情.*?[：:]\s*.*?[\]】])/g;
+            if (stickerRegex.test(act.content)) {
+                const parts = act.content.split(stickerRegex);
+                parts.forEach(part => {
+                    part = part.trim();
+                    if (!part) return;
+                    
+                    const sMatch = part.match(/^[\[【].*?表情.*?[：:]\s*(.*?)[\]】]$/);
+                    if (sMatch) {
+                        splitActions.push({ ...act, type: 'sticker', content: sMatch[1].trim() });
+                    } else {
+                        splitActions.push({ ...act, type: 'text', content: part });
+                    }
+                });
+            } else {
+                splitActions.push(act);
+            }
+        } else {
+            splitActions.push(act);
+        }
+    });
+    actions = splitActions;
+    // 👆 拆分结束 👆
 
     for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
         if (!action) continue;
 
-        // 👇【新增修复】：强制拦截并纠正 AI 掉格式产生的纯文本表情和图片
+        // 👇【新增修复】：纠正发送图片幻觉
         if (action.type === 'text') {
-            // 纠正表情包幻觉 (如 "[表情包: 开心]" 或 "表情包描述：开心")
-            let stickerMatch = action.content.match(/\[表情包?[：:]?\s*(.*?)\]/) || action.content.match(/^表情包描述[：:]\s*(.*)/) || action.content.match(/^\[表情[：:]\s*(.*?)\]/);
-            if (stickerMatch) {
-                action.type = 'sticker';
-                action.content = stickerMatch[1].trim();
-            }
-            // 纠正发送图片幻觉 (如 "[发送了一张图片，图片ID:xxx]" 或 "[图片描述: xxx]")
-            let imgMatch = action.content.match(/\[发送了一张图片[，,]?\s*图片ID[：:]\s*(.*?)\]/) || action.content.match(/\[图片[：:]\s*(.*?)\]/) || action.content.match(/^\[图片描述\][：:]?\s*(.*)/);
+            let imgMatch = action.content.match(/[\[【]发送了一张图片[，,]?\s*图片ID[：:]\s*(.*?)[\]】]/) || 
+                           action.content.match(/[\[【]图片[：:]\s*(.*?)[\]】]/) || 
+                           action.content.match(/^[\[【]图片描述[\]】][：:]?\s*(.*)/);
             if (imgMatch) {
                 action.type = 'text';
                 action.content = `[图片描述] ${imgMatch[1].trim()}`;
@@ -7142,71 +7175,66 @@ function wcOpenMemoryPage() {
     const memView = document.getElementById('wc-view-memory');
     memView.classList.add('active');
     
-    // 隐藏全局的微信 Navbar
     const globalNavbar = document.querySelector('.wc-navbar');
     if (globalNavbar) globalNavbar.style.display = 'none';
 
-    // 注入全新的 HTML 结构 (修复羽毛笔点击，增加字数统计)
+    // 注入全新的书架风 HTML 结构
     memView.innerHTML = `
-        ${generateUniverseBg()}
-        <header class="ins-mem-header">
-            <div class="ins-mem-title-box" onclick="wcCloseMemoryPage()">
-                <span class="ins-mem-title-1">回忆</span>
-                <span class="ins-mem-title-2">日记</span>
+        <header class="mem-header">
+            <div class="mem-title-box" onclick="wcCloseMemoryPage()">
+                <span class="mem-title-line-1">回忆</span>
+                <span class="mem-title-line-2">档案室</span>
             </div>
-            <div class="ins-mem-line"></div>
-            <div class="ins-mem-icons">
-                <!-- 1. 羽毛笔 (调用高级弹窗手动添加记忆) -->
-                <div class="ins-mem-icon-btn" onclick="insOpenManualAddModal()" title="手动添加记忆">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25z" fill="none" stroke="currentColor" stroke-width="1.5"/>
-                    </svg>
+            <div class="mem-header-icons">
+                <!-- 羽毛笔图标 (手动添加) -->
+                <div class="mem-icon-btn" onclick="wcOpenModal('wc-modal-memory-actions')" title="更多操作">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                 </div>
-                <!-- 2. 魔法星轨 (打开更多操作：手动总结 / AI读取条数) -->
-                <div class="ins-mem-icon-btn" onclick="wcOpenModal('wc-modal-memory-actions')" title="更多操作">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 3L13.5 9.5L20 11L13.5 12.5L12 19L10.5 12.5L4 11L10.5 9.5L12 3Z" fill="currentColor" stroke="none"/>
-                        <circle cx="19" cy="5" r="1.5" fill="currentColor" stroke="none"/>
-                        <circle cx="5" cy="18" r="1" fill="currentColor" stroke="none"/>
-                    </svg>
-                </div>
-                <!-- 3. 调音滑块 (回忆设置：触发条数/世界书) -->
-                <div class="ins-mem-icon-btn" onclick="wcOpenMemorySettingsModal()" title="回忆设置">
-                    <svg viewBox="0 0 24 24">
-                        <line x1="4" y1="8" x2="20" y2="8" />
-                        <line x1="4" y1="16" x2="20" y2="16" />
-                        <circle cx="9" cy="8" r="2" fill="currentColor" />
-                        <circle cx="16" cy="16" r="2" fill="currentColor" />
-                    </svg>
+                <!-- 调音台图标 (设置) -->
+                <div class="mem-icon-btn" onclick="wcOpenMemorySettingsModal()" title="回忆设置">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
                 </div>
             </div>
         </header>
-        <main class="ins-mem-main" id="wc-memory-list-container"></main>
-
-        <!-- 塔罗牌堆叠视图 -->
-        <div class="ins-tarot-overlay" id="insTarotModal">
-            <div class="ins-tarot-close" onclick="insCloseTarot()">×</div>
-            <div class="ins-tarot-date-title" id="insTarotDateTitle">DATE</div>
-            <div class="ins-tarot-container" id="insTarotContainer" 
-                 ontouchstart="insTarotTouchStart(event)" 
-                 ontouchmove="insTarotTouchMove(event)" 
-                 ontouchend="insTarotTouchEnd(event)">
+        <main class="mem-main-content">
+            <div class="mem-timeline-line"></div>
+            <div id="wc-memory-list-container">
+                <!-- Memories injected here -->
             </div>
-        </div>
-
-        <!-- 300x500 详情编辑弹窗 (带字数统计) -->
-        <div class="ins-mem-detail-overlay" id="insMemDetailModal">
-            <div class="ins-mem-detail-card">
-                <div class="ins-mem-detail-header">
-                    <span class="ins-mem-detail-date" id="insMemDetailDate">TIME</span>
-                    <span class="ins-mem-detail-close" onclick="insCloseMemDetail()">×</span>
+        </main>
+        
+        <!-- 仿书页弹窗 -->
+        <div class="book-modal-overlay" id="bookModal">
+            <div class="book-page">
+                <!-- 阅读视图 -->
+                <div id="readView" style="display: flex; flex-direction: column; height: 100%;">
+                    <div class="page-header">
+                        <span class="page-date" id="bookPageDate"></span>
+                        <span class="page-close" onclick="closeBookModal()">×</span>
+                    </div>
+                    <div class="page-content-area">
+                        <div class="page-title" id="bookPageTitle"></div>
+                        <div class="page-text" id="bookPageText"></div>
+                    </div>
+                    <div class="page-footer">
+                        <button class="page-btn" onclick="bookPagePrev()">← 上一页</button>
+                        <button class="page-btn edit" onclick="toggleBookEditMode(true)">编辑</button>
+                        <button class="page-btn" onclick="bookPageNext()">下一页 →</button>
+                    </div>
                 </div>
-                <input type="text" class="ins-mem-detail-title" id="insMemDetailTitle" placeholder="标题">
-                <!-- 绑定 oninput 实时更新字数 -->
-                <textarea class="ins-mem-detail-textarea" id="insMemDetailContent" placeholder="记录下这一刻..." oninput="document.getElementById('insMemWordCount').innerText = this.value.length + ' 字'"></textarea>
-                <div class="ins-mem-detail-footer" style="display: flex; justify-content: space-between; align-items: center;">
-                    <span id="insMemWordCount" style="color: rgba(255,255,255,0.5); font-size: 12px; font-family: monospace;">0 字</span>
-                    <button class="ins-mem-detail-save" onclick="insSaveMemDetail()">SAVE</button>
+
+                <!-- 编辑视图 (富文本所见即所得) -->
+                <div id="editView" class="edit-view">
+                    <div class="edit-toolbar">
+                        <button class="tool-btn" onclick="applyBookHighlight()">高光划线</button>
+                        <button class="tool-btn" onclick="applyBookAnnotation()">添加批注</button>
+                    </div>
+                    <!-- 将 textarea 改为 contenteditable 的 div -->
+                    <div class="edit-textarea" id="bookEditDiv" contenteditable="true"></div>
+                    <div class="edit-footer">
+                        <button class="page-btn" onclick="toggleBookEditMode(false)">取消</button>
+                        <button class="page-btn edit" onclick="saveBookEdit()">保存</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -7226,6 +7254,10 @@ function wcCloseMemoryPage() {
     if (char) updateChatTopBarStatus(char);
 }
 
+// 全局变量用于书页翻页
+let currentBookMemories = [];
+let currentBookIndex = 0;
+
 function wcRenderMemories() {
     const container = document.getElementById('wc-memory-list-container');
     if (!container) return;
@@ -7235,7 +7267,7 @@ function wcRenderMemories() {
     if (!char.memories) char.memories = [];
 
     if (char.memories.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #555; padding-top: 50px; font-family: Georgia, serif; font-style: italic;">星空寂寥，暂无回忆...</div>';
+        container.innerHTML = '<div style="text-align: center; color: #8A827E; padding-top: 50px; font-family: Georgia, serif; font-style: italic;">书架空空如也...</div>';
         return;
     }
 
@@ -7247,56 +7279,46 @@ function wcRenderMemories() {
         groups[dateKey].push(mem);
     });
 
-    const colorClasses = ['ins-bg-white', 'ins-bg-gray', 'ins-bg-pink', 'ins-bg-blue', 'ins-bg-green'];
+    const bgClasses = ['mem-spine-bg-1', 'mem-spine-bg-2', 'mem-spine-bg-3'];
 
     Object.keys(groups).sort((a, b) => b.localeCompare(a)).forEach(dateKey => {
         const row = document.createElement('div');
-        row.className = 'ins-mem-row';
+        row.className = 'mem-timeline-row';
         
         let rowHtml = `
-            <div class="ins-mem-time-node" onclick="insOpenTarot('${dateKey}')">
-                <div class="ins-mem-node-icon">
-                    <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" transform="rotate(45 12 12)"/></svg>
-                </div>
-                <div class="ins-mem-date-text">${dateKey}</div>
-                <div class="ins-mem-date-hint">点击展开</div>
+            <div class="mem-time-node">
+                <div class="mem-node-icon"></div>
+                <div class="mem-date-text">${dateKey}</div>
             </div>
-            <div class="ins-mem-cards-scroll">
+            <div class="mem-books-scroll">
         `;
 
         groups[dateKey].forEach((mem, idx) => {
-            const d = new Date(mem.time);
-            const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-            const colorClass = colorClasses[idx % colorClasses.length];
+            const bgClass = bgClasses[idx % bgClasses.length];
             
             let title = '记忆碎片';
             let content = mem.content;
             if (mem.type === 'summary') {
                 if (mem.content.includes('[自动总结')) title = '自动总结';
                 else if (mem.content.includes('[手动总结')) title = '手动总结';
+                else if (mem.content.includes('[线下约会记忆]')) title = '线下约会';
+                else if (mem.content.includes('[语音通话总结')) title = '语音通话';
                 else title = '总结';
                 content = mem.content.replace(/\[.*?\]\s*/, ''); 
             } else if (mem.type === 'manual') {
                 title = '手动添加'; 
             }
 
-            // 👇 核心修复：增加对换行符 \n 和 \r 的转义，防止破坏 onclick 的 HTML 语法导致无法点击
-            const safeContent = content.replace(/'/g, "&#39;").replace(/"/g, "&quot;").replace(/\n/g, "\\n").replace(/\r/g, "");
-
-            // 👈 修改：核心记忆的空心/实心五角星 SVG
-            const starColor = mem.isCore ? '#FFD700' : 'rgba(255,255,255,0.5)';
-            const svgContent = mem.isCore 
-                ? `<svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: ${starColor}; stroke: none; filter: drop-shadow(0 0 4px rgba(255,215,0,0.5));"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`
-                : `<svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: none; stroke: ${starColor}; stroke-width: 2;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
-                
-            const starIcon = `<div onclick="wcToggleCoreMemory(event, ${mem.id})" style="position: absolute; bottom: 8px; left: 8px; cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.8)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">${svgContent}</div>`;
+            // 核心记忆直接加上 core 类，CSS 会自动显示书签和烫金标题
+            const coreClass = mem.isCore ? 'core' : '';
 
             rowHtml += `
-                <div class="ins-mem-card ${colorClass}" onclick="insOpenMemDetail(${mem.id}, '${title}', '${safeContent}', '${dateKey} ${timeStr}')">
-                    <div class="ins-mem-delete-btn" onclick="wcDeleteMemory(event, ${mem.id})">×</div>
-                    ${starIcon}
-                    <div class="ins-mem-card-title">${title}</div>
-                    <div class="ins-mem-card-time">${timeStr}</div>
+                <div class="mem-book-spine ${bgClass} ${coreClass}" onclick="openBookModal(${mem.id})">
+                    <div class="mem-delete-btn" onclick="wcDeleteMemory(event, ${mem.id})">×</div>
+                    <div class="mem-bookmark-ribbon"></div>
+                    <div class="mem-spine-decor"></div>
+                    <div class="mem-spine-title">${title}</div>
+                    <div class="mem-spine-decor"></div>
                 </div>
             `;
         });
@@ -7307,208 +7329,193 @@ function wcRenderMemories() {
     });
 }
 
-function insOpenTarot(dateKey) {
-    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
-    if (!char || !char.memories) return;
-
-    insTarotCardsData = char.memories.filter(mem => {
-        const d = new Date(mem.time);
-        return `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}` === dateKey;
-    });
-
-    if (insTarotCardsData.length === 0) return;
-
-    document.getElementById('insTarotDateTitle').innerText = dateKey;
-    insTarotCurrentIndex = 0;
-    insRenderTarotCards();
-    
-    document.getElementById('insTarotModal').classList.add('active');
-}
-
-function insCloseTarot() {
-    document.getElementById('insTarotModal').classList.remove('active');
-}
-
-function insRenderTarotCards() {
-    const container = document.getElementById('insTarotContainer');
-    container.innerHTML = '';
-
-    insTarotCardsData.forEach((mem, index) => {
-        const d = new Date(mem.time);
-        const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        
-        let title = '记忆碎片';
-        let content = mem.content;
-        if (mem.type === 'summary') {
-            if (mem.content.includes('[自动总结')) title = '自动总结';
-            else if (mem.content.includes('[手动总结')) title = '手动总结';
-            else title = '总结';
-            content = mem.content.replace(/\[.*?\]\s*/, '');
-        } else if (mem.type === 'manual') {
-            title = '手动添加';
-        }
-
-        const card = document.createElement('div');
-        card.className = `ins-tarot-card`;
-        
-        card.innerHTML = `
-            <div class="ins-tarot-card-title">${title}</div>
-            <div class="ins-tarot-card-desc">${content}</div>
-            <div class="ins-tarot-card-time">${timeStr}</div>
-        `;
-
-        card.onclick = () => {
-            if (index === insTarotCurrentIndex) {
-                const dateKey = document.getElementById('insTarotDateTitle').innerText;
-                const safeContent = content.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-                insOpenMemDetail(mem.id, title, safeContent, `${dateKey} ${timeStr}`);
-            } else {
-                insTarotCurrentIndex = index;
-                insUpdateTarotTransforms();
-            }
-        };
-
-        container.appendChild(card);
-    });
-
-    insUpdateTarotTransforms();
-}
-
-function insUpdateTarotTransforms() {
-    const cards = document.querySelectorAll('.ins-tarot-card');
-    cards.forEach((card, index) => {
-        const offset = index - insTarotCurrentIndex;
-        
-        if (offset === 0) {
-            card.style.transform = `translateX(0) scale(1) translateZ(0)`;
-            card.style.zIndex = 10;
-            card.style.opacity = 1;
-            card.style.filter = 'none';
-        } else if (offset < 0) {
-            card.style.transform = `translateX(${offset * 60}px) scale(0.85) rotateY(15deg) translateZ(-100px)`;
-            card.style.zIndex = 5 + offset;
-            card.style.opacity = 1 - Math.abs(offset) * 0.3;
-            card.style.filter = 'brightness(0.5)';
-        } else {
-            card.style.transform = `translateX(${offset * 60}px) scale(0.85) rotateY(-15deg) translateZ(-100px)`;
-            card.style.zIndex = 5 - offset;
-            card.style.opacity = 1 - Math.abs(offset) * 0.3;
-            card.style.filter = 'brightness(0.5)';
-        }
-    });
-}
-
-let insTarotStartX = 0;
-function insTarotTouchStart(e) { insTarotStartX = e.touches[0].clientX; }
-function insTarotTouchMove(e) { e.preventDefault(); }
-function insTarotTouchEnd(e) {
-    const endX = e.changedTouches[0].clientX;
-    const diff = endX - insTarotStartX;
-    if (diff > 50 && insTarotCurrentIndex > 0) {
-        insTarotCurrentIndex--;
-        insUpdateTarotTransforms();
-    } else if (diff < -50 && insTarotCurrentIndex < insTarotCardsData.length - 1) {
-        insTarotCurrentIndex++;
-        insUpdateTarotTransforms();
-    }
-}
-
-// ==========================================
-// 详情编辑与【新增】手动添加弹窗逻辑
-// ==========================================
-
-// 点击羽毛笔触发：复用高级弹窗进行新建
-function insOpenManualAddModal() {
-    insCurrentEditingMemId = null; // null 代表新建
-    document.getElementById('insMemDetailTitle').value = '手动添加';
-    document.getElementById('insMemDetailContent').value = '';
-    document.getElementById('insMemWordCount').innerText = '0 字';
-    
-    const now = new Date();
-    const dateStr = `${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    document.getElementById('insMemDetailDate').innerText = dateStr;
-    
-    document.getElementById('insMemDetailModal').classList.add('active');
-}
-
-function insOpenMemDetail(id, title, content, dateStr) {
-    insCurrentEditingMemId = id;
-    document.getElementById('insMemDetailTitle').value = title;
-    document.getElementById('insMemDetailContent').value = content;
-    document.getElementById('insMemWordCount').innerText = content.length + ' 字'; // 初始化字数
-    document.getElementById('insMemDetailDate').innerText = dateStr;
-    document.getElementById('insMemDetailModal').classList.add('active');
-}
-
-function insCloseMemDetail() {
-    document.getElementById('insMemDetailModal').classList.remove('active');
-    insCurrentEditingMemId = null;
-}
-
-function insSaveMemDetail() {
-    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
-    if (!char) return;
-    if (!char.memories) char.memories = [];
-
-    const newTitle = document.getElementById('insMemDetailTitle').value.trim();
-    const newContent = document.getElementById('insMemDetailContent').value.trim();
-    
-    if (!newContent) {
-        alert("记忆内容不能为空哦~");
-        return;
-    }
-
-    if (insCurrentEditingMemId) {
-        // 修改已有记忆
-        const mem = char.memories.find(m => m.id === insCurrentEditingMemId);
-        if (mem) {
-            if (mem.type === 'summary') {
-                const prefixMatch = mem.content.match(/^\[.*?\]\s*/);
-                const prefix = prefixMatch ? prefixMatch[0] : '[手动总结] ';
-                mem.content = prefix + newContent;
-            } else {
-                mem.content = newContent;
-            }
-        }
-    } else {
-        // 新建手动记忆 (羽毛笔触发)
-        char.memories.unshift({
-            id: Date.now(),
-            type: 'manual',
-            content: newContent,
-            time: Date.now()
-        });
-    }
-    
-    wcSaveData();
-    wcRenderMemories();
-    
-    // 如果塔罗牌开着，同步刷新塔罗牌
-    if (document.getElementById('insTarotModal').classList.contains('active')) {
-        const dateKey = document.getElementById('insTarotDateTitle').innerText;
-        insOpenTarot(dateKey);
-    }
-    
-    insCloseMemDetail();
-}
-
 // 覆盖原有的删除逻辑
 window.wcDeleteMemory = function(event, id) {
-    event.stopPropagation(); // 阻止触发打开详情
+    event.stopPropagation(); 
     if (confirm("确定要将这段记忆化作尘埃吗？")) {
         const char = wcState.characters.find(c => c.id === wcState.activeChatId);
         if (char && char.memories) {
             char.memories = char.memories.filter(m => m.id !== id);
             wcSaveData();
             wcRenderMemories();
-            
-            // 如果塔罗牌开着，同步刷新塔罗牌
-            if (document.getElementById('insTarotModal').classList.contains('active')) {
-                const dateKey = document.getElementById('insTarotDateTitle').innerText;
-                insOpenTarot(dateKey);
-            }
         }
     }
+};
+
+// --- 仿书页弹窗逻辑 ---
+window.openBookModal = function(memId) {
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char || !char.memories) return;
+
+    // 提取所有记忆，用于翻页
+    currentBookMemories = char.memories.sort((a, b) => b.time - a.time);
+    currentBookIndex = currentBookMemories.findIndex(m => m.id === memId);
+
+    if (currentBookIndex === -1) return;
+
+    renderBookPage();
+
+    const modal = document.getElementById('bookModal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.closeBookModal = function() {
+    const modal = document.getElementById('bookModal');
+    modal.classList.remove('active');
+    setTimeout(() => {
+        modal.style.display = 'none';
+        toggleBookEditMode(false); 
+    }, 300);
+};
+
+window.renderBookPage = function() {
+    const mem = currentBookMemories[currentBookIndex];
+    if (!mem) return;
+
+    const d = new Date(mem.time);
+    const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+    
+    let title = '记忆碎片';
+    let content = mem.content;
+    if (mem.type === 'summary') {
+        if (mem.content.includes('[自动总结')) title = '自动总结';
+        else if (mem.content.includes('[手动总结')) title = '手动总结';
+        else if (mem.content.includes('[线下约会记忆]')) title = '线下约会';
+        else if (mem.content.includes('[语音通话总结')) title = '语音通话';
+        else title = '总结';
+        content = mem.content.replace(/\[.*?\]\s*/, ''); 
+    } else if (mem.type === 'manual') {
+        title = '手动添加'; 
+    }
+
+    document.getElementById('bookPageDate').innerText = dateStr;
+    document.getElementById('bookPageTitle').innerText = title;
+    
+    // 渲染到阅读区 (将换行转为 <br>)
+    document.getElementById('bookPageText').innerHTML = content.replace(/\n/g, '<br>');
+    
+    // 渲染到富文本编辑区 (直接填入 HTML)
+    document.getElementById('bookEditDiv').innerHTML = content.replace(/\n/g, '<br>');
+};
+
+window.bookPagePrev = function() {
+    if (currentBookIndex > 0) {
+        currentBookIndex--;
+        renderBookPage();
+    } else {
+        alert("已经是第一页了");
+    }
+};
+
+window.bookPageNext = function() {
+    if (currentBookIndex < currentBookMemories.length - 1) {
+        currentBookIndex++;
+        renderBookPage();
+    } else {
+        alert("已经是最后一页了");
+    }
+};
+
+window.toggleBookEditMode = function(isEdit) {
+    const readView = document.getElementById('readView');
+    const editView = document.getElementById('editView');
+    if (isEdit) {
+        readView.style.display = 'none';
+        editView.classList.add('active');
+    } else {
+        readView.style.display = 'flex';
+        editView.classList.remove('active');
+    }
+};
+
+window.saveBookEdit = function() {
+    const mem = currentBookMemories[currentBookIndex];
+    if (!mem) return;
+
+    const editDiv = document.getElementById('bookEditDiv');
+    let newContent = editDiv.innerHTML.trim();
+    
+    if (!newContent) return alert("内容不能为空");
+
+    // 检查是否包含高光或批注，如果包含，自动设为核心记忆
+    if (newContent.includes('highlight-text') || newContent.includes('annotation-note')) {
+        mem.isCore = true;
+    } else {
+        mem.isCore = false;
+    }
+
+    // 恢复前缀 (如果是总结)
+    if (mem.type === 'summary') {
+        const prefixMatch = mem.content.match(/^\[.*?\]\s*/);
+        const prefix = prefixMatch ? prefixMatch[0] : '[手动总结] ';
+        // 如果富文本内容没有前缀，强行拼在最前面
+        if (!newContent.startsWith('[')) {
+            newContent = prefix + newContent;
+        }
+    }
+
+    mem.content = newContent;
+
+    wcSaveData();
+    wcRenderMemories();
+    renderBookPage();
+    toggleBookEditMode(false);
+};
+
+// 富文本高光划线 (所见即所得)
+window.applyBookHighlight = function() {
+    const selection = window.getSelection();
+    if (!selection.rangeCount || selection.isCollapsed) {
+        return alert("请先选中文本哦~");
+    }
+    
+    const range = selection.getRangeAt(0);
+    const span = document.createElement('span');
+    span.className = 'highlight-text';
+    
+    try {
+        range.surroundContents(span);
+        // 清除选中状态
+        selection.removeAllRanges();
+    } catch (e) {
+        alert("划线失败，请确保只选中了纯文本，不要跨越段落哦~");
+    }
+};
+
+// 取消高光划线
+window.removeBookHighlight = function() {
+    const selection = window.getSelection();
+    
+    // 获取当前光标所在的节点
+    let node = selection.anchorNode;
+    if (!node) return alert("请将光标放在要取消高光的文本上");
+    
+    // 如果选中的是文本节点，往上找它的父元素
+    if (node.nodeType === 3) {
+        node = node.parentNode;
+    }
+    
+    // 判断父元素是不是高光 span
+    if (node && node.classList && node.classList.contains('highlight-text')) {
+        // 将 span 标签剥离，只保留里面的纯文本
+        node.outerHTML = node.innerHTML;
+    } else {
+        alert("当前光标不在高光文本上哦~");
+    }
+};
+
+// 富文本添加批注 (所见即所得)
+window.applyBookAnnotation = function() {
+    const note = prompt("请输入批注内容：");
+    if (!note) return;
+
+    const editDiv = document.getElementById('bookEditDiv');
+    // 在末尾追加批注 HTML
+    editDiv.innerHTML += `<br><div class="annotation-note">批注：${note}</div><br>`;
+    
+    // 自动滚动到底部
+    editDiv.scrollTop = editDiv.scrollHeight;
 };
 
 function wcOpenMemorySummaryModal() {
@@ -7557,6 +7564,29 @@ function wcSaveMemorySettings() {
     wcSaveData();
     wcCloseModal('wc-modal-memory-settings');
     alert("回忆设置已保存");
+}
+// ==========================================
+// 新增：记忆文本 AI 格式化器
+// ==========================================
+function formatMemoryForAI(htmlContent) {
+    if (!htmlContent) return "";
+    
+    let text = htmlContent;
+    
+    // 1. 将高光标签转换为 AI 能懂的强调符号
+    text = text.replace(/<span class="highlight-text">(.*?)<\/span>/gi, "【重点关注：$1】");
+    
+    // 2. 将批注标签转换为 AI 能懂的批注符号
+    text = text.replace(/<div class="annotation-note">(.*?)<\/div>/gi, "\n（我的批注：$1）\n");
+    
+    // 3. 将换行标签转换为真实的换行符
+    text = text.replace(/<br\s*\/?>/gi, "\n");
+    
+    // 4. 剥离掉剩余的所有无用 HTML 标签
+    text = text.replace(/<[^>]*>?/gm, '');
+    
+    // 5. 清理多余的空白和换行
+    return text.trim();
 }
 
 // --- WeChat General Input ---
@@ -26311,7 +26341,10 @@ async function wcProcessCallDecision(char) {
         let memoryText = "暂无特殊记忆。";
         if (char.memories && char.memories.length > 0) {
             const readCount = chatConfig.aiMemoryCount || 5;
-            memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content}`).join('\n');
+            memoryText = char.memories.slice(0, readCount).map(m => {
+                // 👇 核心修改：调用翻译器，保留全文但标记重点
+                return `- ${formatMemoryForAI(m.content).replace(/^\[.*?\]\s*/, '')}`;
+            }).join('\n');
         }
 
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
@@ -26553,7 +26586,10 @@ window.wcTriggerCallAI = async function() {
         let memoryText = "暂无特殊记忆。";
         if (char.memories && char.memories.length > 0) {
             const readCount = chatConfig.aiMemoryCount || 5;
-            memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content}`).join('\n');
+            memoryText = char.memories.slice(0, readCount).map(m => {
+                // 👇 核心修改：调用翻译器，保留全文但标记重点
+                return `- ${formatMemoryForAI(m.content).replace(/^\[.*?\]\s*/, '')}`;
+            }).join('\n');
         }
 
         const msgs = wcState.chats[char.id] || [];
@@ -30986,7 +31022,7 @@ function mergeCloudDataWithLocal(local, cloud) {
     return result;
 }
 
-// 4. 收集所有数据并执行上传 (打开页面备份 + 每8小时备份 + 退出兜底备份)
+// 4. 收集所有数据并执行上传 (打开页面备份 + 每天凌晨备份 + 退出兜底备份)
 async function executeCloudBackup() {
     if (!isCloudSyncEnabled || !window.needCloudBackup) return;
     
@@ -30995,21 +31031,20 @@ async function executeCloudBackup() {
     const code = localStorage.getItem('current_activation_code');
     if (!qq || !deviceId || !code) return;
 
-    // 👇 核心防刷机制：10分钟冷却时间，防止频繁刷新/切后台导致滥用额度 👇
+    // 10分钟冷却时间，防止频繁刷新/切后台导致滥用额度
     const lastBackupTime = parseInt(localStorage.getItem('ios_theme_last_cloud_backup_time') || '0');
     const now = Date.now();
-    const cooldownMs = 10 * 60 * 1000; // 10分钟冷却
+    const cooldownMs = 10 * 60 * 1000; 
     
     if (now - lastBackupTime < cooldownMs) {
         console.log(`云备份冷却中... 距离下次可备份还剩 ${Math.ceil((cooldownMs - (now - lastBackupTime)) / 1000 / 60)} 分钟`);
-        return; // 还在冷却期，直接拦截
+        return; 
     }
-    // 👆 防刷机制结束 👆
 
     try {
         const data = {};
         
-        // 收集 Theme Studio 数据
+        // 收集 Theme Studio 数据 (包含 API 设置 ios_theme_api_config)
         const keys = await idb.getAllKeys();
         for (let key of keys) {
             if (key.startsWith('ios_theme_')) data[key] = await idb.get(key);
@@ -31044,10 +31079,10 @@ async function executeCloudBackup() {
         data['dream_space_data'] = await idb.get('dream_space_data');
         data['ins_forum_data'] = await idb.get('ins_forum_data');
 
-        // 核心：剔除所有图片，大幅减小体积
+        // 核心：使用强化正则剔除所有图片，大幅减小体积
         const cleanData = stripImagesFromData(data);
 
-        // 发送备份请求 (移除 keepalive 以突破 64KB 限制)
+        // 使用 keepalive 确保页面关闭时请求也能发出去
         fetch(`${CLOUD_SYNC_API}/backup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -31057,10 +31092,10 @@ async function executeCloudBackup() {
                 code: code,
                 timestamp: Date.now(),
                 data: cleanData
-            })
+            }),
+            keepalive: true 
         }).then(res => {
             if (res.ok) {
-                // 👇 备份成功后，记录当前时间戳，重新开始计算冷却
                 localStorage.setItem('ios_theme_last_cloud_backup_time', Date.now().toString());
                 window.needCloudBackup = false; // 重置脏标记
                 console.log("云端自动同步已完成 (纯文本)");
@@ -31150,9 +31185,14 @@ async function restoreCloudBackup(qq, code, deviceId) {
             // 1. 恢复 Theme Studio 数据
             for (let key in cloudData) {
                 if (key !== 'wechat_backup' && key !== 'ls_data' && key !== 'ins_music_data' && key !== 'dream_space_data') {
-                    const localVal = await idb.get(key);
-                    const mergedVal = mergeCloudDataWithLocal(localVal, cloudData[key]);
-                    await idb.set(key, mergedVal);
+                    // 👇 核心修复：API 配置直接暴力覆盖，不经过合并函数，防止丢失 👇
+                    if (key === 'ios_theme_api_config') {
+                        await idb.set(key, cloudData[key]);
+                    } else {
+                        const localVal = await idb.get(key);
+                        const mergedVal = mergeCloudDataWithLocal(localVal, cloudData[key]);
+                        await idb.set(key, mergedVal);
+                    }
                 }
             }
 
@@ -31252,10 +31292,19 @@ window.addEventListener('load', () => {
     }, 5000);
 });
 
-// 10. 触发机制：每隔 8 小时自动备份一次
-setInterval(() => {
-    if (isCloudSyncEnabled) {
-        window.needCloudBackup = true; // 强制标记为需要备份
-        executeCloudBackup();
-    }
-}, 8 * 60 * 60 * 1000); // 8小时 = 8 * 60 * 60 * 1000 毫秒
+// 10. 触发机制：每天凌晨 0:00 定时备份一次
+function scheduleMidnightBackup() {
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+    const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+
+    setTimeout(() => {
+        if (isCloudSyncEnabled) {
+            console.log("触发凌晨 0:00 定时云端备份");
+            window.needCloudBackup = true; 
+            executeCloudBackup();
+        }
+        scheduleMidnightBackup();
+    }, msUntilMidnight);
+}
+scheduleMidnightBackup();
