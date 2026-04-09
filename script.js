@@ -1,33 +1,13 @@
 // ==========================================
-// 👇 恢复并优化：仅记录云端备份 API 日志 👇
+// 👇 极简版：仅记录云端备份 API 日志 👇
 // ==========================================
-const sysLogData = { api: [], console: [], currentTab: 'api' };
-
-window.onerror = function(message, source, lineno, colno, error) {
-    sysLogData.console.unshift({
-        id: Date.now(), type: 'js-error', title: 'Uncaught Error',
-        message: message, source: `${source ? source.split('/').pop() : 'unknown'}:${lineno}:${colno}`,
-        stack: error ? error.stack : '', time: Date.now()
-    });
-    if (sysLogData.console.length > 20) sysLogData.console.pop();
-    if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) renderConsoleLogs();
-};
-
-window.addEventListener('unhandledrejection', function(event) {
-    sysLogData.console.unshift({
-        id: Date.now(), type: 'promise-error', title: 'Unhandled Promise',
-        message: event.reason ? (event.reason.message || event.reason) : 'Unknown Error',
-        source: 'Promise Rejection', stack: event.reason && event.reason.stack ? event.reason.stack : '', time: Date.now()
-    });
-    if (sysLogData.console.length > 20) sysLogData.console.pop();
-    if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) renderConsoleLogs();
-});
+const sysLogData = { api: [] };
 
 const originalFetch = window.fetch;
 window.fetch = async function(...args) {
     const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : 'Unknown URL');
     
-    // 【核心优化】：只拦截包含 xiaoyuan-backup 的请求，其他请求直接放行，彻底防卡顿！
+    // 仅拦截云端备份请求，其他全部放行
     if (!url.includes('xiaoyuan-backup.xingyan067.workers.dev')) {
         return originalFetch.apply(this, args);
     }
@@ -58,7 +38,7 @@ window.fetch = async function(...args) {
         });
         
         if (sysLogData.api.length > 20) sysLogData.api.pop();
-        if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) renderApiLogs();
+        if (document.getElementById('cloudSyncSettingsModal') && document.getElementById('cloudSyncSettingsModal').classList.contains('open')) renderApiLogs();
         return response;
     } catch (error) {
         const duration = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -69,30 +49,15 @@ window.fetch = async function(...args) {
             time: Date.now(), isError: true
         });
         if (sysLogData.api.length > 20) sysLogData.api.pop();
-        if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) renderApiLogs();
+        if (document.getElementById('cloudSyncSettingsModal') && document.getElementById('cloudSyncSettingsModal').classList.contains('open')) renderApiLogs();
         throw error;
     }
 };
 
-function openApiLogConsole() {
-    document.getElementById('apiLogConsoleModal').classList.add('open');
-    renderApiLogs();
-    renderConsoleLogs();
-}
-function closeApiLogConsole() { document.getElementById('apiLogConsoleModal').classList.remove('open'); }
-function switchApiLogTab(tab) {
-    sysLogData.currentTab = tab;
-    document.getElementById('btn-log-api').classList.remove('active');
-    document.getElementById('btn-log-console').classList.remove('active');
-    document.getElementById('btn-log-' + tab).classList.add('active');
-    document.getElementById('view-log-api').classList.remove('active');
-    document.getElementById('view-log-console').classList.remove('active');
-    document.getElementById('view-log-' + tab).classList.add('active');
-}
 function clearCurrentLogs() {
-    if (confirm(`确定要清空当前的 ${sysLogData.currentTab === 'api' ? 'API 记录' : '网页报错'} 吗？`)) {
-        if (sysLogData.currentTab === 'api') { sysLogData.api = []; renderApiLogs(); } 
-        else { sysLogData.console = []; renderConsoleLogs(); }
+    if (confirm(`确定要清空云端同步记录吗？`)) {
+        sysLogData.api = []; 
+        renderApiLogs();
     }
 }
 function formatLogTime(timestamp) {
@@ -130,28 +95,6 @@ function renderApiLogs() {
                 <span>⏱ ${log.duration}s</span>
             </div>
             <div class="log-details">${detailsHtml}</div>
-        `;
-        container.appendChild(card);
-    });
-}
-function renderConsoleLogs() {
-    const container = document.getElementById('view-log-console');
-    if (!container) return;
-    container.innerHTML = '';
-    if (sysLogData.console.length === 0) {
-        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:14px;">暂无网页报错记录</div>';
-        return;
-    }
-    sysLogData.console.forEach(log => {
-        const card = document.createElement('div');
-        card.className = `log-card error`;
-        card.innerHTML = `
-            <div class="log-header">
-                <div class="log-title"><span class="log-tag js-error">${log.title}</span>${log.message.substring(0, 30)}...</div>
-                <div class="log-time">${formatLogTime(log.time)}</div>
-            </div>
-            <div class="log-meta"><span>📄 ${log.source}</span></div>
-            <div class="log-details"><span class="log-error-highlight">${log.message}</span>\n${log.stack}</div>
         `;
         container.appendChild(card);
     });
@@ -13118,16 +13061,68 @@ function lsToggleCharWidget(checkbox) {
     lsSaveData();
 }
 
+let lsTempCharWidgetPhoto = ''; // 临时存储上传的图片
+
+function lsToggleCharWidgetInputType(type) {
+    const input = document.getElementById('ls-char-widget-input');
+    const localArea = document.getElementById('ls-char-widget-local-area');
+    if (type === 'photo') {
+        input.placeholder = '描述图片画面 (AI将生成图片)...';
+        if (localArea) localArea.style.display = 'flex';
+    } else {
+        input.placeholder = '输入便利贴留言...';
+        if (localArea) localArea.style.display = 'none';
+    }
+}
+
+async function lsHandleCharWidgetLocalUpload(input) {
+    const file = input.files[0];
+    if (file) {
+        try {
+            // 使用现有的压缩函数，防止图片过大导致存储失败
+            const base64 = await wcCompressImage(file);
+            lsTempCharWidgetPhoto = base64;
+            const preview = document.getElementById('ls-char-widget-preview');
+            if (preview) {
+                preview.src = base64;
+                preview.style.display = 'block';
+            }
+            document.getElementById('ls-char-widget-input').value = ''; // 清空文字描述
+        } catch (e) {
+            alert("图片处理失败");
+        }
+    }
+    input.value = '';
+}
+
 function lsSendToCharWidget() {
     const type = document.getElementById('ls-char-widget-type').value;
     let content = document.getElementById('ls-char-widget-input').value.trim();
     
-    if (!content) return alert("请输入内容");
+    // 如果是照片模式且上传了本地图片，优先使用本地图片
+    if (type === 'photo' && lsTempCharWidgetPhoto) {
+        content = lsTempCharWidgetPhoto;
+    }
+    
+    if (!content) return alert("请输入内容或上传图片");
     
     lsState.charWidgetData = { type, content };
     lsSaveData();
     alert("已成功发送到对方桌面！");
+    
+    // 清空状态
     document.getElementById('ls-char-widget-input').value = '';
+    lsTempCharWidgetPhoto = '';
+    const preview = document.getElementById('ls-char-widget-preview');
+    if (preview) {
+        preview.src = '';
+        preview.style.display = 'none';
+    }
+    
+    // 如果对方手机模拟器开着，实时刷新一下小组件
+    if (typeof wcRenderCharWidget === 'function') {
+        wcRenderCharWidget();
+    }
 }
 
 // --- 手机模拟器内对方桌面小组件渲染与交互 ---
@@ -13259,24 +13254,35 @@ function wcToggleLoversWidgetMode(e) {
     e.stopPropagation();
     const widget = document.getElementById('wc-phone-lovers-widget');
     if (!widget) return; 
+    
     if (widget.classList.contains('flipped')) {
-        widget.classList.remove('flipped');
-        lsState.charWidgetData.type = 'photo';
+        // 修复：当前在背面，点击时询问是否要修改留言
+        if (confirm(`【当前留言】\n${lsState.charWidgetData.content || '暂无留言'}\n\n是否要发送新的内容到 Ta 的桌面？`)) {
+            wcOpenCharWidgetInteractModal();
+        } else {
+            widget.classList.remove('flipped');
+            lsState.charWidgetData.type = 'photo';
+            lsSaveData();
+        }
     } else {
         widget.classList.add('flipped');
         lsState.charWidgetData.type = 'note';
+        lsSaveData();
     }
-    lsSaveData();
 }
 
 function wcShowLoversWidgetPhotoDesc(e) {
     e.stopPropagation();
     if (lsState.charWidgetData.type === 'photo' && lsState.charWidgetData.content && !lsState.charWidgetData.content.startsWith('data:')) {
-        alert(`【照片画面描述】\n${lsState.charWidgetData.content}`);
+        // 修复：如果有描述，先弹窗显示描述，然后询问是否要重新发送
+        if (confirm(`【照片画面描述】\n${lsState.charWidgetData.content}\n\n是否要发送新的内容到 Ta 的桌面？`)) {
+            wcOpenCharWidgetInteractModal();
+        }
     } else {
         wcOpenCharWidgetInteractModal();
     }
 }
+
 
 function lsUnbind() {
     if (confirm("确定要解除恋人关系吗？所有记录将被清空。")) {
@@ -15097,24 +15103,16 @@ function showFavoriteAlert() {
 // 新增：WeChat 主界面的「我的收藏」页面逻辑
 // ==========================================================================
 
-// 替换以下三个函数
 function wcOpenMyFavorites() {
     document.getElementById('wc-view-user').classList.remove('active');
     document.getElementById('wc-view-my-favorites').classList.add('active');
+    
+    // 隐藏底部导航栏
     document.getElementById('wc-main-tabbar').style.display = 'none';
     
-    // 复用主 Navbar，防止点击穿透
-    document.getElementById('wc-btn-exit').style.display = 'none';
-    document.getElementById('wc-btn-back').style.display = 'flex';
-    document.getElementById('wc-btn-back').onclick = wcCloseMyFavorites;
-    
-    const titleEl = document.getElementById('wc-nav-title');
-    titleEl.innerText = '我的收藏';
-    titleEl.onclick = null;
-    titleEl.style.cursor = 'default';
-    
-    const rightContainer = document.getElementById('wc-nav-right-container');
-    rightContainer.innerHTML = '';
+    // 🔪 核心修改：彻底隐藏全局的微信顶栏，使用我们自己的路径栏
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'none';
     
     wcRenderMyFavorites();
 }
@@ -15123,23 +15121,115 @@ function wcCloseMyFavorites() {
     document.getElementById('wc-view-my-favorites').classList.remove('active');
     wcSwitchTab('user');
     
+    // 恢复底部导航栏
     document.getElementById('wc-main-tabbar').style.display = 'flex';
-    document.getElementById('wc-btn-back').style.display = 'none';
-    document.getElementById('wc-btn-exit').style.display = 'flex';
     
-    document.getElementById('wc-btn-back').onclick = wcHandleBack;
+    // 🔪 核心修改：恢复全局的微信顶栏
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'flex';
 }
 
+// 预设的文件夹颜色库 (后层深色, 前层浅色)
+const folderColors = [
+    { back: '#e6c35c', front: '#f8d775' }, // 经典黄
+    { back: '#5a9df8', front: '#7ebeff' }, // 蓝
+    { back: '#ff8a8a', front: '#ffb3b3' }, // 粉
+    { back: '#af52de', front: '#d28cff' }, // 紫
+    { back: '#34c759', front: '#6be388' }, // 绿
+    { back: '#ff9500', front: '#ffc04d' }  // 橙
+];
+
+// 根据角色名字计算哈希值，分配固定颜色
+function getFolderColorByChar(charName) {
+    let hash = 0;
+    for (let i = 0; i < charName.length; i++) {
+        hash = charName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % folderColors.length;
+    return folderColors[index];
+}
+
+// 类别名称映射
+const favTypeNames = {
+    'memo': '备忘录',
+    'diary': '手写日记',
+    'history': '浏览记录',
+    'post': '论坛帖子',
+    'masturbation': '私密记录',
+    'wetDream': '春梦记录'
+};
+
+// 渲染文件夹主视图
 function wcRenderMyFavorites() {
-    const list = document.getElementById('wc-my-favorites-list');
-    list.innerHTML = '';
+    // 确保显示文件夹视图，隐藏详情视图
+    document.getElementById('fav-folder-view').style.display = 'flex';
+    document.getElementById('fav-detail-view').style.display = 'none';
+
+    const container = document.getElementById('wc-my-favorites-folders');
+    container.innerHTML = '';
 
     if (!wcState.myFavorites || wcState.myFavorites.length === 0) {
-        list.innerHTML = '<div style="text-align: center; color: #8E8E93; padding-top: 50px; font-size: 14px;">暂无收藏内容</div>';
+        container.innerHTML = '<div style="grid-column: span 2; text-align: center; color: #8E8E93; padding-top: 50px; font-size: 14px;">文件夹空空如也</div>';
         return;
     }
 
+    // 按 角色 + 类别 进行分组
+    const folders = {};
     wcState.myFavorites.forEach(fav => {
+        const key = `${fav.charName}_${fav.type}`;
+        if (!folders[key]) {
+            folders[key] = {
+                charName: fav.charName,
+                type: fav.type,
+                items: []
+            };
+        }
+        folders[key].items.push(fav);
+    });
+
+    // 渲染文件夹
+    Object.values(folders).forEach(folder => {
+        const typeName = favTypeNames[folder.type] || '其他收藏';
+        const folderName = `${folder.charName} - ${typeName}`;
+        const colors = getFolderColorByChar(folder.charName);
+
+        const div = document.createElement('div');
+        div.className = 'folder-item';
+        div.onclick = () => wcOpenFavoriteFolder(folder.charName, folder.type, folderName);
+        
+        div.innerHTML = `
+            <div class="folder-icon">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                    <!-- 后层文件夹 -->
+                    <path d="M5 20 h35 l10 10 h45 v60 h-90 z" fill="${colors.back}"/>
+                    <!-- 里面的纸张 -->
+                    <rect x="20" y="25" width="60" height="60" fill="#ffffff" stroke="#cccccc" stroke-width="1"/>
+                    <line x1="30" y1="40" x2="70" y2="40" stroke="#e0e0e0" stroke-width="3"/>
+                    <line x1="30" y1="55" x2="70" y2="55" stroke="#e0e0e0" stroke-width="3"/>
+                    <line x1="30" y1="70" x2="50" y2="70" stroke="#e0e0e0" stroke-width="3"/>
+                    <!-- 前层文件夹 -->
+                    <path d="M5 35 h90 l-5 55 h-80 z" fill="${colors.front}"/>
+                </svg>
+            </div>
+            <div class="folder-name">${folderName}</div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// 打开特定文件夹详情
+function wcOpenFavoriteFolder(charName, type, folderName) {
+    document.getElementById('fav-folder-view').style.display = 'none';
+    document.getElementById('fav-detail-view').style.display = 'flex';
+    document.getElementById('fav-detail-path-name').innerText = folderName;
+
+    const list = document.getElementById('wc-my-favorites-list');
+    list.innerHTML = '';
+
+    // 过滤出该文件夹下的内容
+    const items = wcState.myFavorites.filter(f => f.charName === charName && f.type === type);
+
+    items.forEach(fav => {
         const dateStr = new Date(fav.savedAt).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         
         const div = document.createElement('div');
@@ -15150,7 +15240,7 @@ function wcRenderMyFavorites() {
                     <img src="${fav.charAvatar}" class="fav-char-avatar">
                     <div class="fav-header-info">
                         <div class="fav-title">${fav.title}</div>
-                        <div class="fav-time">${dateStr} · ${fav.charName}</div>
+                        <div class="fav-time">${dateStr}</div>
                     </div>
                 </div>
                 <svg class="fav-chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -15159,7 +15249,7 @@ function wcRenderMyFavorites() {
                 <div class="fav-content-inner">
                     <div class="fav-original-time">记录时间: ${fav.time || '未知'}</div>
                     <div class="fav-text">${fav.content}</div>
-                    <div class="fav-delete-btn" onclick="wcDeleteFavorite(${fav.id})">取消收藏</div>
+                    <div class="fav-delete-btn" onclick="wcDeleteFavorite(${fav.id}, '${charName}', '${type}', '${folderName}')">取消收藏</div>
                 </div>
             </div>
         `;
@@ -15167,11 +15257,28 @@ function wcRenderMyFavorites() {
     });
 }
 
-function wcDeleteFavorite(id) {
+// 关闭文件夹详情，返回文件夹列表
+function wcCloseFavoriteFolder() {
+    document.getElementById('fav-detail-view').style.display = 'none';
+    document.getElementById('fav-folder-view').style.display = 'flex';
+    wcRenderMyFavorites(); // 刷新文件夹列表（以防有文件夹被清空）
+}
+
+// 删除收藏 (带参数，以便删除后刷新当前详情页)
+function wcDeleteFavorite(id, charName, type, folderName) {
     if (confirm("确定要取消收藏吗？")) {
         wcState.myFavorites = wcState.myFavorites.filter(f => f.id !== id);
         wcSaveData();
-        wcRenderMyFavorites();
+        
+        // 检查该文件夹下是否还有内容
+        const remainingItems = wcState.myFavorites.filter(f => f.charName === charName && f.type === type);
+        if (remainingItems.length === 0) {
+            // 如果删空了，自动退回文件夹列表
+            wcCloseFavoriteFolder();
+        } else {
+            // 否则刷新当前详情页
+            wcOpenFavoriteFolder(charName, type, folderName);
+        }
     }
 }
 
@@ -20608,39 +20715,6 @@ const systemUpdateLogs = [
             "一机一码，禁止二传二贩"
         ]
     },
-    {
-        version: "小元机 03.09",
-        date: "2026.03.09",
-        title: "欢迎来到小元机^",
-        content: [
-            "这里是小元，非常抱歉，我拼尽全力还是无法适配iOS的底部白边，再加上本人是安卓手机，怎么改也看不到效果TvT",
-            "1. 完善了查手机，新增cart购物车和购买记录（可以帮char买单），新增查看char歌单（在setting页面），点击可以直接播放，一起听歌时char也会知道你播放的是char的歌！",
-            "2. 新增查手机内容可以分享char和收藏（喜欢的内容可以收藏）",
-            "3. 新增拉黑功能（拉黑char后，点击ai回复键，char会以弹窗的形式发消息，消息内容储存在会话页面的小角色卡，嗯对，我新改的ui）"
-        ],
-        notes: [
-            "小教程：1. 聊天设置页面里面char和用户头像之间的心跳线是可以点击的！！！里面是更多设置功能",
-            "2. 想要备份可以前往设置页面的AppleID里面（点击进入页面！！在里面备份！！）",
-            "更新后若遇到界面显示异常，请尝试清除浏览器缓存。",
-            "请妥善保管您的数据，建议定期在设置中进行备份。",
-            "一机一码，禁止二传二贩"
-        ]
-    },
-    {
-        version: "小元机",
-        date: "2026.03.07",
-        title: "欢迎来到小元机^",
-        content: [
-            "这里是小元，如有问题请多多反馈。",
-            "优化了char搜索歌曲模式（音乐的个人页面的五角星是音乐胶囊迷你音乐播放器！）",
-            "梦境支持html状态栏和正则式（我也不知道正则式能干什么）"
-        ],
-        notes: [
-            "更新后若遇到界面显示异常，请尝试清除浏览器缓存。",
-            "请妥善保管您的数据，建议定期在设置中进行备份。",
-            "一机一码，禁止二传二贩"
-        ]
-    },
 ];
 const CURRENT_VERSION = systemUpdateLogs[0].version;
 
@@ -20709,18 +20783,16 @@ function renderUpdateLogs() {
         
         <div style="margin-bottom: 8px;"><strong>桌面APP介绍：</strong></div>
         <ul style="padding-left: 20px; margin: 0 0 12px 0;">
-            <li style="margin-bottom: 8px;"><strong>APP1为聊天：</strong>左上角圆形头像为创建角色，右上角的接听键为退出，删除角色前往contacts通讯录页面左滑角色删除，点击角色可以查手机，聊天页面点击对方头像可以快捷进入查手机。回车键为用户发送键，那个小飞机图标是char回复键，拉黑角色后点击是以弹窗形式出现角色消息，角色消息会储存在chat页面（就是会话列表页面）的小卡片头像里面。爆改了朋友圈UI，点击朋友圈头像显示全部朋友圈，点击单个日期可查看单日朋友圈</li>
+            <li style="margin-bottom: 8px;"><strong>APP1为聊天：</strong>点击角色可以查手机，聊天页面点击对方头像可以快捷进入查手机。回车键为用户发送键，那个小飞机图标是char回复键，拉黑角色后点击是以弹窗形式出现角色消息，角色消息会储存在chat页面（就是会话列表页面）的小卡片头像里面，点击朋友圈头像显示全部朋友圈，点击单个日期可查看单日朋友圈</li>
             <li style="margin-bottom: 8px;"><strong>APP2为情侣空间：</strong><br>
             ① 可以选择开启桌面小组件（有便利贴和拍立得两种模式），选择发送概率，char就会在桌面发送消息或图片。<br>
             ② 关联账号：开启后，char会实时感知用户和其他人聊天，你可以选择NPC回复频率（注意：这个比较耗费额度），你也可以知道NPC给char发送消息，并且可以进入查手机，帮char回复。</li>
             <li style="margin-bottom: 8px;"><strong>APP3为音乐：</strong>主页面为邀请一起听歌，点击主页面的角色卡邀请对方听歌，个人页面的五角星符号为音乐胶囊，点击后桌面会有一个小胶囊（实则迷你音乐播放器）</li>
-            <li style="margin-bottom: 8px;"><strong>APP4还没做。</strong></li>
+            <li style="margin-bottom: 8px;"><strong>APP4论坛，每个网页窗口为独立世界观互不干扰，网址栏的搜索键点击为热搜</strong></li>
         </ul>
         
         <div style="background: #E5E5EA; padding: 10px; border-radius: 8px;">
-            <strong>没有线下模式，但是有剧情模式：</strong><br>
-            梦境为剧情模式可以走点小番外（可以自己做状态栏走番位），总结梦境剧情后可以在总结的梦境卡片左上角的云图标，点击会以梦的方式注入给char。<br>
-            <span style="color: #888; font-size: 12px; display: block; margin-top: 4px;">*如果想要玩线下的宝宝比较多的话，会考虑把梦境改成线下和梦境双模式。</span>
+            <strong>线下在梦境里面</strong><br>       
         </div>
     `;
     container.appendChild(tutorialCard);
@@ -31328,6 +31400,8 @@ const CLOUD_SYNC_API = 'https://xiaoyuan-backup.xingyan067.workers.dev';
 function openCloudSyncSettings() {
     document.getElementById('toggle-cloud-sync').checked = isCloudSyncEnabled;
     document.getElementById('cloudSyncSettingsModal').classList.add('open');
+    // 👇 新增：打开时自动渲染日志
+    if (typeof renderApiLogs === 'function') renderApiLogs();
 }
 
 function closeCloudSyncSettings() {
