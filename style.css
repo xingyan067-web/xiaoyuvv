@@ -352,16 +352,43 @@ input::-webkit-inner-spin-button {
     color: #000;
 }
 
-/* --- 桌面布局 --- */
+/* --- 桌面布局 (双页滑动) --- */
+.home-swiper {
+    flex: 1;
+    display: flex;
+    width: 100%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none; /* Firefox */
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 100px;
+}
+.home-swiper::-webkit-scrollbar { display: none; }
+
 .home-grid {
-    flex: 1; display: grid;
+    min-width: 100%; /* 每页占满屏幕 */
+    scroll-snap-align: start;
+    display: grid;
     grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(7, 1fr);
     gap: clamp(15px, 3vh, 30px) clamp(10px, 3vw, 20px); 
     padding: 20px 20px 0 20px;
     justify-items: center; align-items: start;
     position: relative; 
-    margin-bottom: 100px; 
 }
+
+/* 桌面分页小圆点 */
+.home-pagination {
+    position: absolute;
+    bottom: 110px; /* 在 Dock 栏上方 */
+    left: 0; width: 100%;
+    display: flex; justify-content: center; gap: 8px;
+    z-index: 5; pointer-events: none;
+}
+.page-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4); transition: background 0.3s;
+}
+.page-dot.active { background: rgba(255, 255, 255, 0.9); }
 
 /* --- 新版日系 INS 风小组件样式 (4x3) --- */
 .ins-widget-container {
@@ -1105,9 +1132,10 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
     width: auto; height: auto; background: transparent; z-index: 20000;
     display: flex; align-items: flex-start; justify-content: center;
-    opacity: 1; transition: opacity 0.3s ease, transform 0.3s ease; pointer-events: none;
+    opacity: 1; transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s; pointer-events: none;
+    visibility: visible;
 }
-.wc-ios-loading-overlay.hidden { opacity: 0; transform: translateX(-50%) translateY(-20px); pointer-events: none; }
+.wc-ios-loading-overlay.hidden { opacity: 0; transform: translateX(-50%) translateY(-20px); pointer-events: none; visibility: hidden; }
 .wc-ios-loading-box {
     min-width: 200px; height: 50px; background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -2019,7 +2047,8 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-phone-home-indicator { display: none; }
 .wc-phone-screen { flex: 1; background-size: cover; background-position: center; display: flex; flex-direction: column; padding-top: 30px; position: relative; overflow: hidden; }
 .wc-phone-sim-navbar { height: 88px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 16px 10px 16px; color: white; z-index: 10; }
-.wc-ios-desktop { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(6, 1fr); gap: 15px; padding: 20px; align-content: start; position: relative; }
+.wc-ios-desktop { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(7, 1fr); gap: 15px; padding: 20px; align-content: start; position: relative; }
+.wc-grid-cell { width: 100%; height: 100%; display: flex; justify-content: center; align-items: flex-start; position: relative; }
 .wc-ios-widget-clock { grid-column: span 4; grid-row: span 2; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
 .wc-ios-clock-time { font-size: 60px; font-weight: 200; line-height: 1; }
 .wc-ios-clock-date { font-size: 16px; margin-top: 5px; font-weight: 500; }
@@ -2240,22 +2269,24 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     justify-content: center;
     padding: 5px;
     cursor: pointer;
-    transform: rotate(-2deg); 
+    /* 🔪 修复：去掉了 rotate(-2deg)，让它变正 */
     transition: transform 0.2s;
     perspective: 1000px; 
 }
 .wc-phone-lovers-widget:active {
-    transform: rotate(-2deg) scale(0.98);
+    transform: scale(0.98);
 }
 
 .wc-lovers-widget-inner {
     position: relative;
     width: 160px; 
     height: 160px; 
-    transition: transform 0.6s;
+    /* 🔪 修复：开启硬件加速，让翻转丝滑不卡顿 */
+    transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
     transform-style: preserve-3d;
+    will-change: transform;
     box-shadow: 2px 4px 12px rgba(0,0,0,0.15);
-    border-radius: 4px;
+    border-radius: 12px;
 }
 
 .wc-phone-lovers-widget.flipped .wc-lovers-widget-inner {
@@ -2267,23 +2298,40 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     width: 100%;
     height: 100%;
     backface-visibility: hidden;
-    border-radius: 4px;
+    border-radius: 12px;
     background: #fff;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    padding: 10px;
     box-sizing: border-box;
 }
 
 .wc-lovers-widget-front {
-    background: #fff;
-    border: 1px solid #eee;
+    padding: 10px 10px 10px 24px;
 }
+
+.wc-lovers-widget-back {
+    transform: rotateY(180deg);
+    justify-content: center;
+    align-items: center;
+    padding: 10px 24px 10px 10px;
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.02); 
+}
+
+/* 活页装订线样式 (查手机版) */
+.wc-binding-area { position: absolute; left: -6px; top: 0; width: 24px; height: 100%; display: flex; flex-direction: column; justify-content: space-evenly; padding: 10px 0; box-sizing: border-box; }
+.wc-binding-area-back { position: absolute; right: -6px; top: 0; width: 24px; height: 100%; display: flex; flex-direction: column; justify-content: space-evenly; padding: 10px 0; box-sizing: border-box; }
+.wc-binding-ring { position: relative; width: 100%; height: 12px; }
+.wc-binding-hole { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 5px; height: 8px; background: #333; border-radius: 2px; box-shadow: inset 1px 1px 3px rgba(0,0,0,0.8); }
+.wc-binding-area-back .wc-binding-hole { left: 4px; right: auto; }
+.wc-binding-metal-1, .wc-binding-metal-2 { position: absolute; right: 6px; width: 14px; height: 4px; border: 1.5px solid #e0e0e0; border-right-color: #fff; border-radius: 6px; box-shadow: -1px 2px 3px rgba(0,0,0,0.2), inset 1px 1px 1px rgba(255,255,255,0.8); background: linear-gradient(to bottom, transparent 20%, rgba(0,0,0,0.1) 50%, transparent 80%); }
+.wc-binding-area-back .wc-binding-metal-1, .wc-binding-area-back .wc-binding-metal-2 { left: 6px; right: auto; border-right-color: #e0e0e0; border-left-color: #fff; box-shadow: 1px 2px 3px rgba(0,0,0,0.2), inset -1px 1px 1px rgba(255,255,255,0.8); }
+.wc-binding-metal-1 { top: 0px; }
+.wc-binding-metal-2 { bottom: 0px; }
 
 .wc-lovers-widget-photo {
     width: 100%;
-    height: 110px; 
+    flex: 1;
     background: #f4f4f4;
     border: 1px solid #eee;
     display: flex;
@@ -2292,30 +2340,15 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     overflow: hidden;
     background-size: cover;
     background-position: center;
-    margin-bottom: 8px;
 }
 
-.wc-lovers-widget-photo-desc {
-    font-size: 12px;
-    color: #555;
-    font-family: 'Courier New', Courier, monospace; 
-    font-weight: bold;
-    text-align: center;
-    width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+/* 底部虚线装饰样式 */
+.wc-lovers-widget-decor-text {
+    font-size: 10px; color: #999; display: flex; align-items: center; justify-content: center;
+    width: 100%; margin-top: 8px; margin-bottom: 2px; cursor: pointer;
 }
+.wc-lovers-widget-decor-line { flex: 1; height: 1px; border-top: 1px dashed #ccc; margin: 0 6px; }
 
-.wc-lovers-widget-back {
-    transform: rotateY(180deg);
-    background: #fff; 
-    justify-content: center;
-    border: 1px solid rgba(0,0,0,0.05);
-    box-shadow: inset 0 0 20px rgba(0,0,0,0.02); 
-}
-
-/* 修复：背面文字长文本溢出问题 */
 .wc-lovers-widget-note-text {
     font-size: 14px;
     color: #444; 
@@ -2330,20 +2363,6 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     -webkit-box-orient: vertical;
     overflow: hidden;
     font-style: italic; 
-}
-
-.wc-lovers-widget-sticker {
-    position: absolute;
-    top: -8px;
-    left: 50%;
-    transform: translateX(-50%) rotate(-2deg);
-    width: 60px;
-    height: 20px;
-    background: rgba(255, 255, 255, 0.4); 
-    border: 1px solid rgba(255,255,255,0.6);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-    backdrop-filter: blur(2px);
-    z-index: 20;
 }
 /* ========================================== */
 /* 修复：多选模式下底部被遮挡的问题 */
@@ -10889,3 +10908,271 @@ input[type="text"].ls-shop-search-input:focus { width: 115px !important; }
 .shop-invite-detail-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); }
 .shop-invite-detail-name { font-size: 14px; font-weight: 600; color: #FFF; }
 .shop-invite-detail-price { font-size: 14px; font-weight: bold; color: #D4AF37; font-family: 'Georgia', serif; }
+/* ========================================== */
+/* App 5: Wish & To-Do (星愿空间) 专属样式 */
+/* ========================================== */
+.wish-app-container {
+    width: 100%; height: 100%; display: flex; flex-direction: column; position: relative;
+    background: #F4F4F5; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+}
+.wish-header {
+    padding: calc(env(safe-area-inset-top, 20px) + 20px) 20px 15px 20px;
+    display: flex; justify-content: space-between; align-items: center; z-index: 10;
+}
+.wish-back-btn { font-size: 16px; color: #8E8E93; cursor: pointer; font-weight: 500; display: flex; align-items: center; width: 60px; }
+.wish-title { font-size: 14px; font-weight: 800; letter-spacing: 1px; color: #111; text-transform: uppercase; flex: 1; text-align: center; }
+/* 👈 新增：右上角按钮样式 */
+.wish-header-btn { 
+    width: 60px; display: flex; justify-content: flex-end; align-items: center; 
+    cursor: pointer; color: #111; transition: opacity 0.2s; 
+}
+.wish-header-btn:active { opacity: 0.5; }
+.wish-header-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; }
+
+.wish-content { flex: 1; overflow-y: auto; padding: 0 20px 100px 20px; }
+.wish-page { display: none; animation: wcFadeIn 0.3s ease; }
+.wish-page.active { display: block; }
+.wish-page-title { font-size: 28px; font-weight: 800; margin-bottom: 20px; color: #111; }
+
+.wish-memo-card {
+    background: #FFF; border-radius: 16px; padding: 20px; margin-bottom: 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.02); border: 1px solid #EAEAEA;
+    position: relative; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.wish-memo-card:active { transform: scale(0.97); box-shadow: 0 1px 5px rgba(0,0,0,0.02); }
+.wish-memo-card::before {
+    content: ''; position: absolute; left: 0; top: 20px; bottom: 20px; width: 3px;
+    background: #D4AF37; border-radius: 0 4px 4px 0;
+}
+.wish-memo-info { flex: 1; padding-right: 15px; }
+.wish-memo-text { font-size: 16px; color: #111; line-height: 1.4; font-weight: 600; margin-bottom: 6px; }
+.wish-memo-meta { font-size: 12px; color: #8E8E93; display: flex; align-items: center; gap: 6px; }
+/* 👇 新增：创建者标签样式 */
+.wish-creator-tag { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; letter-spacing: 0.5px; }
+.wish-creator-tag.me { background: #F5F5F5; color: #888; }
+.wish-creator-tag.ta { background: #111; color: #FFF; }
+/* 👆 新增结束 */
+.wish-reply-badge { background: rgba(212, 175, 55, 0.1); color: #D4AF37; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: bold; }
+.wish-chevron-right { width: 16px; height: 16px; stroke: #C7C7CC; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.wish-todo-header { display: flex; align-items: center; gap: 12px; }
+.wish-checkbox { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #CCC; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; }
+.wish-checkbox.done { background: #111; border-color: #111; }
+.wish-checkbox.done::after { content: '✓'; color: #FFF; font-size: 12px; }
+.wish-todo-text { font-size: 16px; font-weight: 600; color: #111; transition: color 0.2s; }
+.wish-todo-text.done { text-decoration: line-through; color: #999; }
+
+/* 拼图网格 */
+.wish-puzzle-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px;
+    background: #EAEAEA; border-radius: 16px; overflow: hidden;
+    border: 4px solid #FFF; box-shadow: 0 10px 30px rgba(0,0,0,0.05); aspect-ratio: 1;
+}
+.wish-puzzle-piece { background: #F5F5F5; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #CCC; position: relative; transition: all 0.5s ease; }
+.wish-puzzle-piece.unlocked { background-size: 300% 300%; color: transparent; }
+.p-0 { background-position: 0% 0%; } .p-1 { background-position: 50% 0%; } .p-2 { background-position: 100% 0%; }
+.p-3 { background-position: 0% 50%; } .p-4 { background-position: 50% 50%; } .p-5 { background-position: 100% 50%; }
+.p-6 { background-position: 0% 100%; } .p-7 { background-position: 50% 100%; } .p-8 { background-position: 100% 100%; }
+
+/* 右下角悬浮添加按钮 */
+.wish-fab-add {
+    position: absolute; bottom: 110px; right: 20px; /* 👈 核心修改：left 改为 right */
+    width: 56px; height: 56px; background: #D4AF37; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 20px rgba(212, 175, 55, 0.4); cursor: pointer;
+    transition: transform 0.2s; z-index: 50;
+}
+.wish-fab-add:active { transform: scale(0.9); }
+.wish-fab-add svg { width: 24px; height: 24px; stroke: #FFF; fill: none; stroke-width: 2.5; }
+
+/* 居中添加弹窗样式 (高级 iOS 风) */
+.wish-center-modal {
+    width: 280px !important;
+    max-width: 85% !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 16px !important;
+    display: flex;
+    flex-direction: column;
+    position: relative !important;
+    bottom: auto !important;
+    margin: 0 !important;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+}
+.wish-modal-title {
+    font-size: 13px; font-weight: 600; color: #8E8E93;
+    text-align: center; padding: 16px; border-bottom: 0.5px solid rgba(0,0,0,0.1);
+}
+.wish-modal-options { display: flex; flex-direction: column; }
+.wish-modal-option {
+    padding: 16px; text-align: center; font-size: 17px; color: #111;
+    font-weight: 500; cursor: pointer; border-bottom: 0.5px solid rgba(0,0,0,0.1);
+    transition: background 0.2s;
+}
+.wish-modal-option:active { background: rgba(0,0,0,0.05); }
+.wish-modal-cancel {
+    padding: 16px; text-align: center; font-size: 17px; color: #FF3B30;
+    font-weight: 600; cursor: pointer; transition: background 0.2s;
+}
+.wish-modal-cancel:active { background: rgba(0,0,0,0.05); border-radius: 0 0 16px 16px; }
+
+/* 底部导航栏 (无凸起) */
+.wish-bottom-bar-wrapper {
+    position: absolute; bottom: calc(env(safe-area-inset-bottom, 20px) + 10px); left: 20px; right: 20px;
+    height: 64px; background: #1C1C1E; border-radius: 20px;
+    display: flex; justify-content: space-around; align-items: center;
+    padding: 0 15px; box-shadow: 0 15px 30px rgba(0,0,0,0.2); z-index: 50;
+}
+.wish-nav-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; opacity: 0.5; }
+.wish-nav-icon.active { opacity: 1; transform: translateY(-2px); }
+.wish-nav-icon svg { width: 22px; height: 22px; stroke: #FFF; fill: none; stroke-width: 2; }
+
+/* 全屏备忘录详情页 */
+.wish-detail-view {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: #FFFFFF; z-index: 100; display: none; flex-direction: column;
+    transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.wish-detail-view.active { transform: translateX(0); display: flex; }
+.wish-detail-nav {
+    padding: calc(env(safe-area-inset-top, 20px) + 20px) 15px 10px 15px;
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); z-index: 10;
+}
+.wish-detail-back { display: flex; align-items: center; color: #D4AF37; font-size: 17px; cursor: pointer; font-weight: 500; }
+.wish-detail-back svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; margin-right: -2px; }
+.wish-detail-date { font-size: 12px; color: #8E8E93; font-weight: 500; }
+.wish-detail-content { flex: 1; overflow-y: auto; padding: 20px 24px 60px 24px; }
+.wish-detail-title { font-size: 26px; font-weight: 800; color: #111; margin-bottom: 24px; line-height: 1.3; letter-spacing: 0.5px; }
+.wish-detail-body { font-size: 16px; color: #333; line-height: 1.8; text-align: justify; letter-spacing: 0.5px; white-space: pre-wrap; font-family: 'Kaiti', 'STKaiti', serif; }
+
+/* 详情页底部操作栏 */
+.wish-detail-actions {
+    padding: 15px 24px calc(env(safe-area-inset-bottom, 20px) + 15px) 24px;
+    background: #FFF; border-top: 1px solid #F0F0F0; display: flex; justify-content: space-between;
+}
+.wish-action-btn {
+    padding: 12px 24px; border-radius: 20px; font-size: 14px; font-weight: bold; cursor: pointer; transition: transform 0.2s; border: none;
+}
+.wish-action-btn:active { transform: scale(0.95); }
+.wish-action-btn.delete { background: #F5F5F5; color: #FF3B30; }
+.wish-action-btn.complete { background: #111; color: #FFF; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+/* ========================================== */
+/* 星愿空间：全屏编辑页 (仿 iOS 备忘录) */
+/* ========================================== */
+.wish-compose-content {
+    flex: 1; display: flex; flex-direction: column; padding: 20px 24px;
+}
+.wish-compose-title-input {
+    font-size: 26px; font-weight: 800; color: #111; border: none; outline: none;
+    background: transparent; margin-bottom: 16px; font-family: inherit;
+}
+.wish-compose-title-input::placeholder { color: #C7C7CC; font-weight: 600; }
+.wish-compose-textarea {
+    flex: 1; font-size: 17px; color: #333; line-height: 1.6; border: none;
+    outline: none; background: transparent; resize: none; font-family: inherit;
+}
+.wish-compose-textarea::placeholder { color: #C7C7CC; }
+
+/* ========================================== */
+/* 星愿空间：成就墙网格样式 */
+/* ========================================== */
+.achieve-wall-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 10px 0;
+}
+.achieve-card {
+    background: #FFF; border-radius: 16px; padding: 16px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid #F0F0F0;
+    display: flex; flex-direction: column; justify-content: space-between;
+    aspect-ratio: 1; /* 保持正方形 */
+}
+.achieve-card-tag {
+    font-size: 10px; font-weight: 800; color: #D4AF37; letter-spacing: 1px; margin-bottom: 8px;
+}
+.achieve-card-title {
+    font-size: 15px; font-weight: bold; color: #111; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.achieve-card-date {
+    font-size: 11px; color: #999; font-family: monospace; margin-top: 10px;
+}
+/* ========================================== */
+/* 星愿空间：探索内心深处 (小游戏) 样式 */
+/* ========================================== */
+.wish-explore-banner {
+    background: linear-gradient(135deg, #111 0%, #333 100%);
+    border-radius: 16px; padding: 16px 20px; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 15px; cursor: pointer;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15); transition: transform 0.2s;
+}
+.wish-explore-banner:active { transform: scale(0.97); }
+.wish-explore-icon { font-size: 24px; }
+.wish-explore-text { flex: 1; }
+.wish-explore-title { font-size: 15px; font-weight: 700; color: #FFF; margin-bottom: 4px; letter-spacing: 0.5px; }
+.wish-explore-desc { font-size: 11px; color: #AAA; }
+.wish-explore-banner svg { width: 20px; height: 20px; stroke: #FFF; fill: none; stroke-width: 2; opacity: 0.5; }
+
+.wish-explore-card {
+    width: 90%; max-width: 340px; background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-radius: 24px; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+    display: flex; flex-direction: column; position: relative;
+}
+.wish-explore-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.wish-explore-tag { font-size: 10px; font-weight: 800; color: #D4AF37; letter-spacing: 2px; }
+.wish-explore-close { background: none; border: none; font-size: 24px; color: #888; cursor: pointer; line-height: 1; padding: 0; }
+.wish-explore-scenario {
+    font-size: 15px; color: #333; line-height: 1.6; text-align: justify;
+    margin-bottom: 24px; font-family: 'Kaiti', 'STKaiti', serif;
+}
+.wish-explore-options { display: flex; flex-direction: column; gap: 12px; }
+.wish-explore-option-btn {
+    background: #F5F5F5; border: 1px solid #EAEAEA; border-radius: 12px;
+    padding: 14px 16px; font-size: 14px; color: #111; font-weight: 500;
+    text-align: left; cursor: pointer; transition: all 0.2s; line-height: 1.4;
+}
+.wish-explore-option-btn:active { background: #EAEAEA; transform: scale(0.98); }
+/* ========================================== */
+/* 恢复：API 日志与报错控制台样式 */
+/* ========================================== */
+.log-segment-btn {
+    flex: 1; text-align: center; padding: 6px 0; font-size: 14px; font-weight: 600;
+    color: #8E8E93; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; z-index: 1;
+}
+.log-segment-btn.active {
+    color: #000; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.log-list-view {
+    display: none; flex-direction: column; gap: 16px; animation: wcFadeIn 0.3s ease;
+}
+.log-list-view.active { display: flex; }
+.log-card {
+    background: #FFFFFF; border-radius: 16px; padding: 16px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03); display: flex; flex-direction: column; gap: 10px;
+    position: relative; overflow: hidden; border: 1px solid #F9F9F9;
+}
+.log-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #34C759;
+}
+.log-card.error::before { background: #FF3B30; }
+.log-card.warn::before { background: #FFCC00; }
+.log-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.log-title { font-size: 15px; font-weight: 700; color: #000; display: flex; align-items: center; gap: 8px; word-break: break-all; padding-right: 10px; }
+.log-time { font-size: 11px; color: #8E8E93; font-family: 'Courier New', Courier, monospace; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
+.log-tag { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; flex-shrink: 0; }
+.log-tag.post { background: rgba(0, 122, 255, 0.1); color: #007AFF; }
+.log-tag.get { background: rgba(52, 199, 89, 0.1); color: #34C759; }
+.log-tag.js-error { background: rgba(255, 59, 48, 0.1); color: #FF3B30; }
+.log-meta { display: flex; gap: 12px; font-size: 12px; color: #8E8E93; font-weight: 500; }
+.log-status-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.log-status-badge.success { background: rgba(52, 199, 89, 0.1); color: #34C759; }
+.log-status-badge.error { background: rgba(255, 59, 48, 0.1); color: #FF3B30; }
+.log-details {
+    background: #F9F9F9; border-radius: 10px; padding: 12px;
+    font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #333;
+    white-space: pre-wrap; word-break: break-all; border: 1px solid #E5E5EA;
+    max-height: 200px; overflow-y: auto; line-height: 1.5;
+}
+.log-error-highlight { color: #FF3B30; font-weight: bold; margin-bottom: 4px; display: block; }

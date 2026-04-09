@@ -100,10 +100,12 @@
         <div class="screen" id="mainScreen">
             <div class="status-bar-placeholder"></div>
 
-            <!-- 桌面区域 -->
-            <div class="home-grid" id="homeGrid">
-                <!-- 新版日系 INS 风小组件 (4x3) -->
-                <div class="ins-widget-container" id="mainWidget">
+            <!-- 桌面区域 (双页滑动容器) -->
+            <div class="home-swiper" id="homeSwiper">
+                <!-- 第一页 -->
+                <div class="home-grid page-1" id="homeGrid">
+                    <!-- 新版日系 INS 风小组件 (4x3) -->
+                    <div class="ins-widget-container" id="mainWidget">
                     <!-- 上半部分 -->
                     <div class="ins-widget-top">
                         <div class="ins-avatar-group">
@@ -146,6 +148,18 @@
                     </div>
                 </div>
                 <!-- JS 生成剩余格子 -->
+                </div>
+                
+                <!-- 第二页 -->
+                <div class="home-grid page-2" id="homeGrid2">
+                    <!-- 第二页的格子由 JS 生成 -->
+                </div>
+            </div>
+
+            <!-- 桌面分页小圆点 -->
+            <div class="home-pagination" id="homePagination">
+                <div class="page-dot active"></div>
+                <div class="page-dot"></div>
             </div>
 
             <!-- Dock 区域 -->
@@ -956,8 +970,171 @@
         </div>
 
         <!-- ========================================== -->
-        <!-- Phone Simulator View (移出 WeChat，置于顶层) -->
+        <!-- App 5: Wish & To-Do (星愿空间) -->
+        <!-- ========================================== -->
+        <div class="settings-modal" id="wishModal" style="padding: 0; z-index: 3500; background: #F4F4F5;">
+            <div class="wish-app-container">
+                <div class="wish-header">
+                    <div class="wish-back-btn" onclick="closeWishApp()">
+                        <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;vertical-align:middle;margin-right:2px;"><polyline points="15 18 9 12 15 6"></polyline></svg>桌面
+                    </div>
+                    <div class="wish-title" id="wish-header-title">SPACE</div>
+                    <!-- 👈 新增：右上角切换角色按钮 -->
+                    <div class="wish-header-btn" onclick="wishOpenCharSelectModal()">
+                        <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                    </div>
+                </div>
 
+                <div class="wish-content">
+                    <!-- 1. 许愿墙 -->
+                    <div id="wish-page-wish" class="wish-page active">
+                        <div class="wish-page-title">Wishes</div>
+                        
+                        <!-- 👇 新增：探索内心深处按钮 -->
+                        <div class="wish-explore-banner" onclick="wishExploreDeepDesire()">
+                            <div class="wish-explore-icon">✨</div>
+                            <div class="wish-explore-text">
+                                <div class="wish-explore-title">探索 Ta 的内心深处</div>
+                                <div class="wish-explore-desc">通过互动解锁 Ta 隐藏的心愿</div>
+                            </div>
+                            <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </div>
+
+                        <div id="wish-list-container">
+                            <!-- 愿望列表由 JS 注入 -->
+                        </div>
+                    </div>
+
+                    <!-- 2. 待办清单 -->
+                    <div id="wish-page-todo" class="wish-page">
+                        <div class="wish-page-title">To-Do</div>
+                        <div id="todo-list-container">
+                            <!-- 待办列表由 JS 注入 -->
+                        </div>
+                    </div>
+
+                    <!-- 3. 成就墙 -->
+                    <div id="wish-page-achieve" class="wish-page">
+                        <div class="wish-page-title">Memories</div>
+                        <div id="achieve-list-container">
+                            <!-- 成就列表由 JS 注入 -->
+                        </div>
+                    </div>
+
+                    <!-- 4. 拼图页 -->
+                    <div id="wish-page-puzzle" class="wish-page">
+                        <div class="wish-page-title">Puzzle</div>
+                        <div style="font-size: 13px; color: #888; margin-bottom: 20px;">完成愿望或待办，解锁专属回忆拼图。 (<span id="puzzle-count-display">0</span>/9)</div>
+                        
+                        <!-- 拼图底图设置 -->
+                        <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 12px; color: #555; font-weight: bold;">自定义拼图底图</span>
+                            <button onclick="document.getElementById('wish-puzzle-upload').click()" style="background: #111; color: #FFF; border: none; padding: 6px 12px; border-radius: 12px; font-size: 12px; cursor: pointer;">上传图片</button>
+                            <input type="file" id="wish-puzzle-upload" style="display: none;" accept="image/*" onchange="wishHandlePuzzleUpload(this)">
+                        </div>
+
+                        <div class="wish-puzzle-grid" id="wish-puzzle-grid">
+                            <!-- 拼图块由 JS 注入 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右下角悬浮添加按钮 -->
+                <div class="wish-fab-add" onclick="wishOpenAddModal()">
+                    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </div>
+
+                <!-- 底部导航栏 (去除中间凸起) -->
+                <div class="wish-bottom-bar-wrapper">
+                    <div class="wish-nav-icon active" onclick="wishSwitchTab('wish', this)">
+                        <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                    </div>
+                    <div class="wish-nav-icon" onclick="wishSwitchTab('todo', this)">
+                        <svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                    </div>
+                    <div class="wish-nav-icon" onclick="wishSwitchTab('achieve', this)">
+                        <svg viewBox="0 0 24 24"><path d="M4 4h16v4A8 8 0 0 1 4 8V4z"></path><path d="M12 12v8"></path><line x1="8" y1="20" x2="16" y2="20"></line></svg>
+                    </div>
+                    <div class="wish-nav-icon" onclick="wishSwitchTab('puzzle', this)">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M9 3v18"></path><path d="M15 3v18"></path><path d="M3 9h18"></path><path d="M3 15h18"></path></svg>
+                    </div>
+                </div>
+
+                <!-- 全屏备忘录详情页 -->
+                <div id="wish-detail-view" class="wish-detail-view">
+                    <div class="wish-detail-nav">
+                        <div class="wish-detail-back" onclick="wishCloseDetail()">
+                            <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>返回
+                        </div>
+                        <div class="wish-detail-date" id="wish-detail-date">TIME</div>
+                        <div style="width: 60px;"></div>
+                    </div>
+                    <div class="wish-detail-content">
+                        <div class="wish-detail-title" id="wish-detail-title">标题</div>
+                        <div class="wish-detail-body" id="wish-detail-body">内容</div>
+                    </div>
+                </div>
+
+                <!-- 👇 新增：全屏编辑页 (仿 iOS 备忘录) -->
+                <div id="wish-compose-view" class="wish-detail-view" style="z-index: 3700;">
+                    <div class="wish-detail-nav">
+                        <div class="wish-detail-back" onclick="wishCloseCompose()" style="color: #8E8E93;">取消</div>
+                        <div class="wish-detail-date" id="wish-compose-header-title" style="color: #111; font-weight: 600;">新记录</div>
+                        <div class="wish-detail-save" onclick="wishSubmitCompose()" style="color: #D4AF37; font-weight: 600; cursor: pointer; font-size: 16px;">完成</div>
+                    </div>
+                    <div class="wish-compose-content">
+                        <input type="text" id="wish-compose-title" class="wish-compose-title-input" placeholder="标题">
+                        <textarea id="wish-compose-body" class="wish-compose-textarea" placeholder="写下详细的计划或心愿..."></textarea>
+                    </div>
+                </div>
+
+                <!-- 添加选项弹窗 (居中无 emoji) -->
+                <div id="wish-add-modal" class="wc-modal hidden" style="z-index: 3600; align-items: center; justify-content: center;">
+                    <div class="wc-modal-content wish-center-modal">
+                        <div class="wish-modal-title">选择添加类型</div>
+                        <div class="wish-modal-options">
+                            <div class="wish-modal-option" onclick="wishOpenCompose('wish')">许下愿望</div>
+                            <div class="wish-modal-option" onclick="wishOpenCompose('todo')">添加待办</div>
+                        </div>
+                        <div class="wish-modal-cancel" onclick="wcCloseModal('wish-add-modal')">取消</div>
+                    </div>
+                </div>
+
+                <!-- 👇 新增：探索内心深处小游戏弹窗 -->
+                <div id="wish-explore-modal" class="wc-modal hidden" style="z-index: 3800; align-items: center; justify-content: center;">
+                    <div class="wish-explore-card">
+                        <div class="wish-explore-header">
+                            <span class="wish-explore-tag">DEEP DESIRE</span>
+                            <button class="wish-explore-close" onclick="wcCloseModal('wish-explore-modal')">×</button>
+                        </div>
+                        <div class="wish-explore-scenario" id="wish-explore-scenario">
+                            <!-- 剧情描述 -->
+                        </div>
+                        <div class="wish-explore-options" id="wish-explore-options">
+                            <!-- 选项列表 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+                <!-- 👈 新增：角色选择弹窗 -->
+                <div id="wish-char-select-modal" class="wc-modal hidden" style="z-index: 3700; align-items: flex-end;">
+                    <div class="wc-modal-content" style="height: 50vh; border-radius: 24px 24px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column;">
+                        <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                            <h3 style="color: #111; font-size: 16px; font-weight: 600;">选择角色</h3>
+                            <button class="wc-close-btn" onclick="wcCloseModal('wish-char-select-modal')">&times;</button>
+                        </div>
+                        <div class="wc-modal-body" id="wish-char-list" style="flex: 1; overflow-y: auto; padding: 10px 20px;">
+                            <!-- 角色列表由 JS 注入 -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        <!-- ========================================== -->
+        <!-- Phone Simulator View (移出 WeChat，置于顶层) -->
         <!-- ========================================== -->
         <div id="wc-view-phone-sim">
             <div class="wc-phone-bezel">
@@ -987,13 +1164,13 @@
                             </div>
                             <div class="wc-ios-app-name">微信</div>
                         </div>
-<div class="wc-ios-app-item" onclick="wcOpenPhoneApp('browser')">
-    <div class="wc-ios-app-icon" id="wc-icon-browser">
-        <svg class="wc-icon" viewBox="0 0 24 24" style="color: #111; width: 32px; height: 32px;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
-    </div>
-    <div class="wc-ios-app-name">Browser</div>
-</div>
-<div class="wc-ios-app-item" onclick="wcOpenPhoneApp('cart')">
+                        <div class="wc-ios-app-item" onclick="wcOpenPhoneApp('browser')">
+                            <div class="wc-ios-app-icon" id="wc-icon-browser">
+                                <svg class="wc-icon" viewBox="0 0 24 24" style="color: #111; width: 32px; height: 32px;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                            </div>
+                            <div class="wc-ios-app-name">Browser</div>
+                        </div>
+                        <div class="wc-ios-app-item" onclick="wcOpenPhoneApp('cart')">
                             <div class="wc-ios-app-icon" id="wc-icon-cart">
                                 <svg class="wc-icon" viewBox="0 0 24 24" style="color: #FF9500; width: 32px; height: 32px;"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
                             </div>
@@ -1001,29 +1178,52 @@
                         </div>
                         <div class="wc-ios-app-item" onclick="wcOpenPhoneApp('settings')">
                             <div class="wc-ios-app-icon" id="wc-icon-settings">
- <svg class="wc-icon" viewBox="0 0 24 24" style="color: #8E8E93; width: 32px; height: 32px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                <svg class="wc-icon" viewBox="0 0 24 24" style="color: #8E8E93; width: 32px; height: 32px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                             </div>
                             <div class="wc-ios-app-name">Settings</div>
                         </div>
                         
                         <!-- 新增：恋人空间发送的拍立得/便利贴小组件 (180x180) -->
-                        <div id="wc-phone-lovers-widget" class="wc-phone-lovers-widget" style="display: none;" onclick="wcOpenCharWidgetInteractModal()">
+                        <div id="wc-phone-lovers-widget" class="wc-phone-lovers-widget" style="display: none;">
                             <div class="wc-lovers-widget-inner" id="wc-lovers-widget-inner">
-                                <div class="wc-lovers-widget-front">
-                                    <div class="wc-lovers-widget-sticker" onclick="wcToggleLoversWidgetMode(event)"></div>
-                                    <div class="wc-lovers-widget-photo" id="wc-lovers-widget-photo" onclick="wcShowLoversWidgetPhotoDesc(event)">
+                                <!-- 正面：点击空白处翻转 -->
+                                <div class="wc-lovers-widget-front" onclick="wcToggleLoversWidgetMode(event)">
+                                    <div class="wc-binding-area">
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                    </div>
+                                    <!-- 点击图片查看描述，阻止冒泡防止翻转 -->
+                                    <div class="wc-lovers-widget-photo" id="wc-lovers-widget-photo" onclick="wcShowLoversWidgetPhotoDesc(event); event.stopPropagation();">
                                         <svg viewBox="0 0 24 24" style="width:50%;height:50%;color:#ccc;"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
                                     </div>
-                                    <div class="wc-lovers-widget-photo-desc" id="wc-lovers-widget-photo-label">Polaroid</div>
+                                    <!-- 点击底部文字打开发送弹窗，阻止冒泡防止翻转 -->
+                                    <div class="wc-lovers-widget-decor-text" onclick="wcOpenCharWidgetInteractModal(); event.stopPropagation();">
+                                        <div class="wc-lovers-widget-decor-line"></div>
+                                        <span id="wc-lovers-widget-photo-label">• ୨ ✧ ୧ •</span>
+                                        <div class="wc-lovers-widget-decor-line"></div>
+                                    </div>
                                 </div>
-                                <div class="wc-lovers-widget-back">
-                                    <div class="wc-lovers-widget-sticker" onclick="wcToggleLoversWidgetMode(event)"></div>
+                                <!-- 背面：点击翻转 -->
+                                <div class="wc-lovers-widget-back" onclick="wcToggleLoversWidgetMode(event)">
+                                    <div class="wc-binding-area-back">
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                        <div class="wc-binding-ring"><div class="wc-binding-hole"></div><div class="wc-binding-metal-1"></div><div class="wc-binding-metal-2"></div></div>
+                                    </div>
                                     <div class="wc-lovers-widget-note-text" id="wc-lovers-widget-note-text"></div>
                                 </div>
                             </div>
                         </div>
                     </div>
-
                     <!-- Phone App: Message (微信内部) -->
                     <div id="wc-phone-app-message" class="wc-phone-app-view" style="display: none; flex-direction: column; background: #F7F7F9;">
                         <!-- 静态高级 Header -->
@@ -1247,7 +1447,7 @@
                     </div>
                     <!-- 👆 新增结束 👆 -->
 
-                </div>
+                   </div>
                 
                 <!-- 指纹退出键 (仅在桌面显示) -->
                 <div id="wc-phone-fingerprint-btn" class="wc-phone-fingerprint" onclick="wcClosePhoneSim()">
@@ -1257,6 +1457,7 @@
         </div>
 
         <!-- Theme Studio 设置面板 -->
+
         <div class="settings-modal" id="settingsModal">
             <div class="settings-header">
                 <div class="header-left">
@@ -1391,7 +1592,19 @@
                             <div class="ios-item-right">API 配置<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
                         </div>
                     </div>
-                 
+                    
+                    <!-- 👇 恢复：云端备份专属控制台入口 👇 -->
+                    <div class="ios-list-item" onclick="openApiLogConsole()">
+                        <div class="ios-icon-box" style="background:#111111">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        </div>
+                        <div class="ios-item-content">
+                            <span class="ios-item-label">云端备份日志</span>
+                            <div class="ios-item-right">查看同步状态<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
+                        </div>
+                    </div>
+                    <!-- 👆 恢复结束 👆 -->
+
                       <!-- 新增：声音与触感 -->
                     <div class="ios-list-item" onclick="openSoundSettings()">
                         <div class="ios-icon-box" style="background:#ff2d55">
@@ -1784,6 +1997,27 @@
                 </div>
             </div>
         </div>
+
+        <!-- 👇 恢复：云端备份专属控制台页面 👇 -->
+        <div class="settings-modal sub-page" id="apiLogConsoleModal" style="background: #F2F2F7; padding: 0;">
+            <div style="padding: calc(env(safe-area-inset-top, 40px) + 10px) 20px 10px; display: flex; justify-content: space-between; align-items: flex-end; flex-shrink: 0;">
+                <div onclick="closeApiLogConsole()" style="font-size: 28px; font-weight: 800; color: #000; letter-spacing: 0.5px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                    备份日志
+                </div>
+                <div onclick="clearCurrentLogs()" style="font-size: 14px; font-weight: 600; color: #007AFF; cursor: pointer; padding-bottom: 4px;">清空</div>
+            </div>
+            <div style="padding: 10px 20px 20px; flex-shrink: 0;">
+                <div style="display: flex; background: #E3E3E8; border-radius: 8px; padding: 2px; position: relative;">
+                    <div class="log-segment-btn active" id="btn-log-api" onclick="switchApiLogTab('api')">云端同步记录</div>
+                    <div class="log-segment-btn" id="btn-log-console" onclick="switchApiLogTab('console')">网页报错</div>
+                </div>
+            </div>
+            <div style="flex: 1; overflow-y: auto; padding: 0 20px 40px; display: flex; flex-direction: column; gap: 16px;">
+                <div class="log-list-view active" id="view-log-api"></div>
+                <div class="log-list-view" id="view-log-console"></div>
+            </div>
+        </div>
+        <!-- 👆 恢复结束 👆 -->
 
         <!-- API 设置页面 (极简黑白灰 iOS 风 + 底部额度查询) -->
         <div class="settings-modal sub-page" id="apiSettingsModal" style="background: #F2F2F7;">

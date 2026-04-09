@@ -1,4 +1,164 @@
 // ==========================================
+// 👇 恢复并优化：仅记录云端备份 API 日志 👇
+// ==========================================
+const sysLogData = { api: [], console: [], currentTab: 'api' };
+
+window.onerror = function(message, source, lineno, colno, error) {
+    sysLogData.console.unshift({
+        id: Date.now(), type: 'js-error', title: 'Uncaught Error',
+        message: message, source: `${source ? source.split('/').pop() : 'unknown'}:${lineno}:${colno}`,
+        stack: error ? error.stack : '', time: Date.now()
+    });
+    if (sysLogData.console.length > 20) sysLogData.console.pop();
+    if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) renderConsoleLogs();
+};
+
+window.addEventListener('unhandledrejection', function(event) {
+    sysLogData.console.unshift({
+        id: Date.now(), type: 'promise-error', title: 'Unhandled Promise',
+        message: event.reason ? (event.reason.message || event.reason) : 'Unknown Error',
+        source: 'Promise Rejection', stack: event.reason && event.reason.stack ? event.reason.stack : '', time: Date.now()
+    });
+    if (sysLogData.console.length > 20) sysLogData.console.pop();
+    if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) renderConsoleLogs();
+});
+
+const originalFetch = window.fetch;
+window.fetch = async function(...args) {
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : 'Unknown URL');
+    
+    // 【核心优化】：只拦截包含 xiaoyuan-backup 的请求，其他请求直接放行，彻底防卡顿！
+    if (!url.includes('xiaoyuan-backup.xingyan067.workers.dev')) {
+        return originalFetch.apply(this, args);
+    }
+
+    const startTime = Date.now();
+    const method = (args[1] && args[1].method) ? args[1].method.toUpperCase() : 'GET';
+    const isOffline = !navigator.onLine;
+    let endpoint = url;
+    try { endpoint = new URL(url).pathname; } catch(e) {}
+
+    let reqBodyStr = '';
+    if (args[1] && args[1].body) {
+        try { reqBodyStr = typeof args[1].body === 'string' ? args[1].body : JSON.stringify(args[1].body); } catch(e) { reqBodyStr = '[Complex Body]'; }
+    }
+
+    try {
+        const response = await originalFetch.apply(this, args);
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        const cloneRes = response.clone();
+        let resBodyStr = '';
+        try { resBodyStr = await cloneRes.text(); } catch(e) { resBodyStr = '[Failed to read response]'; }
+
+        sysLogData.api.unshift({
+            id: Date.now(), url: url, endpoint: endpoint, method: method,
+            status: response.status, statusText: response.statusText || (response.ok ? 'OK' : 'Error'),
+            duration: duration, isOffline: isOffline, reqBody: reqBodyStr, resBody: resBodyStr,
+            time: Date.now(), isError: !response.ok
+        });
+        
+        if (sysLogData.api.length > 20) sysLogData.api.pop();
+        if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) renderApiLogs();
+        return response;
+    } catch (error) {
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        sysLogData.api.unshift({
+            id: Date.now(), url: url, endpoint: endpoint, method: method,
+            status: 'Failed', statusText: 'Network Error', duration: duration,
+            isOffline: isOffline, reqBody: reqBodyStr, resBody: error.message,
+            time: Date.now(), isError: true
+        });
+        if (sysLogData.api.length > 20) sysLogData.api.pop();
+        if (document.getElementById('apiLogConsoleModal') && document.getElementById('apiLogConsoleModal').classList.contains('open')) renderApiLogs();
+        throw error;
+    }
+};
+
+function openApiLogConsole() {
+    document.getElementById('apiLogConsoleModal').classList.add('open');
+    renderApiLogs();
+    renderConsoleLogs();
+}
+function closeApiLogConsole() { document.getElementById('apiLogConsoleModal').classList.remove('open'); }
+function switchApiLogTab(tab) {
+    sysLogData.currentTab = tab;
+    document.getElementById('btn-log-api').classList.remove('active');
+    document.getElementById('btn-log-console').classList.remove('active');
+    document.getElementById('btn-log-' + tab).classList.add('active');
+    document.getElementById('view-log-api').classList.remove('active');
+    document.getElementById('view-log-console').classList.remove('active');
+    document.getElementById('view-log-' + tab).classList.add('active');
+}
+function clearCurrentLogs() {
+    if (confirm(`确定要清空当前的 ${sysLogData.currentTab === 'api' ? 'API 记录' : '网页报错'} 吗？`)) {
+        if (sysLogData.currentTab === 'api') { sysLogData.api = []; renderApiLogs(); } 
+        else { sysLogData.console = []; renderConsoleLogs(); }
+    }
+}
+function formatLogTime(timestamp) {
+    const d = new Date(timestamp);
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+}
+function renderApiLogs() {
+    const container = document.getElementById('view-log-api');
+    if (!container) return;
+    container.innerHTML = '';
+    if (sysLogData.api.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:14px;">暂无云端同步记录</div>';
+        return;
+    }
+    sysLogData.api.forEach(log => {
+        const isError = log.isError;
+        const methodClass = log.method === 'GET' ? 'get' : 'post';
+        const statusClass = isError ? 'error' : 'success';
+        let prettyReq = log.reqBody; let prettyRes = log.resBody;
+        try { if(prettyReq) prettyReq = JSON.stringify(JSON.parse(prettyReq), null, 2); } catch(e){}
+        try { if(prettyRes) prettyRes = JSON.stringify(JSON.parse(prettyRes), null, 2); } catch(e){}
+        let detailsHtml = '';
+        if (isError) detailsHtml += `<span class="log-error-highlight">Request URL: ${log.url}</span>\n`;
+        if (prettyReq) detailsHtml += `[Request Body]\n${prettyReq}\n\n`;
+        detailsHtml += `[Response]\n${prettyRes}`;
+        const card = document.createElement('div');
+        card.className = `log-card ${isError ? 'error' : ''}`;
+        card.innerHTML = `
+            <div class="log-header">
+                <div class="log-title"><span class="log-tag ${methodClass}">${log.method}</span>${log.endpoint}</div>
+                <div class="log-time">${formatLogTime(log.time)}</div>
+            </div>
+            <div class="log-meta">
+                <span class="log-status-badge ${statusClass}">${log.status} ${log.statusText}</span>
+                <span>⏱ ${log.duration}s</span>
+            </div>
+            <div class="log-details">${detailsHtml}</div>
+        `;
+        container.appendChild(card);
+    });
+}
+function renderConsoleLogs() {
+    const container = document.getElementById('view-log-console');
+    if (!container) return;
+    container.innerHTML = '';
+    if (sysLogData.console.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:14px;">暂无网页报错记录</div>';
+        return;
+    }
+    sysLogData.console.forEach(log => {
+        const card = document.createElement('div');
+        card.className = `log-card error`;
+        card.innerHTML = `
+            <div class="log-header">
+                <div class="log-title"><span class="log-tag js-error">${log.title}</span>${log.message.substring(0, 30)}...</div>
+                <div class="log-time">${formatLogTime(log.time)}</div>
+            </div>
+            <div class="log-meta"><span>📄 ${log.source}</span></div>
+            <div class="log-details"><span class="log-error-highlight">${log.message}</span>\n${log.stack}</div>
+        `;
+        container.appendChild(card);
+    });
+}
+// 👆 恢复结束 👆
+
+// ==========================================
 // 新增：iOS Standalone (全屏) 模式检测与防缩放
 // ==========================================
 function initStandaloneMode() {
@@ -264,7 +424,7 @@ function generateCodeForQQ(qq) {
     return `V2-${qqInfo}-${hexHash}`.substring(0, 16);
 }
 // --- 全局变量 ---
-const totalApps = 7; 
+const totalApps = 8; // 👈 修改：增加到 8 个 APP
 let iconPresets = [];
 let fontPresets = [];
 let wallpaperPresets = [];
@@ -1586,7 +1746,7 @@ function resetWallpaper() {
     saveThemeSettings(); 
 }
 function resetIcons() {
-    const defaultNames = ['App 1', 'App 2', 'App 3', 'App 4', 'Theme', 'Settings', '世界书'];
+    const defaultNames = ['App 1', 'App 2', 'App 3', 'App 4', 'Theme', 'Settings', '世界书', 'Wish'];
     for (let i = 0; i < totalApps; i++) {
         const iconDiv = document.getElementById(`icon-${i}`);
         const nameDiv = document.getElementById(`name-${i}`);
@@ -1607,16 +1767,25 @@ function resetFonts() {
 
 // --- 网格与拖拽 ---
 function initGrid() {
-    const grid = document.getElementById('homeGrid');
-    if (!grid) return; 
+    const grid1 = document.getElementById('homeGrid');
+    const grid2 = document.getElementById('homeGrid2');
+    if (!grid1 || !grid2) return; 
 
+    // 为第一页生成空位 (索引 12-27)
     for (let i = 12; i < 28; i++) {
         const cell = document.createElement('div');
         cell.className = 'grid-cell';
         cell.dataset.index = i;
-        grid.appendChild(cell);
+        grid1.appendChild(cell);
     }
-    // 👇 核心修改：注入顶级质感【负空间实心】SVG 图标
+    // 为第二页生成空位 (索引 28-55)
+    for (let i = 28; i < 56; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'grid-cell';
+        cell.dataset.index = i;
+        grid2.appendChild(cell);
+    }
+
     const appsData = [
         // Chat: 实心气泡 + 内部镂空省略号
         { id: 'app-0', iconId: 'icon-0', nameId: 'name-0', name: 'Chat', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 5.92 2 10.75c0 2.7 1.56 5.08 3.96 6.54L4.5 22l4.66-2.33A11.1 11.1 0 0 0 12 19.5c5.52 0 10-3.92 10-8.75S17.52 2 12 2zm-3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>' },
@@ -1625,35 +1794,52 @@ function initGrid() {
         // Music: 实心黑胶唱片 + 内部精细镂空
         { id: 'app-2', iconId: 'icon-2', nameId: 'name-2', name: 'Music', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5z"/><circle cx="12" cy="12" r="1.5" fill="#FFF"/></svg>' },
         // Forum: 实心星球/社区 + 内部镂空纹理
-        { id: 'app-3', iconId: 'icon-3', nameId: 'name-3', name: 'Forum', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>' }
+        { id: 'app-3', iconId: 'icon-3', nameId: 'name-3', name: 'Forum', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>' },
+        // 👇 新增：App 7 (Wish & To-Do) 放在网格的第 5 个位置
+        { id: 'app-7', iconId: 'icon-7', nameId: 'name-7', name: 'Wish', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' }
     ];
-    const cells = Array.from(grid.children).slice(1); 
-    appsData.forEach((data, index) => {
-        if (cells[index]) {
-            const appDiv = document.createElement('div');
-            appDiv.className = 'app-item';
-            appDiv.id = data.id;
-            // 👇 核心修改：把 data.svg 塞进 app-icon 里面
-            appDiv.innerHTML = `<div class="app-icon" id="${data.iconId}">${data.svg}</div><div class="app-name" id="${data.nameId}">${data.name}</div>`;
-            addDragListeners(appDiv);
-            
-            // App 点击事件 (受编辑模式控制)
-                        // App 点击事件 (受编辑模式控制)
-            appDiv.addEventListener('click', (e) => {
-                if (isHomeEditMode || isDragging) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                }
-                if (data.id === 'app-0') openWechat();
-                if (data.id === 'app-1') openLoversSpace();
-                if (data.id === 'app-2') openMusicApp(); 
-                if (data.id === 'app-3') openForumApp(); // <--- 加上这一行！
-            });
+    const cells1 = Array.from(grid1.children).slice(1); // 第一页的格子 (避开小组件)
+    const cells2 = Array.from(grid2.children); // 第二页的格子
 
-                        cells[index].appendChild(appDiv);
+    appsData.forEach((data, index) => {
+        const appDiv = document.createElement('div');
+        appDiv.className = 'app-item';
+        appDiv.id = data.id;
+        appDiv.innerHTML = `<div class="app-icon" id="${data.iconId}">${data.svg}</div><div class="app-name" id="${data.nameId}">${data.name}</div>`;
+        addDragListeners(appDiv);
+        
+        appDiv.addEventListener('click', (e) => {
+            if (isHomeEditMode || isDragging) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            if (data.id === 'app-0') openWechat();
+            if (data.id === 'app-1') openLoversSpace();
+            if (data.id === 'app-2') openMusicApp(); 
+            if (data.id === 'app-3') openForumApp(); 
+            if (data.id === 'app-7') openWishApp(); 
+        });
+
+        // 核心：前 7 个放第一页，第 8 个 (Wish) 放第二页
+        if (data.id === 'app-7') {
+            if (cells2[0]) cells2[0].appendChild(appDiv);
+        } else {
+            if (cells1[index]) cells1[index].appendChild(appDiv);
         }
     });
+
+    // 监听滑动更新小圆点
+    const swiper = document.getElementById('homeSwiper');
+    const dots = document.querySelectorAll('.page-dot');
+    if (swiper && dots.length > 0) {
+        swiper.addEventListener('scroll', () => {
+            const pageIndex = Math.round(swiper.scrollLeft / window.innerWidth);
+            dots.forEach((dot, i) => {
+                dot.classList.toggle('active', i === pageIndex);
+            });
+        });
+    }
 }
 
 function addDragListeners(el) {
@@ -1748,6 +1934,9 @@ function handleDragStart(e) {
     }
 }
 
+// 新增全局变量用于控制翻页防抖
+let edgeScrollTimer = null;
+
 function handleDragMove(e) {
     const touch = e.touches ? e.touches[0] : e;
     
@@ -1764,6 +1953,23 @@ function handleDragMove(e) {
     } else if (isDragging) {
         if (e.cancelable) { e.preventDefault(); }
         updateGhostPosition(touch.clientX, touch.clientY);
+
+        // 👇 核心修复 1：边缘检测，实现跨页拖拽自动翻页
+        const edgeThreshold = 40; // 距离屏幕边缘 40px 触发翻页
+        const swiper = document.getElementById('homeSwiper');
+        if (swiper && !edgeScrollTimer) {
+            if (touch.clientX < edgeThreshold) {
+                // 靠近左边缘，向左翻页
+                const targetScroll = Math.max(0, swiper.scrollLeft - window.innerWidth);
+                swiper.scrollTo({ left: targetScroll, behavior: 'smooth' });
+                edgeScrollTimer = setTimeout(() => { edgeScrollTimer = null; }, 800); // 冷却800ms防止连续乱翻
+            } else if (touch.clientX > window.innerWidth - edgeThreshold) {
+                // 靠近右边缘，向右翻页
+                const targetScroll = Math.min(swiper.scrollWidth, swiper.scrollLeft + window.innerWidth);
+                swiper.scrollTo({ left: targetScroll, behavior: 'smooth' });
+                edgeScrollTimer = setTimeout(() => { edgeScrollTimer = null; }, 800);
+            }
+        }
     }
 }
 
@@ -1776,8 +1982,29 @@ function handleDragEnd(e) {
     if (isDragging && dragItem) {
         const touch = e.changedTouches ? e.changedTouches[0] : e;
         dragGhost.style.display = 'none';
+        
+        // 👇 核心修复 2：增强网格碰撞检测，解决部分格子被透明元素遮挡不灵敏的问题
+        let targetCell = null;
+        
+        // 方案 A：优先使用 elementFromPoint (速度快)
         const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-        const targetCell = elemBelow ? elemBelow.closest('.grid-cell') : null;
+        if (elemBelow) {
+            targetCell = elemBelow.closest('.grid-cell');
+        }
+        
+        // 方案 B：兜底物理坐标碰撞检测 (无视任何透明遮挡物)
+        if (!targetCell || targetCell.classList.contains('widget-item')) {
+            const allCells = document.querySelectorAll('.grid-cell:not(.widget-item)');
+            for (let cell of allCells) {
+                const rect = cell.getBoundingClientRect();
+                // 如果手指坐标落在这个格子的物理矩形范围内
+                if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
+                    touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+                    targetCell = cell;
+                    break;
+                }
+            }
+        }
         
         if (targetCell && !targetCell.classList.contains('widget-item')) {
             const existingApp = targetCell.querySelector('.app-item');
@@ -1788,7 +2015,6 @@ function handleDragEnd(e) {
             } else {
                 targetCell.appendChild(dragItem);
             }
-            // 注意：这里不再立即保存，而是等点击“完成”时统一保存
         }
         
         dragItem.classList.remove('dragging');
@@ -2792,7 +3018,7 @@ function handleAppIconUpload(id, input) {
 }
 
 function resetSingleApp(id) {
-    const defaultNames = ['App 1', 'App 2', 'App 3', 'App 4', 'Theme', 'Settings', '世界书'];
+    const defaultNames = ['App 1', 'App 2', 'App 3', 'App 4', 'Theme', 'Settings', '世界书', 'Wish'];
     document.getElementById(`name-${id}`).innerText = defaultNames[id];
     const iconEl = document.getElementById(`icon-${id}`);
     iconEl.style.backgroundImage = '';
@@ -4181,14 +4407,14 @@ function wcRenderMessages(charId, preserveScroll = false) {
         
         } else {
         
-            // 检测是否为双语格式 (支持跨行匹配，兼容多个 <br>)
-            const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
+            // 检测是否为双语格式 (支持跨行匹配，兼容多个 <br> 或 \n)
+            const bilingualRegex = /^([\s\S]*?)(?:<br\s*\/?>|\n)*\s*<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
             const match = msg.content.match(bilingualRegex);
             
             if (match) {
                 // 深度清理首尾的多余换行和空白
-                const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
-                const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+                const originalText = match[1].replace(/^(<br\s*\/?>|\s)+|(<br\s*\/?>|\s)+$/gi, '');
+                const translatedText = match[2].replace(/^(<br\s*\/?>|\s)+|(<br\s*\/?>|\s)+$/gi, '');
                 const transId = 'trans-' + Math.random().toString(36).substr(2, 9);
                 
                 // 核心修复：压缩为单行，彻底消除 pre-wrap 带来的幽灵空白
@@ -5121,7 +5347,11 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         if (config.bilingualEnabled) {
             const sourceLang = config.bilingualSource || '英语';
             const targetLang = config.bilingualTarget || '中文';
-            systemPrompt += `\n<bilingual_mode>\n你必须以双语形式回复。上面是${sourceLang}，下面是${targetLang}。格式要求：{"type":"text", "content":"${sourceLang}内容<br><span style='font-size: 0.85em; opacity: 0.7;'>${targetLang}内容</span>"}\n</bilingual_mode>\n`;
+            systemPrompt += `\n【最高强制指令：双语翻译模式】\n`;
+            systemPrompt += `你必须以双语形式回复！上面是${sourceLang}，下面是${targetLang}。\n`;
+            systemPrompt += `在 JSON 的 "content" 字段中，请严格使用以下 HTML 格式输出文本消息（注意单引号）：\n`;
+            systemPrompt += `${sourceLang}内容<br><span style='font-size: 0.85em; opacity: 0.7;'>${targetLang}内容</span>\n`;
+            systemPrompt += `绝对不能只输出一种语言！\n`;
         }
         systemPrompt += `</logic_rules>\n\n`;
 
@@ -5161,7 +5391,23 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             systemPrompt += `11. 保存图片到时光相册: {"type":"save_to_album", "content":"存图时的内心OS"}\n`;
         }
         
-        systemPrompt += `12. 收款/退款(如果User给你转账，你可以根据人设和金额决定是否收下): {"type":"transfer_action", "action":"received", "content":"(这里写你决定收款时想说的话，必须符合你的人设)"} 或 {"type":"transfer_action", "action":"rejected", "content":"(这里写你决定退款时想说的话，必须符合你的人设)"}\n`;
+        // 👇 新增：赋予 AI 许愿和添加待办的权限
+        systemPrompt += `12. 星愿空间：许愿与待办 (按需使用，如果你有什么特别想和 User 一起做的事，或者有什么心愿，可以主动在星愿空间里添加): {"type":"wish_add", "wishType":"wish", "title":"(简短的愿望标题)", "content":"(详细的愿望描述或你想对User说的话)"} 或 {"type":"wish_add", "wishType":"todo", "title":"(简短的待办标题)", "content":"(详细的待办描述)"}\n`;
+        
+        // 👇 新增：赋予 AI 划掉已完成愿望的权限
+        if (char.wishData) {
+            const pendingWishes = char.wishData.wishes.filter(w => w.status === 'pending');
+            const pendingTodos = char.wishData.todos.filter(t => t.status === 'pending');
+            let pendingText = "";
+            if (pendingWishes.length > 0) pendingText += `待实现的愿望：${pendingWishes.map(w=>w.title).join('、')}。`;
+            if (pendingTodos.length > 0) pendingText += `待完成的待办：${pendingTodos.map(t=>t.title).join('、')}。`;
+            if (pendingText) {
+                systemPrompt += `12.5. 星愿空间：划掉已完成事项 (按需使用，如果你觉得在刚才的聊天或线下互动中，你们已经完成了某个愿望或待办，你可以主动将其划掉！当前未完成事项有：${pendingText}): {"type":"wish_complete", "title":"(填写你要划掉的愿望/待办的完整标题)"}\n`;
+            }
+        }
+        // 👆 新增结束
+
+        systemPrompt += `13. 收款/退款(如果User给你转账，你可以根据人设和金额决定是否收下): {"type":"transfer_action", "action":"received", "content":"(这里写你决定收款时想说的话，必须符合你的人设)"} 或 {"type":"transfer_action", "action":"rejected", "content":"(这里写你决定退款时想说的话，必须符合你的人设)"}\n`;
         if (typeof lsState !== 'undefined' && lsState.isLinked && lsState.boundCharId === charId) {
             systemPrompt += `13. 接受商城邀请并购买(当你收到User的商城邀请卡片时使用，注意检查余额是否足够): {"type":"shop_order", "items":["商品名1", "商品名2"], "content":"买完后想说的话"}\n`;
             systemPrompt += `14. 主动玩扭蛋机(消耗微信零钱 ¥5.20，为你和User赚取心动值积分，按需使用): {"type":"play_gacha", "content":"扭蛋时的内心OS或对User说的话"}\n`;
@@ -5170,7 +5416,21 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         }
         
         systemPrompt += `\n示例输出：\n`;
-        systemPrompt += `{
+        if (config.bilingualEnabled) {
+            systemPrompt += `{
+  "replies": [
+    {"type":"text", "content":"I just went to the convenience store.<br><span style='font-size: 0.85em; opacity: 0.7;'>刚才去便利店了。</span>"},
+    {"type":"text", "content":"Bought an ice cream, do you want some?<br><span style='font-size: 0.85em; opacity: 0.7;'>买了个冰淇淋，你要吃吗？</span>"},
+    {"type":"sticker", "content":"开心"}
+  ],
+  "phoneUpdate": {
+    "newRemark": "给User的新备注名(不改填null)",
+    "newNickname": "你的新网名(不改填null)",
+    "newSign": "你的新个性签名(不改填null)"
+  }
+}\n`;
+        } else {
+            systemPrompt += `{
   "replies": [
     {"type":"text", "content":"刚才去便利店了。"},
     {"type":"text", "content":"买了个冰淇淋，你要吃吗？"},
@@ -5182,6 +5442,7 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
     "newSign": "你的新个性签名(不改填null)"
   }
 }\n`;
+        }
         systemPrompt += `</format_rules>\n\n`;
         systemPrompt += wcGenerateRelationshipPrompt(); // 注入关系网
 
@@ -6101,7 +6362,74 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 lsSaveImageToAlbum(targetImgBase64, action.content || "偷偷存下来啦~");
                 wcAddMessage(charId, 'system', 'system', `[系统内部信息: 你已将User刚才发的图片存入了专属时光相册，并写下批注：“${action.content}”]`, { hidden: true });
             }
-        // 👆 新增结束 👆
+        
+        // 👇 新增：解析 AI 发送的许愿/待办指令
+        } else if (action.type === 'wish_add') {
+            if (!char.wishData) {
+                char.wishData = { wishes: [], todos: [], achievements: [], puzzleBg: 'https://i.postimg.cc/kgD9CsbW/IMG-8012.jpg', puzzleUnlocked: 0 };
+            }
+            
+            const newItem = {
+                id: Date.now(),
+                title: action.title || '无题',
+                content: action.content || '',
+                aiReply: null,
+                status: 'pending',
+                creator: 'char' // 标记为 AI 创建
+            };
+            
+            if (action.wishType === 'todo') {
+                char.wishData.todos.unshift(newItem);
+            } else {
+                char.wishData.wishes.unshift(newItem);
+            }
+            wcSaveData(); // 保存数据
+            
+            // 在聊天界面生成一张高级感卡片通知 User
+            const cardHtml = `
+                <div class="chat-shared-card" onclick="openWishApp()">
+                    <div class="shared-card-tag">${action.wishType === 'todo' ? 'NEW TO-DO / 新待办' : 'NEW WISH / 新愿望'}</div>
+                    <div class="shared-card-title">${action.title}</div>
+                    <div class="shared-card-content">${action.content}</div>
+                    <div class="shared-card-footer">点击前往星愿空间查看</div>
+                </div>
+            `;
+            wcAddMessage(charId, 'them', 'receipt', cardHtml, extra);
+
+        // 👇 新增：解析 AI 主动划掉愿望/待办的指令
+        } else if (action.type === 'wish_complete') {
+            if (char.wishData) {
+                // 寻找匹配的未完成事项
+                let targetItem = char.wishData.wishes.find(w => w.title === action.title && w.status === 'pending');
+                let itemType = 'wish';
+                if (!targetItem) {
+                    targetItem = char.wishData.todos.find(t => t.title === action.title && t.status === 'pending');
+                    itemType = 'todo';
+                }
+                
+                if (targetItem) {
+                    targetItem.status = 'done';
+                    // 移入成就墙
+                    char.wishData.achievements.unshift({
+                        id: Date.now(), title: targetItem.title, date: Date.now(), type: itemType
+                    });
+                    // 解锁拼图
+                    if (char.wishData.puzzleUnlocked < 9) char.wishData.puzzleUnlocked++;
+                    wcSaveData();
+                    
+                    // 在聊天界面生成成就解锁卡片
+                    const cardHtml = `
+                        <div class="chat-shared-card" onclick="openWishApp()">
+                            <div class="shared-card-tag" style="color: #D4AF37;">ACHIEVEMENT UNLOCKED</div>
+                            <div class="shared-card-title">${targetItem.title}</div>
+                            <div class="shared-card-content">Ta 刚刚标记了该事项为已完成！拼图碎片 +1</div>
+                            <div class="shared-card-footer">点击前往星愿空间查看</div>
+                        </div>
+                    `;
+                    wcAddMessage(charId, 'them', 'receipt', cardHtml, extra);
+                }
+            }
+        // 👆 新增结束
 
         } else if (action.type === 'invite_accept') {
             // AI 明确同意邀请
@@ -10803,7 +11131,11 @@ async function wcSimTriggerAI() {
                 prompt += wcGenerateRelationshipPrompt(); // 注入全局关系网
                 prompt += `【任务】：请重点读取你的【核心人设/简介】和【最近聊天记录】，作为【${chat.name}】本人，回复 ${char.name} 的消息。必须符合你的人设口吻，严禁OOC！\n`;
             }
-            prompt += `【要求】：返回 JSON 数组，格式示例：[{"content":"好的"}]\n`;
+            if (char.chatConfig && char.chatConfig.bilingualEnabled) {
+                prompt += `【要求】：返回 JSON 数组，格式示例：[{"content":"OK.<br><span style='font-size: 0.85em; opacity: 0.7;'>好的。</span>"}]\n`;
+            } else {
+                prompt += `【要求】：返回 JSON 数组，格式示例：[{"content":"好的"}]\n`;
+            }
         }
         
         const isTimePerceptionEnabled = char.chatConfig && char.chatConfig.timePerceptionEnabled !== false;
@@ -10814,11 +11146,12 @@ async function wcSimTriggerAI() {
         if (char.chatConfig && char.chatConfig.bilingualEnabled) {
             const sourceLang = char.chatConfig.bilingualSource || '英语';
             const targetLang = char.chatConfig.bilingualTarget || '中文';
-            prompt += `\n【双语翻译模式强制指令】\n`;
-            prompt += `你必须以双语形式回复。上面是${sourceLang}，下面是${targetLang}。\n`;
-            prompt += `在 JSON 的 "content" 字段中，请严格使用以下 HTML 格式输出文本消息：\n`;
+            prompt += `\n【最高强制指令：双语翻译模式】\n`;
+            prompt += `你必须以双语形式回复！上面是${sourceLang}，下面是${targetLang}。\n`;
+            prompt += `在 JSON 的 "content" 字段中，请严格使用以下 HTML 格式输出文本消息（注意单引号）：\n`;
             prompt += `${sourceLang}内容<br><span style='font-size: 0.85em; opacity: 0.7;'>${targetLang}内容</span>\n`;
             prompt += `例如：[{"content":"Hello!<br><span style='font-size: 0.85em; opacity: 0.7;'>你好！</span>"}]\n`;
+            prompt += `绝对不能只输出一种语言！\n`;
         }
         // 注入活人运转规则
         prompt += `\n【角色活人运转规则】\n`;
@@ -11046,14 +11379,13 @@ function renderSimHistory(history, meAvatar, themAvatar, isGroup = false) {
                 bubble.style.borderBottomLeftRadius = '2px';
             }
             // 检测是否为双语格式
-            const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
+            const bilingualRegex = /^([\s\S]*?)(?:<br\s*\/?>|\\n|\n|\s)*<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
             const match = msg.content.match(bilingualRegex);
             
             if (match) {
-                const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
-                const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
-                const transId = 'sim-trans-' + Math.random().toString(36).substr(2, 9);
-                
+                // 深度清理首尾的多余换行和空白
+                const originalText = match[1].replace(/^(<br\s*\/?>|\\n|\n|\s)+|(<br\s*\/?>|\\n|\n|\s)+$/gi, '');
+                const translatedText = match[2].replace(/^(<br\s*\/?>|\\n|\n|\s)+|(<br\s*\/?>|\\n|\n|\s)+$/gi, '');
                 bubble.style.cursor = 'pointer';
                 bubble.onclick = function() { 
                     const el = document.getElementById(transId); 
@@ -12413,9 +12745,10 @@ const lsState = {
         type: 'photo', 
         photoDesc: '一张拍立得照片',
         noteText: '今天也要开心哦！',
+        decorText: '• ୨ ✧ ୧ •',
         currentMode: 'photo',
         customPhoto: '', 
-        position: { top: '380px', left: '50%', transform: 'translateX(-50%) rotate(5deg)' } 
+        position: { top: '380px', left: '50%', transform: 'translateX(-50%)' } 
     },
     charWidgetEnabled: false,
     charWidgetData: {
@@ -12772,7 +13105,7 @@ function lsHandleWidgetPhotoUpload(input) {
 }
 
 function lsResetWidgetPosition() {
-    lsState.widgetData.position = { top: '380px', left: '50%', transform: 'translateX(-50%) rotate(5deg)' };
+    lsState.widgetData.position = { top: '380px', left: '50%', transform: 'translateX(-50%)' };
     lsSaveData();
     lsRenderWidget();
     alert("小组件位置已重置");
@@ -12823,16 +13156,16 @@ function wcRenderCharWidget() {
             if (lsState.charWidgetData.content.startsWith('data:')) {
                 photoBg.style.backgroundImage = `url('${lsState.charWidgetData.content}')`;
                 photoBg.innerHTML = '';
-                photoDesc.innerText = "From User";
+                photoDesc.innerText = "• ୨ ✧ ୧ •";
             } else {
                 photoBg.style.backgroundImage = 'none';
                 photoBg.innerHTML = `<div style="font-size:10px; color:#999; padding:5px; text-align:center; line-height:1.3;">[AI画面]<br>${lsState.charWidgetData.content.substring(0,20)}...</div>`;
-                photoDesc.innerText = "From User";
+                photoDesc.innerText = "• ୨ ✧ ୧ •";
             }
         } else {
             photoBg.style.backgroundImage = 'none';
             photoBg.innerHTML = `<svg viewBox="0 0 24 24" style="width:50%;height:50%;color:#ccc;"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`;
-            photoDesc.innerText = "Polaroid";
+            photoDesc.innerText = "• ୨ ✧ ୧ •";
         }
     }
 }
@@ -13085,7 +13418,11 @@ async function lsTriggerNpcMessage() {
             prompt += `你的身份/背景：${npc.desc}\n`;
             prompt += `你正在给你的熟人【${char.name}】发微信。\n`;
             prompt += `【输出格式】：JSON数组。\n`;
-            prompt += `示例：[{"type":"text", "content":"在吗？"}, {"type":"text", "content":"有个事想跟你说"}]\n`;
+            if (chatConfig.bilingualEnabled) {
+                prompt += `示例：[{"type":"text", "content":"Are you there?<br><span style='font-size: 0.85em; opacity: 0.7;'>在吗？</span>"}, {"type":"text", "content":"I have something to tell you.<br><span style='font-size: 0.85em; opacity: 0.7;'>有个事想跟你说。</span>"}]\n`;
+            } else {
+                prompt += `示例：[{"type":"text", "content":"在吗？"}, {"type":"text", "content":"有个事想跟你说"}]\n`;
+            }
         }
         
         const isTimePerceptionEnabled = chatConfig.timePerceptionEnabled !== false;
@@ -13101,11 +13438,12 @@ async function lsTriggerNpcMessage() {
         if (chatConfig.bilingualEnabled) {
             const sourceLang = chatConfig.bilingualSource || '英语';
             const targetLang = chatConfig.bilingualTarget || '中文';
-            prompt += `\n【双语翻译模式强制指令】\n`;
-            prompt += `你必须以双语形式回复。上面是${sourceLang}，下面是${targetLang}。\n`;
-            prompt += `在 JSON 的 "content" 字段中，请严格使用以下 HTML 格式输出文本消息：\n`;
+            prompt += `\n【最高强制指令：双语翻译模式】\n`;
+            prompt += `你必须以双语形式回复！上面是${sourceLang}，下面是${targetLang}。\n`;
+            prompt += `在 JSON 的 "content" 字段中，请严格使用以下 HTML 格式输出文本消息（注意单引号）：\n`;
             prompt += `${sourceLang}内容<br><span style='font-size: 0.85em; opacity: 0.7;'>${targetLang}内容</span>\n`;
             prompt += `例如：[{"type":"text", "content":"Hello!<br><span style='font-size: 0.85em; opacity: 0.7;'>你好！</span>"}]\n`;
+            prompt += `绝对不能只输出一种语言！\n`;
         }
         // 注入活人运转与思维链规则
         prompt += `【角色活人运转规则】\n`;
@@ -13241,17 +13579,24 @@ function lsRenderWidget() {
     if (!widget) {
         widget = document.createElement('div');
         widget.id = 'ls-desktop-widget';
+        const decorText = lsState.widgetData.decorText || '• ୨ ✧ ୧ •';
+        const ringsHtml = Array(7).fill('<div class="binding-ring"><div class="binding-hole"></div><div class="binding-metal-1"></div><div class="binding-metal-2"></div></div>').join('');
+
         widget.innerHTML = `
             <div class="ls-widget-inner" id="ls-widget-inner">
-                <div class="ls-widget-front">
-                    <div class="ls-widget-sticker" onmousedown="lsStartWidgetDrag(event)" ontouchstart="lsStartWidgetDrag(event)"></div>
-                    <div class="ls-widget-photo" id="ls-widget-photo" onclick="lsShowWidgetPhotoDesc()">
+                <div class="ls-widget-front" onmousedown="lsStartWidgetDrag(event)" ontouchstart="lsStartWidgetDrag(event)" onclick="if(!isHomeEditMode) lsToggleWidgetMode(event)">
+                    <div class="binding-area">${ringsHtml}</div>
+                    <div class="ls-widget-photo" id="ls-widget-photo" onclick="lsShowWidgetPhotoDesc(); event.stopPropagation();">
                         <svg viewBox="0 0 24 24" style="width:50%;height:50%;color:#ccc;"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
                     </div>
-                    <div class="ls-widget-photo-desc" id="ls-widget-photo-label">Polaroid</div>
+                    <div class="ls-widget-decor-text" onclick="lsEditWidgetDecorText(); event.stopPropagation();">
+                        <div class="ls-widget-decor-line"></div>
+                        <span id="ls-widget-decor-span">${decorText}</span>
+                        <div class="ls-widget-decor-line"></div>
+                    </div>
                 </div>
-                <div class="ls-widget-back">
-                    <div class="ls-widget-sticker" onmousedown="lsStartWidgetDrag(event)" ontouchstart="lsStartWidgetDrag(event)"></div>
+                <div class="ls-widget-back" onmousedown="lsStartWidgetDrag(event)" ontouchstart="lsStartWidgetDrag(event)" onclick="if(!isHomeEditMode) lsToggleWidgetMode(event)">
+                    <div class="binding-area-back">${ringsHtml}</div>
                     <div class="ls-widget-note-text" id="ls-widget-note-text"></div>
                 </div>
             </div>
@@ -13274,42 +13619,52 @@ function lsRenderWidget() {
                 }
                 .ls-widget-inner {
                     position: relative; width: 100%; height: 100%;
-                    transition: transform 0.6s; transform-style: preserve-3d;
+                    transition: transform 0.6s cubic-bezier(0.25, 0.1, 0.25, 1);
+                    transform-style: preserve-3d;
+                    will-change: transform;
                     box-shadow: 2px 6px 15px rgba(0,0,0,0.3);
-                    border-radius: 6px;
+                    border-radius: 12px;
                 }
                 #ls-desktop-widget.flipped .ls-widget-inner { transform: rotateY(180deg); }
+                
                 .ls-widget-front, .ls-widget-back {
                     position: absolute; width: 100%; height: 100%;
-                    backface-visibility: hidden; border-radius: 6px;
+                    backface-visibility: hidden; border-radius: 12px;
                     background: #fff; display: flex; flex-direction: column;
-                    align-items: center; padding: 12px; box-sizing: border-box;
+                    box-sizing: border-box;
                 }
-                
+                .ls-widget-front { padding: 12px 12px 12px 28px; }
                 .ls-widget-back { 
                     transform: rotateY(180deg); 
-                    background: #fff; 
-                    justify-content: center;
+                    justify-content: center; align-items: center;
+                    padding: 12px 28px 12px 12px;
                     border: 1px solid rgba(0,0,0,0.05);
                     box-shadow: inset 0 0 20px rgba(0,0,0,0.02);
                 }
                 
-                .ls-widget-sticker {
-                    position: absolute; top: -12px; left: 50%; transform: translateX(-50%) rotate(-3deg);
-                    width: 80px; height: 28px;
-                    background: rgba(255, 255, 255, 0.5);
-                    border: 1px solid rgba(255,255,255,0.8);
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-                    z-index: 20; cursor: pointer;
-                }
+                /* 活页装订线样式 */
+                .binding-area { position: absolute; left: -8px; top: 0; width: 30px; height: 100%; display: flex; flex-direction: column; justify-content: space-evenly; padding: 12px 0; box-sizing: border-box; }
+                .binding-area-back { position: absolute; right: -8px; top: 0; width: 30px; height: 100%; display: flex; flex-direction: column; justify-content: space-evenly; padding: 12px 0; box-sizing: border-box; }
+                .binding-ring { position: relative; width: 100%; height: 14px; }
+                .binding-hole { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 6px; height: 10px; background: #333; border-radius: 2px; box-shadow: inset 1px 1px 3px rgba(0,0,0,0.8); }
+                .binding-area-back .binding-hole { left: 6px; right: auto; }
+                .binding-metal-1, .binding-metal-2 { position: absolute; right: 8px; width: 18px; height: 5px; border: 1.5px solid #e0e0e0; border-right-color: #fff; border-radius: 8px; box-shadow: -1px 2px 3px rgba(0,0,0,0.2), inset 1px 1px 1px rgba(255,255,255,0.8); background: linear-gradient(to bottom, transparent 20%, rgba(0,0,0,0.1) 50%, transparent 80%); }
+                .binding-area-back .binding-metal-1, .binding-area-back .binding-metal-2 { left: 8px; right: auto; border-right-color: #e0e0e0; border-left-color: #fff; box-shadow: 1px 2px 3px rgba(0,0,0,0.2), inset -1px 1px 1px rgba(255,255,255,0.8); }
+                .binding-metal-1 { top: 0px; }
+                .binding-metal-2 { bottom: 0px; }
                 
                 .ls-widget-photo {
-                    width: 100%; height: 82%; background: #f4f4f4;
+                    width: 100%; flex: 1; background: #f4f4f4;
                     border: 1px solid #eee; display:flex; justify-content:center; align-items:center;
                     overflow: hidden; cursor: pointer; background-size: cover; background-position: center;
                 }
-                .ls-widget-photo-desc { font-size: 14px; color: #555; margin-top: 8px; font-family: 'Courier New', Courier, monospace; font-weight: bold; }
+                
+                /* 底部虚线装饰样式 */
+                .ls-widget-decor-text {
+                    font-size: 12px; color: #999; display: flex; align-items: center; justify-content: center;
+                    width: 100%; margin-top: 10px; margin-bottom: 2px; cursor: pointer;
+                }
+                .ls-widget-decor-line { flex: 1; height: 1px; border-top: 1px dashed #ccc; margin: 0 8px; }
                 
                 .ls-widget-note-text { 
                     font-size: 16px; 
@@ -13334,11 +13689,11 @@ function lsRenderWidget() {
         if (data.position) {
             widget.style.top = data.position.top;
             widget.style.left = data.position.left;
-            widget.style.transform = data.position.transform || 'rotate(5deg)';
+            widget.style.transform = data.position.transform || 'translateX(-50%)';
         } else {
             widget.style.top = '380px';
             widget.style.left = '50%';
-            widget.style.transform = 'translateX(-50%) rotate(5deg)';
+            widget.style.transform = 'translateX(-50%)';
         }
         
         if (data.currentMode === 'note') {
@@ -13370,8 +13725,7 @@ function lsRenderWidget() {
 
 function lsStartWidgetDrag(e) {
     if (!isHomeEditMode) {
-        lsToggleWidgetMode(e);
-        return;
+        return; // 👈 核心修复：非编辑模式下什么都不做，把翻转交给 onclick 处理
     }
 
     const touch = e.touches ? e.touches[0] : e;
@@ -13387,7 +13741,7 @@ function lsStartWidgetDrag(e) {
     
     widget.style.left = rect.left + 'px';
     widget.style.top = rect.top + 'px';
-    widget.style.transform = 'rotate(5deg) scale(1.05)'; 
+    widget.style.transform = 'scale(1.05)'; 
     widget.style.zIndex = 100;
     
     if (navigator.vibrate) navigator.vibrate(50);
@@ -13417,13 +13771,13 @@ if (e.cancelable) { e.preventDefault(); }
 function lsEndWidgetDrag(e) {
     if (lsWidgetDrag.active) {
         const widget = document.getElementById('ls-desktop-widget');
-        widget.style.transform = 'rotate(5deg)'; 
+        widget.style.transform = 'none'; 
         widget.style.zIndex = 10;
         
         lsState.widgetData.position = {
             top: widget.style.top,
             left: widget.style.left,
-            transform: 'rotate(5deg)'
+            transform: 'none'
         };
         
         lsWidgetDrag.active = false;
@@ -13455,6 +13809,23 @@ function lsShowWidgetPhotoDesc() {
         alert("暂无照片描述");
     }
 }
+// ==========================================
+// 新增：修改小组件底部装饰文字
+// ==========================================
+window.lsEditWidgetDecorText = function() {
+    if (isHomeEditMode) return; // 编辑模式下不触发修改
+    const currentText = lsState.widgetData.decorText || '• ୨ ✧ ୧ •';
+    openTextEditModal("修改底部装饰", "请输入新的装饰符号或文字", currentText, (val) => {
+        if (val !== null) {
+            lsState.widgetData.decorText = val.trim() || '• ୨ ✧ ୧ •';
+            lsSaveData();
+            // 强制删除旧的 DOM 并重新渲染
+            const widget = document.getElementById('ls-desktop-widget');
+            if (widget) widget.remove();
+            lsRenderWidget();
+        }
+    });
+};
 
 // ==========================================
 // 回忆功能补丁
@@ -31308,3 +31679,601 @@ function scheduleMidnightBackup() {
     }, msUntilMidnight);
 }
 scheduleMidnightBackup();
+/* ==========================================================================
+   APP 5: Wish & To-Do (星愿空间) 核心逻辑 (角色数据隔离版)
+   ========================================================================== */
+
+const wishState = {
+    activeCharId: null, // 当前选中的角色 ID
+    currentDetailId: null,
+    currentDetailType: null
+};
+
+// --- 辅助函数：获取当前角色的专属数据 ---
+function getWishData() {
+    if (!wishState.activeCharId) return null;
+    const char = wcState.characters.find(c => c.id === wishState.activeCharId);
+    if (!char) return null;
+    
+    // 如果该角色还没有 wishData，初始化一个
+    if (!char.wishData) {
+        char.wishData = {
+            wishes: [],
+            todos: [],
+            achievements: [],
+            puzzleBg: 'https://i.postimg.cc/kgD9CsbW/IMG-8012.jpg',
+            puzzleUnlocked: 0
+        };
+    }
+    return char.wishData;
+}
+
+// --- 数据持久化 ---
+async function wishLoadData() {
+    const data = await idb.get('wish_app_global');
+    if (data && data.activeCharId) {
+        wishState.activeCharId = data.activeCharId;
+    }
+}
+
+async function wishSaveData() {
+    // 保存全局状态
+    await idb.set('wish_app_global', { activeCharId: wishState.activeCharId });
+    // 核心：因为具体数据挂载在 char 上，所以调用微信的保存逻辑即可持久化
+    wcSaveData();
+}
+
+// --- 页面导航 ---
+async function openWishApp() {
+    await wishLoadData();
+    
+    // 如果没有选中的角色，或者选中的角色被删除了，默认选中第一个单人角色
+    if (!wishState.activeCharId || !wcState.characters.find(c => c.id === wishState.activeCharId)) {
+        const firstChar = wcState.characters.find(c => !c.isGroup);
+        if (firstChar) {
+            wishState.activeCharId = firstChar.id;
+        } else {
+            alert("请先在微信中添加一个单人角色哦~");
+            return;
+        }
+    }
+
+    document.getElementById('wishModal').classList.add('open');
+    wishUpdateHeaderTitle();
+    wishSwitchTab('wish', document.querySelector('.wish-nav-icon'));
+}
+
+function closeWishApp() {
+    document.getElementById('wishModal').classList.remove('open');
+}
+
+function wishUpdateHeaderTitle() {
+    const char = wcState.characters.find(c => c.id === wishState.activeCharId);
+    const titleEl = document.getElementById('wish-header-title');
+    if (titleEl && char) {
+        titleEl.innerText = `${char.name}'s Space`;
+    }
+}
+
+function wishSwitchTab(pageId, el) {
+    document.querySelectorAll('.wish-page').forEach(p => p.classList.remove('active'));
+    document.getElementById('wish-page-' + pageId).classList.add('active');
+    
+    document.querySelectorAll('.wish-nav-icon').forEach(icon => icon.classList.remove('active'));
+    if (el) el.classList.add('active');
+
+    if (pageId === 'wish') wishRenderList('wish');
+    if (pageId === 'todo') wishRenderList('todo');
+    if (pageId === 'achieve') wishRenderAchievements();
+    if (pageId === 'puzzle') wishRenderPuzzle();
+}
+
+// --- 角色选择逻辑 ---
+function wishOpenCharSelectModal() {
+    const list = document.getElementById('wish-char-list');
+    list.innerHTML = '';
+    
+    const chars = wcState.characters.filter(c => !c.isGroup);
+    if (chars.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">暂无联系人</div>';
+    } else {
+        chars.forEach(char => {
+            const isSelected = char.id === wishState.activeCharId;
+            const div = document.createElement('div');
+            div.className = 'wc-list-item';
+            div.style.background = 'white';
+            div.style.borderBottom = '1px solid #F0F0F0';
+            div.innerHTML = `
+                <img src="${char.avatar}" class="wc-avatar" style="width:36px;height:36px;">
+                <div class="wc-item-content"><div class="wc-item-title" style="${isSelected ? 'color:#007AFF;' : ''}">${char.name}</div></div>
+                ${isSelected ? '<svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#007AFF;fill:none;stroke-width:2;"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
+            `;
+            div.onclick = () => wishSelectChar(char.id);
+            list.appendChild(div);
+        });
+    }
+    wcOpenModal('wish-char-select-modal');
+}
+
+function wishSelectChar(charId) {
+    wishState.activeCharId = charId;
+    wishSaveData();
+    wishUpdateHeaderTitle();
+    
+    // 刷新当前激活的 Tab
+    const activePage = document.querySelector('.wish-page.active');
+    if (activePage) {
+        const pageId = activePage.id.replace('wish-page-', '');
+        if (pageId === 'wish') wishRenderList('wish');
+        if (pageId === 'todo') wishRenderList('todo');
+        if (pageId === 'achieve') wishRenderAchievements();
+        if (pageId === 'puzzle') wishRenderPuzzle();
+    }
+    
+    wcCloseModal('wish-char-select-modal');
+}
+
+// --- 渲染列表 ---
+function wishRenderList(type) {
+    const container = document.getElementById(type === 'wish' ? 'wish-list-container' : 'todo-list-container');
+    container.innerHTML = '';
+    
+    const data = getWishData();
+    if (!data) return;
+
+    const list = type === 'wish' ? data.wishes : data.todos;
+    
+    if (list.length === 0) {
+        container.innerHTML = `<div style="text-align:center; color:#999; margin-top:40px; font-style:italic;">暂无记录，点击右下角添加吧~</div>`;
+        return;
+    }
+
+    // 倒序排列，未完成的在前
+    const sortedList = [...list].sort((a, b) => {
+        if (a.status === b.status) return b.id - a.id;
+        return a.status === 'pending' ? -1 : 1;
+    });
+
+    sortedList.forEach(item => {
+        const isDone = item.status === 'done';
+        const dateStr = new Date(item.id).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+        const isFromMe = item.creator === 'user';
+        
+        let creatorHtml = isFromMe 
+            ? `<span class="wish-creator-tag me" style="font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; background: #F5F5F5; color: #888;">FROM ME</span>` 
+            : `<span class="wish-creator-tag ta" style="font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; background: #111; color: #FFF;">FROM TA</span>`;
+
+        let badgeHtml = '';
+        if (isDone) {
+            badgeHtml = `<span class="wish-reply-badge" style="background: #F2F2F7; color: #888;">已完成 · 留念</span>`;
+        } else {
+            if (isFromMe) {
+                badgeHtml = `<span class="wish-reply-badge" style="background: rgba(0,122,255,0.1); color: #007AFF;">等待 Ta 回应...</span>`;
+            } else {
+                badgeHtml = `<span class="wish-reply-badge" style="background: rgba(212, 175, 55, 0.1); color: #D4AF37;">等待你实现</span>`;
+            }
+        }
+
+        const div = document.createElement('div');
+        div.className = 'wish-memo-card';
+        div.onclick = () => wishOpenDetail(item.id, type);
+
+        if (type === 'wish') {
+            div.innerHTML = `
+                <div class="wish-memo-info">
+                    <div class="wish-memo-text ${isDone ? 'done' : ''}" style="${isDone ? 'text-decoration:line-through; color:#999;' : ''}">${item.title}</div>
+                    <div class="wish-memo-meta">${creatorHtml}<span>${dateStr}</span>${badgeHtml}</div>
+                </div>
+                <svg class="wish-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            `;
+        } else {
+            div.innerHTML = `
+                <div class="wish-memo-info">
+                    <div class="wish-todo-header">
+                        <div class="wish-checkbox ${isDone ? 'done' : ''}" onclick="event.stopPropagation(); wishToggleStatus(${item.id}, 'todo')"></div>
+                        <div class="wish-todo-text ${isDone ? 'done' : ''}">${item.title}</div>
+                    </div>
+                    <div class="wish-memo-meta" style="margin-left: 34px;">${creatorHtml}<span>${dateStr}</span>${badgeHtml}</div>
+                </div>
+                <svg class="wish-chevron-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            `;
+        }
+        container.appendChild(div);
+    });
+}
+
+// --- 添加逻辑 (取消立刻 AI 回复，改为注入聊天记忆) ---
+function wishOpenAddModal() {
+    if (!wishState.activeCharId) return alert("请先选择一个角色哦~");
+    wcOpenModal('wish-add-modal');
+}
+
+let currentComposeType = 'wish';
+
+function wishOpenCompose(type) {
+    wcCloseModal('wish-add-modal');
+    currentComposeType = type;
+    
+    // 初始化输入框
+    document.getElementById('wish-compose-title').value = '';
+    document.getElementById('wish-compose-body').value = '';
+    document.getElementById('wish-compose-header-title').innerText = type === 'wish' ? '许下愿望' : '添加待办';
+    
+    // 打开全屏编辑页
+    const view = document.getElementById('wish-compose-view');
+    view.style.display = 'flex';
+    setTimeout(() => view.classList.add('active'), 10);
+}
+
+function wishCloseCompose() {
+    const view = document.getElementById('wish-compose-view');
+    view.classList.remove('active');
+    setTimeout(() => view.style.display = 'none', 300);
+}
+
+function wishSubmitCompose() {
+    const title = document.getElementById('wish-compose-title').value.trim();
+    const content = document.getElementById('wish-compose-body').value.trim();
+    
+    if (!title) return alert("标题不能为空哦~");
+    
+    const data = getWishData();
+    if (!data) return;
+
+    const newItem = {
+        id: Date.now(),
+        title: title,
+        content: content, 
+        aiReply: null,
+        status: 'pending',
+        creator: 'user'
+    };
+    
+    if (currentComposeType === 'wish') data.wishes.unshift(newItem);
+    else data.todos.unshift(newItem);
+    
+    wishSaveData();
+    wishRenderList(currentComposeType);
+    
+    // 注入聊天记忆
+    const char = wcState.characters.find(c => c.id === wishState.activeCharId);
+    if (char) {
+        const typeName = currentComposeType === 'wish' ? '愿望' : '待办事项';
+        const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚在你们的专属星愿空间里添加了一个${typeName}：“${title}”。详细内容是：“${content}”。请在接下来的聊天中，自然地提及这件事，并给出你的看法、承诺或申请加入。]`;
+        wcAddMessage(char.id, 'system', 'system', aiPrompt, { hidden: true });
+    }
+    
+    wishCloseCompose();
+    alert(`已添加${currentComposeType === 'wish' ? '愿望' : '待办'}！快去微信找 Ta 聊聊吧~`);
+}
+
+// --- 详情页与状态切换 ---
+function wishOpenDetail(id, type) {
+    const data = getWishData();
+    if (!data) return;
+
+    const item = type === 'wish' ? data.wishes.find(w => w.id === id) : data.todos.find(t => t.id === id);
+    if (!item) return;
+
+    wishState.currentDetailId = id;
+    wishState.currentDetailType = type;
+
+    document.getElementById('wish-detail-title').innerText = item.title;
+    document.getElementById('wish-detail-date').innerText = new Date(item.id).toLocaleString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    
+    let bodyHtml = '';
+    if (item.creator === 'char') {
+        bodyHtml = `<div style="color: #888; font-size: 12px; margin-bottom: 10px; font-weight: bold; letter-spacing: 1px;">TA'S MESSAGE</div>`;
+        bodyHtml += item.content || 'Ta 偷偷许下了一个心愿...';
+    } else {
+        bodyHtml = `<div style="color: #CCC; font-style: italic; text-align: center; margin-top: 50px;">等待在聊天中与 Ta 讨论...</div>`;
+    }
+    document.getElementById('wish-detail-body').innerHTML = bodyHtml;
+
+    // 动态注入底部操作按钮
+    const contentArea = document.querySelector('.wish-detail-content');
+    let actionsEl = document.getElementById('wish-detail-actions');
+    if (actionsEl) actionsEl.remove();
+
+    actionsEl = document.createElement('div');
+    actionsEl.id = 'wish-detail-actions';
+    actionsEl.className = 'wish-detail-actions';
+    
+    if (item.status === 'pending') {
+        const completeText = item.creator === 'char' ? '帮 Ta 实现' : '标记为已完成';
+        actionsEl.innerHTML = `
+            <button class="wish-action-btn delete" onclick="wishDeleteEntry()">删除记录</button>
+            <button class="wish-action-btn complete" onclick="wishCompleteEntry()">${completeText}</button>
+        `;
+    } else {
+        actionsEl.innerHTML = `
+            <button class="wish-action-btn delete" onclick="wishDeleteEntry()">删除记录</button>
+            <div style="color: #999; font-size: 13px; font-weight: bold; display: flex; align-items: center;">已存入成就墙</div>
+        `;
+    }
+    contentArea.appendChild(actionsEl);
+
+    const view = document.getElementById('wish-detail-view');
+    view.style.display = 'flex';
+    setTimeout(() => view.classList.add('active'), 10);
+}
+
+function wishCloseDetail() {
+    const view = document.getElementById('wish-detail-view');
+    view.classList.remove('active');
+    setTimeout(() => view.style.display = 'none', 300);
+    wishState.currentDetailId = null;
+    wishState.currentDetailType = null;
+}
+
+function wishDeleteEntry() {
+    if (!confirm("确定要删除这条记录吗？")) return;
+    const id = wishState.currentDetailId;
+    const type = wishState.currentDetailType;
+    const data = getWishData();
+    
+    if (type === 'wish') data.wishes = data.wishes.filter(w => w.id !== id);
+    else data.todos = data.todos.filter(t => t.id !== id);
+    
+    wishSaveData();
+    wishRenderList(type);
+    wishCloseDetail();
+}
+
+function wishCompleteEntry() {
+    const id = wishState.currentDetailId;
+    const type = wishState.currentDetailType;
+    wishToggleStatus(id, type);
+    wishCloseDetail();
+}
+
+function wishToggleStatus(id, type) {
+    const data = getWishData();
+    if (!data) return;
+
+    const item = type === 'wish' ? data.wishes.find(w => w.id === id) : data.todos.find(t => t.id === id);
+    if (!item) return;
+
+    if (item.status === 'pending') {
+        item.status = 'done';
+        // 移入成就墙
+        data.achievements.unshift({
+            id: Date.now(),
+            title: item.title,
+            date: Date.now(),
+            type: type
+        });
+        
+        // 👇 新增：如果完成的是 Char 的愿望，通知 AI
+        if (item.creator === 'char') {
+            const char = wcState.characters.find(c => c.id === wishState.activeCharId);
+            if (char) {
+                const typeName = type === 'wish' ? '愿望' : '待办事项';
+                const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚在星愿空间里，帮你实现了你许下的${typeName}：“${item.title}”！请在接下来的聊天中，表达你的惊喜、开心和感谢。]`;
+                wcAddMessage(char.id, 'system', 'system', aiPrompt, { hidden: true });
+            }
+        }
+
+        // 解锁拼图
+        if (data.puzzleUnlocked < 9) {
+            data.puzzleUnlocked++;
+            alert(`太棒了！已完成该事项，并解锁了一块新的拼图碎片！(${data.puzzleUnlocked}/9)`);
+        } else {
+            alert("太棒了！已完成该事项！(拼图已全部解锁)");
+        }
+    } else {
+        // 允许反悔取消完成
+        item.status = 'pending';
+        data.achievements = data.achievements.filter(a => a.title !== item.title);
+        if (data.puzzleUnlocked > 0) data.puzzleUnlocked--;
+    }
+
+    wishSaveData();
+    wishRenderList(type);
+}
+
+// --- 成就墙与拼图 ---
+function wishRenderAchievements() {
+    const container = document.getElementById('achieve-list-container');
+    container.innerHTML = '';
+    
+    const data = getWishData();
+    if (!data || data.achievements.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #999; margin-top: 50px; font-style: italic;">完成的愿望会化作回忆存放在这里...</div>';
+        return;
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'achieve-wall-grid';
+
+    data.achievements.forEach(ach => {
+        const dateStr = new Date(ach.date).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '.');
+        const tag = ach.type === 'wish' ? 'WISH' : 'TO-DO';
+        
+        const card = document.createElement('div');
+        card.className = 'achieve-card';
+        card.innerHTML = `
+            <div>
+                <div class="achieve-card-tag">${tag}</div>
+                <div class="achieve-card-title">${ach.title}</div>
+            </div>
+            <div class="achieve-card-date">${dateStr}</div>
+        `;
+        grid.appendChild(card);
+    });
+    
+    container.appendChild(grid);
+}
+
+function wishRenderPuzzle() {
+    const data = getWishData();
+    if (!data) return;
+
+    document.getElementById('puzzle-count-display').innerText = data.puzzleUnlocked;
+    const grid = document.getElementById('wish-puzzle-grid');
+    grid.innerHTML = '';
+    
+    for (let i = 0; i < 9; i++) {
+        const piece = document.createElement('div');
+        if (i < data.puzzleUnlocked) {
+            piece.className = `wish-puzzle-piece unlocked p-${i}`;
+            piece.style.backgroundImage = `url('${data.puzzleBg}')`;
+        } else {
+            piece.className = 'wish-puzzle-piece';
+            piece.innerText = '🔒';
+        }
+        grid.appendChild(piece);
+    }
+}
+
+function wishHandlePuzzleUpload(input) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = getWishData();
+            if (data) {
+                data.puzzleBg = e.target.result;
+                wishSaveData();
+                wishRenderPuzzle();
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+}
+/* ==========================================================================
+   星愿空间：探索内心深处 (小游戏) 逻辑
+   ========================================================================== */
+
+let currentExploreData = null;
+
+async function wishExploreDeepDesire() {
+    const charId = wishState.activeCharId;
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char) return;
+
+    const apiConfig = await getActiveApiConfig('npc');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("正在潜入 Ta 的内心深处...");
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        // 读取世界书
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 读取记忆
+        let memoryText = "暂无特殊记忆。";
+        if (char.memories && char.memories.length > 0) {
+            const readCount = chatConfig.aiMemoryCount || 5;
+            memoryText = char.memories.slice(0, readCount).map(m => `- ${m.content}`).join('\n');
+        }
+
+        let prompt = `你现在是一个恋爱文字冒险游戏(Galgame)的剧情引擎。\n`;
+        prompt += `【攻略目标】：${char.name}\n`;
+        prompt += `【目标人设】：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【玩家(User)设定】：${userPersona}\n`;
+        prompt += `【两人的共同记忆】：\n${memoryText}\n\n`;
+        
+        prompt += `【任务】：请根据以上设定，生成一个探索 ${char.name} 内心深处隐藏心愿的互动剧情。\n`;
+        prompt += `【要求】：\n`;
+        prompt += `1. 设定一个符合人设的场景（scenario），描述 ${char.name} 似乎有心事，欲言又止的样子。\n`;
+        prompt += `2. 设定一个 Ta 真正隐藏的心愿（hiddenWishTitle 和 hiddenWishContent）。\n`;
+        prompt += `3. 提供 3 个供玩家选择的对话/动作选项（options）。\n`;
+        prompt += `4. 这 3 个选项中，只有 1 个是“正确”的（能戳中 Ta 的软肋，让 Ta 吐露心声），另外 2 个是“错误”的（Ta 会掩饰过去）。\n`;
+        prompt += `5. 必须返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "scenario": "夜风微凉，Ta 看着远处的灯火，眼神有些闪躲，似乎有什么话想对你说...",
+  "hiddenWishTitle": "想和你一起看初雪",
+  "hiddenWishContent": "其实...我一直想和你一起看今年的第一场雪。只是怕你太忙，没敢开口。",
+  "options": [
+    {"text": "你怎么了？是不是不开心？", "isCorrect": false, "response": "没、没什么，可能是风有点大吧。"},
+    {"text": "(轻轻握住Ta的手) 无论你在想什么，我都在。", "isCorrect": true, "response": "(反握住你的手，脸颊微红) 其实...我一直想和你一起看今年的第一场雪。"},
+    {"text": "发什么呆呢，走啦回家了。", "isCorrect": false, "response": "哦...好，走吧。"}
+  ]
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        currentExploreData = JSON.parse(content);
+        
+        // 渲染弹窗
+        document.getElementById('wish-explore-scenario').innerText = currentExploreData.scenario;
+        const optionsContainer = document.getElementById('wish-explore-options');
+        optionsContainer.innerHTML = '';
+        
+        currentExploreData.options.forEach((opt, index) => {
+            const btn = document.createElement('div');
+            btn.className = 'wish-explore-option-btn';
+            btn.innerText = opt.text;
+            btn.onclick = () => wishChooseExploreOption(index);
+            optionsContainer.appendChild(btn);
+        });
+
+        wcCloseAllPanels();
+        wcOpenModal('wish-explore-modal');
+        wcShowSuccess("成功潜入内心");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("探索失败，Ta 的内心防线太强了");
+    }
+}
+
+function wishChooseExploreOption(index) {
+    if (!currentExploreData) return;
+    const option = currentExploreData.options[index];
+    
+    // 隐藏选项，显示结果
+    const optionsContainer = document.getElementById('wish-explore-options');
+    optionsContainer.innerHTML = `
+        <div style="padding: 16px; background: #F9F9F9; border-radius: 12px; border: 1px solid #EAEAEA; font-size: 14px; color: #333; line-height: 1.5; font-family: 'Kaiti', serif;">
+            ${option.response}
+        </div>
+        <button onclick="wcCloseModal('wish-explore-modal')" style="margin-top: 16px; width: 100%; padding: 14px; background: #111; color: #FFF; border: none; border-radius: 12px; font-size: 14px; font-weight: bold; cursor: pointer;">关闭</button>
+    `;
+
+    if (option.isCorrect) {
+        // 成功解锁心愿，自动添加到愿望列表
+        const data = getWishData();
+        if (data) {
+            data.wishes.unshift({
+                id: Date.now(),
+                title: currentExploreData.hiddenWishTitle,
+                content: currentExploreData.hiddenWishContent,
+                aiReply: null,
+                status: 'pending',
+                creator: 'char' // 标记为 Char 创建
+            });
+            wishSaveData();
+            wishRenderList('wish');
+            
+            // 注入聊天记忆
+            const char = wcState.characters.find(c => c.id === wishState.activeCharId);
+            if (char) {
+                const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚通过敏锐的观察，察觉到了你隐藏的心愿：“${currentExploreData.hiddenWishTitle}”。这个心愿已经自动添加到了星愿空间。请在接下来的聊天中，表现出被看穿心思的害羞或感动。]`;
+                wcAddMessage(char.id, 'system', 'system', aiPrompt, { hidden: true });
+            }
+        }
+    }
+}
