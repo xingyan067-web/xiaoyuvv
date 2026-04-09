@@ -31343,16 +31343,18 @@ function handleCloudSyncToggle(checkbox) {
     }
 }
 
-// 2. 递归剔除 Base64 图片的函数 (强化正则脱水版)
+// 2. 递归剔除 Base64 图片和音频的函数 (强化正则脱水版)
 function stripImagesFromData(obj) {
     if (typeof obj === 'string') {
-        // 1. 如果整个字符串就是 base64 图片，直接清空
-        if (obj.startsWith('data:image/')) return "";
+        // 1. 如果整个字符串就是 base64 图片或音频，直接清空
+        if (obj.startsWith('data:image/') || obj.startsWith('data:audio/')) return "";
         
-        // 2. 如果字符串内部潜伏了 base64 (比如 <img src="data:image/..."> 或 url('data:image/...') )
-        // 使用正则表达式，把 data:image/ 后面跟着的所有 base64 字符全部替换为空！
+        // 2. 如果字符串内部潜伏了 base64
         if (obj.includes('data:image/')) {
-            return obj.replace(/data:image\/[^"'\s\)]+/g, "");
+            obj = obj.replace(/data:image\/[^"'\s\)]+/g, "");
+        }
+        if (obj.includes('data:audio/')) {
+            obj = obj.replace(/data:audio\/[^"'\s\)]+/g, "");
         }
         return obj;
     }
@@ -31450,10 +31452,10 @@ async function executeCloudBackup() {
         data['dream_space_data'] = await idb.get('dream_space_data');
         data['ins_forum_data'] = await idb.get('ins_forum_data');
 
-        // 核心：使用强化正则剔除所有图片，大幅减小体积
+        // 核心：使用强化正则剔除所有图片和音频，大幅减小体积
         const cleanData = stripImagesFromData(data);
 
-        // 使用 keepalive 确保页面关闭时请求也能发出去
+        // 移除 keepalive 限制，允许发送超过 64KB 的纯文本数据
         fetch(`${CLOUD_SYNC_API}/backup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -31463,8 +31465,7 @@ async function executeCloudBackup() {
                 code: code,
                 timestamp: Date.now(),
                 data: cleanData
-            }),
-            keepalive: true 
+            })
         }).then(res => {
             if (res.ok) {
                 localStorage.setItem('ios_theme_last_cloud_backup_time', Date.now().toString());
