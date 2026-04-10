@@ -377,6 +377,11 @@ let apiPresets = [];
 let sessionApiCallCount = 0; // 当前会话已调用次数
 const aiGeneratingLocks = {}; // 【新增】：防止 AI 重复生成的锁
 
+// 👇 新增：存储拉取到的模型列表 👇
+let fetchedModelsPrimary = [];
+let fetchedModelsSecondary = [];
+// 👆 新增结束 👆
+
 // 世界书数据 (全局共享)
 let worldbookEntries = [];
 let worldbookGroups = [];
@@ -878,6 +883,11 @@ async function loadAllData() {
         if (layoutData) {
             restoreGridLayout(layoutData);
         }
+        // 恢复自定义小组件数据
+        const customWidgetsData = await idb.get('ios_custom_widgets') || { imported: [], desktop: [] };
+        customImportedWidgets = customWidgetsData.imported || [];
+        customDesktopWidgets = customWidgetsData.desktop || [];
+        renderDesktopWidgets();
 
         // 6. 加载预设
         const presets = await idb.get('ios_theme_presets') || {};
@@ -1822,6 +1832,7 @@ function saveHomeEdit() {
     saveGridLayout();
     // 小组件位置在拖拽结束时已更新到 lsState，这里统一保存
     lsSaveData();
+    saveCustomWidgetsData();
 }
 
 function cancelHomeEdit() {
@@ -1982,6 +1993,207 @@ function updateGhostPosition(x, y) {
     if (dragGhost) {
         dragGhost.style.left = (x - 35) + 'px';
         dragGhost.style.top = (y - 35) + 'px';
+    }
+}
+// ==========================================
+// 自定义桌面小组件导入与管理逻辑
+// ==========================================
+let customImportedWidgets = []; // 抽屉里已导入的
+let customDesktopWidgets = [];  // 已经放到桌面的
+
+async function saveCustomWidgetsData() {
+    await idb.set('ios_custom_widgets', {
+        imported: customImportedWidgets,
+        desktop: customDesktopWidgets
+    });
+}
+
+function openWidgetDrawer() {
+    renderWidgetDrawerList();
+    document.getElementById('widget-drawer-overlay').classList.add('active');
+}
+
+function closeWidgetDrawer(e) {
+    if (e && e.target.id !== 'widget-drawer-overlay') return;
+    document.getElementById('widget-drawer-overlay').classList.remove('active');
+}
+
+function renderWidgetDrawerList() {
+    const list = document.getElementById('drawer-list');
+    const importCard = list.firstElementChild; // 保留导入卡片
+    list.innerHTML = '';
+    list.appendChild(importCard);
+
+    customImportedWidgets.forEach(widget => {
+        const item = document.createElement('div');
+        item.className = 'drawer-item';
+        item.style.background = widget.bgColor || '#FFF';
+        item.innerHTML = `
+            <div class="drawer-item-delete" onclick="deleteImportedWidget(event, ${widget.id})"></div>
+            <div style="font-size: 14px; font-weight: bold; color: #333;">${widget.name}</div>
+        `;
+        item.onclick = () => addWidgetToDesktop(widget);
+        list.appendChild(item);
+    });
+}
+
+function handleImportWidgetJson(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const json = JSON.parse(e.target.result);
+            // 简单的格式校验
+            const newWidget = {
+                id: Date.now(),
+                name: json.name || '未命名组件',
+                bgColor: json.bgColor || '#E2F0CB',
+                content: json.content || '自定义内容'
+            };
+            customImportedWidgets.push(newWidget);
+            saveCustomWidgetsData();
+            renderWidgetDrawerList();
+            alert("小组件导入成功！");
+        } catch (err) {
+            alert("导入失败：JSON 格式不正确");
+        }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function deleteImportedWidget(event, id) {
+    event.stopPropagation();
+    if (confirm("确定要删除这个导入的小组件吗？")) {
+        customImportedWidgets = customImportedWidgets.filter(w => w.id !== id);
+        saveCustomWidgetsData();
+        renderWidgetDrawerList();
+    }
+}
+
+function addWidgetToDesktop(widgetData) {
+    const swiper = document.getElementById('homeSwiper');
+    const currentScroll = swiper ? swiper.scrollLeft : 0;
+    
+    // 计算当前屏幕的中心点，加上滚动偏移量，确保小组件出现在当前页
+    const centerLeft = currentScroll + (window.innerWidth / 2) - 170; // 170 是 4x4 小组件宽度(340)的一半
+
+    const newInstance = {
+        instanceId: Date.now() + Math.random(),
+        widgetId: widgetData.id,
+        name: widgetData.name,
+        bgColor: widgetData.bgColor,
+        content: widgetData.content,
+        position: { top: '150px', left: centerLeft + 'px', transform: 'none' }
+    };
+    customDesktopWidgets.push(newInstance);
+    saveCustomWidgetsData();
+    renderDesktopWidgets();
+    closeWidgetDrawer();
+}
+
+function removeWidgetFromDesktop(instanceId) {
+    customDesktopWidgets = customDesktopWidgets.filter(w => w.instanceId !== instanceId);
+    saveCustomWidgetsData();
+    renderDesktopWidgets();
+}
+
+function renderDesktopWidgets() {
+    const container = document.getElementById('desktop-custom-widgets-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    customDesktopWidgets.forEach(widget => {
+        const el = document.createElement('div');
+        el.className = 'custom-desktop-widget';
+        el.style.background = widget.bgColor;
+        el.style.top = widget.position.top;
+        el.style.left = widget.position.left;
+        el.style.transform = widget.position.transform;
+        
+        el.innerHTML = `
+            <div class="widget-remove-btn" onclick="removeWidgetFromDesktop(${widget.instanceId})"></div>
+            <div class="content" style="width:100%; height:100%; padding:0;">${widget.content}</div>
+        `;
+        
+        makeWidgetDraggable(el, widget.instanceId);
+        container.appendChild(el);
+    });
+}
+
+function makeWidgetDraggable(el, instanceId) {
+    let isDragging = false, startX, startY, initialLeft, initialTop;
+
+    el.addEventListener('mousedown', dragStart);
+    el.addEventListener('touchstart', dragStart, { passive: false });
+
+    function dragStart(e) {
+        if (!isHomeEditMode) return;
+        if (e.target.classList.contains('widget-remove-btn')) return;
+        
+        isDragging = true;
+        const touch = e.type === 'touchstart' ? e.touches[0] : e;
+        startX = touch.clientX;
+        startY = touch.clientY;
+        
+        // 获取相对于 200vw 容器的绝对坐标
+        initialLeft = el.offsetLeft;
+        initialTop = el.offsetTop;
+        
+        el.style.transform = 'none'; 
+        el.style.left = initialLeft + 'px';
+        el.style.top = initialTop + 'px';
+
+        document.addEventListener('mousemove', dragMove);
+        document.addEventListener('touchmove', dragMove, { passive: false });
+        document.addEventListener('mouseup', dragEnd);
+        document.addEventListener('touchend', dragEnd);
+    }
+
+    function dragMove(e) {
+        if (!isDragging) return;
+        e.preventDefault();
+        const touch = e.type === 'touchmove' ? e.touches[0] : e;
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
+        
+        el.style.left = (initialLeft + dx) + 'px';
+        el.style.top = (initialTop + dy) + 'px';
+
+        // 边缘检测翻页逻辑：拖到屏幕边缘时自动翻页
+        const edgeThreshold = 40;
+        const swiper = document.getElementById('homeSwiper');
+        if (swiper && !window.edgeScrollTimer) {
+            if (touch.clientX < edgeThreshold) {
+                const targetScroll = Math.max(0, swiper.scrollLeft - window.innerWidth);
+                swiper.scrollTo({ left: targetScroll, behavior: 'smooth' });
+                window.edgeScrollTimer = setTimeout(() => { window.edgeScrollTimer = null; }, 800);
+            } else if (touch.clientX > window.innerWidth - edgeThreshold) {
+                const targetScroll = Math.min(swiper.scrollWidth, swiper.scrollLeft + window.innerWidth);
+                swiper.scrollTo({ left: targetScroll, behavior: 'smooth' });
+                window.edgeScrollTimer = setTimeout(() => { window.edgeScrollTimer = null; }, 800);
+            }
+        }
+    }
+
+    function dragEnd() {
+        if (isDragging) {
+            isDragging = false;
+            // 保存新位置
+            const widget = customDesktopWidgets.find(w => w.instanceId === instanceId);
+            if (widget) {
+                widget.position = {
+                    top: el.style.top,
+                    left: el.style.left,
+                    transform: 'none'
+                };
+            }
+        }
+        document.removeEventListener('mousemove', dragMove);
+        document.removeEventListener('touchmove', dragMove);
+        document.removeEventListener('mouseup', dragEnd);
+        document.removeEventListener('touchend', dragEnd);
     }
 }
 
@@ -2521,13 +2733,13 @@ async function saveApiConfig() {
     await idb.set('ios_theme_api_config', config);
     alert("API 配置已保存！");
 }
-
 async function fetchModels(targetTab) {
     const isPrimary = targetTab === 'primary';
     const baseUrl = isPrimary ? document.getElementById('apiBaseUrl').value : document.getElementById('secApiBaseUrl').value;
     const key = isPrimary ? document.getElementById('apiKey').value : document.getElementById('secApiKey').value;
     const selectId = isPrimary ? 'modelSelect' : 'secModelSelect';
     const btnId = isPrimary ? 'fetchBtnPrimary' : 'fetchBtnSecondary';
+    const searchId = isPrimary ? 'modelSearchPrimary' : 'modelSearchSecondary'; // 👈 新增
     
     if (!baseUrl || !key) return alert("请先填写 API 地址和密钥");
     
@@ -2543,6 +2755,16 @@ async function fetchModels(targetTab) {
         select.innerHTML = '';
         
         if (data.data && Array.isArray(data.data)) {
+            // 👇 新增：保存拉取到的模型列表并清空搜索框 👇
+            if (isPrimary) {
+                fetchedModelsPrimary = data.data.map(m => m.id);
+            } else {
+                fetchedModelsSecondary = data.data.map(m => m.id);
+            }
+            const searchInput = document.getElementById(searchId);
+            if (searchInput) searchInput.value = '';
+            // 👆 新增结束 👆
+
             data.data.forEach(m => {
                 const opt = document.createElement('option');
                 opt.value = m.id;
@@ -2559,6 +2781,48 @@ async function fetchModels(targetTab) {
         btn.innerText = "拉取模型列表";
     }
 }
+
+// 👇 新增：在 fetchModels 函数下方添加过滤函数 👇
+window.filterModels = function(targetTab) {
+    const isPrimary = targetTab === 'primary';
+    const searchId = isPrimary ? 'modelSearchPrimary' : 'modelSearchSecondary';
+    const selectId = isPrimary ? 'modelSelect' : 'secModelSelect';
+    const allModels = isPrimary ? fetchedModelsPrimary : fetchedModelsSecondary;
+    
+    const keyword = document.getElementById(searchId).value.toLowerCase();
+    const select = document.getElementById(selectId);
+    
+    // 保存当前选中的值，以便过滤后尽量恢复
+    const currentValue = select.value;
+    
+    select.innerHTML = '';
+    
+    if (allModels.length === 0) {
+        // 如果还没拉取过，保留当前选项（可能是从本地存储加载的）
+        if (currentValue) {
+            const opt = document.createElement('option');
+            opt.value = currentValue;
+            opt.innerText = currentValue + " (已保存)";
+            select.appendChild(opt);
+        }
+        return;
+    }
+
+    const filteredModels = allModels.filter(id => id.toLowerCase().includes(keyword));
+    
+    filteredModels.forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.innerText = id;
+        select.appendChild(opt);
+    });
+    
+    // 尝试恢复之前的选中状态
+    if (filteredModels.includes(currentValue)) {
+        select.value = currentValue;
+    }
+};
+// 👆 新增结束 👆
 
 // 实时查询当前选中 Tab 的 API 额度
 async function refreshCurrentApiQuota() {
@@ -5230,6 +5494,9 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         const currentUserPersona = config.userPersona || wcState.user.persona || "无特殊设定";
         const currentCharPersona = char.prompt || "无特殊设定";
 
+        // 👇 新增：在组装 Prompt 之前，异步获取天气提示词 👇
+        const weatherPrompt = await getWeatherPrompt(char);
+
         // 1. 核心身份与角色设定
         let systemPrompt = `<role_play_directive>\n`;
         systemPrompt += `你是一个正在进行沉浸式角色扮演的真人，你的回复必须像一个真实的【${char.name}】正在使用微信聊天，【${currentUserName}】是你正在交谈的对象。\n`;
@@ -5256,6 +5523,8 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
 
         systemPrompt += `<context_info>\n`;
         systemPrompt += `${timeContextPrompt}\n`;
+        // 👇 新增：将天气提示词注入到上下文信息中 👇
+        if (weatherPrompt) systemPrompt += `${weatherPrompt}\n`;
         if (ongoingCallPrompt) systemPrompt += `${ongoingCallPrompt}\n`; // 👈 注入进行中的通话记录
         if (latestCallRecordPrompt) systemPrompt += `${latestCallRecordPrompt}\n`; // 👈 注入刚挂断的通话记录
         systemPrompt += `</context_info>\n\n`;
@@ -16624,7 +16893,9 @@ function wcBuyCharCartItem(index) {
     editBar.id = 'home-edit-bar';
     editBar.innerHTML = `
         <div class="edit-btn cancel" onclick="cancelHomeEdit()">取消</div>
-        <div style="font-weight:bold;">编辑主屏幕</div>
+        <div class="edit-bar-center-btn" onclick="openWidgetDrawer()">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </div>
         <div class="edit-btn save" onclick="saveHomeEdit()">完成</div>
     `;
     document.body.appendChild(editBar);
@@ -28177,6 +28448,60 @@ function wcOpenCharStatusModal() {
     renderCharStatusUI(status);
     
     wcOpenModal('wc-modal-char-status');
+    
+    // 👇 新增：异步加载天气数据 👇
+    fetchAndRenderStatusWeather(wcState.activeChatId);
+}
+
+// 👇 新增：异步获取并渲染天气 👇
+async function fetchAndRenderStatusWeather(charId) {
+    const char = wcState.characters.find(c => c.id === charId);
+    if (!char || !char.chatConfig) return;
+
+    const weatherModule = document.getElementById('ins-status-weather-module');
+    const iconEl = document.getElementById('ins-weather-icon');
+    const tempEl = document.getElementById('ins-weather-temp');
+    const descEl = document.getElementById('ins-weather-desc');
+    const diffEl = document.getElementById('ins-weather-diff');
+    if (!weatherModule) return;
+
+    // 1. 获取 User 天气
+    const userWeather = await getUserWeather();
+
+    // 2. 获取 Char 天气
+    if (char.chatConfig.locationType === 'real' && char.chatConfig.locationLat) {
+        weatherModule.style.display = 'flex';
+        const charWeather = await getRealWeather(char.chatConfig.locationLat, char.chatConfig.locationLon);
+        
+        if (charWeather) {
+            iconEl.innerText = getWeatherEmoji(charWeather.weathercode);
+            tempEl.innerText = `${Math.round(charWeather.temperature)}°C`;
+            descEl.innerText = "现实同步";
+            
+            if (userWeather) {
+                const diff = Math.round(charWeather.temperature - userWeather.temperature);
+                if (diff > 0) diffEl.innerText = `比你热 ${diff}°C`;
+                else if (diff < 0) diffEl.innerText = `比你冷 ${Math.abs(diff)}°C`;
+                else diffEl.innerText = `温度与你相同`;
+            } else {
+                diffEl.innerText = "无法获取你的温度";
+            }
+        } else {
+            descEl.innerText = "天气获取失败";
+        }
+    } else if (char.chatConfig.locationType === 'virtual') {
+        if (wcState.virtualWorldData && wcState.virtualWorldData.weather) {
+            weatherModule.style.display = 'flex';
+            iconEl.innerText = '✨';
+            tempEl.innerText = wcState.virtualWorldData.weather.temp || '未知';
+            descEl.innerText = wcState.virtualWorldData.weather.desc || '异星气候';
+            diffEl.innerText = "跨越次元";
+        } else {
+            weatherModule.style.display = 'none';
+        }
+    } else {
+        weatherModule.style.display = 'none';
+    }
 }
 
 // 保存设置
@@ -28195,6 +28520,10 @@ function renderCharStatusUI(status) {
     document.getElementById('ins-status-loc').innerText = status.location || "未知";
     document.getElementById('ins-status-act').innerText = status.action || "未知";
     document.getElementById('ins-status-mood').innerText = status.mood || "暂无状态";
+    
+    // 每次重新渲染时，先隐藏天气模块，等待异步加载
+    const weatherModule = document.getElementById('ins-status-weather-module');
+    if (weatherModule) weatherModule.style.display = 'none';
     
     const timelineContainer = document.getElementById('ins-status-timeline');
     timelineContainer.innerHTML = '';
@@ -29922,12 +30251,350 @@ function wcOpenRelationNetwork() {
     modal.style.display = 'flex';
     setTimeout(() => modal.classList.add('active'), 10);
     
+    // 默认切回关系网视图
+    wcSwitchMapMode('network');
+    
     // 延迟初始化，确保容器有宽高
     setTimeout(() => {
         wcInitRelationData();
         wcRenderRelationNetwork();
     }, 300);
 }
+
+// ==========================================
+// 🌟 新增：双位面地图系统 (现实 vs 异世界)
+// ==========================================
+let realWorldMapInstance = null;
+let realWorldMarkers = [];
+
+// 切换地图模式
+window.wcSwitchMapMode = function(mode) {
+    // 更新按钮状态
+    document.querySelectorAll('.rn-tool-btn').forEach(btn => {
+        btn.style.color = '#8E8E93';
+        btn.style.transform = 'scale(1)';
+    });
+    const activeBtn = document.getElementById(`rn-tab-${mode}`);
+    if (activeBtn) {
+        activeBtn.style.color = '#111';
+        activeBtn.style.transform = 'scale(1.1)';
+    }
+
+    const canvas = document.getElementById('rn-canvas');
+    const realMap = document.getElementById('real-map');
+    const virtualMap = document.getElementById('virtual-map');
+
+    if (mode === 'network') {
+        canvas.style.display = 'block';
+        realMap.style.display = 'none';
+        virtualMap.style.display = 'none';
+        Object.values(rnNodeElements).forEach(el => el.style.display = 'flex');
+        rnLabelElements.forEach(item => item.el.style.display = 'block');
+    } else if (mode === 'real') {
+        canvas.style.display = 'none';
+        realMap.style.display = 'block';
+        virtualMap.style.display = 'none';
+        Object.values(rnNodeElements).forEach(el => el.style.display = 'none');
+        rnLabelElements.forEach(item => item.el.style.display = 'none');
+        
+        renderRealWorldMap();
+    } else if (mode === 'virtual') {
+        canvas.style.display = 'none';
+        realMap.style.display = 'none';
+        virtualMap.style.display = 'block';
+        Object.values(rnNodeElements).forEach(el => el.style.display = 'none');
+        rnLabelElements.forEach(item => item.el.style.display = 'none');
+        
+        checkAndRenderVirtualMap();
+    }
+};
+
+// 渲染现实世界地图
+async function renderRealWorldMap() {
+    if (typeof L === 'undefined') return;
+
+    if (!realWorldMapInstance) {
+        realWorldMapInstance = L.map('real-map', { zoomControl: false, attributionControl: false }).setView([35.0, 105.0], 3);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(realWorldMapInstance);
+    }
+    
+    setTimeout(() => realWorldMapInstance.invalidateSize(), 100);
+
+    // 清理旧 Marker
+    realWorldMarkers.forEach(m => realWorldMapInstance.removeLayer(m));
+    realWorldMarkers = [];
+
+    // 筛选现实角色 (当前分组)
+    const realChars = wcState.characters.filter(c => !c.isGroup && c.groupName === wcState.activeContactsGroup && c.chatConfig && c.chatConfig.locationType === 'real' && c.chatConfig.locationLat);
+
+    for (const char of realChars) {
+        const customIcon = L.divIcon({
+            className: 'custom-marker-wrap',
+            html: `<img src="${char.avatar}" class="custom-avatar-marker">`,
+            iconSize: [44, 44], iconAnchor: [22, 22], popupAnchor: [0, -20]
+        });
+
+        const marker = L.marker([char.chatConfig.locationLat, char.chatConfig.locationLon], { icon: customIcon }).addTo(realWorldMapInstance);
+        realWorldMarkers.push(marker);
+
+        // 异步获取天气并绑定 Popup
+        const weather = await getRealWeather(char.chatConfig.locationLat, char.chatConfig.locationLon);
+        let weatherStr = "天气未知";
+        if (weather) weatherStr = `${getWeatherEmoji(weather.weathercode)} ${Math.round(weather.temperature)}°C`;
+
+        const actionStr = (char.lifeStatus && char.lifeStatus.action !== "未知") ? char.lifeStatus.action : "正在忙碌...";
+
+        const popupHtml = `
+            <div class="map-popup-card">
+                <div class="popup-header">
+                    <img src="${char.avatar}" class="popup-avatar">
+                    <div>
+                        <div class="popup-name">${char.name}</div>
+                        <div class="popup-loc"><svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${char.chatConfig.locationName}</div>
+                    </div>
+                </div>
+                <div class="popup-weather-row">
+                    <div class="popup-w-left">${weatherStr}</div>
+                    <div class="popup-w-right">现实位面</div>
+                </div>
+                <div class="popup-action">“${actionStr}”</div>
+                <button class="popup-btn" onclick="wcCloseRelationNetwork(); setTimeout(()=>wcOpenChat(${char.id}), 300);">发消息</button>
+            </div>
+        `;
+        marker.bindPopup(popupHtml);
+    }
+}
+
+// ==========================================
+// 🌟 异世界地图生成与渲染 (Virtual Map)
+// ==========================================
+function checkAndRenderVirtualMap() {
+    const vMap = document.getElementById('virtual-map');
+    
+    // 如果已经有数据，直接渲染
+    if (wcState.virtualWorldData && wcState.virtualWorldData.locations) {
+        renderVirtualMapDOM();
+    } else {
+        // 没有数据，提示生成
+        vMap.innerHTML = `
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 10; width: 80%;">
+                <div style="color: #FFF; font-size: 16px; font-weight: bold; margin-bottom: 10px; letter-spacing: 2px;">异世界坐标未建立</div>
+                <div style="color: #888; font-size: 12px; margin-bottom: 20px;">需要调取世界书与人设，构建虚拟城市与街道</div>
+                <button onclick="openVirtualMapGenModal()" style="background: #AF52DE; color: #FFF; border: none; padding: 10px 24px; border-radius: 20px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(175,82,222,0.4);">构建异世界</button>
+            </div>
+        `;
+    }
+}
+
+// 打开生成设置弹窗
+window.openVirtualMapGenModal = function() {
+    let modal = document.getElementById('wc-modal-vmap-gen');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'wc-modal-vmap-gen';
+        modal.className = 'wc-modal hidden';
+        modal.style.zIndex = '36000';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="wc-modal-content" style="background: #FFF; padding: 24px; border-radius: 20px; width: 85%; max-width: 340px;">
+            <h3 style="margin-top: 0; text-align: center; color: #111; margin-bottom: 20px;">构建异世界坐标</h3>
+            <div class="wc-form-group">
+                <label class="wc-form-label" style="font-weight: bold; color: #111;">关联世界书 (提供城市/街道背景)</label>
+                <div class="ins-wb-select-btn" onclick="openGlobalWbModal('vmap-wb-list', 'vmap-wb-count')">
+                    <span class="title">选择要关联的世界书</span>
+                    <span class="count" id="vmap-wb-count">已选 0 项</span>
+                </div>
+                <div id="vmap-wb-list" style="display: none;"></div>
+            </div>
+            <div style="font-size: 12px; color: #888; margin-bottom: 20px; line-height: 1.5;">
+                AI 将读取当前分组下所有设定为“虚拟位置”的角色，并结合世界书，为你生成一个包含具体小区、街道、房屋的虚拟地图。
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button class="wc-btn-secondary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; font-weight: bold;" onclick="wcCloseModal('wc-modal-vmap-gen')">取消</button>
+                <button class="wc-btn-primary" style="flex: 1; margin: 0; border-radius: 12px; padding: 12px; background: #AF52DE; font-weight: bold;" onclick="generateVirtualMapData()">开始构建</button>
+            </div>
+        </div>
+    `;
+    wcOpenModal('wc-modal-vmap-gen');
+};
+
+// 调用 API 生成虚拟地图数据
+window.generateVirtualMapData = async function() {
+    const apiConfig = await getActiveApiConfig('chat');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    // 筛选出当前分组下，所有设定为虚拟位置的角色
+    const virtualChars = wcState.characters.filter(c => !c.isGroup && c.groupName === wcState.activeContactsGroup && c.chatConfig && c.chatConfig.locationType === 'virtual');
+    if (virtualChars.length === 0) {
+        alert("当前分组没有设定为【虚拟位置】的角色哦，请先在聊天设置中修改 Ta 的城市设定。");
+        wcCloseModal('wc-modal-vmap-gen');
+        return;
+    }
+
+    wcCloseModal('wc-modal-vmap-gen');
+    wcShowLoading("正在构建异世界城市与街道...");
+
+    try {
+        // 读取勾选的世界书
+        let wbInfo = "";
+        const wbCheckboxes = document.querySelectorAll('#vmap-wb-list input[type="checkbox"]:checked');
+        const selectedWbIds = Array.from(wbCheckboxes).map(cb => cb.value);
+        if (selectedWbIds.length > 0) {
+            const linkedWbs = worldbookEntries.filter(e => selectedWbIds.includes(e.id.toString()));
+            wbInfo = "【世界观背景参考】:\n" + linkedWbs.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+        }
+
+        const charInfo = virtualChars.map(c => `- ${c.name} (设定位置: ${c.chatConfig.locationName || '未知'})：${c.prompt.substring(0, 100)}...`).join('\n');
+
+        let prompt = `你是一个虚拟世界地图构建引擎。请根据以下世界观和角色设定，生成一个具体的虚拟地图。\n\n`;
+        prompt += wbInfo;
+        prompt += `【需要安置在地图上的角色】：\n${charInfo}\n\n`;
+        prompt += `【任务要求】：\n`;
+        prompt += `1. 根据世界观，生成一个符合背景的整体天气 (weather)。\n`;
+        prompt += `2. 生成 4-6 个具体的地点 (locations)，必须包含具体的城市、街道、小区或房屋名称（例如：赛博朋克背景可以是“霓虹街404号公寓”；修仙背景可以是“云隐宗外门弟子居所”）。\n`;
+        prompt += `3. 为每个地点分配一个 X 和 Y 坐标（范围 10 到 90，代表在屏幕上的百分比位置，尽量分散）。\n`;
+        prompt += `4. 将上面的【角色】合理地分配到这些地点中（通过 charId 绑定）。\n`;
+        prompt += `5. 返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "weather": {"temp": "24°C", "desc": "酸雨 / 灵气风暴"},
+  "locations": [
+    {
+      "id": "loc_1",
+      "name": "霓虹街404号公寓",
+      "desc": "破旧但充满科技感的单人公寓",
+      "x": 20,
+      "y": 30,
+      "chars": [
+        {"charId": 角色ID数字, "action": "正在改装义体"}
+      ]
+    }
+  ]
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        wcState.virtualWorldData = JSON.parse(content);
+        wcSaveData();
+        
+        renderVirtualMapDOM();
+        wcShowSuccess("异世界构建完成！");
+
+    } catch (e) {
+        console.error(e);
+        if (typeof showApiErrorModal === 'function') showApiErrorModal(`[地图构建失败] ${e.message}`);
+        else wcShowError("构建失败");
+    }
+};
+
+// 渲染虚拟地图 DOM
+function renderVirtualMapDOM() {
+    const vMap = document.getElementById('virtual-map');
+    vMap.innerHTML = ''; 
+
+    // 添加重构按钮
+    const rebuildBtn = document.createElement('div');
+    rebuildBtn.style.cssText = 'position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.1); color: #FFF; padding: 6px 12px; border-radius: 12px; font-size: 10px; cursor: pointer; z-index: 10; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(4px);';
+    rebuildBtn.innerText = '重构世界';
+    rebuildBtn.onclick = openVirtualMapGenModal;
+    vMap.appendChild(rebuildBtn);
+
+    const data = wcState.virtualWorldData;
+    if (!data || !data.locations) return;
+
+    data.locations.forEach(loc => {
+        // 渲染地点节点 (发光小点)
+        const locNode = document.createElement('div');
+        locNode.style.cssText = `position: absolute; left: ${loc.x}%; top: ${loc.y}%; width: 8px; height: 8px; background: #AF52DE; border-radius: 50%; box-shadow: 0 0 10px #AF52DE; transform: translate(-50%, -50%); z-index: 3;`;
+        
+        // 地点名称标签
+        const locLabel = document.createElement('div');
+        locLabel.style.cssText = `position: absolute; left: ${loc.x}%; top: calc(${loc.y}% + 10px); transform: translateX(-50%); color: rgba(255,255,255,0.6); font-size: 9px; white-space: nowrap; z-index: 3; font-family: monospace;`;
+        locLabel.innerText = loc.name;
+        
+        vMap.appendChild(locNode);
+        vMap.appendChild(locLabel);
+
+        // 渲染该地点上的角色
+        if (loc.chars && loc.chars.length > 0) {
+            loc.chars.forEach((cData, idx) => {
+                const char = wcState.characters.find(c => c.id.toString() === cData.charId.toString());
+                if (!char) return;
+
+                // 稍微偏移一下，防止多个角色重叠
+                const offsetX = (idx * 15) - 15;
+                const offsetY = -30;
+
+                const avatarWrap = document.createElement('div');
+                avatarWrap.className = 'virtual-avatar-wrap';
+                avatarWrap.style.left = `calc(${loc.x}% + ${offsetX}px)`;
+                avatarWrap.style.top = `calc(${loc.y}% + ${offsetY}px)`;
+                avatarWrap.style.animationDelay = `${Math.random() * 2}s`;
+
+                avatarWrap.innerHTML = `
+                    <img src="${char.avatar}">
+                    <div class="virtual-avatar-name">${char.name}</div>
+                `;
+
+                // 点击弹出异世界卡片
+                avatarWrap.onclick = () => {
+                    showVirtualPopup(char, loc, cData.action, data.weather);
+                };
+
+                vMap.appendChild(avatarWrap);
+            });
+        }
+    });
+}
+
+// 显示异世界信息卡片
+window.showVirtualPopup = function(char, loc, action, weather) {
+    let popup = document.getElementById('virtual-popup');
+    if (!popup) {
+        popup = document.createElement('div');
+        popup.id = 'virtual-popup';
+        popup.className = 'virtual-popup';
+        document.getElementById('virtual-map').appendChild(popup);
+    }
+
+    const weatherStr = weather ? `${weather.desc} ${weather.temp}` : '异星气候';
+
+    popup.innerHTML = `
+        <div class="virtual-close" onclick="document.getElementById('virtual-popup').classList.remove('active')">×</div>
+        <div class="popup-header">
+            <img src="${char.avatar}" class="popup-avatar">
+            <div>
+                <div class="popup-name">${char.name}</div>
+                <div class="popup-loc">
+                    <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    <span>${loc.name}</span>
+                </div>
+            </div>
+        </div>
+        <div class="popup-weather-row">
+            <div class="popup-w-left">✨ ${weatherStr}</div>
+            <div class="popup-w-right">跨越次元</div>
+        </div>
+        <div class="popup-action">“${action || '正在发呆'}”</div>
+        <div style="font-size: 10px; color: #888; margin-top: -4px; font-style: italic;">${loc.desc}</div>
+        <button class="popup-btn" onclick="wcCloseRelationNetwork(); setTimeout(()=>wcOpenChat(${char.id}), 300);">跨次元通讯</button>
+    `;
+
+    popup.classList.add('active');
+};
 
 function wcCloseRelationNetwork() {
     const modal = document.getElementById('wc-modal-relation-network');
@@ -32351,4 +33018,104 @@ function wishChooseExploreOption(index) {
             }
         }
     }
+}
+// ==========================================
+// 🌟 新增：天气系统核心逻辑 (Weather System)
+// ==========================================
+let cachedUserWeather = null;
+
+// 获取用户当前真实天气
+async function getUserWeather() {
+    if (cachedUserWeather) return cachedUserWeather;
+    return new Promise((resolve) => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                try {
+                    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}&current_weather=true`);
+                    const data = await res.json();
+                    cachedUserWeather = data.current_weather;
+                    resolve(cachedUserWeather);
+                } catch (e) { resolve(null); }
+            }, () => resolve(null), { timeout: 5000 });
+        } else { resolve(null); }
+    });
+}
+
+// 获取指定经纬度的真实天气
+async function getRealWeather(lat, lon) {
+    try {
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+        const data = await res.json();
+        return data.current_weather;
+    } catch (e) { return null; }
+}
+
+// 将天气代码转换为 Emoji
+function getWeatherEmoji(code) {
+    if (code === 0) return '☀️'; // 晴
+    if (code === 1 || code === 2) return '⛅'; // 多云
+    if (code === 3) return '☁️'; // 阴
+    if (code >= 45 && code <= 67) return '🌧️'; // 雨
+    if (code >= 71 && code <= 82) return '❄️'; // 雪
+    if (code >= 95) return '⛈️'; // 雷暴
+    return '🌤️';
+}
+// ==========================================
+// 🌟 新增：AI 天气感知 Prompt 生成器
+// ==========================================
+const charWeatherCache = {}; // 缓存角色的真实天气，避免频繁请求 API
+
+async function getWeatherPrompt(char) {
+    if (!char || !char.chatConfig) return "";
+    
+    let userWeatherStr = "";
+    let charWeatherStr = "";
+
+    try {
+        // 1. 获取 User 天气 (设置 2 秒超时，防止网络差导致聊天卡死)
+        const userWeatherPromise = getUserWeather();
+        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 2000));
+        const userWeather = await Promise.race([userWeatherPromise, timeoutPromise]);
+        
+        if (userWeather) {
+            userWeatherStr = `${getWeatherEmoji(userWeather.weathercode)} ${Math.round(userWeather.temperature)}°C`;
+        }
+
+        // 2. 获取 Char 天气
+        if (char.chatConfig.locationType === 'real' && char.chatConfig.locationLat) {
+            const cacheKey = `${char.chatConfig.locationLat},${char.chatConfig.locationLon}`;
+            let charWeather = charWeatherCache[cacheKey];
+            
+            // 1小时缓存，避免重复请求
+            if (!charWeather || (Date.now() - charWeather.timestamp > 3600000)) { 
+                const charWeatherPromise = getRealWeather(char.chatConfig.locationLat, char.chatConfig.locationLon);
+                const cw = await Promise.race([charWeatherPromise, timeoutPromise]);
+                if (cw) {
+                    charWeatherCache[cacheKey] = { data: cw, timestamp: Date.now() };
+                    charWeather = charWeatherCache[cacheKey];
+                }
+            }
+            
+            if (charWeather && charWeather.data) {
+                charWeatherStr = `${getWeatherEmoji(charWeather.data.weathercode)} ${Math.round(charWeather.data.temperature)}°C`;
+            }
+        } else if (char.chatConfig.locationType === 'virtual') {
+            // 如果是异世界，直接读取虚拟地图生成的天气
+            if (wcState.virtualWorldData && wcState.virtualWorldData.weather) {
+                charWeatherStr = `✨ ${wcState.virtualWorldData.weather.desc} ${wcState.virtualWorldData.weather.temp}`;
+            }
+        }
+
+        // 3. 组装 Prompt
+        if (userWeatherStr || charWeatherStr) {
+            let prompt = `\n【环境与天气感知】：\n`;
+            if (charWeatherStr) prompt += `- 你所在地的天气：${charWeatherStr}\n`;
+            if (userWeatherStr) prompt += `- User 所在地的天气：${userWeatherStr}\n`;
+            prompt += `(请在聊天中自然地体现出天气的差异，例如提醒对方添衣、抱怨自己这边的天气等，但绝对不要生硬地像天气预报一样播报！)\n`;
+            return prompt;
+        }
+    } catch (e) {
+        console.warn("获取天气 Prompt 失败", e);
+    }
+    return "";
 }

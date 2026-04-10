@@ -101,7 +101,11 @@
             <div class="status-bar-placeholder"></div>
 
             <!-- 桌面区域 (双页滑动容器) -->
-            <div class="home-swiper" id="homeSwiper">
+            <div class="home-swiper" id="homeSwiper" style="position: relative;">
+                
+                <!-- 👇 移到这里：自定义桌面小组件容器 (宽度200vw，覆盖两页) 👇 -->
+                <div id="desktop-custom-widgets-container" style="position: absolute; top: 0; left: 0; width: 200vw; height: 100%; pointer-events: none; z-index: 5;"></div>
+
                 <!-- 第一页 -->
                 <div class="home-grid page-1" id="homeGrid">
                     <!-- 新版日系 INS 风小组件 (4x3) -->
@@ -2054,6 +2058,11 @@
                         <div class="ios-api-title">主 API 模型选择</div>
                         <div class="ios-api-card">
                             <button class="ios-api-btn" onclick="fetchModels('primary')" id="fetchBtnPrimary" style="margin-bottom: 16px;">拉取模型列表</button>
+                            <!-- 👇 新增：主 API 模型搜索框 👇 -->
+                            <div class="ios-api-field" style="margin-bottom: 10px;">
+                                <input type="text" id="modelSearchPrimary" placeholder="搜索模型..." oninput="filterModels('primary')" style="padding: 8px 12px; font-size: 14px;">
+                            </div>
+                            <!-- 👆 新增结束 👆 -->
                             <div class="ios-api-field">
                                 <label>选择模型</label>
                                 <select id="modelSelect" class="ios-select-clean"></select>
@@ -2115,6 +2124,11 @@
                         <div class="ios-api-title">副 API 模型选择</div>
                         <div class="ios-api-card">
                             <button class="ios-api-btn" onclick="fetchModels('secondary')" id="fetchBtnSecondary" style="margin-bottom: 16px;">拉取模型列表</button>
+                            <!-- 👇 新增：副 API 模型搜索框 👇 -->
+                            <div class="ios-api-field" style="margin-bottom: 10px;">
+                                <input type="text" id="modelSearchSecondary" placeholder="搜索模型..." oninput="filterModels('secondary')" style="padding: 8px 12px; font-size: 14px;">
+                            </div>
+                            <!-- 👆 新增结束 👆 -->
                             <div class="ios-api-field">
                                 <label>选择模型</label>
                                 <select id="secModelSelect" class="ios-select-clean"></select>
@@ -4540,12 +4554,56 @@
                 <div style="width: 32px;"></div>
             </div>
             
-            <div id="rn-container">
+            <!-- 👇 修改：升级为多视图容器 👇 -->
+            <div id="rn-container" class="map-container-wrapper">
+                <!-- 视图1：关系网连线 -->
                 <canvas id="rn-canvas"></canvas>
-                <!-- 节点将由 JS 动态注入 -->
+                <!-- 视图2：现实世界地图 -->
+                <div id="real-map" style="display: none;"></div>
+                <!-- 视图3：异世界星空雷达 -->
+                <div id="virtual-map" style="display: none;">
+                    <!-- 虚拟角色将由 JS 注入这里 -->
+                    <!-- 异世界专属弹窗 -->
+                    <div class="virtual-popup" id="virtual-popup">
+                        <div class="virtual-close" onclick="closeVirtualPopup()">×</div>
+                        <div class="popup-header">
+                            <img src="" class="popup-avatar" id="v-avatar">
+                            <div>
+                                <div class="popup-name" id="v-name">Name</div>
+                                <div class="popup-loc">
+                                    <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                    <span id="v-loc">Location</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="popup-weather-row">
+                            <div class="popup-w-left" id="v-weather">☁️ --°C</div>
+                            <div class="popup-w-right">跨越次元</div>
+                        </div>
+                        <div class="popup-action" id="v-action">“...”</div>
+                        <button class="popup-btn" id="v-chat-btn">跨次元通讯</button>
+                    </div>
+                </div>
             </div>
+            <!-- 👆 修改结束 👆 -->
             
             <div class="rn-toolbar">
+                <!-- 👇 新增：地图切换按钮 👇 -->
+                <div class="rn-tool-btn" id="rn-tab-network" onclick="wcSwitchMapMode('network')" style="color: #111;">
+                    <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                    <span>关系网</span>
+                </div>
+                <div class="rn-tool-btn" id="rn-tab-real" onclick="wcSwitchMapMode('real')">
+                    <svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    <span>现实世界</span>
+                </div>
+                <div class="rn-tool-btn" id="rn-tab-virtual" onclick="wcSwitchMapMode('virtual')">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                    <span>虚拟世界</span>
+                </div>
+                <div style="width: 1px; height: 24px; background: #EAEAEA; margin: 0 10px;"></div>
+                <!-- 👆 新增结束 👆 -->
+
                 <div class="rn-tool-btn" onclick="wcOpenAddRelationModal()">
                     <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
                     <span></span>
@@ -5429,6 +5487,27 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 底部小组件抽屉 -->
+                <div class="widget-drawer-overlay" id="widget-drawer-overlay" onclick="closeWidgetDrawer(event)">
+                    <div class="widget-drawer" onclick="event.stopPropagation()">
+                        <div class="drawer-header">
+                            <div class="drawer-title">添加小组件</div>
+                            <div class="drawer-close" onclick="closeWidgetDrawer()">×</div>
+                        </div>
+                        <div class="drawer-list" id="drawer-list">
+                            <!-- 导入卡片 -->
+                            <div class="drawer-item import-card" onclick="document.getElementById('import-widget-json-input').click()">
+                                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                <span style="font-size: 12px; font-weight: bold;">导入 JSON</span>
+                            </div>
+                            <!-- 动态生成的已导入小组件会放在这里 -->
+                        </div>
+                    </div>
+                </div>
+                <!-- 隐藏的 JSON 导入框 -->
+                <input type="file" id="import-widget-json-input" accept=".json" style="display: none;" onchange="handleImportWidgetJson(event)">
+
     </div> <!-- End of #app-root -->
 
     <style id="dynamic-font-style"></style>
@@ -6211,6 +6290,19 @@
                 <div class="ins-status-value" id="ins-status-mood" style="font-weight: normal; font-size: 13px; color: rgba(255,255,255,0.85);">
                     点击下方按钮生成当前状态...
                 </div>
+                
+                <!-- 👇 新增：天气与温差模块 (默认隐藏，有数据时显示) 👇 -->
+                <div class="weather-module" id="ins-status-weather-module" style="display: none;">
+                    <div class="weather-info">
+                        <span class="weather-icon-large" id="ins-weather-icon">☁️</span>
+                        <div>
+                            <div class="weather-temp" id="ins-weather-temp">--°C</div>
+                            <div class="weather-desc" id="ins-weather-desc">获取中...</div>
+                        </div>
+                    </div>
+                    <div class="weather-diff" id="ins-weather-diff">--</div>
+                </div>
+                <!-- 👆 新增结束 👆 -->
             </div>
 
             <!-- 行程时间轴 -->
