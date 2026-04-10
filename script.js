@@ -614,10 +614,13 @@ function updateAppViewportVars() {
 }
 
 // 监听可视区域变化（键盘弹出/收起）
+let viewportResizeTimer = null; // 新增：防抖计时器
 if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
-        updateAppViewportVars();
-        setTimeout(() => {
+        // 核心修复：加入防抖逻辑，防止打开APP时疯狂触发重绘导致卡顿
+        if (viewportResizeTimer) clearTimeout(viewportResizeTimer);
+        viewportResizeTimer = setTimeout(() => {
+            updateAppViewportVars();
             if (typeof wcScrollToBottom === 'function') wcScrollToBottom(true);
             const simHistory = document.getElementById('wc-sim-chat-history');
             if (simHistory) simHistory.scrollTop = simHistory.scrollHeight;
@@ -625,7 +628,7 @@ if (window.visualViewport) {
             if (pmHistory) pmHistory.scrollTop = pmHistory.scrollHeight;
             const dreamHistory = document.getElementById('dream-chat-history');
             if (dreamHistory) dreamHistory.scrollTop = dreamHistory.scrollHeight;
-        }, 100);
+        }, 150); // 延迟 150ms，等屏幕完全稳定后再计算
     });
     
     // 恢复防滚动机制，配合正确的键盘高度计算，实现原生 App 体验
@@ -2112,12 +2115,23 @@ function renderDesktopWidgets() {
         el.style.left = widget.position.left;
         el.style.transform = widget.position.transform;
         
+        // 👇 恢复魔法脚本修改过的外层样式（大小、透明度等）
+        if (widget.customStyles) {
+            if (widget.customStyles.width) el.style.width = widget.customStyles.width;
+            if (widget.customStyles.height) el.style.height = widget.customStyles.height;
+            if (widget.customStyles.background) el.style.background = widget.customStyles.background;
+            if (widget.customStyles.border) el.style.border = widget.customStyles.border;
+            if (widget.customStyles.boxShadow) el.style.boxShadow = widget.customStyles.boxShadow;
+            if (widget.customStyles.backdropFilter) el.style.backdropFilter = widget.customStyles.backdropFilter;
+        }
+        
         el.innerHTML = `
             <div class="widget-remove-btn" onclick="removeWidgetFromDesktop(${widget.instanceId})"></div>
             <div class="content" style="width:100%; height:100%; padding:0;">${widget.content}</div>
         `;
         
         makeWidgetDraggable(el, widget.instanceId);
+        observeWidgetChanges(el, widget.instanceId); // 👇 启动全自动静默保存监听
         container.appendChild(el);
     });
 }
@@ -33118,4 +33132,47 @@ async function getWeatherPrompt(char) {
         console.warn("获取天气 Prompt 失败", e);
     }
     return "";
+}
+// ==========================================
+// 全自动静默保存监听器 (MutationObserver)
+// ==========================================
+function observeWidgetChanges(el, instanceId) {
+    const contentDiv = el.querySelector('.content');
+    if (!contentDiv) return;
+
+    let timeout = null;
+    // 创建一个观察者，时刻盯着小组件的变化
+    const observer = new MutationObserver((mutations) => {
+        // 防抖处理：防止上传大图片时频繁触发导致卡顿，延迟 500ms 保存
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+            const widget = customDesktopWidgets.find(w => w.instanceId === instanceId);
+            if (widget) {
+                // 1. 保存内部最新的 HTML (包括你换的图片 base64 和改的文字)
+                widget.content = contentDiv.innerHTML;
+                
+                // 2. 保存外层容器被魔法脚本修改的样式 (大小、透明背景等)
+                widget.customStyles = {
+                    width: el.style.width,
+                    height: el.style.height,
+                    background: el.style.background,
+                    border: el.style.border,
+                    boxShadow: el.style.boxShadow,
+                    backdropFilter: el.style.backdropFilter
+                };
+                
+                // 3. 写入数据库
+                saveCustomWidgetsData();
+            }
+        }, 500);
+    });
+
+    // 启动监听：监听所有属性(src/style)、子节点和文本的变化
+    observer.observe(el, {
+        attributes: true,
+        childList: true,
+        characterData: true,
+        subtree: true,
+        attributeFilter: ['src', 'style'] 
+    });
 }
