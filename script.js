@@ -1630,7 +1630,17 @@ function clearAllData() {
     confirmBtn.onclick = async () => {
         closePopup();
         try {
-            // 执行清空逻辑
+            // 1. 【新增】：在执行毁灭性清空前，先备份所有的授权核心数据 (白名单)
+            const authData = {
+                fallback: localStorage.getItem('ios_theme_activation_v2_fallback'),
+                qq: localStorage.getItem('current_bound_qq'),
+                code: localStorage.getItem('current_activation_code'),
+                deviceId: localStorage.getItem('ios_theme_device_id')
+            };
+            // 备份 IndexedDB 里的深层激活状态
+            const idbAuthStatus = await idb.get('ios_theme_activation_v2_status');
+
+            // 2. 执行清空逻辑 (清空业务数据)
             await idb.clear();
             if (typeof wcDb !== 'undefined' && wcDb.instance) {
                 const stores = ['kv_store', 'characters', 'chats', 'moments', 'masks'];
@@ -1641,10 +1651,20 @@ function clearAllData() {
             if (typeof wcClearCharactersPersistentSnapshot === 'function') {
                 await wcClearCharactersPersistentSnapshot();
             }
-            // 【V2修改点：保留新的激活状态】
-            const isActivated = localStorage.getItem('ios_theme_activation_v2_fallback');
+            
+            // 3. 清空 localStorage
             localStorage.clear();
-            if (isActivated) localStorage.setItem('ios_theme_activation_v2_fallback', isActivated);
+
+            // 4. 【新增】：将备份的授权核心数据原封不动地恢复回去！
+            if (authData.fallback) localStorage.setItem('ios_theme_activation_v2_fallback', authData.fallback);
+            if (authData.qq) localStorage.setItem('current_bound_qq', authData.qq);
+            if (authData.code) localStorage.setItem('current_activation_code', authData.code);
+            if (authData.deviceId) localStorage.setItem('ios_theme_device_id', authData.deviceId);
+            
+            // 恢复 IndexedDB 里的深层激活状态
+            if (idbAuthStatus) {
+                await idb.set('ios_theme_activation_v2_status', idbAuthStatus);
+            }
 
             // 贯彻高级感：不弹原生 alert，直接让整个页面优雅淡出并刷新
             document.body.style.transition = 'opacity 0.6s ease';
