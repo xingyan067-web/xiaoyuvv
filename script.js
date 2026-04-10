@@ -10031,13 +10031,15 @@ function wcRenderPhoneMe() {
                 </div>
                 <svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
             </div>
-            <div class="wc-list-item" style="background: #fff;">
+            <!-- 👇 修改：给设置项加上 onclick 事件和 cursor: pointer 👇 -->
+            <div class="wc-list-item" onclick="wcConfirmGenerateAllPhoneData()" style="background: #fff; cursor: pointer;">
                 <svg class="wc-icon" style="margin-right: 10px; color: #8E8E93;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                 <div class="wc-item-content">
                     <div class="wc-item-title">设置</div>
                 </div>
                 <svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
             </div>
+            <!-- 👆 修改结束 👆 -->
         </div>
     `;
 }
@@ -33311,5 +33313,199 @@ function makeMainWidgetDraggable(el) {
         document.removeEventListener('touchmove', dragMove);
         document.removeEventListener('mouseup', dragEnd);
         document.removeEventListener('touchend', dragEnd);
+    }
+}
+// ==========================================================================
+// 新增：一键生成查手机所有内容 (除通讯录和歌单)
+// ==========================================================================
+function wcConfirmGenerateAllPhoneData() {
+    if (confirm("是否一键生成查手机所有内容？\n（将覆盖现有的手机状态、浏览器、隐私、购物车、钱包和聊天记录，不包含通讯录和歌单）\n\n注意：生成内容较多，可能需要等待较长时间。")) {
+        wcGenerateAllPhoneData();
+    }
+}
+
+async function wcGenerateAllPhoneData() {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char) return alert("请先进入一个角色的聊天界面或详情页");
+
+    const apiConfig = await getActiveApiConfig('phone');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    const limit = apiConfig.limit || 50;
+    if (limit > 0 && sessionApiCallCount >= limit) {
+        wcShowError("已达到API调用上限");
+        return;
+    }
+    sessionApiCallCount++;
+
+    wcShowLoading("正在一键生成手机所有数据(耗时较长请耐心等待)...");
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        
+        // 1. 读取用户面具/设定
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        // 2. 读取最近 30 条聊天记录
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-30).map(m => {
+            if (m.isError || m.type === 'system') return null;
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return `${m.sender==='me'?'User':char.name}: ${content}`;
+        }).filter(Boolean).join('\n');
+
+        // 3. 读取当前聊天设置中勾选的世界书
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观与背景设定参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        // 提取通讯录 NPC 列表，供生成聊天记录使用
+        const contacts = char.phoneData && char.phoneData.contacts ? char.phoneData.contacts.filter(c => !c.isUser) : [];
+        let contactsInfo = "通讯录中暂无其他NPC，请自由发挥生成。";
+        if (contacts.length > 0) {
+            contactsInfo = "【通讯录NPC列表】:\n" + contacts.map(c => `- ${c.name} (${c.type === 'group' ? '群聊' : '好友'}): ${c.desc}`).join('\n');
+        }
+
+        const now = new Date();
+        const timeString = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
+        const timePrompt = `\n【绝对时间基准】：当前现实时间是 ${timeString} ${dayString}。你生成的所有数据的时间戳必须合理，不能超过当前时间，且内容要符合当前的时间段氛围。\n`;
+
+        const lifeStatusPrompt = getLifeStatusPrompt(char);
+
+        // 组装强大的 Prompt
+        let prompt = `你扮演角色：${char.name}。\n`;
+        prompt += timePrompt;
+        prompt += `【你的人设】：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += lifeStatusPrompt; 
+        prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）的手机。\n`;
+        prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
+        prompt += `${contactsInfo}\n\n`;
+        
+        prompt += `请基于你的人设、世界观背景、当前生活状态，以及我们**最近的聊天上下文**，一次性生成你手机里的各项数据（不包含通讯录和歌单）。\n`;
+        prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
+        prompt += `0. 【最高警告】：所有生成的内容（浏览记录、私密日记、购物车、聊天记录等）必须严格符合【世界观背景】和【你的人设】，并且必须是对【最近聊天记录】的延伸、复盘或吐槽！绝对不要生成毫无关联的模板化内容！\n`;
+        prompt += `1. 手机状态 (settings)：包含 battery(电量数字), screenTime(屏幕使用时间), appUsage(3-6个APP使用时长), locations(3-6个今日行程记录)。\n`;
+        prompt += `2. 浏览器 (browser)：包含 history(3-6条浏览记录，带内心批注), posts(2-4个论坛帖子，带评论)。\n`;
+        prompt += `3. 私密记录 (privacy)：包含 masturbation(自慰记录) 和 wetDream(春梦记录)。\n`;
+        prompt += `4. 购物车 (cartApp)：包含 cart(3-6条购物车商品) 和 history(3-6条购买记录)。\n`;
+        prompt += `5. 钱包 (wallet)：包含 balance(余额数字) 和 transactions(4-8条交易记录，type为income或expense)。\n`;
+        prompt += `6. 聊天记录 (chats)：生成 3-6 个聊天会话。必须包含一个与用户(User)的会话(isUser为true)。其他会话从【通讯录NPC列表】中挑选。每个会话的 history 数组包含 5-10 条具体聊天记录(sender为me或them)。\n`;
+        prompt += `【内在逻辑要求】：所有数据必须相互呼应！例如行程里去了便利店，钱包里就该有支出；聊天里提到了某物，浏览器或购物车里就该有相关记录。\n`;
+        prompt += `推演结束后，直接返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "settings": {
+    "battery": 85, "screenTime": "4小时20分",
+    "appUsage": [{"name": "微信", "time": "2小时"}],
+    "locations": [{"time": "10:00", "place": "公司", "desc": "开会好困"}]
+  },
+  "browser": {
+    "history": [{"title": "网页标题", "url_placeholder": "xxx.com", "annotation": "内心批注", "time": "10:30"}],
+    "posts": [{"title": "帖子标题", "content": "正文", "author": "匿名", "comments": [{"author": "网友", "content": "评论"}]}]
+  },
+  "privacy": {
+    "masturbation": {"time": "昨晚", "status": "状态", "action": "动作", "feeling": "感受"},
+    "wetDream": {"time": "前天", "status": "状态", "dream": "梦境", "feeling": "感受"}
+  },
+  "cartApp": {
+    "cart": [{"name": "商品名", "desc": "加购OS", "price": "129.00"}],
+    "history": [{"name": "商品名", "desc": "购买OS", "price": "45.00", "date": "10-24"}]
+  },
+  "wallet": {
+    "balance": 1234.56,
+    "transactions": [{"type": "expense", "amount": 25.50, "note": "买水", "time": "10-24 12:00"}]
+  },
+  "chats": [
+    {
+      "name": "User的备注名", "isUser": true, "isGroup": false, "lastMsg": "最近的一条消息", "time": "10:30",
+      "history": [
+        {"sender": "them", "content": "在干嘛？"},
+        {"sender": "me", "content": "刚吃完饭"}
+      ]
+    }
+  ]
+}\n`;
+
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: parseFloat(apiConfig.temp) || 0.8,
+                max_tokens: 12000
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || `HTTP 错误: ${response.status}`);
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) throw new Error("API 返回数据异常");
+
+        let content = data.choices[0].message.content;
+        content = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        let resultData;
+        try {
+            resultData = JSON.parse(content);
+        } catch (parseErr) {
+            throw new Error("AI 返回的 JSON 格式错误，请重试。");
+        }
+
+        if (!char.phoneData) char.phoneData = {};
+        
+        // 合并数据，保留原有的 playlists (歌单)
+        if (resultData.settings) {
+            const oldPlaylists = (char.phoneData.settings && char.phoneData.settings.playlists) ? char.phoneData.settings.playlists : [];
+            const oldPlaylist = (char.phoneData.settings && char.phoneData.settings.playlist) ? char.phoneData.settings.playlist : [];
+            char.phoneData.settings = resultData.settings;
+            char.phoneData.settings.playlists = oldPlaylists;
+            char.phoneData.settings.playlist = oldPlaylist;
+        }
+        if (resultData.browser) char.phoneData.browser = resultData.browser;
+        if (resultData.privacy) char.phoneData.privacy = resultData.privacy;
+        if (resultData.cartApp) char.phoneData.cartApp = resultData.cartApp;
+        if (resultData.wallet) char.phoneData.wallet = resultData.wallet;
+        
+        // 处理聊天记录
+        if (resultData.chats) {
+            const formattedChats = resultData.chats.map(c => ({
+                id: Date.now() + Math.random(),
+                name: c.name,
+                isUser: c.isUser || false,
+                isGroup: c.isGroup || false,
+                lastMsg: c.lastMsg || "",
+                time: c.time || "",
+                avatar: "", // 将在渲染时分配
+                history: c.history || []
+            }));
+            char.phoneData.chats = formattedChats;
+        }
+        
+        wcSaveData();
+
+        // 刷新当前可见的页面
+        if (document.getElementById('wc-phone-app-settings').style.display === 'flex') wcGeneratePhoneSettings(true);
+        if (document.getElementById('wc-phone-app-browser').style.display === 'flex') wcRenderPhoneBrowserContent();
+        if (document.getElementById('wc-phone-app-privacy').style.display === 'flex') wcRenderPhonePrivacyContent();
+        if (document.getElementById('wc-phone-app-cart').style.display === 'flex') wcRenderPhoneCartContent();
+        if (document.getElementById('wc-phone-app-wallet').style.display === 'flex') wcRenderPhoneWalletContent();
+        if (document.getElementById('wc-phone-app-message').style.display === 'flex') wcRenderPhoneChats();
+
+        wcShowSuccess("一键生成成功");
+
+    } catch (e) {
+        console.error(e);
+        if (typeof showApiErrorModal === 'function') {
+            showApiErrorModal(`[一键生成失败] ${e.message}`);
+        } else {
+            wcShowError("生成失败");
+        }
     }
 }
