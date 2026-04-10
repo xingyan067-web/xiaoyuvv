@@ -1362,7 +1362,7 @@
                         </div>
 
                         <!-- 悬浮在 Settings 页面底部的迷你播放器 -->
-                        <div id="sim-global-mini-player" class="sim-mini-player" style="display: none;" onclick="musicOpenFullPlayer()">
+                        <div id="sim-global-mini-player" class="sim-mini-player" style="display: none;" onclick="wcOpenSimFullPlayer()">
                             <div class="sim-mini-record" id="sim-global-mini-record">
                                 <img src="" id="sim-global-mini-cover" class="sim-mini-cover">
                             </div>
@@ -1377,6 +1377,76 @@
                                 <div class="sim-mini-btn" onclick="event.stopPropagation(); musicOpenCurrentPlaylist();">
                                     <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- 查手机专属全屏音乐播放器 (低饱和黑白灰) -->
+                        <div id="wc-phone-sim-full-player" class="wc-sfp-container">
+                            <div class="wc-sfp-header">
+                                <div class="wc-sfp-btn" onclick="wcCloseSimFullPlayer()">
+                                    <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                </div>
+                                <div class="wc-sfp-title">Songs</div>
+                                <div style="width: 24px;"></div>
+                            </div>
+
+                            <div class="wc-sfp-record-area">
+                                <div class="wc-sfp-record" id="wc-sfp-record">
+                                    <img src="" id="wc-sfp-cover" class="wc-sfp-cover">
+                                </div>
+                            </div>
+
+                            <div class="wc-sfp-info">
+                                <div class="wc-sfp-song" id="wc-sfp-title">Song Title</div>
+                                <div class="wc-sfp-artist" id="wc-sfp-artist">Artist</div>
+                            </div>
+
+                            <!-- 动作行：加号、当前时间、更多 -->
+                            <div class="wc-sfp-action-row">
+                                <div class="wc-sfp-add-btn" onclick="musicOpenAddToPlaylist(musicState.currentSong)" title="添加到歌单">
+                                    <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                </div>
+                                <div class="wc-sfp-time-center">
+                                    <span id="wc-sfp-time-current-center">0:00</span>
+                                </div>
+                                <div class="wc-sfp-more-btn">
+                                    <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                </div>
+                            </div>
+
+                            <!-- 声波进度条区域 -->
+                            <div class="wc-sfp-progress-area">
+                                <span id="wc-sfp-time-current">0:00</span>
+                                <div class="wc-sfp-waveform" id="wc-sfp-waveform" onclick="wcSimSeekWaveform(event)">
+                                    <!-- JS 动态生成竖条 -->
+                                </div>
+                                <span id="wc-sfp-time-total">-:-</span>
+                            </div>
+
+                            <!-- 控制按钮区域 -->
+                            <div class="wc-sfp-controls">
+                                <div class="wc-sfp-ctrl-btn small" onclick="musicTogglePlayMode()" id="wc-sfp-btn-mode">
+                                    <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+                                </div>
+                                <div class="wc-sfp-play-wrapper">
+                                    <div class="wc-sfp-ctrl-btn" onclick="musicPlayPrev()">
+                                        <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                                    </div>
+                                    <div class="wc-sfp-ctrl-btn play" onclick="musicTogglePlay(event)" id="wc-sfp-btn-play">
+                                        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                    </div>
+                                    <div class="wc-sfp-ctrl-btn" onclick="musicPlayNext()">
+                                        <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                                    </div>
+                                </div>
+                                <div class="wc-sfp-ctrl-btn small" onclick="musicOpenCurrentPlaylist()">
+                                    <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+                                </div>
+                            </div>
+
+                            <div class="wc-sfp-lyrics-hint">
+                                <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                                Lyrics
                             </div>
                         </div>
                     </div>
@@ -2593,18 +2663,6 @@
             </div>
         </div>
 
-        <!-- 添加到歌单弹窗 -->
-        <div id="music-modal-add-to-playlist" class="wc-modal hidden" style="z-index: 3800; align-items: flex-end;">
-            <div class="wc-modal-content" style="height: 50vh; border-radius: 24px 24px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column;">
-                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
-                    <h3 style="color: #111; font-size: 16px; font-weight: 600;">Add to Playlist</h3>
-                    <button class="wc-close-btn" onclick="wcCloseModal('music-modal-add-to-playlist')">&times;</button>
-                </div>
-                <div class="wc-modal-body" id="music-add-to-pl-list" style="flex: 1; overflow-y: auto; padding: 10px 20px;">
-                    <!-- 歌单列表由 JS 注入 -->
-                </div>
-            </div>
-        </div>
                 <!-- 底部导航栏 -->
                 <div class="ins-music-tabbar">
                     <div class="ins-music-tab active" onclick="musicSwitchTab('home')" id="music-tab-home">
@@ -2617,20 +2675,8 @@
             </div>
         </div>
 
-        <!-- 当前播放列表弹窗 -->
-        <div id="music-modal-current-playlist" class="wc-modal hidden" style="z-index: 3800; align-items: flex-end;">
-            <div class="wc-modal-content" style="height: 60vh; border-radius: 24px 24px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column;">
-                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
-                    <h3 style="color: #111; font-size: 18px; font-weight: 700;">Up Next</h3>
-                    <button class="wc-close-btn" onclick="wcCloseModal('music-modal-current-playlist')">&times;</button>
-                </div>
-                <div class="wc-modal-body" id="music-current-playlist-container" style="flex: 1; overflow-y: auto; padding: 10px 20px;">
-                    <!-- 列表由 JS 注入 -->
-                </div>
-            </div>
-        </div>
-
         <!-- 音乐 APP 弹窗：精美邀请确认 -->
+
         <div id="music-modal-invite" class="wc-modal hidden" style="z-index: 3700;">
             <div class="ins-music-invite-card">
                 <div class="ins-music-invite-avatar-wrap">
@@ -6480,6 +6526,36 @@
             <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </div>
         <img id="global-image-preview-img" src="" style="max-width: 95%; max-height: 85%; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); object-fit: contain;" onclick="event.stopPropagation()">
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 全局音乐弹窗 (移出 Music App 容器，防止被隐藏) -->
+    <!-- ========================================== -->
+    
+    <!-- 添加到歌单弹窗 -->
+    <div id="music-modal-add-to-playlist" class="wc-modal hidden" style="z-index: 35000; align-items: flex-end; position: fixed;">
+        <div class="wc-modal-content" style="height: 50vh; border-radius: 24px 24px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column;">
+            <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                <h3 style="color: #111; font-size: 16px; font-weight: 600;">Add to Playlist</h3>
+                <button class="wc-close-btn" onclick="wcCloseModal('music-modal-add-to-playlist')">&times;</button>
+            </div>
+            <div class="wc-modal-body" id="music-add-to-pl-list" style="flex: 1; overflow-y: auto; padding: 10px 20px;">
+                <!-- 歌单列表由 JS 注入 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 当前播放列表弹窗 -->
+    <div id="music-modal-current-playlist" class="wc-modal hidden" style="z-index: 35000; align-items: flex-end; position: fixed;">
+        <div class="wc-modal-content" style="height: 60vh; border-radius: 24px 24px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column;">
+            <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                <h3 style="color: #111; font-size: 18px; font-weight: 700;">Up Next</h3>
+                <button class="wc-close-btn" onclick="wcCloseModal('music-modal-current-playlist')">&times;</button>
+            </div>
+            <div class="wc-modal-body" id="music-current-playlist-container" style="flex: 1; overflow-y: auto; padding: 10px 20px;">
+                <!-- 列表由 JS 注入 -->
+            </div>
+        </div>
     </div>
 
 </body>

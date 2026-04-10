@@ -17370,6 +17370,31 @@ audioPlayer.addEventListener('timeupdate', () => {
     if (capTimeCurrentEl) capTimeCurrentEl.innerText = musicFormatTime(current);
     if (capTimeTotalEl) capTimeTotalEl.innerText = musicFormatTime(total);
     // 👆新增结束
+
+    // 👇【新增】：同步更新查手机专属全屏播放器的进度条和时间
+    const sfpTimeCurrentCenterEl = document.getElementById('wc-sfp-time-current-center');
+    const sfpTimeCurrentEl = document.getElementById('wc-sfp-time-current');
+    const sfpTimeTotalEl = document.getElementById('wc-sfp-time-total');
+    const waveform = document.getElementById('wc-sfp-waveform');
+    
+    if (sfpTimeCurrentCenterEl) sfpTimeCurrentCenterEl.innerText = musicFormatTime(current);
+    if (sfpTimeCurrentEl) sfpTimeCurrentEl.innerText = musicFormatTime(current);
+    if (sfpTimeTotalEl) sfpTimeTotalEl.innerText = musicFormatTime(total);
+    
+    // 更新声波条的激活状态
+    if (waveform && waveform.children.length > 0) {
+        const bars = waveform.children;
+        const activeCount = Math.floor((percent / 100) * bars.length);
+        for (let i = 0; i < bars.length; i++) {
+            if (i < activeCount) {
+                bars[i].classList.add('active');
+            } else {
+                bars[i].classList.remove('active');
+            }
+        }
+    }
+    // 👆新增结束
+
     // 同步更新桌面小组件进度条
     const widgetProgressFill = document.getElementById('widget-progress-fill');
     if (widgetProgressFill) widgetProgressFill.style.width = `${percent}%`;
@@ -17972,13 +17997,19 @@ function musicTogglePlayMode() {
     musicState.playMode = modes[(currentIndex + 1) % modes.length];
     
     const modeBtn = document.getElementById('music-btn-mode');
+    const sfpModeBtn = document.getElementById('wc-sfp-btn-mode'); // 同步更新专属播放器
+    
+    let iconHtml = '';
     if (musicState.playMode === 'loop') {
-        modeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>';
+        iconHtml = '<svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>';
     } else if (musicState.playMode === 'single') {
-        modeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>';
+        iconHtml = '<svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>';
     } else if (musicState.playMode === 'random') {
-        modeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>';
+        iconHtml = '<svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>';
     }
+    
+    if (modeBtn) modeBtn.innerHTML = iconHtml;
+    if (sfpModeBtn) sfpModeBtn.innerHTML = iconHtml;
 
     // 👇 宝宝，把下面这一行加在这个函数的最后面！
     // 它的作用是：每次切换模式后，立刻通知胶囊更新UI
@@ -18036,6 +18067,52 @@ function musicOpenFullPlayer() {
     }
 }
 
+// --- 新增：查手机专属全屏播放器逻辑 ---
+function wcOpenSimFullPlayer() {
+    if (!musicState.currentSong) return;
+    const player = document.getElementById('wc-phone-sim-full-player');
+    if (player) {
+        player.classList.add('active');
+        wcInitWaveform(); // 初始化声波条
+    }
+}
+
+function wcCloseSimFullPlayer() {
+    const player = document.getElementById('wc-phone-sim-full-player');
+    if (player) {
+        player.classList.remove('active');
+    }
+}
+
+// 初始化声波条
+function wcInitWaveform() {
+    const waveform = document.getElementById('wc-sfp-waveform');
+    if (!waveform) return;
+    
+    // 如果已经生成过，就不重复生成
+    if (waveform.children.length > 0) return;
+
+    // 预设一些高度，模拟声波起伏
+    const heights = [10, 15, 8, 20, 12, 25, 18, 22, 14, 28, 16, 10, 20, 15, 8, 22, 12, 18, 10, 25, 14, 20, 16, 12, 8];
+    
+    let html = '';
+    for (let i = 0; i < heights.length; i++) {
+        html += `<div class="wc-sfp-wave-bar" style="height: ${heights[i]}px;"></div>`;
+    }
+    waveform.innerHTML = html;
+}
+
+// 点击声波条跳转进度
+function wcSimSeekWaveform(e) {
+    const waveform = e.currentTarget; 
+    const rect = waveform.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    
+    if (audioPlayer && isFinite(audioPlayer.duration) && audioPlayer.duration > 0) {
+        audioPlayer.currentTime = percent * audioPlayer.duration;
+    }
+}
+
 function musicCloseFullPlayer() {
     const fullPlayer = document.getElementById('music-full-player');
     if (fullPlayer) {
@@ -18085,6 +18162,14 @@ function musicUpdatePlayerUI() {
     if (simMiniArtist) simMiniArtist.innerText = musicState.currentSong.artist;
     if (simMiniCover) simMiniCover.src = musicState.currentSong.cover;
 
+    // 👇 新增：同步更新查手机专属全屏播放器信息 👇
+    const sfpTitle = document.getElementById('wc-sfp-title');
+    const sfpArtist = document.getElementById('wc-sfp-artist');
+    const sfpCover = document.getElementById('wc-sfp-cover');
+    if (sfpTitle) sfpTitle.innerText = musicState.currentSong.title;
+    if (sfpArtist) sfpArtist.innerText = musicState.currentSong.artist;
+    if (sfpCover) sfpCover.src = musicState.currentSong.cover;
+
     const coverEl = document.getElementById('music-player-cover');
     const fpRecordEl = document.getElementById('music-fp-record');
     const playBtn = document.getElementById('music-btn-play');
@@ -18093,6 +18178,10 @@ function musicUpdatePlayerUI() {
     // 👇 新增：获取 Settings 页面的迷你播放器控制元素 👇
     const simMiniRecord = document.getElementById('sim-global-mini-record');
     const simMiniPlayBtn = document.getElementById('sim-global-mini-play-btn');
+
+    // 👇 新增：获取查手机专属全屏播放器控制元素 👇
+    const sfpRecordEl = document.getElementById('wc-sfp-record');
+    const sfpPlayBtn = document.getElementById('wc-sfp-btn-play');
     
     const pauseIcon = '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
     const playIcon = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';            
@@ -18106,6 +18195,9 @@ function musicUpdatePlayerUI() {
         // 同步旋转和暂停图标
         if (simMiniRecord) simMiniRecord.classList.add('playing');
         if (simMiniPlayBtn) simMiniPlayBtn.innerHTML = pauseIcon;
+
+        if (sfpRecordEl) sfpRecordEl.classList.add('playing');
+        if (sfpPlayBtn) sfpPlayBtn.innerHTML = pauseIcon;
     } else {
         coverEl.classList.remove('playing');
         fpRecordEl.classList.remove('playing');
@@ -18115,6 +18207,9 @@ function musicUpdatePlayerUI() {
         // 同步停止旋转和播放图标
         if (simMiniRecord) simMiniRecord.classList.remove('playing');
         if (simMiniPlayBtn) simMiniPlayBtn.innerHTML = playIcon;
+
+        if (sfpRecordEl) sfpRecordEl.classList.remove('playing');
+        if (sfpPlayBtn) sfpPlayBtn.innerHTML = playIcon;
     }
     const widgetPlayBtn = document.getElementById('widget-btn-play');
     if (widgetPlayBtn) {

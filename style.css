@@ -6429,6 +6429,78 @@ input::-webkit-inner-spin-button {
     font-family: 'Courier New', Courier, monospace; 
 }
 /* ========================================== */
+/* 查手机专属全屏音乐播放器 (低饱和黑白灰) */
+/* ========================================== */
+.wc-sfp-container {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(180deg, #F9F9F9 0%, #EAEAEA 100%);
+    z-index: 3000; display: flex; flex-direction: column;
+    transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.wc-sfp-container.active { transform: translateY(0); }
+
+.wc-sfp-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: calc(env(safe-area-inset-top, 20px) + 20px) 24px 10px 24px;
+}
+.wc-sfp-btn { width: 24px; height: 24px; cursor: pointer; color: #333; display: flex; align-items: center; justify-content: center; }
+.wc-sfp-btn svg { width: 24px; height: 24px; }
+.wc-sfp-title { font-size: 18px; font-weight: 600; color: #333; }
+
+.wc-sfp-record-area {
+    flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.wc-sfp-record {
+    width: 260px; height: 260px; border-radius: 50%; background: #111;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.15), inset 0 0 0 8px #222, inset 0 0 0 16px #111, inset 0 0 0 17px #333;
+    animation: spin 12s linear infinite; animation-play-state: paused;
+}
+.wc-sfp-record.playing { animation-play-state: running; }
+.wc-sfp-cover { width: 170px; height: 170px; border-radius: 50%; object-fit: cover; border: 4px solid #000; }
+
+.wc-sfp-info { text-align: center; margin-bottom: 30px; padding: 0 30px; }
+.wc-sfp-song { font-size: 22px; font-weight: 700; color: #111; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wc-sfp-artist { font-size: 14px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.wc-sfp-action-row {
+    display: flex; justify-content: space-between; align-items: center; padding: 0 30px; margin-bottom: 20px;
+}
+.wc-sfp-time-center {
+    font-size: 12px; color: #555; font-weight: 600; font-family: monospace;
+}
+.wc-sfp-add-btn, .wc-sfp-more-btn { width: 24px; height: 24px; color: #555; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.wc-sfp-add-btn svg, .wc-sfp-more-btn svg { width: 20px; height: 20px; }
+
+.wc-sfp-progress-area {
+    display: flex; align-items: center; justify-content: space-between; padding: 0 30px; margin-bottom: 40px; gap: 10px;
+}
+.wc-sfp-progress-area span {
+    font-size: 12px; color: #555; font-weight: 600; font-family: monospace; width: 35px; text-align: center;
+}
+.wc-sfp-waveform {
+    flex: 1; height: 30px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;
+}
+.wc-sfp-wave-bar {
+    width: 3px; background-color: #D1D1D6; border-radius: 2px; transition: background-color 0.1s;
+}
+.wc-sfp-wave-bar.active {
+    background-color: #111;
+}
+
+.wc-sfp-controls { display: flex; justify-content: space-between; align-items: center; padding: 0 40px; margin-bottom: 40px; }
+.wc-sfp-ctrl-btn { color: #555; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.wc-sfp-ctrl-btn svg { width: 24px; height: 24px; fill: currentColor; }
+.wc-sfp-ctrl-btn.small svg { width: 20px; height: 20px; fill: #888; }
+.wc-sfp-play-wrapper { background: #FFF; border-radius: 30px; padding: 10px 30px; display: flex; align-items: center; gap: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #F0F0F0; }
+.wc-sfp-ctrl-btn.play { width: 50px; height: 50px; background: #111; border-radius: 50%; color: #FFF; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+.wc-sfp-ctrl-btn.play svg { width: 24px; height: 24px; }
+
+.wc-sfp-lyrics-hint { text-align: center; color: #AAA; font-size: 12px; margin-bottom: calc(env(safe-area-inset-bottom, 20px) + 10px); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.wc-sfp-lyrics-hint svg { width: 16px; height: 16px; }
+
+/* ========================================== */
 /* 新增：拉黑拦截弹窗 (高级黑白灰 INS 风) */
 /* ========================================== */
 .ins-blocked-alert-card {
