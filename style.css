@@ -11494,3 +11494,10 @@ body.edit-mode-active .widget-remove-btn { display: flex; }
 .virtual-popup .popup-action { background: rgba(0,0,0,0.3); color: #CCC; border-left-color: #AF52DE; }
 .virtual-popup .popup-btn { background: #AF52DE; color: #FFF; }
 .virtual-close { position: absolute; top: 12px; right: 12px; color: #888; cursor: pointer; font-size: 20px; line-height: 1; }
+/* 新增：隐形的 4x3 占位符，用于撑开底层网格，把 APP 挤到第 4 行 */
+.widget-placeholder-4x3 {
+    grid-column: 1 / span 4;
+    grid-row: 1 / span 3;
+    pointer-events: none; /* 绝对不阻挡任何点击 */
+    visibility: hidden; /* 完全隐形 */
+}
