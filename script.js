@@ -815,6 +815,25 @@ async function loadAllData() {
     try {
         // 1. 加载新版小组件数据
         const widgetData = await idb.get('ios_theme_widget') || {};
+        
+        // 恢复 4x3 小组件的位置和显示状态
+        const mainWidget = document.getElementById('mainWidget');
+        if (mainWidget) {
+            if (widgetData.position) {
+                mainWidget.style.top = widgetData.position.top;
+                mainWidget.style.left = widgetData.position.left;
+                mainWidget.style.transform = widgetData.position.transform;
+            } else {
+                // 默认位置
+                mainWidget.style.top = '20px';
+                mainWidget.style.left = '20px';
+            }
+            if (widgetData.isVisible === false) {
+                mainWidget.style.display = 'none';
+            }
+            makeMainWidgetDraggable(mainWidget); // 绑定拖拽
+        }
+
         const elements = ['label1', 'label2', 'bubble1', 'bubble2', 'bubble3'];
         elements.forEach(id => {
             if (widgetData[id]) {
@@ -989,8 +1008,16 @@ async function saveNewWidgetData() {
     // 【修复】：增加安全检查，如果当前页面没有小组件元素，直接跳过保存，防止报错清空数据
     const label1El = document.getElementById('label1');
     if (!label1El) return; 
+    
+    const mainWidget = document.getElementById('mainWidget');
 
     const data = {
+        isVisible: mainWidget ? mainWidget.style.display !== 'none' : true,
+        position: mainWidget ? {
+            top: mainWidget.style.top,
+            left: mainWidget.style.left,
+            transform: mainWidget.style.transform
+        } : null,
         label1: label1El.innerText,
         label2: document.getElementById('label2') ? document.getElementById('label2').innerText : '',
         // 【已删除 widgetSong 和 widgetLyric 的保存逻辑】
@@ -2027,13 +2054,47 @@ function renderWidgetDrawerList() {
     list.innerHTML = '';
     list.appendChild(importCard);
 
+    // 👇 内置的 4x3 日系小组件卡片 (带预览骨架)
+    const builtinItem = document.createElement('div');
+    builtinItem.className = 'drawer-item';
+    builtinItem.innerHTML = `
+        <div class="drawer-item-preview-wrapper" style="background: #E8F0FE;">
+            <div style="font-size: 20px; color: #8AB4F8; font-weight: 900; letter-spacing: 2px;">4x3</div>
+        </div>
+        <div class="drawer-item-name">日系组件</div>
+    `;
+    builtinItem.onclick = () => {
+        const mainWidget = document.getElementById('mainWidget');
+        if (mainWidget) {
+            mainWidget.style.display = 'flex';
+            const swiper = document.getElementById('homeSwiper');
+            const currentScroll = swiper ? swiper.scrollLeft : 0;
+            const centerLeft = currentScroll + (window.innerWidth / 2) - (mainWidget.offsetWidth / 2);
+            mainWidget.style.top = '50px';
+            mainWidget.style.left = centerLeft + 'px';
+            mainWidget.style.transform = 'none';
+            saveNewWidgetData();
+            closeWidgetDrawer();
+        }
+    };
+    list.appendChild(builtinItem);
+
+    // 👇 渲染导入的小组件 (带真实缩略图预览)
     customImportedWidgets.forEach(widget => {
         const item = document.createElement('div');
         item.className = 'drawer-item';
-        item.style.background = widget.bgColor || '#FFF';
+        
+        // 提取背景色应用到预览框上
+        const previewBg = widget.bgColor || 'transparent';
+
         item.innerHTML = `
             <div class="drawer-item-delete" onclick="deleteImportedWidget(event, ${widget.id})"></div>
-            <div style="font-size: 14px; font-weight: bold; color: #333;">${widget.name}</div>
+            <div class="drawer-item-preview-wrapper" style="background: ${previewBg};">
+                <div class="drawer-item-preview-content">
+                    ${widget.content}
+                </div>
+            </div>
+            <div class="drawer-item-name">${widget.name}</div>
         `;
         item.onclick = () => addWidgetToDesktop(widget);
         list.appendChild(item);
@@ -33175,4 +33236,80 @@ function observeWidgetChanges(el, instanceId) {
         subtree: true,
         attributeFilter: ['src', 'style'] 
     });
+}
+// ==========================================
+// 4x3 内置小组件的移除与拖拽逻辑
+// ==========================================
+function removeMainWidget() {
+    const mainWidget = document.getElementById('mainWidget');
+    if (mainWidget) {
+        mainWidget.style.display = 'none';
+        saveNewWidgetData();
+    }
+}
+
+function makeMainWidgetDraggable(el) {
+    let isDragging = false, startX, startY, initialLeft, initialTop;
+
+    el.addEventListener('mousedown', dragStart);
+    el.addEventListener('touchstart', dragStart, { passive: false });
+
+    function dragStart(e) {
+        if (!isHomeEditMode) return;
+        if (e.target.classList.contains('widget-remove-btn')) return;
+        
+        isDragging = true;
+        const touch = e.type === 'touchstart' ? e.touches[0] : e;
+        startX = touch.clientX;
+        startY = touch.clientY;
+        
+        initialLeft = el.offsetLeft;
+        initialTop = el.offsetTop;
+        
+        el.style.transform = 'none'; 
+        el.style.left = initialLeft + 'px';
+        el.style.top = initialTop + 'px';
+
+        document.addEventListener('mousemove', dragMove);
+        document.addEventListener('touchmove', dragMove, { passive: false });
+        document.addEventListener('mouseup', dragEnd);
+        document.addEventListener('touchend', dragEnd);
+    }
+
+    function dragMove(e) {
+        if (!isDragging) return;
+        e.preventDefault();
+        const touch = e.type === 'touchmove' ? e.touches[0] : e;
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
+        
+        el.style.left = (initialLeft + dx) + 'px';
+        el.style.top = (initialTop + dy) + 'px';
+
+        // 边缘检测翻页逻辑
+        const edgeThreshold = 40;
+        const swiper = document.getElementById('homeSwiper');
+        if (swiper && !window.edgeScrollTimer) {
+            if (touch.clientX < edgeThreshold) {
+                const targetScroll = Math.max(0, swiper.scrollLeft - window.innerWidth);
+                swiper.scrollTo({ left: targetScroll, behavior: 'smooth' });
+                window.edgeScrollTimer = setTimeout(() => { window.edgeScrollTimer = null; }, 800);
+            } else if (touch.clientX > window.innerWidth - edgeThreshold) {
+                const targetScroll = Math.min(swiper.scrollWidth, swiper.scrollLeft + window.innerWidth);
+                swiper.scrollTo({ left: targetScroll, behavior: 'smooth' });
+                window.edgeScrollTimer = setTimeout(() => { window.edgeScrollTimer = null; }, 800);
+            }
+        }
+    }
+
+    function dragEnd() {
+        if (isDragging) {
+            isDragging = false;
+            saveNewWidgetData(); // 拖拽结束自动保存位置
+        }
+        document.removeEventListener('mousemove', dragMove);
+        document.removeEventListener('touchmove', dragMove);
+        document.removeEventListener('mouseup', dragEnd);
+        document.removeEventListener('touchend', dragEnd);
+    }
 }

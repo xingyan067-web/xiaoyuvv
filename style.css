@@ -393,19 +393,23 @@ input::-webkit-inner-spin-button {
 
 /* --- 新版日系 INS 风小组件样式 (4x3) --- */
 .ins-widget-container {
-    grid-column: 1 / span 4; 
-    grid-row: 1 / span 3; /* 关键：占3行，变成 4x3 大小 */
-    width: 100%; 
-    height: 100%;
-    background: transparent; /* 无背景 */
+    position: absolute; /* 改为绝对定位，脱离网格 */
+    width: calc(100vw - 40px); /* 宽度适配屏幕 */
+    max-width: 350px;
+    height: 260px; /* 固定高度 */
+    background: transparent;
     display: flex;
     flex-direction: column;
-    justify-content: center; /* 👈 核心修复：改为 center，消除上下巨大间隔 */
-    gap: 10px; /* 👈 稍微缩小整体间距 */
+    justify-content: center;
+    gap: 10px;
     box-sizing: border-box;
-    position: relative;
-    z-index: 1;
+    z-index: 5;
+    pointer-events: auto;
+    transition: transform 0.2s;
 }
+/* 编辑模式下的抖动和拖拽样式 */
+body.edit-mode-active .ins-widget-container { animation: shake 0.3s infinite; cursor: grab; }
+body.edit-mode-active .ins-widget-container:active { cursor: grabbing; transform: scale(1.02); z-index: 100; }
 
 /* 上半部分 */
 .ins-widget-top {
@@ -11327,7 +11331,7 @@ body.edit-mode-active .widget-remove-btn { display: flex; }
 .widget-drawer {
     position: absolute; bottom: 0; left: 0; width: 100%;
     background: #F9F9F9; border-radius: 24px 24px 0 0;
-    padding: 20px 0 calc(20px + env(safe-area-inset-bottom));
+    padding: 20px 0 calc(40px + env(safe-area-inset-bottom));
     transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     display: flex; flex-direction: column; box-shadow: 0 -10px 30px rgba(0,0,0,0.1);
 }
@@ -11341,15 +11345,34 @@ body.edit-mode-active .widget-remove-btn { display: flex; }
 .drawer-list::-webkit-scrollbar { display: none; }
 
 .drawer-item {
-    width: 120px; height: 120px; flex-shrink: 0; border-radius: 16px;
+    width: 140px; height: 180px; flex-shrink: 0; border-radius: 16px;
     background: #FFF; border: 1px solid #EAEAEA; box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    position: relative; cursor: pointer; transition: transform 0.2s; padding: 10px; text-align: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    position: relative; cursor: pointer; transition: transform 0.2s; padding: 10px;
 }
 .drawer-item:active { transform: scale(0.95); }
 
-.drawer-item.import-card { background: #F0F0F0; border: 1px dashed #CCC; color: #888; }
+.drawer-item.import-card { justify-content: center; background: #F0F0F0; border: 1px dashed #CCC; color: #888; }
 .drawer-item.import-card svg { width: 32px; height: 32px; stroke: currentColor; stroke-width: 1.5; fill: none; margin-bottom: 8px; }
+
+.drawer-item-preview-wrapper {
+    width: 120px; height: 120px; border-radius: 12px; overflow: hidden;
+    position: relative; margin-bottom: 10px; background: #f5f5f5;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+}
+
+.drawer-item-preview-content {
+    transform-origin: center center;
+    transform: scale(0.35);
+    width: 340px; height: 340px;
+    display: flex; align-items: center; justify-content: center;
+}
+
+.drawer-item-name {
+    font-size: 13px; font-weight: bold; color: #333; text-align: center;
+    width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 .drawer-item-delete {
     position: absolute; top: -6px; right: -6px; width: 24px; height: 24px;

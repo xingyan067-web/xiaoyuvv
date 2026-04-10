@@ -103,55 +103,58 @@
             <!-- 桌面区域 (双页滑动容器) -->
             <div class="home-swiper" id="homeSwiper" style="position: relative;">
                 
-                <!-- 👇 移到这里：自定义桌面小组件容器 (宽度200vw，覆盖两页) 👇 -->
+                <!-- 👇 自定义桌面小组件容器 (宽度200vw，覆盖两页) 👇 -->
                 <div id="desktop-custom-widgets-container" style="position: absolute; top: 0; left: 0; width: 200vw; height: 100%; pointer-events: none; z-index: 5;"></div>
-
-                <!-- 第一页 -->
-                <div class="home-grid page-1" id="homeGrid">
-                    <!-- 新版日系 INS 风小组件 (4x3) -->
-                    <div class="ins-widget-container" id="mainWidget">
-                    <!-- 上半部分 -->
-                    <div class="ins-widget-top">
-                        <div class="ins-avatar-group">
-                            <div class="ins-avatar" id="avatar1" onclick="document.getElementById('input-avatar1').click()">Me</div>
-                            <div class="ins-label" id="label1" onclick="event.stopPropagation(); editNewWidgetText('label1', '编辑标签')">User</div>
-                        </div>
+                    
+                <!-- 新版日系 INS 风小组件 (4x3) 独立出来，防止被 JS 清空 -->
+                <div class="ins-widget-container" id="mainWidget">
+                        <!-- 新增：移除按钮 -->
+                        <div class="widget-remove-btn" onclick="removeMainWidget()"></div>
                         
-                        <div class="ins-center-group" onclick="event.stopPropagation(); openMusicApp()">
-                            <div class="ins-widget-song" id="widget-song-name">Time machine</div>
-                            <!-- 增加了一个 wrapper 容器来实现高级滚动效果 -->
-                            <div class="ins-widget-lyric-wrapper">
-                                <div class="ins-widget-lyric" id="widget-song-lyric">I wish I could go back in time</div>
+                        <!-- 上半部分 -->
+                        <div class="ins-widget-top">
+                            <div class="ins-avatar-group">
+                                <div class="ins-avatar" id="avatar1" onclick="document.getElementById('input-avatar1').click()">Me</div>
+                                <div class="ins-label" id="label1" onclick="event.stopPropagation(); editNewWidgetText('label1', '编辑标签')">User</div>
                             </div>
-                            <div class="ins-widget-progress">
-                                <div class="ins-widget-progress-fill" id="widget-progress-fill"></div>
+                            
+                            <div class="ins-center-group" onclick="event.stopPropagation(); openMusicApp()">
+                                <div class="ins-widget-song" id="widget-song-name">Time machine</div>
+                                <div class="ins-widget-lyric-wrapper">
+                                    <div class="ins-widget-lyric" id="widget-song-lyric">I wish I could go back in time</div>
+                                </div>
+                                <div class="ins-widget-progress">
+                                    <div class="ins-widget-progress-fill" id="widget-progress-fill"></div>
+                                </div>
+                                <div class="ins-widget-controls">
+                                    <svg onclick="event.stopPropagation(); musicPlayPrev()" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                                    <svg onclick="event.stopPropagation(); musicTogglePlay()" id="widget-btn-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                    <svg onclick="event.stopPropagation(); musicPlayNext()" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                                </div>
                             </div>
-                            <div class="ins-widget-controls">
-                                <svg onclick="event.stopPropagation(); musicPlayPrev()" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
-                                <svg onclick="event.stopPropagation(); musicTogglePlay()" id="widget-btn-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                                <svg onclick="event.stopPropagation(); musicPlayNext()" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+
+                            <div class="ins-avatar-group">
+                                <div class="ins-avatar" id="avatar2" onclick="document.getElementById('input-avatar2').click()">Ta</div>
+                                <div class="ins-label" id="label2" onclick="event.stopPropagation(); editNewWidgetText('label2', '编辑标签')">Lover</div>
                             </div>
                         </div>
 
-                        <div class="ins-avatar-group">
-                            <div class="ins-avatar" id="avatar2" onclick="document.getElementById('input-avatar2').click()">Ta</div>
-                            <div class="ins-label" id="label2" onclick="event.stopPropagation(); editNewWidgetText('label2', '编辑标签')">Lover</div>
+                        <!-- 下半部分 -->
+                        <div class="ins-widget-bottom">
+                            <div class="ins-bubbles">
+                                <div class="ins-bubble" id="bubble1" onclick="event.stopPropagation(); editNewWidgetText('bubble1', '编辑气泡')">听你听过的歌</div>
+                                <div class="ins-bubble" id="bubble2" onclick="event.stopPropagation(); editNewWidgetText('bubble2', '编辑气泡')">心跳会同频吗</div>
+                                <div class="ins-bubble" id="bubble3" onclick="event.stopPropagation(); editNewWidgetText('bubble3', '编辑气泡')">I love you</div>
+                            </div>
+                            <div class="ins-picture" id="picture1" onclick="document.getElementById('input-picture1').click()">
+                                <span class="placeholder" id="pic-placeholder">220 x 150</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- 下半部分 -->
-                    <div class="ins-widget-bottom">
-                        <div class="ins-bubbles">
-                            <div class="ins-bubble" id="bubble1" onclick="event.stopPropagation(); editNewWidgetText('bubble1', '编辑气泡')">听你听过的歌</div>
-                            <div class="ins-bubble" id="bubble2" onclick="event.stopPropagation(); editNewWidgetText('bubble2', '编辑气泡')">心跳会同频吗</div>
-                            <div class="ins-bubble" id="bubble3" onclick="event.stopPropagation(); editNewWidgetText('bubble3', '编辑气泡')">I love you</div>
-                        </div>
-                        <div class="ins-picture" id="picture1" onclick="document.getElementById('input-picture1').click()">
-                            <span class="placeholder" id="pic-placeholder">220 x 150</span>
-                        </div>
-                    </div>
-                </div>
-                <!-- JS 生成剩余格子 -->
+                <!-- 👇 核心修复：把丢失的第一页网格补回来！ 👇 -->
+                <div class="home-grid page-1" id="homeGrid">
+                    <!-- JS 生成剩余格子 -->
                 </div>
                 
                 <!-- 第二页 -->
