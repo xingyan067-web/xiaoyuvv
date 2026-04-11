@@ -714,6 +714,9 @@ updateAppViewportVars();
          
     // 延迟 1.5 秒检查并弹出系统更新日志
     setTimeout(checkSystemUpdate, 1500); 
+    
+    // 初始化音乐进度条拖拽
+    initMusicProgressDrag();
 };
 
 // --- 动态注入新增功能的 HTML 结构 ---
@@ -17378,33 +17381,49 @@ audioPlayer.addEventListener('timeupdate', () => {
     if (!audioPlayer.duration) return;
     
     // 1. 性能优化：先获取 DOM 元素，如果不存在则直接返回，避免后台播放时高频报错
-    const progressFill = document.getElementById('music-progress-fill');
+    const progressFillArc = document.getElementById('music-progress-fill-arc');
+    const progressDot = document.getElementById('music-progress-dot');
     const timeCurrentEl = document.getElementById('music-time-current');
     const timeTotalEl = document.getElementById('music-time-total');
-    const lyricsContainer = document.getElementById('music-fp-lyrics');
+    const singleLyricEl = document.getElementById('music-fp-single-lyric');
+    const multiLyricsInner = document.getElementById('music-multi-lyrics-inner');
 
     // 如果进度条元素不存在，说明播放器界面未打开或未渲染，无需更新 UI
-    if (!progressFill) return;
+    if (!progressFillArc) return;
 
     const current = audioPlayer.currentTime;
     const total = audioPlayer.duration;
-    const percent = (current / total) * 100;
+    const percent = (current / total); // 0 到 1 之间
     
-    progressFill.style.width = `${percent}%`;
+    // 更新弧形进度条 (500 是总长度，400 是起始偏移，100 是终点偏移)
+    const dashOffset = 500 - (percent * 100);
+    progressFillArc.style.strokeDashoffset = dashOffset;
+    
+    // 计算圆点在圆弧上的坐标 (圆心 x:150, y:60, 半径 r:150)
+    // 角度从 180度 (PI) 到 0度 (0)
+    const angle = Math.PI - (percent * Math.PI);
+    const dotX = 150 + 150 * Math.cos(angle);
+    const dotY = 60 - 150 * Math.sin(angle);
+    
+    if (progressDot) {
+        progressDot.setAttribute('cx', dotX);
+        progressDot.setAttribute('cy', dotY);
+    }
+
     if (timeCurrentEl) timeCurrentEl.innerText = musicFormatTime(current);
     if (timeTotalEl) timeTotalEl.innerText = musicFormatTime(total);
-    
-    // 👇【新增】：同步更新音乐胶囊的进度条和时间
+
+    // 👇【保留】：同步更新音乐胶囊的进度条和时间
     const capProgressFill = document.getElementById('capsule-progress-fill');
     const capTimeCurrentEl = document.getElementById('capsule-time-current');
     const capTimeTotalEl = document.getElementById('capsule-time-total');
     
-    if (capProgressFill) capProgressFill.style.width = `${percent}%`;
+    if (capProgressFill) capProgressFill.style.width = `${percent * 100}%`;
     if (capTimeCurrentEl) capTimeCurrentEl.innerText = musicFormatTime(current);
     if (capTimeTotalEl) capTimeTotalEl.innerText = musicFormatTime(total);
-    // 👆新增结束
+    // 👆保留结束
 
-    // 👇【新增】：同步更新查手机专属全屏播放器的进度条和时间
+    // 👇【保留】：同步更新查手机专属全屏播放器的进度条和时间
     const sfpTimeCurrentCenterEl = document.getElementById('wc-sfp-time-current-center');
     const sfpTimeCurrentEl = document.getElementById('wc-sfp-time-current');
     const sfpTimeTotalEl = document.getElementById('wc-sfp-time-total');
@@ -17417,7 +17436,7 @@ audioPlayer.addEventListener('timeupdate', () => {
     // 更新声波条的激活状态
     if (waveform && waveform.children.length > 0) {
         const bars = waveform.children;
-        const activeCount = Math.floor((percent / 100) * bars.length);
+        const activeCount = Math.floor(percent * bars.length);
         for (let i = 0; i < bars.length; i++) {
             if (i < activeCount) {
                 bars[i].classList.add('active');
@@ -17426,14 +17445,14 @@ audioPlayer.addEventListener('timeupdate', () => {
             }
         }
     }
-    // 👆新增结束
+    // 👆保留结束
 
     // 同步更新桌面小组件进度条
     const widgetProgressFill = document.getElementById('widget-progress-fill');
-    if (widgetProgressFill) widgetProgressFill.style.width = `${percent}%`;
+    if (widgetProgressFill) widgetProgressFill.style.width = `${percent * 100}%`;
 
-    // 2. 同步歌词
-    if (musicState.lyrics.length > 0 && lyricsContainer) {
+    // 2. 同步歌词 (单行 + 多行)
+    if (musicState.lyrics.length > 0) {
         let activeIndex = -1;
         for (let i = 0; i < musicState.lyrics.length; i++) {
             if (current >= musicState.lyrics[i].time) {
@@ -17444,63 +17463,56 @@ audioPlayer.addEventListener('timeupdate', () => {
         }
         
         if (activeIndex !== -1) {
-            // 3. 性能优化：只在歌词行真正发生切换时，才去操作 DOM 重绘
-            const lastActiveIndex = lyricsContainer.getAttribute('data-active-index');
+            const currentLyricText = musicState.lyrics[activeIndex].text || '...';
             
-            if (lastActiveIndex !== activeIndex.toString()) {
-                const lines = lyricsContainer.querySelectorAll('.ins-music-lyric-line');
-                lines.forEach(l => l.classList.remove('active'));
-                
-                if (lines[activeIndex]) {
-                    lines[activeIndex].classList.add('active');
+            // 更新单行歌词
+            if (singleLyricEl && singleLyricEl.innerText !== currentLyricText) {
+                singleLyricEl.innerText = currentLyricText;
+            }
+            
+            // 更新多行歌词滚动
+            if (multiLyricsInner) {
+                const lastActiveIndex = multiLyricsInner.getAttribute('data-active-index');
+                if (lastActiveIndex !== activeIndex.toString()) {
+                    const lines = multiLyricsInner.querySelectorAll('.music-multi-lyric-line');
+                    lines.forEach(l => l.classList.remove('active'));
                     
-                    const player = document.getElementById('music-full-player');
-                    const isLyricMode = player.classList.contains('lyric-mode');
-                    
-                    if (isLyricMode) {
-                        // 歌词模式下：动态计算高度并居中
+                    if (lines[activeIndex]) {
+                        lines[activeIndex].classList.add('active');
+                        // 滚动居中
                         let offset = 0;
                         for (let i = 0; i < activeIndex; i++) {
-                            offset += lines[i].offsetHeight;
+                            offset += lines[i].offsetHeight + 20; // 包含 margin
                         }
-                        const containerHeight = document.querySelector('.ins-music-fp-lyrics-container').offsetHeight;
-                        offset = offset - containerHeight / 2 + lines[activeIndex].offsetHeight / 2;
-                        lyricsContainer.style.transform = `translateY(-${Math.max(0, offset)}px)`;
-                    } else {
-                        // 唱片模式下：固定行高 30px
-                        const offset = activeIndex * 30;
-                        lyricsContainer.style.transform = `translateY(-${offset}px)`;
+                        multiLyricsInner.style.transform = `translateY(-${offset}px)`;
                     }
+                    multiLyricsInner.setAttribute('data-active-index', activeIndex);
                 }
-                // 记录当前高亮的歌词索引
-                lyricsContainer.setAttribute('data-active-index', activeIndex);
-                // 【新增】：同步歌词到音乐胶囊
-                const capsuleLyricEl = document.getElementById('capsule-exp-lyric');
-                if (capsuleLyricEl && musicState.lyrics[activeIndex]) {
-                    capsuleLyricEl.innerText = musicState.lyrics[activeIndex].text || '...';
-                }               
-                // 同步歌词到桌面小组件 (带智能滚动判断)
-                const widgetLyricEl = document.getElementById('widget-song-lyric');
-                if (widgetLyricEl && musicState.lyrics[activeIndex]) {
-                    widgetLyricEl.innerText = musicState.lyrics[activeIndex].text || '...';
-                    
-                    // 动态判断是否需要滚动
-                    const wrapper = widgetLyricEl.parentElement;
-                    // 强制浏览器重绘以获取真实宽度
-                    void widgetLyricEl.offsetWidth; 
-                    
-                    if (widgetLyricEl.scrollWidth > wrapper.clientWidth) {
-                        // 如果歌词宽度大于容器宽度，计算需要滚动的距离 (负值)
-                        const dist = wrapper.clientWidth - widgetLyricEl.scrollWidth;
-                        widgetLyricEl.style.setProperty('--scroll-dist', `${dist}px`);
-                        widgetLyricEl.classList.add('scrolling');
-                    } else {
-                        // 如果不够长，移除滚动类，恢复居中静止状态
-                        widgetLyricEl.classList.remove('scrolling');
-                        widgetLyricEl.style.transform = 'translateX(0)';
-                    }
-                }
+            }
 
+            // 【保留】：同步歌词到音乐胶囊
+            const capsuleLyricEl = document.getElementById('capsule-exp-lyric');
+            if (capsuleLyricEl && capsuleLyricEl.innerText !== currentLyricText) {
+                capsuleLyricEl.innerText = currentLyricText;
+            }               
+            
+            // 【保留】：同步歌词到桌面小组件 (带智能滚动判断)
+            const widgetLyricEl = document.getElementById('widget-song-lyric');
+            if (widgetLyricEl && widgetLyricEl.innerText !== currentLyricText) {
+                widgetLyricEl.innerText = currentLyricText;
+                
+                // 动态判断是否需要滚动
+                const wrapper = widgetLyricEl.parentElement;
+                void widgetLyricEl.offsetWidth; 
+                
+                if (widgetLyricEl.scrollWidth > wrapper.clientWidth) {
+                    const dist = wrapper.clientWidth - widgetLyricEl.scrollWidth;
+                    widgetLyricEl.style.setProperty('--scroll-dist', `${dist}px`);
+                    widgetLyricEl.classList.add('scrolling');
+                } else {
+                    widgetLyricEl.classList.remove('scrolling');
+                    widgetLyricEl.style.transform = 'translateX(0)';
+                }
             }
         }
     }
@@ -17519,15 +17531,39 @@ function musicFormatTime(seconds) {
 }
 
 function musicSeek(e) {
-    // 修复：使用 e.currentTarget 获取当前点击的进度条（兼容全屏和胶囊）
-    const bar = e.currentTarget; 
+    const bar = document.getElementById('music-progress-bar'); 
+    if (!bar) return;
     const rect = bar.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
+    // 简单的水平映射，因为圆弧比较平缓
+    let percent = (e.clientX - rect.left - 20) / (rect.width - 40);
     
-    // 修复：增加 isFinite 检查，防止 The provided double value is non-finite 报错
+    if (percent < 0) percent = 0;
+    if (percent > 1) percent = 1;
+    
     if (audioPlayer && isFinite(audioPlayer.duration) && audioPlayer.duration > 0) {
         audioPlayer.currentTime = percent * audioPlayer.duration;
     }
+}
+
+// 新增：音乐进度条拖拽逻辑
+let isDraggingMusicProgress = false;
+
+function initMusicProgressDrag() {
+    const bar = document.getElementById('music-progress-bar');
+    if (!bar) return;
+    
+    bar.addEventListener('mousedown', (e) => { isDraggingMusicProgress = true; musicSeek(e); });
+    document.addEventListener('mousemove', (e) => { if (isDraggingMusicProgress) musicSeek(e); });
+    document.addEventListener('mouseup', () => { isDraggingMusicProgress = false; });
+    
+    bar.addEventListener('touchstart', (e) => { isDraggingMusicProgress = true; musicSeek(e.touches[0]); }, {passive: true});
+    document.addEventListener('touchmove', (e) => { 
+        if (isDraggingMusicProgress) {
+            e.preventDefault(); // 防止拖动时页面滚动
+            musicSeek(e.touches[0]); 
+        }
+    }, {passive: false});
+    document.addEventListener('touchend', () => { isDraggingMusicProgress = false; });
 }
 
 // --- 初始化与数据加载 ---
@@ -17926,34 +17962,29 @@ async function musicPlaySong(id, title, artist, cover) {
 }
 
 async function musicFetchLyrics(id) {
-    const lyricsContainer = document.getElementById('music-fp-lyrics');
-    lyricsContainer.innerHTML = '<div class="ins-music-lyric-line">Loading lyrics...</div>';
+    const singleLyricEl = document.getElementById('music-fp-single-lyric');
+    const multiLyricsInner = document.getElementById('music-multi-lyrics-inner');
+    
+    if (singleLyricEl) singleLyricEl.innerText = 'Loading lyrics...';
+    if (multiLyricsInner) multiLyricsInner.innerHTML = '<div class="music-multi-lyric-line">Loading...</div>';
+    
     musicState.lyrics = [];
     
     try {
         let rawLyric = '';
         const playBaseUrl = getMusicPlayApiBaseUrl();
-        
-        // 统一使用主接口获取歌词
         const res = await fetch(`${playBaseUrl}/?server=netease&type=lrc&id=${id}`);
         const textData = await res.text();
         try {
             const jsonData = JSON.parse(textData);
-            if (jsonData.lrc && jsonData.lrc.lyric) {
-                rawLyric = jsonData.lrc.lyric;
-            } else if (jsonData.lyric) {
-                rawLyric = jsonData.lyric;
-            } else {
-                rawLyric = textData;
-            }
-        } catch (e) {
-            rawLyric = textData;
-        }
+            if (jsonData.lrc && jsonData.lrc.lyric) rawLyric = jsonData.lrc.lyric;
+            else if (jsonData.lyric) rawLyric = jsonData.lyric;
+            else rawLyric = textData;
+        } catch (e) { rawLyric = textData; }
         
         if (rawLyric) {
             const lines = rawLyric.split('\n');
             const parsedLyrics = [];
-            
             lines.forEach(line => {
                 const match = line.match(/\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/);
                 if (match) {
@@ -17969,22 +18000,26 @@ async function musicFetchLyrics(id) {
             musicState.lyrics = parsedLyrics;
             
             if (parsedLyrics.length > 0) {
-                lyricsContainer.innerHTML = '';
-                parsedLyrics.forEach(l => {
-                    const div = document.createElement('div');
-                    div.className = 'ins-music-lyric-line';
-                    div.innerText = l.text;
-                    lyricsContainer.appendChild(div);
-                });
+                if (multiLyricsInner) {
+                    multiLyricsInner.innerHTML = '';
+                    parsedLyrics.forEach(l => {
+                        const div = document.createElement('div');
+                        div.className = 'music-multi-lyric-line';
+                        div.innerText = l.text;
+                        multiLyricsInner.appendChild(div);
+                    });
+                }
             } else {
-                lyricsContainer.innerHTML = '<div class="ins-music-lyric-line">Pure Music</div>';
+                if (singleLyricEl) singleLyricEl.innerText = 'Pure Music';
+                if (multiLyricsInner) multiLyricsInner.innerHTML = '<div class="music-multi-lyric-line">Pure Music</div>';
             }
         } else {
-            lyricsContainer.innerHTML = '<div class="ins-music-lyric-line">No lyrics available</div>';
+            if (singleLyricEl) singleLyricEl.innerText = 'No lyrics available';
+            if (multiLyricsInner) multiLyricsInner.innerHTML = '<div class="music-multi-lyric-line">No lyrics available</div>';
         }
     } catch (e) {
         console.error("Lyric Error:", e);
-        lyricsContainer.innerHTML = '<div class="ins-music-lyric-line">Failed to load lyrics</div>';
+        if (singleLyricEl) singleLyricEl.innerText = 'Failed to load lyrics';
     }
 }
        
@@ -18173,21 +18208,27 @@ function musicUpdatePlayerUI() {
     if (!musicState.currentSong) return;
     
     document.getElementById('music-player-cover').src = musicState.currentSong.cover;
-    document.getElementById('music-fp-cover').src = musicState.currentSong.cover;
+    
+    // 更新全屏大封面
+    const largeCover = document.getElementById('music-fp-cover-large');
+    if (largeCover) largeCover.src = musicState.currentSong.cover;
 
     const miniTitle = document.getElementById('music-player-title');
     const miniArtist = document.getElementById('music-player-artist');
     const fpTitle = document.getElementById('music-fp-title');
     const fpArtist = document.getElementById('music-fp-artist');
+    const fpArtistTop = document.getElementById('music-fp-artist-top'); // 顶部歌手名
 
     if (miniTitle) miniTitle.innerText = musicState.currentSong.title;
     if (miniArtist) miniArtist.innerText = musicState.currentSong.artist;
     if (fpTitle) fpTitle.innerText = musicState.currentSong.title;
     if (fpArtist) fpArtist.innerText = musicState.currentSong.artist; 
+    if (fpArtistTop) fpArtistTop.innerText = musicState.currentSong.artist; 
+    
     const widgetTitle = document.getElementById('widget-song-name');
     if (widgetTitle) widgetTitle.innerText = musicState.currentSong.title;
 
-    // 👇 新增：同步更新 Settings 页面的迷你播放器信息 👇
+    // 👇 【保留】：同步更新 Settings 页面的迷你播放器信息 👇
     const simMiniTitle = document.getElementById('sim-global-mini-title');
     const simMiniArtist = document.getElementById('sim-global-mini-artist');
     const simMiniCover = document.getElementById('sim-global-mini-cover');
@@ -18195,7 +18236,7 @@ function musicUpdatePlayerUI() {
     if (simMiniArtist) simMiniArtist.innerText = musicState.currentSong.artist;
     if (simMiniCover) simMiniCover.src = musicState.currentSong.cover;
 
-    // 👇 新增：同步更新查手机专属全屏播放器信息 👇
+    // 👇 【保留】：同步更新查手机专属全屏播放器信息 👇
     const sfpTitle = document.getElementById('wc-sfp-title');
     const sfpArtist = document.getElementById('wc-sfp-artist');
     const sfpCover = document.getElementById('wc-sfp-cover');
@@ -18204,15 +18245,14 @@ function musicUpdatePlayerUI() {
     if (sfpCover) sfpCover.src = musicState.currentSong.cover;
 
     const coverEl = document.getElementById('music-player-cover');
-    const fpRecordEl = document.getElementById('music-fp-record');
     const playBtn = document.getElementById('music-btn-play');
     const fpPlayBtn = document.getElementById('music-fp-btn-play');
     
-    // 👇 新增：获取 Settings 页面的迷你播放器控制元素 👇
+    // 👇 【保留】：获取 Settings 页面的迷你播放器控制元素 👇
     const simMiniRecord = document.getElementById('sim-global-mini-record');
     const simMiniPlayBtn = document.getElementById('sim-global-mini-play-btn');
 
-    // 👇 新增：获取查手机专属全屏播放器控制元素 👇
+    // 👇 【保留】：获取查手机专属全屏播放器控制元素 👇
     const sfpRecordEl = document.getElementById('wc-sfp-record');
     const sfpPlayBtn = document.getElementById('wc-sfp-btn-play');
     
@@ -18220,10 +18260,9 @@ function musicUpdatePlayerUI() {
     const playIcon = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';            
     
     if (musicState.isPlaying) {
-        coverEl.classList.add('playing');
-        fpRecordEl.classList.add('playing');
-        playBtn.innerHTML = pauseIcon;
-        fpPlayBtn.innerHTML = pauseIcon;
+        if (coverEl) coverEl.classList.add('playing');
+        if (playBtn) playBtn.innerHTML = pauseIcon;
+        if (fpPlayBtn) fpPlayBtn.innerHTML = pauseIcon;
         
         // 同步旋转和暂停图标
         if (simMiniRecord) simMiniRecord.classList.add('playing');
@@ -18232,10 +18271,9 @@ function musicUpdatePlayerUI() {
         if (sfpRecordEl) sfpRecordEl.classList.add('playing');
         if (sfpPlayBtn) sfpPlayBtn.innerHTML = pauseIcon;
     } else {
-        coverEl.classList.remove('playing');
-        fpRecordEl.classList.remove('playing');
-        playBtn.innerHTML = playIcon;
-        fpPlayBtn.innerHTML = playIcon;
+        if (coverEl) coverEl.classList.remove('playing');
+        if (playBtn) playBtn.innerHTML = playIcon;
+        if (fpPlayBtn) fpPlayBtn.innerHTML = playIcon;
         
         // 同步停止旋转和播放图标
         if (simMiniRecord) simMiniRecord.classList.remove('playing');
@@ -18252,6 +18290,190 @@ function musicUpdatePlayerUI() {
     // 同步更新音乐胶囊的 UI
     if (typeof musicUpdateCapsuleUI === 'function') musicUpdateCapsuleUI();
 }
+// ==========================================
+// 新增：全屏播放器交互逻辑 (歌词、悬浮输入框、气泡、换背景、下拉菜单)
+// ==========================================
+
+// 👇 新增：控制右上角下拉菜单 👇
+window.toggleMusicDropdownMenu = function(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    const menu = document.getElementById('music-dropdown-menu');
+    if (menu) {
+        menu.classList.toggle('active');
+    }
+};
+
+// 点击屏幕其他地方关闭下拉菜单
+document.addEventListener('click', (e) => {
+    const menu = document.getElementById('music-dropdown-menu');
+    if (menu && menu.classList.contains('active')) {
+        // 如果点击的不是菜单本身，也不是触发按钮，就关闭
+        if (!e.target.closest('.ins-music-dropdown-menu') && !e.target.closest('.ins-music-fp-btn')) {
+            menu.classList.remove('active');
+        }
+    }
+});
+
+window.musicHandleFpBgUpload = async function(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    try {
+        const base64 = await wcCompressImage(file);
+        const largeCover = document.getElementById('music-fp-cover-large');
+        if (largeCover) {
+            largeCover.src = base64;
+        }
+    } catch (e) {
+        console.error("背景图片处理失败", e);
+        alert("图片处理失败，请重试");
+    }
+    input.value = ''; 
+};
+
+// 切换多行歌词显示
+window.toggleMultiLyrics = function() {
+    const container = document.getElementById('music-multi-lyrics-container');
+    if (container) {
+        container.classList.toggle('active');
+    }
+};
+
+// 打开旧的聊天窗口 (绑定在心跳线上)
+window.musicToggleOldChatWindow = function(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (!musicState.listenTogether.active || !musicState.listenTogether.charId) {
+        alert("请先在发现页邀请一位角色一起听歌哦~");
+        return;
+    }
+    const chatWin = document.getElementById('music-chat-window');
+    if (chatWin.style.display === 'none' || chatWin.style.display === '') {
+        chatWin.style.display = 'flex';
+        musicRenderChatMessages();
+    } else {
+        chatWin.style.display = 'none';
+    }
+};
+
+// 切换悬浮输入框 (绑定在爱心上)
+window.toggleFloatingInput = function(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (!musicState.listenTogether.active || !musicState.listenTogether.charId) {
+        alert("请先在发现页邀请一位角色一起听歌哦~");
+        return;
+    }
+    const inputWin = document.getElementById('floating-chat-input');
+    if (inputWin.style.display === 'none' || inputWin.style.display === '') {
+        inputWin.style.display = 'flex';
+        document.getElementById('floating-input-text').focus();
+    } else {
+        inputWin.style.display = 'none';
+    }
+};
+
+// 悬浮输入框拖拽逻辑
+let floatDrag = { active: false, startY: 0, initialTop: 0 };
+document.addEventListener('DOMContentLoaded', () => {
+    const handle = document.getElementById('floating-drag-handle');
+    const box = document.getElementById('floating-chat-input');
+    if (!handle || !box) return;
+
+    handle.addEventListener('touchstart', (e) => {
+        floatDrag.active = true;
+        floatDrag.startY = e.touches[0].clientY;
+        floatDrag.initialTop = box.offsetTop;
+    }, { passive: false });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!floatDrag.active) return;
+        e.preventDefault();
+        const dy = e.touches[0].clientY - floatDrag.startY;
+        box.style.top = (floatDrag.initialTop + dy) + 'px';
+        box.style.bottom = 'auto';
+    }, { passive: false });
+
+    document.addEventListener('touchend', () => { floatDrag.active = false; });
+});
+
+// 显示头像气泡
+function showAvatarBubble(type, text, isTyping = false) {
+    const bubbleId = type === 'user' ? 'user-bubble' : 'char-bubble';
+    const bubble = document.getElementById(bubbleId);
+    if (!bubble) return;
+
+    if (type === 'char') {
+        const typingEl = document.getElementById('char-typing');
+        const textEl = document.getElementById('char-bubble-text');
+        if (isTyping) {
+            typingEl.style.display = 'block';
+            textEl.style.display = 'none';
+        } else {
+            typingEl.style.display = 'none';
+            textEl.style.display = 'block';
+            textEl.innerText = text;
+        }
+    } else {
+        bubble.innerText = text;
+    }
+
+    bubble.classList.add('show');
+    
+    // 如果不是正在输入状态，3秒后自动隐藏
+    if (!isTyping) {
+        setTimeout(() => {
+            bubble.classList.remove('show');
+        }, 3000);
+    }
+}
+
+// 悬浮框发送消息
+window.sendFloatingMsg = function() {
+    const input = document.getElementById('floating-input-text');
+    const text = input.value.trim();
+    if (!text) return;
+    
+    const charId = musicState.listenTogether.charId;
+    if (!charId) return;
+    
+    wcAddMessage(charId, 'me', 'text', text);
+    input.value = '';
+    
+    // 显示 User 气泡
+    showAvatarBubble('user', text);
+};
+
+// 悬浮框触发 AI
+window.triggerFloatingAI = function() {
+    const charId = musicState.listenTogether.charId;
+    if (!charId) return;
+    
+    if (aiGeneratingLocks[charId]) return;
+    
+    // 显示 Char 正在输入气泡
+    showAvatarBubble('char', '', true);
+    
+    // 拦截原有的 wcParseAIResponse，在 AI 回复后更新气泡
+    const originalParse = wcParseAIResponse;
+    wcParseAIResponse = async function(id, text, stickerGroupIds) {
+        await originalParse(id, text, stickerGroupIds);
+        
+        // 尝试从最新的聊天记录中提取 AI 的回复文本
+        const msgs = wcState.chats[id];
+        if (msgs && msgs.length > 0) {
+            const lastMsg = msgs[msgs.length - 1];
+            if (lastMsg.sender === 'them' && lastMsg.type === 'text') {
+                showAvatarBubble('char', lastMsg.content, false);
+            } else {
+                // 如果是表情包等，隐藏气泡
+                document.getElementById('char-bubble').classList.remove('show');
+            }
+        }
+        // 恢复原函数
+        wcParseAIResponse = originalParse;
+    };
+
+    wcTriggerAI(charId);
+};
 
 // --- 个人主页与歌单管理 ---
 function musicRenderProfile() {

@@ -2503,102 +2503,160 @@
                     </div>
                 </div>
 
-                <!-- 全屏音乐播放器 (黑白灰简约 iOS 风 + 黑胶唱片 + 歌词) -->
+                <!-- 全屏音乐播放器 (大封面沉浸式 + 实体耳机线 + 悬浮聊天) -->
                 <div id="music-full-player" class="ins-music-full-player">
-                    <!-- 顶部：返回按钮 & 聊天按钮 -->
+                    <!-- 全屏背景大封面 (增加点击事件切换歌词) -->
+                    <img src="" id="music-fp-cover-large" class="ins-music-fp-cover-large" alt="Cover" onclick="toggleMultiLyrics()">
+
+                    <!-- 顶部栏 -->
                     <div class="ins-music-fp-header">
                         <div class="ins-music-fp-btn" onclick="musicCloseFullPlayer()">
-                            <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" transform="rotate(-90 12 12)"/></svg>
+                            <svg viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" transform="rotate(-90 12 12)"/></svg>
                         </div>
-                        <div class="ins-music-fp-title">Now Playing</div>
-<!-- 修改这里：把添加歌单按钮改成了聊天按钮 (加上 event 参数) -->
-<div class="ins-music-fp-btn" onclick="musicToggleChatWindow(event)">
-    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-</div>
+                        <div class="ins-music-fp-title">
+                            <div class="ins-music-fp-title-main">NOW PLAYING</div>
+                            <div class="ins-music-fp-title-sub" id="music-fp-artist-top">Artist</div>
+                        </div>
+                        <!-- 右上角三个点 (点击弹出 iOS 菜单) -->
+                        <div class="ins-music-fp-btn" onclick="toggleMusicDropdownMenu(event)">
+                            <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                        </div>
+                        
+                        <!-- iOS 风格下拉菜单 -->
+                        <div id="music-dropdown-menu" class="ins-music-dropdown-menu" style="display: none;">
+                            <div class="dropdown-item" onclick="document.getElementById('music-fp-bg-upload').click(); toggleMusicDropdownMenu(event);">
+                                <span>更换背景</span>
+                                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                            </div>
+                            <div class="dropdown-item danger" onclick="musicStopListenTogether(); toggleMusicDropdownMenu(event);">
+                                <span>结束一起听歌</span>
+                                <svg viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                            </div>
+                        </div>
+                        
+                        <input type="file" id="music-fp-bg-upload" style="display: none;" accept="image/*" onchange="musicHandleFpBgUpload(this)">
                     </div>
-                    
-                    <!-- 【新增】：迷你聊天弹窗 (放在头部下方) -->
+
+                    <!-- 小聊天窗口 (右上角加了关闭键) -->
                     <div id="music-chat-window" class="music-chat-window" style="display: none;">
+                        <div class="music-chat-close-btn" onclick="document.getElementById('music-chat-window').style.display='none'">×</div>
                         <div class="music-chat-history" id="music-chat-history"></div>
                         <div class="music-chat-input-area">
                             <input type="text" id="music-chat-input" placeholder="和 Ta 聊聊这首歌..." onkeypress="musicHandleChatEnter(event)">
-                            <!-- AI 回复按钮 -->
                             <button onclick="musicTriggerAI()" title="让Ta回复">
                                 <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:currentColor;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
                             </button>
-                            <!-- 发送按钮 -->
                             <button onclick="musicSendChatMessage()" title="发送">
                                 <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:currentColor;"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
                             </button>
                         </div>
-                    </div> <!-- ⚠️ 修复：在这里补上闭合标签 -->
-                    
-                    <!-- 新增：一起听歌状态 (点击可结束) -->
-                    <div class="ins-music-fp-together" id="music-fp-together" style="display: none;" onclick="musicStopListenTogether()">
-                        <div class="ins-music-fp-avatars">
-                            <img src="" id="music-fp-avatar-user" class="ins-music-fp-avatar">
-                            <img src="" id="music-fp-avatar-char" class="ins-music-fp-avatar char">
-                        </div>
-                        <!-- 👇 新增：距离与时长显示 👇 -->
-                        <div class="ins-music-fp-meta" id="music-fp-meta">相距 -- 公里，一起听了 0 小时 0 分钟</div>
-                        
-                        <!-- 隐藏原来的计时器，因为我们用上面的新排版了 -->
-                        <div class="ins-music-fp-timer" id="music-fp-timer" style="display: none;">00:00</div>
-                    </div>
-                    
-                    <!-- 🌟 中间区域：点击任意位置切换模式 🌟 -->
-                    <div class="ins-music-fp-center-area" onclick="toggleLyricMode()">
-                        <!-- 中间：黑胶唱片 -->
-                        <div class="ins-music-fp-record-container">
-                            <div class="ins-music-fp-record" id="music-fp-record">
-                                <img src="" id="music-fp-cover" class="ins-music-fp-cover">
-                            </div>
-                        </div>
-                        
-                        <!-- 歌曲信息 -->
-                        <div class="ins-music-fp-info">
-                            <div class="ins-music-fp-song" id="music-fp-title">Song Title</div>
-                            <div class="ins-music-fp-artist" id="music-fp-artist">Artist</div>
-                        </div>
-
-                        <!-- 滚动歌词 -->
-                        <div class="ins-music-fp-lyrics-container" id="music-fp-lyrics-container">
-                            <div class="ins-music-fp-lyrics" id="music-fp-lyrics">
-                                <div class="ins-music-lyric-line">Pure Music...</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- 进度条 -->
-                    <div class="ins-music-fp-progress">
-                        <div class="ins-music-fp-progress-bar" id="music-progress-bar" onclick="musicSeek(event)">
-                            <div class="ins-music-fp-progress-fill" id="music-progress-fill"></div>
-                        </div>
-                        <div class="ins-music-fp-time">
-                            <span id="music-time-current">0:00</span>
-                            <span id="music-time-total">-:-</span>
-                        </div>
                     </div>
 
-                    <!-- 播放控制栏 -->
-                    <div class="ins-music-fp-controls">
-                        <div class="ins-music-fp-ctrl-btn small" onclick="musicTogglePlayMode()" id="music-btn-mode">
-                            <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+                    <!-- 多行歌词容器 -->
+                    <div id="music-multi-lyrics-container" class="music-multi-lyrics-container" onclick="toggleMultiLyrics()">
+                        <div id="music-multi-lyrics-inner" class="music-multi-lyrics-inner"></div>
+                    </div>
+
+                    <!-- 底部控制与信息区 -->
+                    <div class="ins-music-fp-bottom-area">
+                        
+                        <!-- 1. 一起听歌头像 (外侧耳机线 + 中间画爱心动画) -->
+                        <div class="together-section" id="music-fp-together" style="display: none;">
+                            <div class="together-avatars">
+                                <!-- 外侧耳机线 SVG (修改为左右两侧连接) -->
+                                <svg class="headphone-wires-outer" viewBox="0 0 280 64" preserveAspectRatio="none">
+                                    <path d="M 0 64 C 0 32, 20 32, 40 32" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5"/>
+                                    <path d="M 280 64 C 280 32, 260 32, 240 32" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5"/>
+                                    <rect x="38" y="28" width="4" height="8" fill="#FFF" rx="2"/>
+                                    <rect x="238" y="28" width="4" height="8" fill="#FFF" rx="2"/>
+                                </svg>
+                                
+                                <!-- User 头像与气泡 -->
+                                <div class="avatar-wrapper">
+                                    <div class="avatar-bubble" id="user-bubble"></div>
+                                    <img src="" id="music-fp-avatar-user" alt="User">
+                                </div>
+                                
+                                <!-- 中间画爱心动画 (点击打开旧聊天框) -->
+                                <div class="heartbeat-line" onclick="musicToggleOldChatWindow(event)">
+                                    <svg viewBox="0 0 32 32" class="heart-ecg">
+                                        <path d="M 16 28 C 16 28 4 18 4 10 C 4 5 10 3 16 9 C 22 3 28 5 28 10 C 28 18 16 28 16 28 Z" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </div>
+
+                                <!-- Char 头像与气泡 -->
+                                <div class="avatar-wrapper">
+                                    <div class="avatar-bubble" id="char-bubble">
+                                        <div class="typing-dots" id="char-typing" style="display:none;"><span></span><span></span><span></span></div>
+                                        <div class="bubble-text" id="char-bubble-text"></div>
+                                    </div>
+                                    <img src="" id="music-fp-avatar-char" alt="Char">
+                                </div>
+                            </div>
+                            <div class="together-meta" id="music-fp-meta">相距 -- 公里，一起听了 0 小时 0 分钟</div>
                         </div>
-                        <div class="ins-music-fp-ctrl-btn" onclick="musicPlayPrev()">
-                            <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+
+                        <!-- 2. 歌曲信息与单行歌词 -->
+                        <div class="song-info-box">
+                            <div class="song-title" id="music-fp-title">Song Title</div>
+                            <div class="song-artist" id="music-fp-artist">Artist</div>
+                            <div class="song-lyric" id="music-fp-single-lyric">Pure Music...</div>
                         </div>
-                        <div class="ins-music-fp-ctrl-btn play" onclick="musicTogglePlay(event)" id="music-fp-btn-play">
-                            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+
+                        <!-- 3. 弧形进度条 -->
+                        <div class="ins-music-fp-progress">
+                            <div class="ins-music-fp-progress-arc" id="music-progress-bar" onclick="musicSeek(event)">
+                                <svg viewBox="0 0 300 60" preserveAspectRatio="xMidYMax meet">
+                                    <path id="arc-bg" d="M 20 60 A 150 150 0 0 1 280 60" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3" stroke-linecap="round"/>
+                                    <path id="arc-fill" d="M 20 60 A 150 150 0 0 1 280 60" fill="none" stroke="#FFF" stroke-width="3" stroke-linecap="round" stroke-dasharray="320" stroke-dashoffset="320"/>
+                                    <circle id="music-progress-dot" cx="20" cy="60" r="5" fill="#FFF" filter="drop-shadow(0 0 4px rgba(255,255,255,0.8))"/>
+                                </svg>
+                            </div>
+                            <div class="ins-music-fp-time-center">
+                                <!-- 爱心聊天按钮 (点击打开悬浮输入框) -->
+                                <div class="chat-heart-btn" onclick="toggleFloatingInput(event)">
+                                    <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                </div>
+                                <span class="ins-music-fp-time-text"><span id="music-time-current">0:00</span> / <span id="music-time-total">-:-</span></span>
+                            </div>
                         </div>
-                        <div class="ins-music-fp-ctrl-btn" onclick="musicPlayNext()">
-                            <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-                        </div>
-                        <div class="ins-music-fp-ctrl-btn small" onclick="musicOpenCurrentPlaylist()">
-                            <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+
+                        <!-- 4. 控制按钮 -->
+                        <div class="ins-music-fp-controls">
+                            <div class="side-btn" onclick="musicTogglePlayMode()" id="music-btn-mode">
+                                <svg viewBox="0 0 24 24"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+                            </div>
+                            <div class="ins-music-fp-ctrl-btn" onclick="musicPlayPrev()">
+                                <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                            </div>
+                            <div class="ins-music-fp-ctrl-btn play" onclick="musicTogglePlay(event)" id="music-fp-btn-play">
+                                <div class="inner-circle">
+                                    <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </div>
+                            </div>
+                            <div class="ins-music-fp-ctrl-btn" onclick="musicPlayNext()">
+                                <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                            </div>
+                            <div class="side-btn" onclick="musicOpenCurrentPlaylist()">
+                                <svg viewBox="0 0 24 24"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+                            </div>
                         </div>
                     </div>
+                    
+                    <!-- 悬浮可拖动输入框 (去掉了关闭键) -->
+                    <div id="floating-chat-input" class="floating-chat-input" style="display: none;">
+                        <div class="drag-handle" id="floating-drag-handle"></div>
+                        <div class="input-row">
+                            <button class="ai-btn" onclick="triggerFloatingAI()" title="让Ta回复">
+                                <svg viewBox="0 0 24 24"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+                            </button>
+                            <input type="text" id="floating-input-text" placeholder="说点什么..." onkeypress="if(event.key==='Enter') sendFloatingMsg()">
+                            <button class="send-btn" onclick="sendFloatingMsg()">发送</button>
+                        </div>
+                    </div>
+                    
                 </div>
+
         <!-- ========================================== -->
         <!-- 音乐 APP 弹窗集合 -->
         <!-- ========================================== -->
