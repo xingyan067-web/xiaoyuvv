@@ -6861,7 +6861,7 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                     const uChat = char.phoneData.chats.find(c => c.isUser);
                     if (uChat) uChat.name = phoneUpdate.newRemark;
                 }
-                wcAddMessage(charId, 'system', 'system', `[系统提示：${char.name} 偷偷在 Ta 的手机里，将你的备注改为了“${phoneUpdate.newRemark}”]`, { style: 'transparent' });
+                wcAddMessage(charId, 'system', 'system', `[系统提示：${char.name} 将你的备注改为了“${phoneUpdate.newRemark}”]`, { style: 'transparent' });
                 hasChanges = true;
             }
 
@@ -14636,7 +14636,7 @@ prompt += `7. 返回纯 JSON 对象，格式如下：\n`;
                 const uChat = char.phoneData.chats.find(c => c.isUser);
                 if (uChat) uChat.name = result.newRemark;
             }
-            wcAddMessage(charId, 'system', 'system', `[系统提示：${char.name} 偷偷在 Ta 的手机里，将你的备注改为了“${result.newRemark}”]`, { style: 'transparent' });
+            wcAddMessage(charId, 'system', 'system', `[系统提示：${char.name} 将你的备注改为了“${result.newRemark}”]`, { style: 'transparent' });
             hasChanges = true;
         }
 
