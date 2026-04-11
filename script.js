@@ -716,8 +716,9 @@ updateAppViewportVars();
     setTimeout(checkSystemUpdate, 1500); 
     
     // 初始化音乐进度条拖拽
-    initMusicProgressDrag();
+    setTimeout(initMusicProgressDrag, 1000); // 延迟绑定，确保 DOM 已渲染
 };
+
 
 // --- 动态注入新增功能的 HTML 结构 ---
 function initNewPhoneFeatures() {
@@ -17376,9 +17377,21 @@ async function musicInitState() {
         musicStartListenTogether(musicState.listenTogether.charId, true);
     }
 }
+// 修复：确保音频元数据加载完成后，立即更新总时长显示
+audioPlayer.addEventListener('loadedmetadata', () => {
+    const timeTotalEl = document.getElementById('music-time-total');
+    const capTimeTotalEl = document.getElementById('capsule-time-total');
+    const sfpTimeTotalEl = document.getElementById('wc-sfp-time-total');
+    
+    const totalStr = musicFormatTime(audioPlayer.duration);
+    if (timeTotalEl) timeTotalEl.innerText = totalStr;
+    if (capTimeTotalEl) capTimeTotalEl.innerText = totalStr;
+    if (sfpTimeTotalEl) sfpTimeTotalEl.innerText = totalStr;
+});
+
 // 进度条与歌词同步
 audioPlayer.addEventListener('timeupdate', () => {
-    if (!audioPlayer.duration) return;
+    if (!audioPlayer.duration || isDraggingMusicProgress) return; // 拖拽时暂停更新进度条
     
     // 1. 性能优化：先获取 DOM 元素，如果不存在则直接返回，避免后台播放时高频报错
     const progressFillArc = document.getElementById('music-progress-fill-arc');
@@ -17395,19 +17408,16 @@ audioPlayer.addEventListener('timeupdate', () => {
     const total = audioPlayer.duration;
     const percent = (current / total); // 0 到 1 之间
     
-    // 更新弧形进度条 (500 是总长度，400 是起始偏移，100 是终点偏移)
-    const dashOffset = 500 - (percent * 100);
+    // 修复：更新弧形进度条，使用 getPointAtLength 精准获取圆点坐标
+    const pathLength = progressFillArc.getTotalLength() || 320;
+    const dashOffset = pathLength - (percent * pathLength);
+    progressFillArc.style.strokeDasharray = pathLength;
     progressFillArc.style.strokeDashoffset = dashOffset;
     
-    // 计算圆点在圆弧上的坐标 (圆心 x:150, y:60, 半径 r:150)
-    // 角度从 180度 (PI) 到 0度 (0)
-    const angle = Math.PI - (percent * Math.PI);
-    const dotX = 150 + 150 * Math.cos(angle);
-    const dotY = 60 - 150 * Math.sin(angle);
-    
-    if (progressDot) {
-        progressDot.setAttribute('cx', dotX);
-        progressDot.setAttribute('cy', dotY);
+    if (progressDot && progressFillArc.getPointAtLength) {
+        const point = progressFillArc.getPointAtLength(percent * pathLength);
+        progressDot.setAttribute('cx', point.x);
+        progressDot.setAttribute('cy', point.y);
     }
 
     if (timeCurrentEl) timeCurrentEl.innerText = musicFormatTime(current);
@@ -17479,11 +17489,11 @@ audioPlayer.addEventListener('timeupdate', () => {
                     
                     if (lines[activeIndex]) {
                         lines[activeIndex].classList.add('active');
-                        // 滚动居中
-                        let offset = 0;
-                        for (let i = 0; i < activeIndex; i++) {
-                            offset += lines[i].offsetHeight + 20; // 包含 margin
-                        }
+                        // 修复：精准滚动居中
+                        const activeLine = lines[activeIndex];
+                        const containerHeight = multiLyricsInner.parentElement.clientHeight;
+                        // 计算偏移量：当前行距离顶部的距离 - 容器高度的一半 + 当前行高度的一半
+                        const offset = activeLine.offsetTop - (containerHeight / 2) + (activeLine.clientHeight / 2);
                         multiLyricsInner.style.transform = `translateY(-${offset}px)`;
                     }
                     multiLyricsInner.setAttribute('data-active-index', activeIndex);
@@ -17530,40 +17540,124 @@ function musicFormatTime(seconds) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+let isDraggingMusicProgress = false;
+
 function musicSeek(e) {
     const bar = document.getElementById('music-progress-bar'); 
     if (!bar) return;
     const rect = bar.getBoundingClientRect();
+    
+    // 兼容鼠标和触摸事件
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    
     // 简单的水平映射，因为圆弧比较平缓
-    let percent = (e.clientX - rect.left - 20) / (rect.width - 40);
+    let percent = (clientX - rect.left - 20) / (rect.width - 40);
     
     if (percent < 0) percent = 0;
     if (percent > 1) percent = 1;
     
     if (audioPlayer && isFinite(audioPlayer.duration) && audioPlayer.duration > 0) {
         audioPlayer.currentTime = percent * audioPlayer.duration;
+        
+        // 拖拽时实时更新 UI，但不触发 timeupdate
+        const progressFillArc = document.getElementById('music-progress-fill-arc');
+        const progressDot = document.getElementById('music-progress-dot');
+        const timeCurrentEl = document.getElementById('music-time-current');
+        
+        if (progressFillArc) {
+            const pathLength = progressFillArc.getTotalLength() || 320;
+            progressFillArc.style.strokeDashoffset = pathLength - (percent * pathLength);
+            
+            if (progressDot && progressFillArc.getPointAtLength) {
+                const point = progressFillArc.getPointAtLength(percent * pathLength);
+                progressDot.setAttribute('cx', point.x);
+                progressDot.setAttribute('cy', point.y);
+            }
+        }
+        if (timeCurrentEl) timeCurrentEl.innerText = musicFormatTime(audioPlayer.currentTime);
     }
 }
+// ==========================================
+// 新增：音乐小聊天窗口拖拽逻辑
+// ==========================================
+let musicChatDrag = { active: false, startX: 0, startY: 0, initialLeft: 0, initialTop: 0 };
 
-// 新增：音乐进度条拖拽逻辑
-let isDraggingMusicProgress = false;
+document.addEventListener('DOMContentLoaded', () => {
+    const handle = document.getElementById('music-chat-drag-handle');
+    const box = document.getElementById('music-chat-window');
+    if (!handle || !box) return;
 
+    // 触摸端拖拽
+    handle.addEventListener('touchstart', (e) => {
+        musicChatDrag.active = true;
+        musicChatDrag.startX = e.touches[0].clientX;
+        musicChatDrag.startY = e.touches[0].clientY;
+        musicChatDrag.initialLeft = box.offsetLeft;
+        musicChatDrag.initialTop = box.offsetTop;
+    }, { passive: false });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!musicChatDrag.active) return;
+        e.preventDefault();
+        const dx = e.touches[0].clientX - musicChatDrag.startX;
+        const dy = e.touches[0].clientY - musicChatDrag.startY;
+        box.style.left = (musicChatDrag.initialLeft + dx) + 'px';
+        box.style.top = (musicChatDrag.initialTop + dy) + 'px';
+        box.style.right = 'auto'; // 解除 right 限制，允许自由移动
+    }, { passive: false });
+
+    document.addEventListener('touchend', () => { musicChatDrag.active = false; });
+    
+    // 电脑端鼠标拖拽
+    handle.addEventListener('mousedown', (e) => {
+        musicChatDrag.active = true;
+        musicChatDrag.startX = e.clientX;
+        musicChatDrag.startY = e.clientY;
+        musicChatDrag.initialLeft = box.offsetLeft;
+        musicChatDrag.initialTop = box.offsetTop;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!musicChatDrag.active) return;
+        e.preventDefault();
+        const dx = e.clientX - musicChatDrag.startX;
+        const dy = e.clientY - musicChatDrag.startY;
+        box.style.left = (musicChatDrag.initialLeft + dx) + 'px';
+        box.style.top = (musicChatDrag.initialTop + dy) + 'px';
+        box.style.right = 'auto';
+    });
+
+    document.addEventListener('mouseup', () => { musicChatDrag.active = false; });
+});
+
+// 初始化音乐进度条拖拽
 function initMusicProgressDrag() {
     const bar = document.getElementById('music-progress-bar');
     if (!bar) return;
     
-    bar.addEventListener('mousedown', (e) => { isDraggingMusicProgress = true; musicSeek(e); });
-    document.addEventListener('mousemove', (e) => { if (isDraggingMusicProgress) musicSeek(e); });
-    document.addEventListener('mouseup', () => { isDraggingMusicProgress = false; });
+    const startDrag = (e) => {
+        isDraggingMusicProgress = true;
+        musicSeek(e);
+    };
     
-    bar.addEventListener('touchstart', (e) => { isDraggingMusicProgress = true; musicSeek(e.touches[0]); }, {passive: true});
-    document.addEventListener('touchmove', (e) => { 
+    const moveDrag = (e) => {
         if (isDraggingMusicProgress) {
-            e.preventDefault(); // 防止拖动时页面滚动
-            musicSeek(e.touches[0]); 
+            if (e.cancelable) e.preventDefault();
+            musicSeek(e);
         }
-    }, {passive: false});
-    document.addEventListener('touchend', () => { isDraggingMusicProgress = false; });
+    };
+    
+    const endDrag = () => {
+        isDraggingMusicProgress = false;
+    };
+    
+    bar.addEventListener('mousedown', startDrag);
+    document.addEventListener('mousemove', moveDrag);
+    document.addEventListener('mouseup', endDrag);
+    
+    bar.addEventListener('touchstart', startDrag, {passive: false});
+    document.addEventListener('touchmove', moveDrag, {passive: false});
+    document.addEventListener('touchend', endDrag);
 }
 
 // --- 初始化与数据加载 ---
@@ -18294,11 +18388,13 @@ function musicUpdatePlayerUI() {
 // 新增：全屏播放器交互逻辑 (歌词、悬浮输入框、气泡、换背景、下拉菜单)
 // ==========================================
 
-// 👇 新增：控制右上角下拉菜单 👇
+// 👇 修复：控制右上角下拉菜单 👇
 window.toggleMusicDropdownMenu = function(e) {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     const menu = document.getElementById('music-dropdown-menu');
     if (menu) {
+        // 强制提升层级并切换状态
+        menu.style.zIndex = '9999';
         menu.classList.toggle('active');
     }
 };

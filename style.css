@@ -3892,18 +3892,18 @@ input::-webkit-inner-spin-button {
 }
 .music-chat-close-btn:active { color: #111; }
 
-/* --- 新增：多行歌词容器 --- */
+/* --- 新增：多行歌词容器 (调整到头像上方并默认显示) --- */
 .music-multi-lyrics-container {
-    position: absolute; top: 120px; left: 0; width: 100%; bottom: 350px;
+    position: absolute; top: 15%; left: 0; width: 100%; height: 200px;
     z-index: 5; display: flex; flex-direction: column; align-items: center;
-    overflow: hidden; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+    overflow: hidden; opacity: 1; pointer-events: none; transition: opacity 0.3s ease;
     mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
     -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
 }
 .music-multi-lyrics-container.active { opacity: 1; pointer-events: auto; }
 .music-multi-lyrics-inner {
     display: flex; flex-direction: column; align-items: center; width: 100%;
-    transition: transform 0.3s ease-out; padding: 50% 20px; box-sizing: border-box;
+    transition: transform 0.3s ease-out; padding: 100px 20px; box-sizing: border-box;
 }
 .music-multi-lyric-line {
     font-size: 16px; color: rgba(255,255,255,0.4); margin: 10px 0; text-align: center;
@@ -3936,11 +3936,12 @@ input::-webkit-inner-spin-button {
     width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
     border: 2px solid #222; box-shadow: 0 4px 15px rgba(0,0,0,0.6); z-index: 2;
 }
-/* 外侧耳机线 SVG */
+/* 外侧耳机线 SVG (U形下垂) */
 .headphone-wires-outer {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 280px; height: 64px; z-index: 0; pointer-events: none;
+    position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
+    width: 260px; height: 100px; z-index: 0; pointer-events: none;
 }
+
 /* 🌟 核心修改：中间画爱心动画 🌟 */
 .heartbeat-line {
     width: 50px; height: 50px; z-index: 1; cursor: pointer;
@@ -3950,12 +3951,12 @@ input::-webkit-inner-spin-button {
     width: 100%; height: 100%;
 }
 .heart-ecg path {
-    stroke-dasharray: 100;
-    stroke-dashoffset: 100;
+    stroke-dasharray: 200;
+    stroke-dashoffset: 200;
     animation: drawHeart 2s infinite ease-in-out;
 }
 @keyframes drawHeart {
-    0% { stroke-dashoffset: 100; opacity: 0; }
+    0% { stroke-dashoffset: 200; opacity: 0; }
     20% { opacity: 1; }
     80% { stroke-dashoffset: 0; opacity: 1; filter: drop-shadow(0 0 5px #FFF); }
     100% { stroke-dashoffset: 0; opacity: 0; }
@@ -4020,6 +4021,20 @@ input::-webkit-inner-spin-button {
 .side-btn { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; color: #FFF; cursor: pointer; transition: background 0.2s; }
 .side-btn:active { background: rgba(255,255,255,0.15); }
 .side-btn svg { width: 16px; height: 16px; fill: currentColor; }
+/* 👇 新增：小聊天窗口拖拽把手样式 👇 */
+.chat-drag-handle {
+    width: 40px; 
+    height: 4px; 
+    background: rgba(0,0,0,0.2); 
+    border-radius: 2px;
+    margin: 8px auto 0 auto; 
+    cursor: grab; 
+    flex-shrink: 0;
+    z-index: 10;
+}
+.chat-drag-handle:active { 
+    cursor: grabbing; 
+}
 
 /* --- 修复：悬浮输入框样式 (去掉了关闭键) --- */
 .floating-chat-input {
