@@ -5593,6 +5593,9 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         const weatherPrompt = await getWeatherPrompt(char);
 
         // 1. 核心身份与角色设定
+        const charGenderStr = char.gender ? `性别：${char.gender}。` : '';
+        const userGenderStr = (char.chatConfig && char.chatConfig.userGender) ? `性别：${char.chatConfig.userGender}。` : (wcState.user.gender ? `性别：${wcState.user.gender}。` : '');
+
         let systemPrompt = `<role_play_directive>\n`;
         systemPrompt += `你是一个正在进行沉浸式角色扮演的真人，你的回复必须像一个真实的【${char.name}】正在使用微信聊天，【${currentUserName}】是你正在交谈的对象。\n`;
         systemPrompt += `你只能是你自己！请严格遵守设定，禁止出现违反人设的行为语言！\n`;
@@ -5600,7 +5603,7 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
 
         systemPrompt += `<char_settings>\n`;
         systemPrompt += `1. 你的角色名是：${char.name}\n`;
-        systemPrompt += `2. 你的角色设定是：${currentCharPersona}\n`;
+        systemPrompt += `2. 你的角色设定是：${charGenderStr}${currentCharPersona}\n`;
         if (worldBookContent && worldBookContent !== "无特定世界观设定。") {
             systemPrompt +=`\n${worldBookContent}\n`;
         }
@@ -5608,7 +5611,7 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
 
         systemPrompt += `<user_settings>\n`;
         systemPrompt += `1. 我的名字是：${currentUserName}\n`;
-        systemPrompt += `2. 我的人设面具是：${currentUserPersona}\n`;
+        systemPrompt += `2. 我的人设面具是：${userGenderStr}${currentUserPersona}\n`;
         systemPrompt += `</user_settings>\n\n`;
 
         // 2. 记忆与情境
@@ -9527,6 +9530,7 @@ function readTavernPNG(file) {
 
 async function wcSaveCharacter() {
     const name = document.getElementById('wc-input-char-name').value;
+    const gender = document.getElementById('wc-input-char-gender').value.trim();
     const note = document.getElementById('wc-input-char-note').value;
     const prompt = document.getElementById('wc-input-char-prompt').value;
     if (!name) return alert('请输入角色名称');
@@ -9535,7 +9539,7 @@ async function wcSaveCharacter() {
     const defaultAvatar = 'data:image/svg+xml;base64,' + window.btoa(unescape(encodeURIComponent(defaultAvatarSvg)));
 
     const newChar = {
-        id: Date.now(), name: name, note: note, prompt: prompt,
+        id: Date.now(), name: name, gender: gender, note: note, prompt: prompt,
         avatar: wcState.tempImage || defaultAvatar, isPinned: false
     };
     wcState.characters.push(newChar);
@@ -9763,6 +9767,7 @@ function wcOpenEditCharSettings() {
     wcState.tempImage = '';
     document.getElementById('wc-edit-char-avatar').src = char.avatar;
     document.getElementById('wc-edit-char-name').value = char.name;
+    document.getElementById('wc-edit-char-gender').value = char.gender || '';
     document.getElementById('wc-edit-char-note').value = char.note;
     document.getElementById('wc-edit-char-prompt').value = char.prompt;
     wcOpenModal('wc-modal-edit-char-settings');
@@ -9772,6 +9777,7 @@ async function wcUpdateCharacter() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     if (!char) return;
     char.name = document.getElementById('wc-edit-char-name').value;
+    char.gender = document.getElementById('wc-edit-char-gender').value.trim();
     char.note = document.getElementById('wc-edit-char-note').value;
     char.prompt = document.getElementById('wc-edit-char-prompt').value;
     if (wcState.tempImage && wcState.tempImageType === 'edit-char') char.avatar = wcState.tempImage;
@@ -12200,6 +12206,7 @@ function wcOpenChatSettings() {
     // Populate Inputs
     document.getElementById('wc-setting-char-avatar').src = char.avatar;
     document.getElementById('wc-setting-char-name').value = char.name;
+    document.getElementById('wc-setting-char-gender').value = char.gender || "";
     document.getElementById('wc-setting-char-note').value = char.note || "";
     document.getElementById('wc-setting-char-prompt').value = char.prompt || "";
     document.getElementById('wc-setting-life-status-toggle').checked = char.chatConfig.lifeStatusEnabled !== false; // 默认开启
@@ -12268,6 +12275,7 @@ function wcOpenChatSettings() {
 
     document.getElementById('wc-setting-user-avatar').src = char.chatConfig.userAvatar || wcState.user.avatar;
     document.getElementById('wc-setting-user-name').value = char.chatConfig.userName || wcState.user.name;
+    document.getElementById('wc-setting-user-gender').value = char.chatConfig.userGender || wcState.user.gender || "";
     document.getElementById('wc-setting-user-prompt').value = char.chatConfig.userPersona || wcState.user.persona;
     
     const maskSelect = document.getElementById('wc-setting-user-mask-select');
@@ -12427,6 +12435,7 @@ async function wcSaveChatSettings() {
     if (!char) return;
     
     char.name = document.getElementById('wc-setting-char-name').value;
+    char.gender = document.getElementById('wc-setting-char-gender').value.trim();
     char.note = document.getElementById('wc-setting-char-note').value;
     char.prompt = document.getElementById('wc-setting-char-prompt').value;
     // 拉黑状态已在弹窗确认时保存，这里无需再读取
@@ -12434,6 +12443,7 @@ async function wcSaveChatSettings() {
 
     if (!char.chatConfig) char.chatConfig = {};
     char.chatConfig.userName = document.getElementById('wc-setting-user-name').value;
+    char.chatConfig.userGender = document.getElementById('wc-setting-user-gender').value.trim();
     char.chatConfig.userPersona = document.getElementById('wc-setting-user-prompt').value;
     char.chatConfig.lifeStatusEnabled = document.getElementById('wc-setting-life-status-toggle').checked;
     
@@ -12586,11 +12596,13 @@ function wcOpenEditMask(id = null) {
         const mask = wcState.masks.find(m => m.id === id);
         document.getElementById('wc-mask-modal-title').innerText = '编辑面具';
         document.getElementById('wc-input-mask-name').value = mask.name;
+        document.getElementById('wc-input-mask-gender').value = mask.gender || '';
         document.getElementById('wc-input-mask-prompt').value = mask.prompt;
         document.getElementById('wc-preview-mask-avatar').src = mask.avatar;
     } else {
         document.getElementById('wc-mask-modal-title').innerText = '新建面具';
         document.getElementById('wc-input-mask-name').value = '';
+        document.getElementById('wc-input-mask-gender').value = '';
         document.getElementById('wc-input-mask-prompt').value = '';
         document.getElementById('wc-preview-mask-avatar').src = '';
     }
@@ -12598,14 +12610,15 @@ function wcOpenEditMask(id = null) {
 }
 function wcSaveMask() {
     const name = document.getElementById('wc-input-mask-name').value;
+    const gender = document.getElementById('wc-input-mask-gender').value.trim();
     const prompt = document.getElementById('wc-input-mask-prompt').value;
     const avatar = wcState.tempImage || (wcState.editingMaskId ? wcState.masks.find(m=>m.id===wcState.editingMaskId).avatar : wcState.user.avatar);
     if (!name) return alert('请输入名称');
     if (wcState.editingMaskId) {
         const mask = wcState.masks.find(m => m.id === wcState.editingMaskId);
-        mask.name = name; mask.prompt = prompt; mask.avatar = avatar;
+        mask.name = name; mask.gender = gender; mask.prompt = prompt; mask.avatar = avatar;
     } else {
-        wcState.masks.push({ id: Date.now(), name, prompt, avatar });
+        wcState.masks.push({ id: Date.now(), name, gender, prompt, avatar });
     }
     wcSaveData();
     wcCloseModal('wc-modal-edit-mask');
@@ -26314,10 +26327,23 @@ function forumDirectGenFanfic(min = 2, max = 3, selectedPostIds = [], keepPosts 
     const trope = forumState.config.fanficTrope || '随机日常/发疯脑洞';
     const style = forumState.config.fanficStyle || '极具高级感、日系/韩系文艺风、意识流、细腻且克制。';
 
+    // 尝试查找性别
+    let genderA = ''; let genderB = '';
+    const findGender = (name) => {
+        if (name.includes('(User)') || name.includes('(我)')) return wcState.user.gender || '';
+        const c = wcState.characters.find(ch => name.includes(ch.name));
+        if (c && c.gender) return c.gender;
+        const m = wcState.masks.find(mk => name.includes(mk.name));
+        if (m && m.gender) return m.gender;
+        return '';
+    };
+    genderA = findGender(charA);
+    genderB = findGender(charB);
+
     let basePrompt = `你现在是一个同人论坛的驻站神仙太太（同人文作者）。\n`;
     basePrompt += `请根据以下设定，创作同人文：\n`;
-    basePrompt += `【主角 A】：${charA}\n`;
-    basePrompt += `【主角 B】：${charB}\n`;
+    basePrompt += `【主角 A】：${charA} ${genderA ? '(性别:'+genderA+')' : ''}\n`;
+    basePrompt += `【主角 B】：${charB} ${genderB ? '(性别:'+genderB+')' : ''}\n`;
     basePrompt += `【小说类型/梗】：${trope}\n`;
     basePrompt += `【文风要求】：${style}\n`;
 
