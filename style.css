@@ -3892,25 +3892,91 @@ input::-webkit-inner-spin-button {
 }
 .music-chat-close-btn:active { color: #111; }
 
-/* --- 新增：多行歌词容器 (调整到头像上方并默认显示) --- */
+/* --- 新增：中间唱片与歌词容器 --- */
+.music-middle-container {
+    position: absolute; top: 12%; left: 0; width: 100%; height: 250px; /* 增加高度适应大唱片 */
+    z-index: 5; display: flex; align-items: center; justify-content: flex-end;
+    padding: 0 20px; box-sizing: border-box;
+    opacity: 1; transition: opacity 0.3s ease;
+    overflow: hidden; /* 防止唱片溢出导致横向滚动条 */
+}
+
+/* 左侧黑色半露唱片样式 */
+.music-record-wrapper {
+    width: 200px; height: 200px; /* 放大唱片尺寸 */
+    position: absolute; 
+    left: -60px; /* 🔪 核心：向左偏移一半的宽度，使其只显示右半边 */
+    top: 50%;
+    transform: translateY(-50%);
+    flex-shrink: 0;
+}
+.music-record-disc {
+    width: 100%; height: 100%; border-radius: 50%;
+    background: #111; /* 纯黑底色 */
+    background-image: radial-gradient(circle, #222 10%, #050505 90%); /* 黑胶渐变质感 */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 10px 0 30px rgba(0,0,0,0.6); /* 右侧阴影，增加立体感 */
+    display: flex; align-items: center; justify-content: center;
+    animation: spinRecord 12s linear infinite;
+    animation-play-state: paused;
+    position: relative;
+}
+/* 黑胶唱片纹理圈 */
+.music-record-disc::before {
+    content: ''; position: absolute; width: 85%; height: 85%; border-radius: 50%; border: 1px solid rgba(255,255,255,0.05);
+}
+.music-record-disc::after {
+    content: ''; position: absolute; width: 65%; height: 65%; border-radius: 50%; border: 1px solid rgba(255,255,255,0.05);
+}
+.music-record-disc.playing { animation-play-state: running; }
+
+@keyframes spinRecord {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 唱片中间的封面 */
+.music-record-cover {
+    width: 120px; height: 120px; border-radius: 50%; object-fit: cover;
+    border: 4px solid #000; z-index: 2;
+}
+
+/* 唱针样式 (调整到右侧可见区域) */
+.music-record-stylus {
+    position: absolute; top: 10px; right: 30px; width: 4px; height: 80px;
+    background: #EAEAEA; border-radius: 2px; transform-origin: top center;
+    transform: rotate(-35deg); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    box-shadow: 2px 4px 10px rgba(0,0,0,0.4); z-index: 3;
+}
+.music-record-stylus::before {
+    content: ''; position: absolute; top: -6px; left: -6px; width: 16px; height: 16px; background: #CCC; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+.music-record-stylus::after {
+    content: ''; position: absolute; bottom: -8px; left: -3px; width: 10px; height: 20px; background: #CCC; border-radius: 4px; transform: rotate(15deg);
+}
+.music-record-wrapper.playing .music-record-stylus {
+    transform: rotate(-10deg); /* 播放时唱针放上去 */
+}
+
+/* 右侧多行歌词容器 (靠左对齐，避开唱片) */
 .music-multi-lyrics-container {
-    position: absolute; top: 15%; left: 0; width: 100%; height: 200px;
-    z-index: 5; display: flex; flex-direction: column; align-items: center;
-    overflow: hidden; opacity: 1; pointer-events: none; transition: opacity 0.3s ease;
+    flex: 1; height: 100%; display: flex; flex-direction: column; align-items: flex-start;
+    overflow: hidden; pointer-events: none; 
+    margin-left: 160px; /* 🔪 核心：避开左侧露出的 140px 唱片，留出间距 */
     mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
     -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
 }
-.music-multi-lyrics-container.active { opacity: 1; pointer-events: auto; }
 .music-multi-lyrics-inner {
-    display: flex; flex-direction: column; align-items: center; width: 100%;
-    transition: transform 0.3s ease-out; padding: 100px 20px; box-sizing: border-box;
+    display: flex; flex-direction: column; align-items: flex-start; width: 100%;
+    transition: transform 0.3s ease-out; padding: 120px 0; box-sizing: border-box;
 }
 .music-multi-lyric-line {
-    font-size: 16px; color: rgba(255,255,255,0.4); margin: 10px 0; text-align: center;
+    font-size: 10px; color: rgba(255,255,255,0.4); margin: 8px 0; text-align: left;
     transition: all 0.3s ease; line-height: 1.5;
 }
+
 .music-multi-lyric-line.active {
-    font-size: 20px; color: #FFF; font-weight: bold; transform: scale(1.05);
+    font-size: 14px; color: #FFF; font-weight: bold; transform: scale(1.05); transform-origin: left center;
 }
 
 /* 底部控制与信息区 */

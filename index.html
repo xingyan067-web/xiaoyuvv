@@ -2558,10 +2558,21 @@
                         </div>
                     </div>
 
-                    <!-- 多行歌词容器 -->
-                    <div id="music-multi-lyrics-container" class="music-multi-lyrics-container" onclick="toggleMultiLyrics()">
-                        <div id="music-multi-lyrics-inner" class="music-multi-lyrics-inner"></div>
+                    <!-- 中间：透明唱片与多行歌词容器 -->
+                    <div id="music-middle-container" class="music-middle-container" onclick="toggleMultiLyrics()">
+                        <!-- 左侧：透明旋转唱片 -->
+                        <div class="music-record-wrapper" id="music-fp-record-wrapper">
+                            <div class="music-record-disc" id="music-fp-record-disc">
+                                <img src="" id="music-fp-record-cover" class="music-record-cover">
+                            </div>
+                            <div class="music-record-stylus" id="music-fp-stylus"></div>
+                        </div>
+                        <!-- 右侧：滚动歌词 -->
+                        <div id="music-multi-lyrics-container" class="music-multi-lyrics-container">
+                            <div id="music-multi-lyrics-inner" class="music-multi-lyrics-inner"></div>
+                        </div>
                     </div>
+
 
                     <!-- 底部控制与信息区 -->
                     <div class="ins-music-fp-bottom-area">

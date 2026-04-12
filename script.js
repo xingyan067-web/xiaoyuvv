@@ -18317,7 +18317,17 @@ function musicUpdatePlayerUI() {
     
     // 更新全屏大封面
     const largeCover = document.getElementById('music-fp-cover-large');
-    if (largeCover) largeCover.src = musicState.currentSong.cover;
+    if (largeCover) {
+        if (musicState.profile && musicState.profile.fpBg) {
+            largeCover.src = musicState.profile.fpBg;
+        } else {
+            largeCover.src = musicState.currentSong.cover;
+        }
+    }
+
+    // 👇 新增：更新透明唱片封面 👇
+    const fpRecordCover = document.getElementById('music-fp-record-cover');
+    if (fpRecordCover) fpRecordCover.src = musicState.currentSong.cover;
 
     const miniTitle = document.getElementById('music-player-title');
     const miniArtist = document.getElementById('music-player-artist');
@@ -18365,10 +18375,17 @@ function musicUpdatePlayerUI() {
     const pauseIcon = '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
     const playIcon = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';            
     
+    const fpRecordDisc = document.getElementById('music-fp-record-disc');
+    const fpRecordWrapper = document.getElementById('music-fp-record-wrapper');
+
     if (musicState.isPlaying) {
         if (coverEl) coverEl.classList.add('playing');
         if (playBtn) playBtn.innerHTML = pauseIcon;
         if (fpPlayBtn) fpPlayBtn.innerHTML = pauseIcon;
+        
+        // 👇 新增：播放时唱片旋转，唱针放下 👇
+        if (fpRecordDisc) fpRecordDisc.classList.add('playing');
+        if (fpRecordWrapper) fpRecordWrapper.classList.add('playing');
         
         // 同步旋转和暂停图标
         if (simMiniRecord) simMiniRecord.classList.add('playing');
@@ -18380,6 +18397,10 @@ function musicUpdatePlayerUI() {
         if (coverEl) coverEl.classList.remove('playing');
         if (playBtn) playBtn.innerHTML = playIcon;
         if (fpPlayBtn) fpPlayBtn.innerHTML = playIcon;
+        
+        // 👇 新增：暂停时唱片停止，唱针移开 👇
+        if (fpRecordDisc) fpRecordDisc.classList.remove('playing');
+        if (fpRecordWrapper) fpRecordWrapper.classList.remove('playing');
         
         // 同步停止旋转和播放图标
         if (simMiniRecord) simMiniRecord.classList.remove('playing');
@@ -18427,6 +18448,10 @@ window.musicRestoreDefaultBg = function() {
     if (largeCover && musicState.currentSong) {
         largeCover.src = musicState.currentSong.cover;
     }
+    if (musicState.profile) {
+        musicState.profile.fpBg = null;
+        musicSaveData();
+    }
 };
 
 // 点击屏幕其他地方关闭下拉菜单
@@ -18450,6 +18475,9 @@ window.musicHandleFpBgUpload = async function(input) {
         if (largeCover) {
             largeCover.src = base64;
         }
+        if (!musicState.profile) musicState.profile = {};
+        musicState.profile.fpBg = base64;
+        musicSaveData();
     } catch (e) {
         console.error("背景图片处理失败", e);
         alert("图片处理失败，请重试");
