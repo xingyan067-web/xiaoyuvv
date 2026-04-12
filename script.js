@@ -18405,9 +18405,27 @@ window.toggleMusicDropdownMenu = function(e) {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     const menu = document.getElementById('music-dropdown-menu');
     if (menu) {
+        // 动态判断是否显示“结束一起听歌”按钮
+        const endListenBtn = document.getElementById('music-menu-end-listen');
+        if (endListenBtn) {
+            if (musicState.listenTogether && musicState.listenTogether.active) {
+                endListenBtn.style.display = 'flex';
+            } else {
+                endListenBtn.style.display = 'none';
+            }
+        }
+
         // 强制提升层级并切换状态
         menu.style.zIndex = '9999';
         menu.classList.toggle('active');
+    }
+};
+
+// 新增：恢复默认背景（跟随歌曲封面）
+window.musicRestoreDefaultBg = function() {
+    const largeCover = document.getElementById('music-fp-cover-large');
+    if (largeCover && musicState.currentSong) {
+        largeCover.src = musicState.currentSong.cover;
     }
 };
 
