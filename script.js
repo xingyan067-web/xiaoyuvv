@@ -12477,7 +12477,15 @@ async function wcSaveChatSettings() {
 
     char.chatConfig.proactiveInterval = parseInt(document.getElementById('wc-setting-proactive-interval').value) || 60;
     char.chatConfig.momentFreq = parseInt(document.getElementById('wc-setting-moment-freq').value) || 0;
-    // 👇 新增：保存后台小动作概率 👇
+    
+    // 👇 新增：保存 NPC 评论开关状态 👇
+    const npcCommentToggle = document.getElementById('wc-setting-moment-npc-comment');
+    if (npcCommentToggle) {
+        char.chatConfig.momentNpcCommentEnabled = npcCommentToggle.checked;
+    }
+    // 👆 新增结束 👆
+
+    // 👇 新增：动态注入后台小动作概率滑块 👇
     const bgUpdateFreqInput = document.getElementById('wc-setting-bg-update-freq');
     if (bgUpdateFreqInput) {
         char.chatConfig.bgUpdateFreq = parseInt(bgUpdateFreqInput.value) || 0;
@@ -17080,6 +17088,10 @@ function closeNotificationSettings() {
 }
 
 function updateNotifUI() {
+    // 每次打开面板时，重新从本地存储读取最新状态，防止变量不同步
+    isRealNotifEnabled = localStorage.getItem('ios_theme_real_notif_enabled') === 'true';
+    isAlwaysRealNotifEnabled = localStorage.getItem('ios_theme_always_real_notif_enabled') === 'true';
+
     const notifToggle = document.getElementById('toggle-real-notif');
     const alwaysNotifToggle = document.getElementById('toggle-always-real-notif');
     const keepAliveToggle = document.getElementById('toggle-keep-alive');

@@ -2562,17 +2562,13 @@
                     <!-- 底部控制与信息区 -->
                     <div class="ins-music-fp-bottom-area">
                         
-                        <!-- 1. 一起听歌头像 (外侧耳机线 + 中间画爱心动画) -->
+                        <!-- 1. 一起听歌头像 (外侧耳机线 + 中间心跳动画) -->
                         <div class="together-section" id="music-fp-together" style="display: none;">
                             <div class="together-avatars">
                                 <!-- 外侧耳机线 SVG (左右两侧自然下垂) -->
                                 <svg class="headphone-wires-outer" viewBox="0 0 200 120" preserveAspectRatio="none">
-                                    <!-- 左侧耳机线：从左边头像外侧(x=15)开始，向左下自然弯曲 -->
                                     <path d="M 15 10 C 5 40, 0 80, 5 120" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5"/>
-                                    <!-- 右侧耳机线：从右边头像外侧(x=185)开始，向右下自然弯曲 -->
                                     <path d="M 185 10 C 195 40, 200 80, 195 120" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5"/>
-                                    
-                                    <!-- 耳机头小白块也移到外侧对应位置 -->
                                     <rect x="13" y="8" width="4" height="8" fill="#FFF" rx="2" transform="rotate(15 15 10)"/>
                                     <rect x="183" y="8" width="4" height="8" fill="#FFF" rx="2" transform="rotate(-15 185 10)"/>
                                 </svg>
@@ -2583,11 +2579,10 @@
                                     <img src="" id="music-fp-avatar-user" alt="User">
                                 </div>
                                 
-                                <!-- 中间画爱心动画 (点击打开旧聊天框) -->
-                                <div class="heartbeat-line" onclick="musicToggleOldChatWindow(event)">
-                                    <svg viewBox="0 0 32 32" class="heart-ecg">
-                                        <path d="M 16 28 C 16 28 4 18 4 10 C 4 5 10 3 16 9 C 22 3 28 5 28 10 C 28 18 16 28 16 28 Z" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                                    </svg>
+                                <!-- 中间心跳动画 (使用你提供的双层 SVG) -->
+                                <div class="heartbeat-line" onclick="musicToggleOldChatWindow(event)" style="position: relative; color: rgba(255,255,255,0.8);">
+                                    <svg class="heart-ghost" viewBox="0 0 24 24" style="width:100%; height:100%; position:absolute; top:0; left:0; stroke:currentColor; fill:none; stroke-width:1.5; opacity: 0.3;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3c1.18 0 2.27.38 3.15 1.02 M21.9 6.8C21.96 7.34 22 7.9 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35"/></svg>
+                                    <svg class="heart-main" viewBox="0 0 24 24" style="width:100%; height:100%; position:absolute; top:0; left:0; stroke:currentColor; fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3c1.18 0 2.27.38 3.15 1.02 M21.9 6.8C21.96 7.34 22 7.9 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35"/></svg>
                                 </div>
 
                                 <!-- Char 头像与气泡 -->
@@ -2601,7 +2596,6 @@
                             </div>
                             <div class="together-meta" id="music-fp-meta">相距 -- 公里，一起听了 0 小时 0 分钟</div>
                         </div>
-
                         <!-- 2. 歌曲信息与单行歌词 -->
                         <div class="song-info-box">
                             <div class="song-title" id="music-fp-title">Song Title</div>
@@ -2620,7 +2614,7 @@
                             </div>
                             <div class="ins-music-fp-time-center">
                                 <!-- 爱心聊天按钮 (点击打开悬浮输入框) -->
-                                <div class="chat-heart-btn" onclick="toggleFloatingInput(event)">
+                                <div class="chat-heart-btn" onclick="toggleFloatingInput(event)" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
                                     <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                                 </div>
                                 <span class="ins-music-fp-time-text"><span id="music-time-current">0:00</span> / <span id="music-time-total">-:-</span></span>
