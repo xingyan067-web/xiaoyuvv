@@ -4678,7 +4678,8 @@ function wcRenderMessages(charId, preserveScroll = false) {
             if (rp.type === 'exclusive') typeText = `给 ${rp.target} 的专属红包`;
             
             let statusText = '查看红包';
-            if (rp.status === 'opened') statusText = '已领取';
+            // 优化：如果是群聊且还没领完，显示“已领取(还有剩余)”
+            if (rp.status === 'opened') statusText = rp.isGroup ? '已领取(还有剩余)' : '已领取';
             else if (rp.status === 'empty') statusText = '已被领完';
             else if (rp.status === 'refunded') statusText = '已退款';
 
@@ -35068,7 +35069,8 @@ wcParseAIResponse = async function(charId, text, stickerGroupIds) {
             actions.forEach(action => {
                 if (action.type === 'redpacket_receive' && action.id) {
                     const msgs = wcState.chats[charId];
-                    const msg = msgs.find(m => m.id.toString() === action.id.toString());
+                    // 修复：用 m.rpData.id 去匹配 action.id，而不是用气泡的 m.id
+                    const msg = msgs.find(m => m.rpData && m.rpData.id.toString() === action.id.toString());
                     if (msg && msg.rpData) {
                         const rp = msg.rpData;
                         const char = wcState.characters.find(c => c.id === charId);
