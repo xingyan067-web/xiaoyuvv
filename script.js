@@ -5771,8 +5771,10 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             groupPrompt += `> 每次生成回复前，必须核对当前发言人的名字和设定，确保 100% 匹配！\n`;
             groupPrompt += `【丰富互动】：群里的每一个成员都可以发送文本(text)、表情包(sticker)、图片(image)、语音(voice)或转账(transfer)。\n`;
             groupPrompt += `【主动私聊机制】：如果在群聊中发生了某件事，某个群成员想要**私下**找 User 聊天，该成员可以使用指令 {"type":"private_chat", "senderName":"该成员名字", "content":"私聊的第一句话"}。这会在后台自动给 User 发送私聊消息。\n`;
-            groupPrompt += `【格式要求】：你必须返回 JSON 数组，且**每一个**对象都必须包含 "senderName" 字段标明是谁在操作！\n`;
-            groupPrompt += `示例：\n[\n  {"type":"text", "senderName":"张三", "content":"大家晚上好"},\n  {"type":"sticker", "senderName":"李四", "content":"开心"},\n  {"type":"private_chat", "senderName":"张三", "content":"User，刚才群里那件事你怎么看？"}\n]\n\n`;
+            const rMinGroup = config.replyMin !== undefined ? config.replyMin : 3;
+            const rMaxGroup = config.replyMax !== undefined ? config.replyMax : 8;
+            groupPrompt += `【格式要求】：你必须返回 JSON 对象，包含 "replies" 数组！**每一个**回复对象都必须包含 "senderName" 字段标明是谁在操作！\n`;
+            groupPrompt += `【强制气泡数量】：群成员的总回复气泡数必须在 ${rMinGroup} 到 ${rMaxGroup} 之间！必须让不同成员分多条消息发送，严禁把所有人的话挤在一起！\n\n`;
         }
 
         // 👆 修复结束 👆
@@ -5949,6 +5951,16 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             systemPrompt += `【当前资产状态】：微信零钱余额 ¥${wcState.wallet.balance.toFixed(2)}，心动值(商城积分)余额 ♥${lsState.qaScore}。\n`;
         }
         
+        if (char.isGroup) {
+            systemPrompt += `17. 抢红包(看到系统提示有人发红包，可决定是否抢): {"type":"redpacket_receive", "id":"红包ID", "senderName":"你的名字"}\n`;
+            systemPrompt += `18. 发群红包(给群友发红包，rpType可选: random(拼手气), normal(普通), exclusive(专属)。exclusive必须指定target接收人):\n`;
+            systemPrompt += `{"type":"redpacket_send", "rpType":"random", "amount":52.0, "count":5, "msg":"大家吃好喝好", "target":"User"}\n`;
+        } else {
+            systemPrompt += `17. 领红包(看到User发了红包，可决定是否领取): {"type":"redpacket_receive", "id":"红包ID"}\n`;
+            systemPrompt += `18. 发红包(主动给User发微信红包，只需指定金额和留言):\n`;
+            systemPrompt += `{"type":"redpacket_send", "amount":52.0, "msg":"给你买奶茶"}\n`;
+        }
+        
         systemPrompt += `\n示例输出：\n`;
         if (config.bilingualEnabled) {
             systemPrompt += `{
@@ -5964,7 +5976,18 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
   }
 }\n`;
         } else {
-            systemPrompt += `{
+            if (char.isGroup) {
+                systemPrompt += `{
+  "replies": [
+    {"type":"text", "senderName":"张三", "content":"大家晚上好"},
+    {"type":"text", "senderName":"李四", "content":"终于下班了！"},
+    {"type":"sticker", "senderName":"王五", "content":"开心"},
+    {"type":"private_chat", "senderName":"张三", "content":"User，刚才群里那件事你怎么看？"}
+  ],
+  "phoneUpdate": null
+}\n`;
+            } else {
+                systemPrompt += `{
   "replies": [
     {"type":"text", "content":"刚才去便利店了。"},
     {"type":"text", "content":"买了个冰淇淋，你要吃吗？"},
@@ -5976,6 +5999,7 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
     "newSign": "你的新个性签名(不改填null)"
   }
 }\n`;
+            }
         }
         systemPrompt += `</format_rules>\n\n`;
         systemPrompt += wcGenerateRelationshipPrompt(); // 注入关系网
@@ -6987,6 +7011,50 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 }
             }
         // 👆 新增结束
+
+        } else if (action.type === 'redpacket_send') {
+            const amount = parseFloat(action.amount) || 5.20;
+            const msgText = action.msg || '恭喜发财，大吉大利';
+            const senderName = char.isGroup && action.senderName ? action.senderName : char.name;
+            
+            let rpType = 'normal';
+            let count = 1;
+            let target = null;
+
+            // 强制隔离：只有群聊才允许解析拼手气、专属和个数
+            if (char.isGroup) {
+                rpType = action.rpType || 'random';
+                count = parseInt(action.count) || 1;
+                target = action.target || null;
+            }
+
+            const rpData = {
+                id: Date.now().toString() + Math.random().toString().substring(2, 6),
+                type: rpType,
+                isGroup: char.isGroup,
+                totalAmount: amount,
+                count: count,
+                msg: msgText,
+                target: rpType === 'exclusive' ? target : null,
+                sender: senderName,
+                status: 'unopened', 
+                receivers: [] 
+            };
+
+            wcAddMessage(charId, 'them', 'redpacket', '微信红包', { rpData: rpData, senderName: senderName, ...extra });
+            
+            const userName = (char.chatConfig && char.chatConfig.userName) ? char.chatConfig.userName : wcState.user.name;
+            
+            if (!char.isGroup || (rpType === 'exclusive' && target === userName)) {
+                wcAddMessage(charId, 'system', 'system', `[系统提示: ${senderName} 给你发了一个红包，快点击领取吧！]`, { style: 'transparent' });
+            } else if (char.isGroup) {
+                let aiPrompt = `[系统内部信息(仅AI可见): ${senderName} 刚刚在群里发了一个微信红包。总金额：¥${amount.toFixed(2)}，留言：“${msgText}”。`;
+                if (rpType === 'random') aiPrompt += `这是一个拼手气红包，共 ${count} 个。`;
+                else if (rpType === 'normal') aiPrompt += `这是一个普通红包，共 ${count} 个。`;
+                else if (rpType === 'exclusive') aiPrompt += `这是一个专属红包，仅限【${target}】领取。`;
+                aiPrompt += `群里的NPC可以根据自己的人设决定是否抢红包。如果决定抢，请在返回的 JSON 数组中加入 {"type":"redpacket_receive", "id": "${rpData.id}", "senderName": "抢红包的角色名"} 指令。注意：专属红包只有指定的人能抢成功！]`;
+                wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
+            }
 
         } else if (action.type === 'invite_accept') {
             // AI 明确同意邀请
@@ -12539,9 +12607,8 @@ function wcOpenChatSettings() {
     const nameRow = document.getElementById('wc-setting-char-name') ? document.getElementById('wc-setting-char-name').closest('.wc-avatar-row') : null;
     const noteRow = document.getElementById('wc-setting-char-note') ? document.getElementById('wc-setting-char-note').closest('.wc-form-group') : null;
     const promptRow = document.getElementById('wc-setting-char-prompt') ? document.getElementById('wc-setting-char-prompt').closest('.wc-form-group') : null;
-    const proactiveToggle = document.getElementById('wc-setting-proactive-toggle');
-    const proactiveSection = proactiveToggle ? proactiveToggle.closest('.wc-settings-section') : null;
-    const stickerSection = document.getElementById('wc-setting-sticker-group-list') ? document.getElementById('wc-setting-sticker-group-list').closest('.wc-form-group') : null;
+    const singleOnlySection = document.getElementById('wc-setting-single-only-section');
+    const bilingualContainer = document.getElementById('wc-setting-bilingual-container');
 
     const blockBtn = document.getElementById('wc-setting-block-btn');
     const groupMembersSection = document.getElementById('wc-setting-group-members-section');
@@ -12559,8 +12626,8 @@ function wcOpenChatSettings() {
         }
         if(noteRow) noteRow.style.display = 'none';
         if(promptRow) promptRow.style.display = 'none';
-        if(proactiveSection) proactiveSection.style.display = 'none';
-        if(stickerSection) stickerSection.style.display = 'none';
+        if(singleOnlySection) singleOnlySection.style.display = 'none';
+        if(bilingualContainer) bilingualContainer.style.display = 'none';
         if(locSection) locSection.style.display = 'none'; // 隐藏城市信息
         if(lifeStatusSection) lifeStatusSection.style.display = 'none'; // 隐藏生活状态
         
@@ -12575,8 +12642,8 @@ function wcOpenChatSettings() {
         }
         if(noteRow) noteRow.style.display = 'block';
         if(promptRow) promptRow.style.display = 'block';
-        if(proactiveSection) proactiveSection.style.display = 'block';
-        if(stickerSection) stickerSection.style.display = 'block';
+        if(singleOnlySection) singleOnlySection.style.display = 'block';
+        if(bilingualContainer) bilingualContainer.style.display = 'block';
         if(locSection) locSection.style.display = 'block'; // 恢复城市信息
         if(lifeStatusSection) lifeStatusSection.style.display = 'flex'; // 恢复生活状态
 
@@ -21120,32 +21187,35 @@ async function triggerDreamAI() {
     const userPersona = (char && char.chatConfig && char.chatConfig.userPersona) ? char.chatConfig.userPersona : wcState.user.persona;
 
     if (dreamState.currentMode === 'offline') {
-        // 👇 新增：获取当前时间与时段氛围 👇
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth() + 1;
-        const date = now.getDate();
-        const hours = now.getHours();
-        const minutes = now.getMinutes();
-        const timeString = `${year}年${month}月${date}日 ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-        const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
-
-        let timeSlotVibe = "";
-        if (hours >= 5 && hours < 8) timeSlotVibe = "清晨：可能带着慵懒、柔软或起床气。";
-        else if (hours >= 8 && hours < 12) timeSlotVibe = "上午：清醒、有活力，适合外出或工作。";
-        else if (hours >= 12 && hours < 18) timeSlotVibe = "下午：平稳，午后可能有些懒洋洋，适合喝下午茶或散步。";
-        else if (hours >= 18 && hours < 21) timeSlotVibe = "傍晚：放松，适合共进晚餐、看日落或散步。";
-        else if (hours >= 21 && hours < 24) timeSlotVibe = "夜晚：放松，更容易敞开心扉，适合私密独处或看电影。";
-        else timeSlotVibe = "深夜/凌晨：夜深人静，适合极度私密的互动、相拥入眠或吃宵夜。";
-        // 👆 新增结束 👆
-
         systemPrompt += `你现在处于现实世界的线下互动场景中。你和 User 已经跨越了屏幕，正在面对面接触。\n`;
-        
-        // 👇 新增：将时间感知注入到 Prompt 中 👇
-        systemPrompt += `【当前现实时间】：${timeString} ${dayString}\n`;
-        systemPrompt += `【当前时段氛围参考】：${timeSlotVibe}\n`;
-        systemPrompt += `【时间观念要求】：请严格根据当前的时间点和氛围来描写你们的线下互动。例如：如果是深夜，你们可能在吃宵夜或在家里；如果是清晨，可能刚醒来。绝对不要出现时间逻辑错误！\n\n`;
-        // 👆 新增结束 👆
+
+        const isTimePerceptionEnabled = char && char.chatConfig && char.chatConfig.timePerceptionEnabled !== false;
+
+        if (isTimePerceptionEnabled) {
+            // 👇 新增：获取当前时间与时段氛围 👇
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            const date = now.getDate();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            const timeString = `${year}年${month}月${date}日 ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            const dayString = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()];
+
+            let timeSlotVibe = "";
+            if (hours >= 5 && hours < 8) timeSlotVibe = "清晨：可能带着慵懒、柔软或起床气。";
+            else if (hours >= 8 && hours < 12) timeSlotVibe = "上午：清醒、有活力，适合外出或工作。";
+            else if (hours >= 12 && hours < 18) timeSlotVibe = "下午：平稳，午后可能有些懒洋洋，适合喝下午茶或散步。";
+            else if (hours >= 18 && hours < 21) timeSlotVibe = "傍晚：放松，适合共进晚餐、看日落或散步。";
+            else if (hours >= 21 && hours < 24) timeSlotVibe = "夜晚：放松，更容易敞开心扉，适合私密独处或看电影。";
+            else timeSlotVibe = "深夜/凌晨：夜深人静，适合极度私密的互动、相拥入眠或吃宵夜。";
+            
+            systemPrompt += `【当前现实时间】：${timeString} ${dayString}\n`;
+            systemPrompt += `【当前时段氛围参考】：${timeSlotVibe}\n`;
+            systemPrompt += `【时间观念要求】：请严格根据当前的时间点和氛围来描写你们的线下互动。例如：如果是深夜，你们可能在吃宵夜或在家里；如果是清晨，可能刚醒来。绝对不要出现时间逻辑错误！\n\n`;
+        } else {
+            systemPrompt += `\n【现实感知】：你当前处于一个模糊的时间维度，不需要关注具体的时间流逝。\n\n`;
+        }
 
         systemPrompt += `请注重描写你的肢体动作、神态、语气以及周围的现实环境。不要输出JSON，直接输出纯文本回复。请使用中文双引号（“”）或单引号（「」）来包裹角色说出的话。\n`;
         systemPrompt += `【最高格式警告】：绝对禁止输出任何思维链过程！绝对禁止使用 <thinking> 或类似标签！直接输出你最终的回复内容！\n\n`;
@@ -34870,7 +34940,8 @@ window.wcClickRedPacket = function(msgId) {
     // 判断自己是否已经领过
     const hasReceived = rp.receivers.some(r => r.name === 'User');
 
-    if (rp.status === 'opened' || rp.status === 'empty' || hasReceived) {
+    // 修复：如果是群聊，'opened' 代表红包还有剩余，只有 'empty' 才代表领完；单聊 'opened' 即代表领完
+    if (rp.status === 'empty' || hasReceived || (!rp.isGroup && rp.status === 'opened')) {
         // 已经领过或领完了，直接进详情
         wcShowRpDetail(rp);
     } else {
@@ -35009,7 +35080,9 @@ window.wcShowRpDetail = function(rpData) {
     }
 
     // 渲染列表
-    document.getElementById('rp-detail-list-header').innerText = `已领取 ${rp.receivers.length}/${rp.count} 个，共 ${rp.totalAmount.toFixed(2)}/${rp.totalAmount.toFixed(2)} 元`;
+    let grabbedAmount = 0;
+    rp.receivers.forEach(r => grabbedAmount += r.amount);
+    document.getElementById('rp-detail-list-header').innerText = `已领取 ${rp.receivers.length}/${rp.count} 个，共 ${grabbedAmount.toFixed(2)}/${rp.totalAmount.toFixed(2)} 元`;
     
     const list = document.getElementById('rp-detail-list');
     list.innerHTML = '';
@@ -35061,11 +35134,30 @@ wcParseAIResponse = async function(charId, text, stickerGroupIds) {
     try {
         let cleanText = text.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
         cleanText = cleanText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const start = cleanText.indexOf('[');
-        const end = cleanText.lastIndexOf(']');
-        if (start !== -1 && end !== -1) {
-            const actions = JSON.parse(cleanText.substring(start, end + 1));
-            
+        
+        let actions = [];
+        const startObj = cleanText.indexOf('{');
+        const endObj = cleanText.lastIndexOf('}');
+        const startArr = cleanText.indexOf('[');
+        const endArr = cleanText.lastIndexOf(']');
+
+        if (startObj !== -1 && endObj !== -1 && (startArr === -1 || startObj < startArr)) {
+            let objText = cleanText.substring(startObj, endObj + 1);
+            objText = objText.replace(/,\s*]/g, ']').replace(/,\s*}/g, '}');
+            objText = objText.replace(/([^\\])"\s*}/g, '$1"}');
+            const parsed = JSON.parse(objText);
+            if (parsed.replies && Array.isArray(parsed.replies)) {
+                actions = parsed.replies;
+            } else if (parsed.type && parsed.content) {
+                actions = [parsed];
+            }
+        } else if (startArr !== -1 && endArr !== -1) {
+            let arrText = cleanText.substring(startArr, endArr + 1);
+            arrText = arrText.replace(/,\s*]/g, ']').replace(/}\s*{/g, '},{');
+            actions = JSON.parse(arrText);
+        }
+
+        if (actions && actions.length > 0) {
             actions.forEach(action => {
                 if (action.type === 'redpacket_receive' && action.id) {
                     const msgs = wcState.chats[charId];

@@ -4834,21 +4834,25 @@
                                         <input type="checkbox" id="wc-setting-time-perception-toggle" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);" checked>
                                     </div>
 
-                                    <!-- 新增：双语翻译模式 -->
-                                    <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between;">
-                                        <label class="wc-form-label" style="margin: 0;">双语翻译模式</label>
-                                        <input type="checkbox" id="wc-setting-bilingual-toggle" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);" onchange="document.getElementById('wc-bilingual-options').style.display = this.checked ? 'block' : 'none'">
-                                    </div>
-                                    <div id="wc-bilingual-options" style="display: none; background: #F9F9F9; padding: 12px; border-radius: 10px; margin-bottom: 16px; border: 1px solid #F0F0F0;">
-                                        <div class="wc-form-group" style="margin-bottom: 10px;">
-                                            <label class="wc-form-label" style="font-size: 12px;">原语种 (如: 英语)</label>
-                                            <input type="text" id="wc-setting-bilingual-source" class="wc-form-input" placeholder="输入原语种" style="padding: 8px; font-size: 14px;">
+                                    <!-- 👇 新增包裹层：双语模式容器 👇 -->
+                                    <div id="wc-setting-bilingual-container">
+                                        <!-- 新增：双语翻译模式 -->
+                                        <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between;">
+                                            <label class="wc-form-label" style="margin: 0;">双语翻译模式</label>
+                                            <input type="checkbox" id="wc-setting-bilingual-toggle" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);" onchange="document.getElementById('wc-bilingual-options').style.display = this.checked ? 'block' : 'none'">
                                         </div>
-                                        <div class="wc-form-group" style="margin-bottom: 0;">
-                                            <label class="wc-form-label" style="font-size: 12px;">目标语种 (如: 中文)</label>
-                                            <input type="text" id="wc-setting-bilingual-target" class="wc-form-input" placeholder="输入目标语种" style="padding: 8px; font-size: 14px;">
+                                        <div id="wc-bilingual-options" style="display: none; background: #F9F9F9; padding: 12px; border-radius: 10px; margin-bottom: 16px; border: 1px solid #F0F0F0;">
+                                            <div class="wc-form-group" style="margin-bottom: 10px;">
+                                                <label class="wc-form-label" style="font-size: 12px;">原语种 (如: 英语)</label>
+                                                <input type="text" id="wc-setting-bilingual-source" class="wc-form-input" placeholder="输入原语种" style="padding: 8px; font-size: 14px;">
+                                            </div>
+                                            <div class="wc-form-group" style="margin-bottom: 0;">
+                                                <label class="wc-form-label" style="font-size: 12px;">目标语种 (如: 中文)</label>
+                                                <input type="text" id="wc-setting-bilingual-target" class="wc-form-input" placeholder="输入目标语种" style="padding: 8px; font-size: 14px;">
+                                            </div>
                                         </div>
                                     </div>
+                                    <!-- 👆 包裹层结束 👆 -->
 
                                     <div class="wc-form-group">
                                         <label class="wc-form-label">上下文条数限制 (0为不限制)</label>
@@ -4864,41 +4868,45 @@
 
                                         <div style="font-size: 11px; color: #888; margin-top: 4px;">强制AI将长段落拆分为多个气泡发送。</div>
                                     </div>
-                                    <div class="wc-form-group">
-                                        <label class="wc-form-label">关联世界书条目 (多选)</label>
-                                        <div class="ins-wb-select-btn" onclick="openGlobalWbModal('wc-setting-worldbook-list', 'wc-setting-wb-count')">
-                                            <span class="title">选择要关联的世界书</span>
-                                            <span class="count" id="wc-setting-wb-count">已选 0 项</span>
+                                    <!-- 👇 新增包裹层：单聊专属设置 👇 -->
+                                    <div id="wc-setting-single-only-section">
+                                        <div class="wc-form-group">
+                                            <label class="wc-form-label">关联世界书条目 (多选)</label>
+                                            <div class="ins-wb-select-btn" onclick="openGlobalWbModal('wc-setting-worldbook-list', 'wc-setting-wb-count')">
+                                                <span class="title">选择要关联的世界书</span>
+                                                <span class="count" id="wc-setting-wb-count">已选 0 项</span>
+                                            </div>
+                                            <div id="wc-setting-worldbook-list" style="display: none;"></div>
                                         </div>
-                                        <div id="wc-setting-worldbook-list" style="display: none;"></div>
-                                    </div>
-                                    <div class="wc-form-group">
-                                        <label class="wc-form-label">关联表情包分组 (多选)</label>
-                                        <div id="wc-setting-sticker-group-list" class="wc-checkbox-list">
-                                            <!-- Checkboxes injected via JS -->
+                                        <div class="wc-form-group">
+                                            <label class="wc-form-label">关联表情包分组 (多选)</label>
+                                            <div id="wc-setting-sticker-group-list" class="wc-checkbox-list">
+                                                <!-- Checkboxes injected via JS -->
+                                            </div>
+                                        </div>
+
+                                        <!-- 👇 恢复：主动发消息开关 (网页在线时) 👇 -->
+                                        <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 15px;">
+                                            <label class="wc-form-label" style="margin: 0;">主动发消息</label>
+                                            <input type="checkbox" id="wc-setting-proactive-toggle" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);">
+                                        </div>
+                                        <div class="wc-form-group">
+
+                                            <label class="wc-form-label">发送间隔 (分钟)</label>
+                                            <input type="number" id="wc-setting-proactive-interval" class="wc-form-input" placeholder="例如: 60">
+                                        </div>
+                                        <div class="wc-form-group">
+                                            <label class="wc-form-label">发朋友圈频率 (0-100%)</label>
+                                            <input type="number" id="wc-setting-moment-freq" class="wc-form-input" placeholder="例如: 20">
+                                            <div style="font-size: 11px; color: #888; margin-top: 4px;">每次回复后触发的概率</div>
+                                        </div>
+                                        <!-- 👇 新增：朋友圈注入NPC评论开关 👇 -->
+                                        <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 15px;">
+                                            <label class="wc-form-label" style="margin: 0;">朋友圈注入NPC评论</label>
+                                            <input type="checkbox" id="wc-setting-moment-npc-comment" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);">
                                         </div>
                                     </div>
-
-                                    <!-- 👇 恢复：主动发消息开关 (网页在线时) 👇 -->
-                                    <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 15px;">
-                                        <label class="wc-form-label" style="margin: 0;">主动发消息</label>
-                                        <input type="checkbox" id="wc-setting-proactive-toggle" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);">
-                                    </div>
-                                    <div class="wc-form-group">
-
-                                        <label class="wc-form-label">发送间隔 (分钟)</label>
-                                        <input type="number" id="wc-setting-proactive-interval" class="wc-form-input" placeholder="例如: 60">
-                                    </div>
-                                    <div class="wc-form-group">
-                                        <label class="wc-form-label">发朋友圈频率 (0-100%)</label>
-                                        <input type="number" id="wc-setting-moment-freq" class="wc-form-input" placeholder="例如: 20">
-                                        <div style="font-size: 11px; color: #888; margin-top: 4px;">每次回复后触发的概率</div>
-                                    </div>
-                                    <!-- 👇 新增：朋友圈注入NPC评论开关 👇 -->
-                                    <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between; margin-top: 15px;">
-                                        <label class="wc-form-label" style="margin: 0;">朋友圈注入NPC评论</label>
-                                        <input type="checkbox" id="wc-setting-moment-npc-comment" style="width: 20px; height: 20px; accent-color: var(--wc-accent-green);">
-                                    </div>
+                                    <!-- 👆 包裹层结束 👆 -->
                                 </div>
 
                                 <!-- Appearance -->
