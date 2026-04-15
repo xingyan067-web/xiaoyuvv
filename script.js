@@ -7,6 +7,43 @@ const originalFetch = window.fetch;
 window.fetch = async function(...args) {
     const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : 'Unknown URL');
     
+    // 👇 新增：拦截大模型 API 请求，记录消耗 👇
+    if (url.includes('/chat/completions')) {
+        let modelName = 'unknown';
+        let reqBodyStr = '';
+        if (args[1] && args[1].body) {
+            try { 
+                reqBodyStr = typeof args[1].body === 'string' ? args[1].body : JSON.stringify(args[1].body); 
+                const reqObj = JSON.parse(reqBodyStr);
+                if (reqObj.model) modelName = reqObj.model;
+            } catch(e) {}
+        }
+
+        try {
+            const response = await originalFetch.apply(this, args);
+            const cloneRes = response.clone();
+            
+            // 异步解析并记录，不阻塞主流程
+            cloneRes.json().then(resData => {
+                let tokens = 0;
+                if (resData && resData.usage && resData.usage.total_tokens) {
+                    tokens = resData.usage.total_tokens;
+                } else {
+                    // 如果 API 没返回 usage，粗略估算
+                    tokens = estimateTokens(reqBodyStr) + estimateTokens(JSON.stringify(resData.choices || {}));
+                }
+                if (tokens > 0) {
+                    if (typeof recordApiBilling === 'function') recordApiBilling(modelName, tokens);
+                }
+            }).catch(e => {});
+
+            return response;
+        } catch (error) {
+            throw error;
+        }
+    }
+    // 👆 新增结束 👆
+
     // 仅拦截云端备份请求，其他全部放行
     if (!url.includes('xiaoyuan-backup.xingyan067.workers.dev')) {
         return originalFetch.apply(this, args);
@@ -4403,6 +4440,41 @@ function wcRenderMessages(charId, preserveScroll = false) {
             
             container.insertBefore(row, anchor);
             return;
+        } else if (msg.type === 'recall') {
+            row.className = 'wc-message-row system';
+            let sysCheckboxHtml = '';
+            if (wcState.isMultiSelectMode) {
+                sysCheckboxHtml = `<div class="wc-msg-checkbox ${wcState.multiSelectedIds.includes(msg.id) ? 'checked' : ''}" onclick="wcToggleMultiSelectMsg(${msg.id})"></div>`;
+            }
+            
+            let displayContent = msg.originalContent;
+            if (msg.originalType === 'image' || msg.originalType === 'sticker') {
+                displayContent = `<img src="${msg.originalContent}" style="max-width: 100px; max-height: 100px; border-radius: 4px;">`;
+            } else if (msg.originalType === 'voice') {
+                displayContent = `[语音] ${msg.originalContent}`;
+            } else if (msg.originalType !== 'text') {
+                displayContent = `[${msg.originalType}]`;
+            }
+
+            let recallText = msg.sender === 'me' ? '你撤回了一条消息' : `"${msg.senderName || char.name}" 撤回了一条消息`;
+            // 👇 核心修改：加上 white-space: nowrap; 强制不换行，并稍微放宽 max-width
+            let recallHtml = `<div class="wc-system-msg-text" style="cursor: pointer; white-space: nowrap; max-width: 95%;" onclick="wcToggleRecallContent(${msg.id})">${recallText}</div>`;
+            let originalHtml = `<div id="recall-content-${msg.id}" style="display: none; font-size: 12px; color: #888; margin-top: 4px; text-align: center; background: rgba(0,0,0,0.05); padding: 4px 8px; border-radius: 4px; max-width: 80%; word-break: break-word;">${displayContent}</div>`;
+            
+            row.innerHTML = `${sysCheckboxHtml}<div style="display: flex; flex-direction: column; align-items: center;">${recallHtml}${originalHtml}</div>`;
+            
+            const sysText = row.querySelector('.wc-system-msg-text');
+            if (sysText) {
+                sysText.addEventListener('touchstart', (e) => wcHandleTouchStart(e, msg.id));
+                sysText.addEventListener('touchend', wcHandleTouchEnd);
+                sysText.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    wcShowContextMenu(e.clientX, e.clientY, msg.id);
+                });
+            }
+            
+            container.insertBefore(row, anchor);
+            return;
         }
 
         row.className = `wc-message-row ${msg.sender === 'me' ? 'me' : 'them'}`;
@@ -4583,6 +4655,37 @@ function wcRenderMessages(charId, preserveScroll = false) {
             // 新增：渲染购物小票
             contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" style="background: transparent; padding: 0; border: none;">${msg.content}</div>`;
             
+        } else if (msg.type === 'redpacket') {
+            // 👇 新增：渲染微信红包卡片 👇
+            const rp = msg.rpData;
+            let typeText = '微信红包';
+            if (rp.type === 'exclusive') typeText = `给 ${rp.target} 的专属红包`;
+            
+            let statusText = '查看红包';
+            if (rp.status === 'opened') statusText = '已领取';
+            else if (rp.status === 'empty') statusText = '已被领完';
+            else if (rp.status === 'refunded') statusText = '已退款';
+
+            contentHtml = `
+                <div class="wc-bubble redpacket" style="background: transparent !important; border: none !important; padding: 0 !important; box-shadow: none !important;">
+                    ${quoteHtml}
+                    <div class="rp-bubble" onclick="wcClickRedPacket('${msg.id}')">
+                        <div class="rp-bubble-top">
+                            <svg class="rp-bubble-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <rect x="3" y="4" width="18" height="16" rx="3" fill="#FFF"/>
+                                <path d="M3 8.5C7.5 11.5 10.5 13.5 12 14.5C13.5 13.5 16.5 11.5 21 8.5" stroke="#F28C48" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="14.5" r="3.5" fill="#F28C48" stroke="#FFF" stroke-width="1.5"/>
+                                <rect x="11" y="13.5" width="2" height="2" fill="#FFF"/>
+                            </svg>
+                            <div class="rp-bubble-info">
+                                <div class="rp-bubble-title">${rp.msg}</div>
+                                <div class="rp-bubble-status" id="rp-status-${rp.id}">${statusText}</div>
+                            </div>
+                        </div>
+                        <div class="rp-bubble-bottom">${typeText}</div>
+                    </div>
+                </div>`;
+            // 👆 新增结束 👆
         } else if (msg.type === 'recipe') {
             // 新增：渲染全新高级感食谱卡片
             const isEdited = msg.isEdited;
@@ -4877,10 +4980,18 @@ function wcShowContextMenu(x, y, msgId) {
     
     // 获取菜单中的“编辑”按钮
     const editBtn = menu.querySelector('.wc-ctx-item[onclick="wcHandleEdit()"]');
+    const recallBtn = menu.querySelector('#wc-ctx-recall');
 
     if (msg && editBtn) {
         // 允许编辑所有类型的消息，以便进行格式修复
         editBtn.style.display = 'flex'; 
+    }
+    
+    // 只有自己发的消息，且还未被撤回，才能显示撤回按钮
+    if (msg && msg.sender === 'me' && msg.type !== 'recall' && recallBtn) {
+        recallBtn.style.display = 'flex';
+    } else if (recallBtn) {
+        recallBtn.style.display = 'none';
     }
 
     const menuWidth = 150;
@@ -4900,6 +5011,40 @@ function wcHideContextMenu() {
     document.getElementById('wc-context-menu').style.display = 'none';
     wcState.selectedMsgId = null;
 }
+
+window.wcHandleRecall = function() {
+    const msgs = wcState.chats[wcState.activeChatId];
+    const msg = msgs.find(m => m.id === wcState.selectedMsgId);
+    if (!msg || msg.sender !== 'me') return;
+
+    // 保存原始信息
+    msg.originalType = msg.type;
+    msg.originalContent = msg.content;
+    
+    // 变更为撤回类型
+    msg.type = 'recall';
+    msg.content = '你撤回了一条消息';
+    
+    // 50% 概率让 Char 看到你撤回了消息
+    if (Math.random() < 0.5) {
+        let displayContent = msg.originalContent;
+        if (msg.originalType === 'image' || msg.originalType === 'sticker') displayContent = '[图片/表情包]';
+        else if (msg.originalType === 'voice') displayContent = '[语音]';
+        
+        wcAddMessage(wcState.activeChatId, 'system', 'system', `[系统提示: User 刚刚撤回了一条消息，撤回的内容是："${displayContent}"]`, { hidden: true });
+    }
+    
+    wcSaveData();
+    wcRenderMessages(wcState.activeChatId);
+    wcHideContextMenu();
+};
+
+window.wcToggleRecallContent = function(msgId) {
+    const el = document.getElementById(`recall-content-${msgId}`);
+    if (el) {
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+};
 
 function wcHandleReply() {
     const msgs = wcState.chats[wcState.activeChatId];
@@ -5726,6 +5871,7 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             systemPrompt += `13. 接受商城邀请并购买(当你收到User的商城邀请卡片时使用，注意检查余额是否足够): {"type":"shop_order", "items":["商品名1", "商品名2"], "content":"买完后想说的话"}\n`;
             systemPrompt += `14. 主动玩扭蛋机(消耗微信零钱 ¥5.20，为你和User赚取心动值积分，按需使用): {"type":"play_gacha", "content":"扭蛋时的内心OS或对User说的话"}\n`;
             systemPrompt += `15. 情绪典当(当你心情不好，或者想撒娇时，可以把坏情绪典当换取心动值积分): {"type":"pawn_emotion", "emotion":"你当前的坏情绪描述", "content":"对User说的话"}\n`;
+            systemPrompt += `16. 撤回消息(按需使用，如果你发错了消息，或者想表现出撤回的动作，可以使用此指令撤回你刚刚发出的上一条消息): {"type":"recall"}\n`;
             systemPrompt += `【当前资产状态】：微信零钱余额 ¥${wcState.wallet.balance.toFixed(2)}，心动值(商城积分)余额 ♥${lsState.qaScore}。\n`;
         }
         
@@ -6578,6 +6724,29 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 </div>
             `;
             wcAddMessage(charId, 'them', 'receipt', receiptHtml);
+
+        // 👇 新增：解析 AI 撤回消息指令 👇
+        } else if (action.type === 'recall') {
+            const msgs = wcState.chats[charId] || [];
+            let targetMsg = null;
+            // 倒序查找最后一条该角色发送的消息，且未被撤回
+            for (let k = msgs.length - 1; k >= 0; k--) {
+                if (msgs[k].sender === 'them' && msgs[k].type !== 'recall' && (!char.isGroup || msgs[k].senderName === action.senderName)) {
+                    targetMsg = msgs[k];
+                    break;
+                }
+            }
+            
+            if (targetMsg) {
+                targetMsg.originalType = targetMsg.type;
+                targetMsg.originalContent = targetMsg.content;
+                targetMsg.type = 'recall';
+                let senderName = char.isGroup && action.senderName ? action.senderName : char.name;
+                targetMsg.content = `"${senderName}" 撤回了一条消息`;
+                
+                wcSaveData();
+                wcRenderMessages(charId);
+            }
 
         // 👇 新增：解析 AI 主动打来的电话 👇
         } else if (action.type === 'call_invite') {
@@ -9843,7 +10012,7 @@ function wcOpenPhoneSim() {
     
     wcStartPhoneClock();
     
-    document.getElementById('wc-phone-fingerprint-btn').style.display = 'flex';
+    document.getElementById('wc-phone-fingerprint-btn').style.display = 'none';
     document.getElementById('wc-phone-sticky-note').style.display = 'flex';
 }
 
@@ -9936,9 +10105,25 @@ function wcOpenPhoneApp(appName) {
         document.getElementById('wc-phone-app-cart').style.display = 'flex';
         wcState.phoneCartTab = 'cart'; // 默认打开购物车
         wcRenderPhoneCartContent();
+    } else if (appName === 'files') { // 👇 新增：打开文件管理
+        document.getElementById('wc-phone-app-files').style.display = 'flex';
+        const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+        if (char) {
+            const avatarEl = document.getElementById('fm-user-avatar');
+            const nameEl = document.getElementById('fm-user-name');
+            if (avatarEl) avatarEl.innerHTML = `<img src="${char.avatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+            if (nameEl) nameEl.innerText = `Hello, ${char.name}!`;
+        }
+        // 每次打开时渲染数据
+        if (typeof wcRenderPhoneFilesContent === 'function') {
+            wcRenderPhoneFilesContent();
+        }
     }
     document.getElementById('wc-phone-fingerprint-btn').style.display = 'none';
     document.getElementById('wc-phone-sticky-note').style.display = 'none';
+    // 隐藏 Dock 栏
+    const dock = document.getElementById('wc-phone-dock');
+    if (dock) dock.style.display = 'none';
 }
 
 // 找到 wcClosePhoneApp 函数，替换为以下代码：
@@ -9962,8 +10147,15 @@ function wcClosePhoneApp() {
     const cartApp = document.getElementById('wc-phone-app-cart');
     if(cartApp) cartApp.style.display = 'none';
     
-    document.getElementById('wc-phone-fingerprint-btn').style.display = 'flex';
+    // 👇 新增：关闭文件管理页面
+    const filesApp = document.getElementById('wc-phone-app-files');
+    if(filesApp) filesApp.style.display = 'none';
+    
+    document.getElementById('wc-phone-fingerprint-btn').style.display = 'none'; // 保持隐藏
     document.getElementById('wc-phone-sticky-note').style.display = 'flex';
+    // 恢复 Dock 栏
+    const dock = document.getElementById('wc-phone-dock');
+    if (dock) dock.style.display = 'flex';
 }
 
 // 找到 wcClosePhoneSim 函数，替换为以下代码：
@@ -12954,6 +13146,10 @@ function checkProactiveMessages() {
     const currentHHMM = `${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`;
     const todayStr = dateObj.toDateString();
 
+    // 👇 新增：检查红包 24 小时退款逻辑 👇
+    wcCheckRedPacketRefunds(now);
+    // 👆 新增结束 👆
+
     wcState.characters.forEach(char => {
         // 1. 检查食谱定时发送逻辑
         if (char.phoneData && char.phoneData.recipe && char.phoneData.recipe.ta) {
@@ -13048,6 +13244,74 @@ function wcHandleTouchMoveSwipe(evt) {
     }
 }
 function wcHandleTouchEndSwipe(evt) { wcXDown = null; wcYDown = null; }
+// ==========================================
+// 新增：红包 24 小时自动退款逻辑
+// ==========================================
+function wcCheckRedPacketRefunds(currentTime) {
+    let hasRefund = false;
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000; // 24小时的毫秒数
+
+    // 遍历所有聊天记录
+    for (const charId in wcState.chats) {
+        const msgs = wcState.chats[charId];
+        if (!msgs) continue;
+
+        msgs.forEach(msg => {
+            // 找到红包消息，且状态不是已领完(empty)也不是已退款(refunded)
+            if (msg.type === 'redpacket' && msg.rpData && msg.rpData.status !== 'empty' && msg.rpData.status !== 'refunded') {
+                const rp = msg.rpData;
+                
+                // 检查是否超过 24 小时
+                if (currentTime - msg.time > ONE_DAY_MS) {
+                    // 计算已领取的总金额
+                    let grabbedAmount = 0;
+                    rp.receivers.forEach(r => { grabbedAmount += r.amount; });
+                    
+                    // 计算需要退款的剩余金额
+                    const refundAmount = rp.totalAmount - grabbedAmount;
+                    
+                    if (refundAmount > 0) {
+                        // 1. 退回钱包余额
+                        wcState.wallet.balance += refundAmount;
+                        
+                        // 2. 生成退款账单
+                        wcState.wallet.transactions.push({
+                            id: Date.now() + Math.random(), 
+                            type: 'income', 
+                            amount: refundAmount, 
+                            note: `微信红包退款`, 
+                            time: currentTime
+                        });
+
+                        // 3. 更新红包状态
+                        rp.status = 'refunded';
+                        
+                        // 4. 在聊天界面插入系统提示
+                        wcAddMessage(charId, 'system', 'system', `[系统提示: 你的红包已超过24小时，剩余 ¥${refundAmount.toFixed(2)} 已退回零钱]`, { style: 'transparent' });
+                        
+                        hasRefund = true;
+                    } else {
+                        // 如果金额其实已经被领完了（容错处理），直接标记为 empty
+                        rp.status = 'empty';
+                        hasRefund = true;
+                    }
+                }
+            }
+        });
+    }
+
+    if (hasRefund) {
+        wcSaveData();
+        // 如果当前停留在钱包页面，刷新钱包 UI
+        if (document.getElementById('wc-view-wallet') && document.getElementById('wc-view-wallet').classList.contains('active')) {
+            wcRenderWallet();
+        }
+        // 如果当前停留在聊天页面，刷新聊天 UI
+        if (wcState.activeChatId) {
+            wcRenderMessages(wcState.activeChatId);
+        }
+    }
+}
 
 /* ==========================================================================
    APP 2: LOVERS SPACE LOGIC (Prefix: ls)
@@ -15362,6 +15626,33 @@ function wcCancelShare() {
     pendingShareItem = null;
 }
 
+// 新增：短视频分享触发函数
+window.vTriggerShare = function(source, index) {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.videoApp) return;
+
+    let video = null;
+    if (source === 'home') {
+        video = char.phoneData.videoApp.homeFeed[index];
+    } else if (source === 'profile') {
+        video = char.phoneData.videoApp.profile.posts[index];
+    }
+
+    if (!video) return alert("无法读取视频数据");
+
+    const title = (video.author || char.name) + " 的短视频";
+    const content = `画面：${video.imageDesc || '无'}\n文案：${video.desc || '无'}`;
+
+    pendingShareItem = { type: 'video', title: title, content: content, time: "" };
+
+    document.getElementById('share-confirm-title').innerText = title;
+    document.getElementById('share-confirm-desc').innerText = content;
+
+    const modal = document.getElementById('wc-modal-share-confirm');
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+};
+
 function wcExecuteShare() {
     if (!pendingShareItem) return;
 
@@ -15375,6 +15666,7 @@ function wcExecuteShare() {
     else if (pendingShareItem.type === 'post') tagText = "FORUM POST / 论坛帖子";
     else if (pendingShareItem.type === 'masturbation') tagText = "SECRET / 私密记录";
     else if (pendingShareItem.type === 'wetDream') tagText = "SECRET / 春梦记录";
+    else if (pendingShareItem.type === 'video') tagText = "SHORT VIDEO / 短视频"; // 👈 新增视频类型
 
     // 构造高级感聊天卡片 HTML
     const cardHtml = `
@@ -18327,7 +18619,13 @@ function musicUpdatePlayerUI() {
 
     // 👇 新增：更新透明唱片封面 👇
     const fpRecordCover = document.getElementById('music-fp-record-cover');
-    if (fpRecordCover) fpRecordCover.src = musicState.currentSong.cover;
+    if (fpRecordCover) {
+        if (musicState.profile && musicState.profile.fpRecord) {
+            fpRecordCover.src = musicState.profile.fpRecord;
+        } else {
+            fpRecordCover.src = musicState.currentSong.cover;
+        }
+    }
 
     const miniTitle = document.getElementById('music-player-title');
     const miniArtist = document.getElementById('music-player-artist');
@@ -18450,6 +18748,37 @@ window.musicRestoreDefaultBg = function() {
     }
     if (musicState.profile) {
         musicState.profile.fpBg = null;
+        musicSaveData();
+    }
+};
+
+window.musicHandleFpRecordUpload = async function(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    try {
+        const base64 = await wcCompressImage(file);
+        const recordCover = document.getElementById('music-fp-record-cover');
+        if (recordCover) {
+            recordCover.src = base64;
+        }
+        if (!musicState.profile) musicState.profile = {};
+        musicState.profile.fpRecord = base64;
+        musicSaveData();
+    } catch (e) {
+        console.error("唱片封面处理失败", e);
+        alert("图片处理失败，请重试");
+    }
+    input.value = ''; 
+};
+
+window.musicRestoreDefaultRecord = function() {
+    const recordCover = document.getElementById('music-fp-record-cover');
+    if (recordCover && musicState.currentSong) {
+        recordCover.src = musicState.currentSong.cover;
+    }
+    if (musicState.profile) {
+        musicState.profile.fpRecord = null;
         musicSaveData();
     }
 };
@@ -33391,9 +33720,9 @@ function wishToggleStatus(id, type) {
         }
 
         // 解锁拼图
-        if (data.puzzleUnlocked < 9) {
+        if (data.puzzleUnlocked < 16) {
             data.puzzleUnlocked++;
-            alert(`太棒了！已完成该事项，并解锁了一块新的拼图碎片！(${data.puzzleUnlocked}/9)`);
+            alert(`太棒了！已完成该事项，并解锁了一块新的拼图碎片！(${data.puzzleUnlocked}/16)`);
         } else {
             alert("太棒了！已完成该事项！(拼图已全部解锁)");
         }
@@ -33449,14 +33778,14 @@ function wishRenderPuzzle() {
     const grid = document.getElementById('wish-puzzle-grid');
     grid.innerHTML = '';
     
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 16; i++) {
         const piece = document.createElement('div');
         if (i < data.puzzleUnlocked) {
             piece.className = `wish-puzzle-piece unlocked p-${i}`;
             piece.style.backgroundImage = `url('${data.puzzleBg}')`;
         } else {
             piece.className = 'wish-puzzle-piece';
-            piece.innerText = '🔒';
+            // 移除 emoji，保持全白块
         }
         grid.appendChild(piece);
     }
@@ -33477,6 +33806,7 @@ function wishHandlePuzzleUpload(input) {
         reader.readAsDataURL(file);
     }
 }
+
 /* ==========================================================================
    星愿空间：探索内心深处 (小游戏) 逻辑
    ========================================================================== */
@@ -34026,3 +34356,1308 @@ async function wcGenerateAllPhoneData() {
         }
     }
 }
+/* ==========================================================================
+   新增：微信红包 (Red Packet) 核心逻辑
+   ========================================================================== */
+
+let wcCurrentRpType = 'normal'; 
+let wcCurrentRpData = null; 
+let wcActiveRpMsgId = null;
+
+// 1. 打开红包面板
+window.wcOpenRedPacketPanel = function() {
+    wcCloseAllPanels();
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (!char) return;
+
+    const rp = document.getElementById('rp-fullscreen');
+    const typeSwitchContainer = document.getElementById('rp-type-switch-container');
+    const groupCount = document.getElementById('rp-group-count');
+    const groupTarget = document.getElementById('rp-group-target');
+    const amountLabel = document.getElementById('rp-amount-label');
+
+    // 重置表单
+    document.getElementById('rp-amount').value = '';
+    document.getElementById('rp-count').value = '';
+    document.getElementById('rp-msg').value = '';
+    wcCheckRpInput();
+
+    if (char.isGroup) {
+        typeSwitchContainer.style.display = 'flex';
+        
+        // 填充专属红包的下拉框
+        const select = document.getElementById('rp-target-select');
+        select.innerHTML = '';
+        if (char.members) {
+            char.members.forEach(mId => {
+                if (mId === 'user') return;
+                const mChar = wcState.characters.find(c => c.id === mId);
+                if (mChar) {
+                    select.innerHTML += `<option value="${mChar.name}">${mChar.name}</option>`;
+                }
+            });
+        }
+        document.getElementById('rp-group-member-count').innerText = `本群共 ${char.members ? char.members.length : 0} 人`;
+        
+        wcSwitchRpType('random'); // 群聊默认拼手气
+    } else {
+        typeSwitchContainer.style.display = 'none';
+        groupCount.style.display = 'none';
+        groupTarget.style.display = 'none';
+        amountLabel.innerHTML = '金额';
+        wcCurrentRpType = 'normal';
+    }
+
+    rp.style.display = 'flex';
+    setTimeout(() => rp.classList.add('active'), 10);
+};
+
+// 2. 切换红包类型
+window.wcSwitchRpType = function(type) {
+    wcCurrentRpType = type;
+    document.querySelectorAll('.rp-type-item').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.rp-type-item[onclick="wcSwitchRpType('${type}')"]`).classList.add('active');
+
+    const groupCount = document.getElementById('rp-group-count');
+    const groupTarget = document.getElementById('rp-group-target');
+    const amountLabel = document.getElementById('rp-amount-label');
+
+    if (type === 'random') {
+        groupCount.style.display = 'block';
+        groupTarget.style.display = 'none';
+        amountLabel.innerHTML = '<span class="rp-label-icon">拼</span>总金额';
+    } else if (type === 'normal') {
+        groupCount.style.display = 'block';
+        groupTarget.style.display = 'none';
+        amountLabel.innerHTML = '单个金额';
+    } else if (type === 'exclusive') {
+        groupCount.style.display = 'none';
+        groupTarget.style.display = 'block';
+        amountLabel.innerHTML = '金额';
+    }
+    wcCheckRpInput();
+};
+
+// 3. 校验输入
+window.wcCheckRpInput = function() {
+    const amount = parseFloat(document.getElementById('rp-amount').value) || 0;
+    const count = parseInt(document.getElementById('rp-count').value) || 0;
+    const btn = document.getElementById('rp-submit-btn');
+    const display = document.getElementById('rp-amount-display');
+    const displayText = document.getElementById('rp-amount-text');
+
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    const isGroup = char ? char.isGroup : false;
+
+    let isValid = false;
+    let totalAmount = 0;
+
+    if (!isGroup || wcCurrentRpType === 'exclusive') {
+        isValid = amount > 0;
+        totalAmount = amount;
+    } else if (wcCurrentRpType === 'random') {
+        isValid = amount > 0 && count > 0 && amount >= count * 0.01;
+        totalAmount = amount;
+    } else if (wcCurrentRpType === 'normal') {
+        isValid = amount > 0 && count > 0;
+        totalAmount = amount * count;
+    }
+
+    if (isValid) {
+        btn.classList.add('active');
+        display.style.display = 'block';
+        displayText.innerText = totalAmount.toFixed(2);
+    } else {
+        btn.classList.remove('active');
+        display.style.display = 'none';
+    }
+};
+
+// 4. 弹出密码框并发送
+window.wcShowRpPassword = function() {
+    const totalAmount = parseFloat(document.getElementById('rp-amount-text').innerText);
+    
+    wcOpenGeneralInput(`发红包 ¥${totalAmount.toFixed(2)} (输入支付密码)`, (pass) => {
+        if (pass !== wcState.wallet.password) {
+            alert("密码错误！");
+            return;
+        }
+        if (wcState.wallet.balance < totalAmount) {
+            alert("余额不足！请先前往「我-钱包」充值哦~");
+            return;
+        }
+
+        // 扣除余额
+        wcState.wallet.balance -= totalAmount;
+        wcState.wallet.transactions.push({
+            id: Date.now(), type: 'payment', amount: totalAmount, note: `发微信红包`, time: Date.now()
+        });
+
+        const charId = wcState.activeChatId;
+        const char = wcState.characters.find(c => c.id === charId);
+        const count = parseInt(document.getElementById('rp-count').value) || 1;
+        const msg = document.getElementById('rp-msg').value || '恭喜发财，大吉大利';
+        const target = document.getElementById('rp-target-select').value;
+
+        const rpData = {
+            id: Date.now().toString(),
+            type: wcCurrentRpType,
+            isGroup: char.isGroup,
+            totalAmount: totalAmount,
+            count: count,
+            msg: msg,
+            target: wcCurrentRpType === 'exclusive' ? target : null,
+            sender: 'User',
+            status: 'unopened', 
+            receivers: [] 
+        };
+
+        // 发送消息
+        wcAddMessage(charId, 'me', 'redpacket', '微信红包', { rpData: rpData });
+        
+        // 告诉 AI 发了红包
+        let aiPrompt = `[系统内部信息(仅AI可见): User 刚刚在聊天中发了一个微信红包。总金额：¥${totalAmount.toFixed(2)}，留言：“${msg}”。`;
+        if (char.isGroup) {
+            if (wcCurrentRpType === 'random') aiPrompt += `这是一个拼手气红包，共 ${count} 个。`;
+            else if (wcCurrentRpType === 'normal') aiPrompt += `这是一个普通红包，共 ${count} 个。`;
+            else if (wcCurrentRpType === 'exclusive') aiPrompt += `这是一个专属红包，仅限【${target}】领取。`;
+            aiPrompt += `群里的NPC可以根据自己的人设决定是否抢红包。如果决定抢，请在返回的 JSON 数组中加入 {"type":"redpacket_receive", "id": "${rpData.id}", "senderName": "抢红包的角色名"} 指令。注意：专属红包只有指定的人能抢成功！]`;
+        } else {
+            aiPrompt += `请根据你的人设决定是否领取。如果决定领取，请在返回的 JSON 数组中加入 {"type":"redpacket_receive", "id": "${rpData.id}"} 指令，并在回复中做出反应。]`;
+        }
+        
+        wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
+        
+        wcSaveData();
+        wcCloseRpModals();
+        
+    }, true);
+};
+
+// 5. 点击聊天界面的红包卡片
+window.wcClickRedPacket = function(msgId) {
+    const charId = wcState.activeChatId;
+    const msgs = wcState.chats[charId];
+    const msg = msgs.find(m => m.id.toString() === msgId.toString());
+    if (!msg || !msg.rpData) return;
+
+    wcActiveRpMsgId = msgId;
+    const rp = msg.rpData;
+    
+    // 判断是否是专属红包且不是发给自己的
+    if (rp.type === 'exclusive' && rp.target !== 'User' && rp.sender !== 'User') {
+        alert(`仅 ${rp.target} 可领取`);
+        return;
+    }
+
+    // 判断自己是否已经领过
+    const hasReceived = rp.receivers.some(r => r.name === 'User');
+
+    if (rp.status === 'opened' || rp.status === 'empty' || hasReceived) {
+        // 已经领过或领完了，直接进详情
+        wcShowRpDetail(rp);
+    } else {
+        // 弹出拆红包界面
+        const char = wcState.characters.find(c => c.id === charId);
+        let senderAvatar = wcState.user.avatar;
+        let senderName = wcState.user.name;
+        
+        if (rp.sender !== 'User') {
+            const senderChar = wcState.characters.find(c => c.name === rp.sender);
+            senderAvatar = senderChar ? senderChar.avatar : getRandomNpcAvatar();
+            senderName = rp.sender;
+        }
+
+        document.getElementById('rp-open-avatar').src = senderAvatar;
+        document.getElementById('rp-open-sender-name').innerText = senderName;
+        document.getElementById('rp-open-msg-text').innerText = rp.msg;
+        
+        let desc = '发了一个红包';
+        if (rp.type === 'random') desc += '，金额随机';
+        document.getElementById('rp-open-desc-text').innerText = desc;
+
+        const overlay = document.getElementById('rp-open-overlay');
+        overlay.style.display = 'flex';
+        setTimeout(() => overlay.classList.add('active'), 10);
+        
+        const btn = document.getElementById('rp-open-btn');
+        btn.style.display = 'flex';
+        btn.classList.remove('spin');
+        document.getElementById('rp-open-detail-link').style.display = 'none';
+    }
+};
+
+// 6. 播放拆红包动画并计算金额
+window.wcPlayRpAnimation = function() {
+    const btn = document.getElementById('rp-open-btn');
+    btn.classList.add('spin');
+    
+    setTimeout(() => {
+        const charId = wcState.activeChatId;
+        const msgs = wcState.chats[charId];
+        const msg = msgs.find(m => m.id.toString() === wcActiveRpMsgId.toString());
+        const rp = msg.rpData;
+
+        let myAmount = 0;
+
+        if (!rp.isGroup) {
+            // 单聊，直接全领
+            myAmount = rp.totalAmount;
+            rp.receivers.push({ name: 'User', avatar: wcState.user.avatar, amount: myAmount, time: new Date().toLocaleTimeString() });
+            rp.status = 'opened';
+        } else {
+            // 群聊分配
+            if (rp.type === 'normal' || rp.type === 'exclusive') {
+                myAmount = rp.totalAmount / rp.count;
+                rp.receivers.push({ name: 'User', avatar: wcState.user.avatar, amount: myAmount, time: new Date().toLocaleTimeString() });
+            } else if (rp.type === 'random') {
+                // 拼手气分配
+                let remainAmount = rp.totalAmount;
+                let remainCount = rp.count;
+                
+                // 减去已经被其他人领走的
+                rp.receivers.forEach(r => {
+                    remainAmount -= r.amount;
+                    remainCount--;
+                });
+
+                if (remainCount === 1) {
+                    myAmount = parseFloat(remainAmount.toFixed(2));
+                } else {
+                    let max = (remainAmount / remainCount) * 2;
+                    myAmount = Math.random() * max;
+                    if (myAmount < 0.01) myAmount = 0.01;
+                    myAmount = parseFloat(myAmount.toFixed(2));
+                }
+                rp.receivers.push({ name: 'User', avatar: wcState.user.avatar, amount: myAmount, time: new Date().toLocaleTimeString() });
+            }
+            
+            if (rp.receivers.length >= rp.count) {
+                rp.status = 'empty';
+            } else {
+                rp.status = 'opened';
+            }
+        }
+
+        // 钱存入钱包
+        wcState.wallet.balance += myAmount;
+        wcState.wallet.transactions.push({
+            id: Date.now(), type: 'income', amount: myAmount, note: `抢到红包`, time: Date.now()
+        });
+
+        // 更新卡片状态
+        const statusEl = document.getElementById(`rp-status-${rp.id}`);
+        if (statusEl) statusEl.innerText = '已领取';
+        
+        // 插入系统提示
+        let sysText = rp.sender === 'User' ? '你领取了自己发的红包' : `你领取了 ${rp.sender} 的红包`;
+        wcAddMessage(charId, 'system', 'system', sysText, { style: 'transparent' });
+
+        wcSaveData();
+        wcCloseRpModals();
+        wcShowRpDetail(rp);
+        
+    }, 1000);
+};
+
+// 7. 显示红包详情页
+window.wcShowRpDetail = function(rpData) {
+    let rp = rpData;
+    if (!rp) {
+        const msgs = wcState.chats[wcState.activeChatId];
+        const msg = msgs.find(m => m.id.toString() === wcActiveRpMsgId.toString());
+        rp = msg.rpData;
+    }
+
+    const detail = document.getElementById('rp-detail-fullscreen');
+    
+    let senderAvatar = wcState.user.avatar;
+    if (rp.sender !== 'User') {
+        const senderChar = wcState.characters.find(c => c.name === rp.sender);
+        senderAvatar = senderChar ? senderChar.avatar : getRandomNpcAvatar();
+    }
+
+    document.getElementById('rp-detail-avatar').src = senderAvatar;
+    document.getElementById('rp-detail-sender-name').innerText = `${rp.sender}的红包`;
+    document.getElementById('rp-detail-msg-text').innerText = rp.msg;
+
+    // 查找自己的领取记录
+    const myRecord = rp.receivers.find(r => r.name === 'User');
+    const myAmountBox = document.getElementById('rp-detail-my-amount-box');
+    if (myRecord) {
+        myAmountBox.style.display = 'block';
+        document.getElementById('rp-detail-my-amount').innerText = myRecord.amount.toFixed(2);
+    } else {
+        myAmountBox.style.display = 'none';
+    }
+
+    // 渲染列表
+    document.getElementById('rp-detail-list-header').innerText = `已领取 ${rp.receivers.length}/${rp.count} 个，共 ${rp.totalAmount.toFixed(2)}/${rp.totalAmount.toFixed(2)} 元`;
+    
+    const list = document.getElementById('rp-detail-list');
+    list.innerHTML = '';
+    
+    let bestAmount = 0;
+    if (rp.type === 'random' && rp.receivers.length === rp.count) {
+        bestAmount = Math.max(...rp.receivers.map(r => r.amount));
+    }
+
+    rp.receivers.forEach(r => {
+        const isBest = (rp.type === 'random' && r.amount === bestAmount);
+        const bestHtml = isBest ? `<div class="rp-detail-item-best"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>手气最佳</div>` : '';
+        
+        list.innerHTML += `
+            <div class="rp-detail-item">
+                <img src="${r.avatar}" class="rp-detail-item-avatar">
+                <div class="rp-detail-item-info">
+                    <div class="rp-detail-item-name">${r.name}</div>
+                    <div class="rp-detail-item-time">${r.time}</div>
+                </div>
+                <div class="rp-detail-item-right">
+                    <div class="rp-detail-item-amount">${r.amount.toFixed(2)} 元</div>
+                    ${bestHtml}
+                </div>
+            </div>
+        `;
+    });
+
+    detail.style.display = 'flex';
+    setTimeout(() => detail.classList.add('active'), 10);
+};
+
+// 8. 关闭所有红包弹窗
+window.wcCloseRpModals = function() {
+    const rp = document.getElementById('rp-fullscreen');
+    const open = document.getElementById('rp-open-overlay');
+    const detail = document.getElementById('rp-detail-fullscreen');
+    
+    if (rp) { rp.classList.remove('active'); setTimeout(() => rp.style.display = 'none', 300); }
+    if (open) { open.classList.remove('active'); setTimeout(() => open.style.display = 'none', 200); }
+    if (detail) { detail.classList.remove('active'); setTimeout(() => detail.style.display = 'none', 300); }
+};
+
+// 9. 拦截 AI 的 JSON 指令，处理 AI 抢红包
+const originalWcParseAIResponseForRp = wcParseAIResponse;
+wcParseAIResponse = async function(charId, text, stickerGroupIds) {
+    await originalWcParseAIResponseForRp(charId, text, stickerGroupIds);
+    
+    try {
+        let cleanText = text.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        cleanText = cleanText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const start = cleanText.indexOf('[');
+        const end = cleanText.lastIndexOf(']');
+        if (start !== -1 && end !== -1) {
+            const actions = JSON.parse(cleanText.substring(start, end + 1));
+            
+            actions.forEach(action => {
+                if (action.type === 'redpacket_receive' && action.id) {
+                    const msgs = wcState.chats[charId];
+                    const msg = msgs.find(m => m.id.toString() === action.id.toString());
+                    if (msg && msg.rpData) {
+                        const rp = msg.rpData;
+                        const char = wcState.characters.find(c => c.id === charId);
+                        const senderName = action.senderName || char.name;
+                        
+                        // 1. 专属红包拦截逻辑
+                        if (rp.type === 'exclusive' && senderName !== rp.target) {
+                            wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): ${senderName} 试图抢红包，但发现这是给【${rp.target}】的专属红包，抢夺失败。请 ${senderName} 对此做出反应（如尴尬、吐槽等）。]`, { hidden: true });
+                            return; // 拦截，不往下执行
+                        }
+
+                        // 2. 检查是否还能抢，且自己没抢过
+                        if (rp.status !== 'empty' && rp.status !== 'refunded' && !rp.receivers.some(r => r.name === senderName)) {
+                            let amt = 0;
+                            
+                            // 获取抢红包人的头像
+                            let grabberAvatar = char.avatar;
+                            if (char.isGroup && senderName !== char.name) {
+                                const memberChar = wcState.characters.find(c => c.name === senderName);
+                                if (memberChar) grabberAvatar = memberChar.avatar;
+                            }
+
+                            if (!rp.isGroup) {
+                                // 单聊全领
+                                amt = rp.totalAmount;
+                                rp.status = 'opened';
+                            } else {
+                                // 群聊分配
+                                if (rp.type === 'normal' || rp.type === 'exclusive') {
+                                    amt = rp.totalAmount / rp.count;
+                                } else if (rp.type === 'random') {
+                                    let remainAmount = rp.totalAmount;
+                                    let remainCount = rp.count;
+                                    rp.receivers.forEach(r => { remainAmount -= r.amount; remainCount--; });
+                                    
+                                    if (remainCount === 1) {
+                                        amt = parseFloat(remainAmount.toFixed(2));
+                                    } else {
+                                        let max = (remainAmount / remainCount) * 2;
+                                        amt = Math.random() * max;
+                                        if (amt < 0.01) amt = 0.01;
+                                        amt = parseFloat(amt.toFixed(2));
+                                    }
+                                }
+                                if (rp.receivers.length + 1 >= rp.count) rp.status = 'empty';
+                                else rp.status = 'opened';
+                            }
+                            
+                            // 记录领取信息
+                            rp.receivers.push({ name: senderName, avatar: grabberAvatar, amount: amt, time: new Date().toLocaleTimeString() });
+                            
+                            // 插入可见的系统提示
+                            wcAddMessage(charId, 'system', 'system', `${senderName} 领取了你的红包`, { style: 'transparent' });
+                            
+                            // 3. 如果是群聊拼手气，且刚好被抢完，触发手气吐槽
+                            if (rp.isGroup && rp.type === 'random' && rp.status === 'empty') {
+                                let best = rp.receivers[0];
+                                let worst = rp.receivers[0];
+                                rp.receivers.forEach(r => {
+                                    if (r.amount > best.amount) best = r;
+                                    if (r.amount < worst.amount) worst = r;
+                                });
+                                
+                                const luckPrompt = `[系统内部信息(仅AI可见): User 发的拼手气红包已被抢完！其中【${best.name}】手气最佳抢到了 ¥${best.amount.toFixed(2)}，【${worst.name}】手气最差只抢到了 ¥${worst.amount.toFixed(2)}。请群友们根据人设对此进行吐槽、炫耀或互动。]`;
+                                wcAddMessage(charId, 'system', 'system', luckPrompt, { hidden: true });
+                            }
+
+                            wcSaveData();
+                            wcRenderMessages(charId);
+                        }
+                    }
+                }
+            });
+        }
+    } catch (e) {
+        // 解析失败忽略
+    }
+};
+// ==========================================
+// 新增：API 消耗明细与计费逻辑
+// ==========================================
+
+// 估算不同模型的费率 (美元 / 1k tokens)
+function getModelRate(modelName) {
+    const name = modelName.toLowerCase();
+    if (name.includes('gpt-4o-mini')) return 0.00015;
+    if (name.includes('gpt-4o')) return 0.005;
+    if (name.includes('claude-3-5-sonnet')) return 0.003;
+    if (name.includes('claude-3-haiku')) return 0.00025;
+    if (name.includes('gemini-1.5-flash')) return 0.000075;
+    if (name.includes('gemini-1.5-pro')) return 0.0035;
+    if (name.includes('gemini-2.0-flash')) return 0.0001;
+    if (name.includes('gemini-2.0-pro')) return 0.005;
+    return 0.002; // 默认兜底费率
+}
+
+// 记录单次 API 消耗
+function recordApiBilling(model, tokens) {
+    const todayStr = new Date().toLocaleDateString();
+    let billingData = JSON.parse(localStorage.getItem('ios_theme_api_billing') || '{}');
+    
+    // 如果不是今天的数据，清空重置
+    if (billingData.date !== todayStr) {
+        billingData = { date: todayStr, records: [], totalCost: 0, totalCount: 0 };
+    }
+
+    const rate = getModelRate(model);
+    const cost = (tokens / 1000) * rate;
+
+    billingData.records.unshift({
+        time: Date.now(),
+        model: model,
+        tokens: tokens,
+        cost: cost
+    });
+
+    // 最多保留 100 条记录防止撑爆本地存储
+    if (billingData.records.length > 100) {
+        billingData.records.pop();
+    }
+
+    billingData.totalCost += cost;
+    billingData.totalCount += 1;
+
+    localStorage.setItem('ios_theme_api_billing', JSON.stringify(billingData));
+}
+
+// 打开弹窗并渲染数据
+window.openApiBillingModal = function() {
+    const modal = document.getElementById('api-billing-modal');
+    const listContainer = document.getElementById('api-billing-list-container');
+    const totalCountEl = document.getElementById('billing-total-count');
+    const totalCostEl = document.getElementById('billing-total-cost');
+
+    const todayStr = new Date().toLocaleDateString();
+    const billingData = JSON.parse(localStorage.getItem('ios_theme_api_billing') || '{}');
+
+    if (billingData.date !== todayStr || !billingData.records || billingData.records.length === 0) {
+        totalCountEl.innerHTML = `0 <span style="font-size:12px;color:#888;font-family:sans-serif;">次</span>`;
+        totalCostEl.innerText = `$0.0000`;
+        listContainer.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px;">今日暂无调用记录</div>';
+    } else {
+        totalCountEl.innerHTML = `${billingData.totalCount} <span style="font-size:12px;color:#888;font-family:sans-serif;">次</span>`;
+        totalCostEl.innerText = `$${billingData.totalCost.toFixed(4)}`;
+        
+        listContainer.innerHTML = '';
+        billingData.records.forEach(record => {
+            const timeStr = new Date(record.time).toLocaleTimeString('zh-CN', { hour12: false });
+            const tokenStr = record.tokens > 1000 ? (record.tokens / 1000).toFixed(1) + 'k' : record.tokens;
+            
+            const div = document.createElement('div');
+            div.className = 'billing-item';
+            div.innerHTML = `
+                <div class="billing-item-left">
+                    <span class="billing-item-model">${record.model}</span>
+                    <span class="billing-item-time">${timeStr}</span>
+                </div>
+                <div class="billing-item-right">
+                    <span class="billing-item-cost">-$${record.cost.toFixed(4)}</span>
+                    <span class="billing-item-tokens">${tokenStr} tokens</span>
+                </div>
+            `;
+            listContainer.appendChild(div);
+        });
+    }
+
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.closeApiBillingModal = function() {
+    const modal = document.getElementById('api-billing-modal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+};
+
+// ==========================================
+// 短视频 APP 交互逻辑
+// ==========================================
+window.openVideoApp = function() {
+    document.getElementById('videoApp').classList.add('active');
+    switchVideoTab('home');
+    // 隐藏 Dock 栏和便利贴
+    const dock = document.getElementById('wc-phone-dock');
+    if (dock) dock.style.display = 'none';
+    const stickyNote = document.getElementById('wc-phone-sticky-note');
+    if (stickyNote) stickyNote.style.display = 'none';
+    
+    // 新增：打开时渲染已有数据
+    if (typeof wcRenderVideoApp === 'function') {
+        wcRenderVideoApp();
+    }
+};
+
+window.closeVideoApp = function() {
+    document.getElementById('videoApp').classList.remove('active');
+    // 恢复 Dock 栏和便利贴
+    const dock = document.getElementById('wc-phone-dock');
+    if (dock) dock.style.display = 'flex';
+    const stickyNote = document.getElementById('wc-phone-sticky-note');
+    if (stickyNote) stickyNote.style.display = 'flex';
+};
+
+window.switchVideoTab = function(tabName) {
+    // 隐藏所有页面
+    document.querySelectorAll('.v-page').forEach(el => el.classList.remove('active'));
+    // 取消所有底栏高亮
+    document.querySelectorAll('.v-tab').forEach(el => el.classList.remove('active'));
+    
+    // 激活目标页面和底栏
+    document.getElementById(`v-page-${tabName}`).classList.add('active');
+    const tabs = document.querySelectorAll('.v-tab');
+    if(tabName === 'home') tabs[0].classList.add('active');
+    if(tabName === 'discover') tabs[1].classList.add('active');
+    if(tabName === 'inbox') tabs[2].classList.add('active');
+    if(tabName === 'profile') tabs[3].classList.add('active');
+};
+// ==========================================
+// 短视频 APP：AI 数据生成与渲染逻辑 (无网图、带评论、强关联)
+// ==========================================
+
+window.wcGenerateVideoAppData = async function() {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char) return alert("请先进入一个角色的手机");
+
+    const apiConfig = await getActiveApiConfig('phone');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("正在破解 Ta 的短视频算法...");
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        // 提取最近 30 条聊天记录
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-30).map(m => {
+            if (m.isError || m.type === 'system') return null;
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return `${m.sender==='me'?'User':char.name}: ${content}`;
+        }).filter(Boolean).join('\n');
+
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观背景参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        let prompt = `你现在是一个短视频APP的后台数据引擎。我（User）正在偷偷查看【${char.name}】的手机。\n`;
+        prompt += `【${char.name} 的人设】：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【我(User) 的设定】：${userPersona}\n`;
+        prompt += `【最近我们的聊天记录】：\n${recentMsgs}\n\n`;
+        
+        prompt += `请根据 ${char.name} 的人设和我们最近的聊天记录，生成 Ta 短视频 APP 里的数据。\n`;
+        prompt += `【核心要求（极具活人感与偷窥感）】：\n`;
+        prompt += `1. 首页推荐 (homeFeed)：生成 3 到 5 个视频。内容必须和最近聊天的话题相关，或者是 Ta 潜意识里关注的事物。每个视频必须包含随机的点赞量(likes)、总评论量(commentCount)、收藏量(saves)和分享量(shares)。并且必须生成 5 条具体的网友评论内容 (comments)。\n`;
+        prompt += `2. 个人主页 (profile)：生成 Ta 自己发布的 4 个视频。**【重点】：文案和画面必须和 User 有关！表达 Ta 对 User 的真实情绪，也可以是记录user的相关事情，或者是自己和user之间的事情。** 每个视频必须包含随机的点赞量(likes)、总评论量(commentCount)、收藏量(saves)和分享量(shares)。并且必须生成 5 条具体的网友评论内容 (comments)。\n`;
+        prompt += `3. 消息页 (inbox)：生成 2 到 4 条私信。**【重点】：私信内容必须是路人或熟人对 Ta 在个人主页 (profile) 发布的视频的反应或搭讪！**\n`;
+        prompt += `4. 发现页 (discover)：生成 4 个热搜标题。符合世界观或 Ta 的兴趣。\n`;
+        prompt += `5. 所有视频不要真实图片链接，请用 imageDesc (画面描述) 代替。\n`;
+        prompt += `返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "homeFeed": [
+    {
+      "author": "@视频博主名", "imageDesc": "[视频画面] 一只正在打呼噜的橘猫", "desc": "视频文案描述", "likes": "12.5k", "commentCount": "2.3k", "saves": "1.1k", "shares": "500",
+      "comments": [
+        {"name": "网友A", "text": "太可爱了吧！"} // 确保固定生成5条
+      ]
+    }
+  ],
+  "profile": {
+    "followers": "10.5K", "following": "128", "likes": "1.2M",
+    "posts": [
+      {
+        "imageDesc": "[视频画面] 昏暗路灯下的两个影子", "desc": "暗戳戳关于User的文案", "views": "12K", "likes": "5.2K", "commentCount": "800", "saves": "1.1K", "shares": "500",
+        "comments": [
+          {"name": "网友A", "text": "好浪漫！"} // 确保固定生成4条
+        ]
+      }
+    ]
+  },
+  "inbox": [
+    {"name": "路人甲", "msg": "你最新发的那个视频里的人是谁呀？", "time": "2h"}
+  ],
+  "discover": [
+    {"title": "热搜标题1", "views": "1.2M"}
+  ]
+}\n`;
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const videoData = JSON.parse(content);
+
+        // 👇 核心修复：防止 AI 漏掉数组格式导致报错
+        if (videoData.homeFeed && !Array.isArray(videoData.homeFeed)) {
+            videoData.homeFeed = [videoData.homeFeed];
+        }
+        if (videoData.profile && videoData.profile.posts && !Array.isArray(videoData.profile.posts)) {
+            videoData.profile.posts = [videoData.profile.posts];
+        }
+
+        // 👇 新增：为所有生成的人物注入内置的 NPC 头像
+        if (videoData.homeFeed) {
+            videoData.homeFeed.forEach(v => {
+                v.avatar = getRandomNpcAvatar();
+                if (v.comments) {
+                    v.comments.forEach(c => c.avatar = getRandomNpcAvatar());
+                }
+            });
+        }
+        if (videoData.inbox) {
+            videoData.inbox.forEach(msg => {
+                msg.avatar = getRandomNpcAvatar();
+            });
+        }
+        if (videoData.profile && videoData.profile.posts) {
+            videoData.profile.posts.forEach(p => {
+                if (p.comments) {
+                    p.comments.forEach(c => c.avatar = getRandomNpcAvatar());
+                }
+            });
+        }
+
+        if (!char.phoneData) char.phoneData = {};
+        char.phoneData.videoApp = videoData;
+        wcSaveData();
+
+        wcRenderVideoApp();
+        wcShowSuccess("算法破解成功");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("生成失败");
+    }
+};
+
+// 渲染整个短视频 APP
+window.wcRenderVideoApp = function() {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.videoApp) {
+        document.getElementById('v-home-feed').innerHTML = '<div style="text-align:center; color:#888; font-size:14px; margin-top:50%;">点击右上角搜索图标<br>生成 Ta 的短视频数据</div>';
+        return;
+    }
+
+    const data = char.phoneData.videoApp;
+
+    // 1. 渲染 Home (多视频滑动)
+    if (data.homeFeed && data.homeFeed.length > 0) {
+        const feedContainer = document.getElementById('v-home-feed');
+        feedContainer.innerHTML = '';
+        data.homeFeed.forEach((video, idx) => {
+            feedContainer.innerHTML += `
+                <div class="video-card">
+                    <div class="video-image-desc">${video.imageDesc || '无画面描述'}</div>
+                    <div class="video-actions">
+                        <div class="action-item"><div class="action-icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div><span class="action-text">${video.likes || '10K'}</span></div>
+                        <div class="action-item" onclick="vOpenComments('home', ${idx})"><div class="action-icon"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></div><span class="action-text">${video.commentCount || (video.comments ? video.comments.length : 0)}</span></div>
+                        <div class="action-item"><div class="action-icon"><svg viewBox="0 0 24 24" style="fill:none; stroke:#FFF; stroke-width:2;"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></div><span class="action-text">${video.saves || 'Save'}</span></div>
+                        <div class="action-item" onclick="vTriggerShare('home', ${idx})"><div class="action-icon"><svg viewBox="0 0 24 24" style="fill:none; stroke:#FFF; stroke-width:2;"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></div><span class="action-text">${video.shares || 'Share'}</span></div>
+                    </div>
+                    <div class="video-info">
+                        <div class="video-author">
+                            <img src="${video.avatar || getRandomNpcAvatar()}" class="video-avatar">
+                            <span class="video-name">${video.author}</span>
+                        </div>
+                        <div class="video-desc">${video.desc}</div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    // 2. 渲染 Discover
+    if (data.discover && data.discover.length > 0) {
+        const grid = document.querySelector('#v-page-discover .v-grid');
+        grid.innerHTML = '';
+        data.discover.forEach(item => {
+            grid.innerHTML += `
+                <div class="v-grid-item" style="cursor:pointer;">
+                    <div class="v-grid-item-desc" style="color:#FFF; font-weight:bold; font-style:normal; font-size:13px;">${item.title}</div>
+                    <div class="views">▶ ${item.views}</div>
+                </div>
+            `;
+        });
+    }
+
+    // 3. 渲染 Inbox
+    if (data.inbox && data.inbox.length > 0) {
+        const list = document.querySelector('#v-page-inbox .v-inbox-list');
+        list.innerHTML = '';
+        data.inbox.forEach((item, idx) => {
+            list.innerHTML += `
+                <div class="v-inbox-item" onclick="vOpenInboxDetail(${idx})">
+                    <div class="v-inbox-avatar"><img src="${item.avatar || getRandomNpcAvatar()}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;"></div>
+                    <div class="v-inbox-info">
+                        <div class="v-inbox-name">${item.name}</div>
+                        <div class="v-inbox-msg">${item.msg} · ${item.time}</div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    // 4. 渲染 Profile
+    if (data.profile) {
+        document.querySelector('.v-profile-username').innerHTML = `@${char.name} <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#FFF;fill:none;"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+        document.querySelector('.v-profile-avatar').src = char.avatar;
+        
+        const stats = document.querySelectorAll('.v-stat-num');
+        if (stats.length >= 3) {
+            stats[0].innerText = data.profile.following;
+            stats[1].innerText = data.profile.followers;
+            stats[2].innerText = data.profile.likes;
+        }
+
+        const pGrid = document.querySelector('#v-page-profile .v-grid');
+        pGrid.innerHTML = '';
+        if (data.profile.posts) {
+            data.profile.posts.forEach((post, idx) => {
+                let descText = post.imageDesc || '无画面描述';
+                if (descText.length > 25) descText = descText.substring(0, 25) + '...';
+                
+                pGrid.innerHTML += `
+                    <div class="v-grid-item" style="cursor:pointer;" onclick="vOpenVideoDetail(${idx})">
+                        <div class="v-grid-item-desc">${descText}</div>
+                        <div class="views">▶ ${post.views || '10K'}</div>
+                    </div>
+                `;
+            });
+        }
+    }
+
+};
+
+// 打开评论区
+window.vOpenComments = function(source, index) {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.videoApp) return;
+    
+    let comments = [];
+    let totalCountStr = "0";
+    
+    if (source === 'home') {
+        const video = char.phoneData.videoApp.homeFeed[index];
+        comments = video.comments || [];
+        totalCountStr = video.commentCount || comments.length;
+    } else if (source === 'profile') {
+        const post = char.phoneData.videoApp.profile.posts[index];
+        comments = post.comments || [];
+        totalCountStr = post.commentCount || comments.length;
+    }
+
+    document.getElementById('v-comments-count').innerText = `${totalCountStr} 条评论`;
+    const list = document.getElementById('v-comments-list');
+    list.innerHTML = '';
+    
+    if (comments.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#888; margin-top:20px; font-size:13px;">暂无评论</div>';
+    } else {
+        comments.forEach(c => {
+            list.innerHTML += `
+                <div class="v-comment-item">
+                    <img src="${c.avatar || getRandomNpcAvatar()}" class="v-comment-avatar">
+                    <div class="v-comment-info">
+                        <div class="v-comment-name">${c.name}</div>
+                        <div class="v-comment-text">${c.text}</div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    document.getElementById('v-comments-panel').classList.add('active');
+};
+
+window.vCloseComments = function() {
+    document.getElementById('v-comments-panel').classList.remove('active');
+};
+
+// 打开个人主页的视频详情
+window.vOpenVideoDetail = function(postIndex) {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.videoApp || !char.phoneData.videoApp.profile) return;
+    
+    const post = char.phoneData.videoApp.profile.posts[postIndex];
+    if (!post) return;
+
+    const feedContainer = document.getElementById('v-detail-feed');
+    feedContainer.innerHTML = `
+        <div class="video-card">
+            <div class="video-image-desc">${post.imageDesc || '无画面描述'}</div>
+            <div class="video-actions">
+                <div class="action-item"><div class="action-icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div><span class="action-text">${post.likes || '10K'}</span></div>
+                <div class="action-item" onclick="vOpenComments('profile', ${postIndex})"><div class="action-icon"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></div><span class="action-text">${post.commentCount || (post.comments ? post.comments.length : 0)}</span></div>
+                <div class="action-item"><div class="action-icon"><svg viewBox="0 0 24 24" style="fill:none; stroke:#FFF; stroke-width:2;"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></div><span class="action-text">${post.saves || 'Save'}</span></div>
+                <div class="action-item" onclick="vTriggerShare('profile', ${postIndex})"><div class="action-icon"><svg viewBox="0 0 24 24" style="fill:none; stroke:#FFF; stroke-width:2;"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></div><span class="action-text">${post.shares || 'Share'}</span></div>
+            </div>
+            <div class="video-info">
+                <div class="video-author">
+                    <img src="${char.avatar}" class="video-avatar">
+                    <span class="video-name">@${char.name}</span>
+                </div>
+                <div class="video-desc">${post.desc}</div>
+            </div>
+        </div>
+    `;
+
+    switchVideoTab('detail');
+};
+
+// 覆盖原有的 switchVideoTab，增加 detail 页面的处理
+window.switchVideoTab = function(tabName) {
+    document.querySelectorAll('.v-page').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.v-tab').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById(`v-page-${tabName}`).classList.add('active');
+    
+    const tabbar = document.querySelector('.video-tabbar');
+    
+    // 如果不是详情页，才高亮底栏并显示底栏
+    if (tabName !== 'detail' && tabName !== 'inbox-detail') {
+        if (tabbar) tabbar.style.display = 'flex';
+        const tabs = document.querySelectorAll('.v-tab');
+        if(tabName === 'home') tabs[0].classList.add('active');
+        if(tabName === 'discover') tabs[1].classList.add('active');
+        if(tabName === 'inbox') tabs[2].classList.add('active');
+        if(tabName === 'profile') tabs[3].classList.add('active');
+    } else {
+        // 详情页隐藏底栏
+        if (tabbar) tabbar.style.display = 'none';
+    }
+    
+    // 切换页面时关闭评论区
+    vCloseComments();
+};
+
+// 新增 vOpenInboxDetail 函数
+window.vOpenInboxDetail = function(idx) {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.videoApp || !char.phoneData.videoApp.inbox) return;
+    
+    const msg = char.phoneData.videoApp.inbox[idx];
+    if (!msg) return;
+
+    document.getElementById('v-inbox-detail-name').innerText = msg.name;
+    
+    const chatContainer = document.getElementById('v-inbox-detail-chat');
+    chatContainer.innerHTML = `
+        <div style="display: flex; gap: 10px; align-items: flex-start;">
+            <img src="${msg.avatar}" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover;">
+            <div style="background: #333; color: #FFF; padding: 10px 14px; border-radius: 16px; border-top-left-radius: 4px; font-size: 14px; max-width: 75%;">
+                ${msg.msg}
+            </div>
+        </div>
+    `;
+
+    switchVideoTab('inbox-detail');
+};
+// ==========================================
+// 文件管理 APP (Files) 交互逻辑
+// ==========================================
+window.fmSwitchTab = function(tabId, element) {
+    // 1. 移除所有 nav-item 的 active 状态和文字
+    document.querySelectorAll('.fm-nav-item').forEach(el => {
+        el.classList.remove('active');
+        const textSpan = el.querySelector('.fm-nav-text');
+        if(textSpan) textSpan.remove();
+    });
+
+    // 2. 给当前点击的 nav-item 添加 active 状态和文字
+    element.classList.add('active');
+    const textMap = { 'home': 'Home', 'gallery': 'Photos', 'audio': 'Audios', 'docs': 'Files' };
+    const textSpan = document.createElement('span');
+    textSpan.className = 'fm-nav-text';
+    textSpan.innerText = textMap[tabId];
+    element.appendChild(textSpan);
+
+    // 3. 切换页面显示
+    document.querySelectorAll('.fm-page').forEach(page => page.classList.remove('active'));
+    document.getElementById('fm-page-' + tabId).classList.add('active');
+};
+
+window.fmRotateCards = function() {
+    const cards = document.querySelectorAll('.fm-file-card');
+    cards.forEach(card => {
+        if (card.classList.contains('fm-card-pos-1')) {
+            card.classList.remove('fm-card-pos-1');
+            card.classList.add('fm-card-pos-3');
+        } else if (card.classList.contains('fm-card-pos-2')) {
+            card.classList.remove('fm-card-pos-2');
+            card.classList.add('fm-card-pos-1');
+        } else if (card.classList.contains('fm-card-pos-3')) {
+            card.classList.remove('fm-card-pos-3');
+            card.classList.add('fm-card-pos-2');
+        }
+    });
+};
+
+window.fmToggleAudio = function(element) {
+    const isPlaying = element.classList.contains('playing');
+    
+    // 先暂停所有
+    document.querySelectorAll('.fm-audio-item').forEach(item => {
+        item.classList.remove('playing');
+        item.querySelector('.fm-play-btn').innerHTML = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+        // 重置波形
+        item.querySelectorAll('.fm-wave-bar').forEach(bar => bar.style.height = '8px');
+    });
+
+    // 如果原来不是播放状态，则播放当前点击的
+    if (!isPlaying) {
+        element.classList.add('playing');
+        element.querySelector('.fm-play-btn').innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+        // 恢复波形动画高度
+        const heights = ['12px', '24px', '8px', '18px', '14px'];
+        element.querySelectorAll('.fm-wave-bar').forEach((bar, idx) => {
+            bar.style.height = heights[idx];
+        });
+    }
+};
+// ==========================================
+// 文件管理 APP - 弹窗控制逻辑
+// ==========================================
+
+window.fmOpenPhotoDetail = function(desc) {
+    document.getElementById('fm-photo-detail-text').innerText = desc;
+    const modal = document.getElementById('fm-photo-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.fmClosePhotoDetail = function() {
+    const modal = document.getElementById('fm-photo-modal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+};
+
+window.fmOpenAudioDetail = function(title, date, duration, content) {
+    document.getElementById('fm-audio-detail-title').innerText = title;
+    document.getElementById('fm-audio-detail-meta').innerText = `${date} • ${duration}`;
+    document.getElementById('fm-audio-detail-content').innerText = content;
+    
+    const modal = document.getElementById('fm-audio-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.fmCloseAudioDetail = function() {
+    const modal = document.getElementById('fm-audio-modal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 400); // 抽屉动画稍微长一点
+};
+window.fmOpenDocDetail = function(title, date, content) {
+    document.getElementById('fm-doc-detail-title').innerText = title;
+    document.getElementById('fm-doc-detail-meta').innerText = `最后修改: ${date}`;
+    // 使用 innerHTML 并将换行符替换为 <br>，以支持 AI 生成的排版
+    document.getElementById('fm-doc-detail-content').innerHTML = content.replace(/\n/g, '<br>');
+    
+    const modal = document.getElementById('fm-doc-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => modal.classList.add('active'), 10);
+};
+
+window.fmCloseDocDetail = function() {
+    const modal = document.getElementById('fm-doc-modal');
+    modal.classList.remove('active');
+    setTimeout(() => modal.style.display = 'none', 300);
+};
+
+// ==========================================
+// 文件管理 APP (Files) AI 生成与渲染逻辑
+// ==========================================
+
+// 1. 渲染页面内容
+window.wcRenderPhoneFilesContent = function() {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char) return;
+
+    const filesData = (char.phoneData && char.phoneData.filesApp) ? char.phoneData.filesApp : null;
+
+    const stackContainer = document.getElementById('fm-cardStack');
+    const galleryGrid = document.getElementById('fm-gallery-grid');
+    const audioList = document.getElementById('fm-audio-list');
+    const docList = document.getElementById('fm-doc-list');
+
+    if (!filesData) {
+        stackContainer.innerHTML = '<div style="text-align: center; color: #888; margin-top: 50px; font-size: 14px;">点击右上角铃铛<br>生成 Ta 的私密文件...</div>';
+        galleryGrid.innerHTML = '';
+        audioList.innerHTML = '';
+        docList.innerHTML = '';
+        document.getElementById('fm-photo-count').innerText = '0 Secret Photos';
+        document.getElementById('fm-audio-count').innerText = '0 Recorded Audios';
+        document.getElementById('fm-doc-count').innerText = '0 Saved Files';
+        return;
+    }
+
+    // 渲染首页层叠卡片 (Home)
+    if (filesData.homeCards && filesData.homeCards.length > 0) {
+        stackContainer.innerHTML = '';
+        // 确保最多只渲染 3 张，并分配不同的背景和层级
+        const maxCards = Math.min(filesData.homeCards.length, 3);
+        for (let i = 0; i < maxCards; i++) {
+            const card = filesData.homeCards[i];
+            const posClass = `fm-card-pos-${3 - i}`; // 3, 2, 1 (1在最上面)
+            const bgClass = `fm-card-bg-${3 - i}`;   // 不同的渐变背景
+            
+            let iconSvg = '';
+            if (card.type === 'image') iconSvg = '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>';
+            else if (card.type === 'audio') iconSvg = '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line>';
+            else iconSvg = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>';
+
+            stackContainer.innerHTML += `
+                <div class="fm-file-card ${bgClass} ${posClass}" onclick="fmRotateCards()">
+                    <div class="fm-card-top-icon"><svg viewBox="0 0 24 24">${iconSvg}</svg></div>
+                    <div class="fm-card-visual-desc">"${card.desc}"</div>
+                    <div class="fm-card-info-bar">
+                        <div class="fm-info-left">
+                            <div class="fm-info-title">${card.title}</div>
+                            <div class="fm-info-subtitle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> ${card.meta}</div>
+                        </div>
+                        <div class="fm-info-divider"></div>
+                        <div class="fm-info-right"><div class="fm-info-size">${card.size || '1.2'}</div><div class="fm-info-type">/ MB</div></div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    // 渲染相册 (Photos)
+    if (filesData.photos && filesData.photos.length > 0) {
+        document.getElementById('fm-photo-count').innerText = `${filesData.photos.length} Secret Photos`;
+        galleryGrid.innerHTML = '';
+        const gradients = [
+            'linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%)',
+            'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
+            'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+            'linear-gradient(135deg, #cfd9df 0%, #e2ebf0 100%)',
+            'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)',
+            'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
+        ];
+        filesData.photos.forEach((photo, idx) => {
+            const bg = gradients[idx % gradients.length];
+            const color = (idx % 6 === 1) ? '#FFF' : 'rgba(0,0,0,0.7)'; 
+            const stroke = (idx % 6 === 1) ? '#FFF' : '#8E8E93';
+            // 👇 核心修改：转义引号并绑定点击事件
+            const safeDesc = photo.desc.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+            galleryGrid.innerHTML += `
+                <div class="fm-gallery-item" style="background: ${bg}; color: ${color};" onclick="fmOpenPhotoDetail('${safeDesc}')">
+                    <svg class="fm-gallery-icon" style="stroke: ${stroke};" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                    <div class="fm-gallery-desc" style="color: ${color};">"${photo.desc}"</div>
+                </div>
+            `;
+        });
+    }
+
+    // 渲染录音 (Audios)
+    if (filesData.audios && filesData.audios.length > 0) {
+        document.getElementById('fm-audio-count').innerText = `${filesData.audios.length} Recorded Audios`;
+        audioList.innerHTML = '';
+        filesData.audios.forEach(audio => {
+            // 👇 核心修改：转义引号和换行符，防止破坏 onclick 语法
+            const safeTitle = audio.title.replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, " ");
+            const safeContent = (audio.content || '一段沉默的录音...').replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, "\\n").replace(/\r/g, "");
+            
+            audioList.innerHTML += `
+                <div class="fm-audio-item" onclick="fmOpenAudioDetail('${safeTitle}', '${audio.date}', '${audio.duration}', '${safeContent}')">
+                    <div class="fm-play-btn" onclick="event.stopPropagation(); fmToggleAudio(this.parentElement)"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>
+                    <div class="fm-audio-info">
+                        <div class="fm-audio-title">${audio.title}</div>
+                        <div class="fm-audio-meta">${audio.date} • ${audio.duration}</div>
+                    </div>
+                    <div class="fm-audio-wave">
+                        <div class="fm-wave-bar" style="height: 8px;"></div><div class="fm-wave-bar" style="height: 8px;"></div><div class="fm-wave-bar" style="height: 8px;"></div><div class="fm-wave-bar" style="height: 8px;"></div><div class="fm-wave-bar" style="height: 8px;"></div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    // 渲染文档 (Docs)
+    if (filesData.docs && filesData.docs.length > 0) {
+        document.getElementById('fm-doc-count').innerText = `${filesData.docs.length} Saved Files`;
+        docList.innerHTML = '';
+        filesData.docs.forEach(doc => {
+            let iconClass = 'fm-icon-doc';
+            let typeText = 'DOC';
+            if (doc.type === 'pdf') { iconClass = 'fm-icon-pdf'; typeText = 'PDF'; }
+            else if (doc.type === 'xls') { iconClass = 'fm-icon-xls'; typeText = 'XLSX'; }
+
+            // 👇 核心修改：转义引号和换行符，防止破坏 onclick 语法
+            const safeTitle = doc.title.replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, " ");
+            const safeContent = (doc.content || '文档内容为空...').replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, "\\n").replace(/\r/g, "");
+
+            docList.innerHTML += `
+                <div class="fm-doc-item" onclick="fmOpenDocDetail('${safeTitle}', '${doc.date}', '${safeContent}')">
+                    <div class="fm-doc-icon ${iconClass}">${typeText}</div>
+                    <div class="fm-doc-info">
+                        <div class="fm-doc-title">${doc.title}</div>
+                        <div class="fm-doc-meta"><span>${doc.size}</span><span>${doc.date}</span></div>
+                    </div>
+                    <div class="fm-doc-more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg></div>
+                </div>
+            `;
+        });
+    }
+};
+
+// 2. 调取 API 生成数据
+window.wcGeneratePhoneFiles = async function() {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char) return alert("请先进入一个角色的手机");
+
+    const apiConfig = await getActiveApiConfig('phone');
+    if (!apiConfig || !apiConfig.key) return alert("请先配置 API");
+
+    wcShowLoading("正在破解 Ta 的私密文件库...");
+
+    try {
+        const chatConfig = char.chatConfig || {};
+        const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+        
+        // 提取最近 30 条聊天记录
+        const msgs = wcState.chats[char.id] || [];
+        const recentMsgs = msgs.slice(-30).map(m => {
+            if (m.isError || m.type === 'system') return null;
+            let content = m.content;
+            if (m.type !== 'text') content = `[${m.type}]`;
+            return `${m.sender==='me'?'User':char.name}: ${content}`;
+        }).filter(Boolean).join('\n');
+
+        let wbInfo = "";
+        if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【世界观背景参考】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n');
+            }
+        }
+
+        let prompt = `你现在是一个手机文件管理系统的后台数据引擎。我（User）正在偷偷查看【${char.name}】的手机文件。\n`;
+        prompt += `【${char.name} 的人设】：${char.prompt}\n${wbInfo}\n`;
+        prompt += `【我(User) 的设定】：${userPersona}\n`;
+        prompt += `【最近我们的聊天记录】：\n${recentMsgs}\n\n`;
+        
+        prompt += `请根据 ${char.name} 的人设和我们最近的聊天记录，生成 Ta 手机里的私密文件数据。\n`;
+        prompt += `【核心要求（极具活人感与偷窥感）】：\n`;
+        prompt += `1. 相册 (photos)：生成 4-8 张照片的画面描述。必须体现偷窥感（如：偷存的User照片、奇怪的截图、日常风景、聊天中提到的事物）。\n`;
+        prompt += `2. 录音 (audios)：生成 3-6 条录音记录。包含标题(title)、时长(duration, 如"04:20")、日期(date)，以及【录音的具体文字转写内容(content)】。内容可以是深夜emo的碎碎念、工作会议录音、想发给User但没敢发的语音草稿。\n`;
+        prompt += `3. 文档 (docs)：生成 3-6 个私密文件。包含标题(title, 带后缀)、大小(size, 如"2.4 MB")、日期(date)、类型(type: pdf/doc/xls)，以及【文档的具体正文内容(content，50-150字)】。内容可以是旅游攻略、记账本、工作文档、日记草稿。\n`;
+        prompt += `4. 首页推荐 (homeCards)：从上面生成的资源中，挑选最具有代表性、最私密的 3 个（最好是1图1音1文），生成详细的画面描述或内容摘要(desc)。\n`;
+        prompt += `返回纯 JSON 对象，格式如下：\n`;
+        prompt += `{
+  "homeCards": [
+    {"type": "image", "title": "IMG_8924.jpg", "desc": "一张在海边看日落的照片，光线很温柔，画面边缘似乎有User的侧影。", "meta": "Lubin, Poland", "size": "4.2"},
+    {"type": "audio", "title": "深夜碎碎念.m4a", "desc": "一段深夜录制的音频，背景里有微弱的雨声和 Ta 轻轻的叹息。", "meta": "昨天 02:15", "size": "04:20"},
+    {"type": "doc", "title": "Travel_Plan.pdf", "desc": "一份写着未来旅行计划的文档，里面提到了User最想去的海岛。", "meta": "10月20日 14:30", "size": "2.4"}
+  ],
+  "photos": [
+    {"desc": "User 昨天发来的自拍，偷偷存下来了"}
+  ],
+  "audios": [
+    {"title": "关于 User 的想法", "duration": "02:15", "date": "10月20日", "content": "其实我今天看到Ta的时候，心跳得好快...但我不敢说。"}
+  ],
+  "docs": [
+    {"title": "周末旅行攻略.pdf", "size": "2.4 MB", "date": "昨天 09:41", "type": "pdf", "content": "第一天：早上9点出发去海边，中午吃海鲜大排档。第二天：去爬山看日出..."}
+  ]
+}\n`;
+        const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.key}` },
+            body: JSON.stringify({
+                model: apiConfig.model,
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.8
+            })
+        });
+
+        const data = await response.json();
+        let content = data.choices[0].message.content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+        content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const filesData = JSON.parse(content);
+
+        if (!char.phoneData) char.phoneData = {};
+        char.phoneData.filesApp = filesData;
+        wcSaveData();
+
+        wcRenderPhoneFilesContent();
+        wcShowSuccess("文件破解成功");
+
+    } catch (e) {
+        console.error(e);
+        wcShowError("生成失败");
+    }
+};

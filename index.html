@@ -1044,7 +1044,7 @@
                     <!-- 4. 拼图页 -->
                     <div id="wish-page-puzzle" class="wish-page">
                         <div class="wish-page-title">Puzzle</div>
-                        <div style="font-size: 13px; color: #888; margin-bottom: 20px;">完成愿望或待办，解锁专属回忆拼图。 (<span id="puzzle-count-display">0</span>/9)</div>
+                        <div style="font-size: 13px; color: #888; margin-bottom: 20px;">完成愿望或待办，解锁专属回忆拼图。 (<span id="puzzle-count-display">0</span>/16)</div>
                         
                         <!-- 拼图底图设置 -->
                         <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
@@ -1244,6 +1244,340 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- 👇 新增：查手机专属 Dock 栏 👇 -->
+                    <div class="sim-dock-container" id="wc-phone-dock">
+                        <div class="sim-dock">
+                            <!-- 1. 抖音 (点击打开短视频页面) -->
+                            <div class="wc-ios-app-item" onclick="openVideoApp()">
+                                <div class="wc-ios-app-icon" style="background: #FFF !important;">
+                                    <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; fill: #111;"><path d="M12 2v10.5c-.5-.3-1.2-.5-2-.5-2.2 0-4 1.8-4 4s1.8 4 4 4 4-1.8 4-4V6h4V2h-6z"/></svg>
+                                </div>
+                            </div>
+                            
+                            <!-- 2. 退出 (白色背景 + 朝上的箭头) -->
+                            <div class="wc-ios-app-item" onclick="wcClosePhoneSim()">
+                                <div class="wc-ios-app-icon" style="background: #FFF !important;">
+                                    <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; fill: none; stroke: #111; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;">
+                                        <line x1="12" y1="19" x2="12" y2="5"></line>
+                                        <polyline points="5 12 12 5 19 12"></polyline>
+                                    </svg>
+                                </div>
+                            </div>
+                            
+                            <!-- 3. 文件管理 (原相册) -->
+                            <div class="wc-ios-app-item" onclick="wcOpenPhoneApp('files')">
+                                <div class="wc-ios-app-icon" style="background: #FFF !important;">
+                                    <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; fill: none; stroke: #111; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 👆 新增结束 👆 -->
+
+                    <!-- 👇 新增：短视频 APP 页面 (卡片流设计) 👇 -->
+                    <div class="video-app-container" id="videoApp">
+                        <div class="v-pages">
+                            <!-- 1. Home 主页 -->
+                            <div class="v-page active" id="v-page-home">
+                                <!-- 顶栏：左侧退出(朝左箭头)，右侧搜索 -->
+                                <div class="v-header-home">
+                                    <div class="v-icon-btn" onclick="closeVideoApp()">
+                                        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                    </div>
+                                    <div class="video-tabs">
+                                        <span>Following</span>
+                                        <span class="active">For You</span>
+                                    </div>
+                                    <!-- 修改：绑定 wcGenerateVideoAppData() 函数 -->
+                                    <div class="v-icon-btn" onclick="wcGenerateVideoAppData()">
+                                        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                    </div>
+                                </div>
+
+                                <!-- 视频卡片区 (支持上下滑动) -->
+                                <div class="video-feed" id="v-home-feed">
+                                    <!-- 视频卡片将由 JS 动态注入 -->
+                                </div>
+                            </div>
+
+                            <!-- 5. 视频详情页 (从个人主页点击进入) -->
+                            <div class="v-page" id="v-page-detail">
+                                <div class="v-header-home" style="z-index: 20;">
+                                    <div class="v-icon-btn" onclick="switchVideoTab('profile')">
+                                        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                    </div>
+                                    <div class="video-tabs">
+                                        <span class="active">Ta 的作品</span>
+                                    </div>
+                                    <div style="width: 28px;"></div>
+                                </div>
+                                <div class="video-feed" id="v-detail-feed">
+                                    <!-- 详情视频卡片将由 JS 动态注入 -->
+                                </div>
+                            </div>
+
+                            <!-- 底部弹出的评论区面板 -->
+                            <div class="v-comments-panel" id="v-comments-panel">
+                                <div class="v-comments-header">
+                                    <span id="v-comments-count">0 条评论</span>
+                                    <div class="v-comments-close" onclick="vCloseComments()">×</div>
+                                </div>
+                                <div class="v-comments-list" id="v-comments-list">
+                                    <!-- 评论列表由 JS 注入 -->
+                                </div>
+                                <div class="v-comments-input-area">
+                                    <input type="text" placeholder="留下你的评论...">
+                                    <button>发送</button>
+                                </div>
+                            </div>
+
+                            <!-- 2. Discover 发现页 -->
+                            <div class="v-page" id="v-page-discover">
+                                <div class="v-header-simple">Discover</div>
+                                <div class="v-search-box">
+                                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                    <span>Search trends, creators...</span>
+                                </div>
+                                <div class="v-grid">
+                                    <div class="v-grid-item"><img src="https://i.postimg.cc/kgD9CsbW/IMG-8012.jpg"><div class="views">▶ 1.2M</div></div>
+                                    <div class="v-grid-item"><img src="https://i.postimg.cc/7YgYdR84/Image-1770474411684-498.jpg"><div class="views">▶ 845K</div></div>
+                                    <div class="v-grid-item"><img src="https://i.postimg.cc/GhkhVfwd/Image-1770474415295-455.jpg"><div class="views">▶ 2.1M</div></div>
+                                    <div class="v-grid-item"><img src="https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg"><div class="views">▶ 340K</div></div>
+                                </div>
+                            </div>
+
+                            <!-- 3. Inbox 消息页 -->
+                            <div class="v-page" id="v-page-inbox">
+                                <div class="v-header-simple">Inbox</div>
+                                <div class="v-inbox-list">
+                                    <div class="v-inbox-item">
+                                        <div class="v-inbox-avatar online"><img src="https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg" style="width:100%;height:100%;border-radius:50%;"></div>
+                                        <div class="v-inbox-info">
+                                            <div class="v-inbox-name">System Notice</div>
+                                            <div class="v-inbox-msg">Welcome to the new video experience!</div>
+                                        </div>
+                                    </div>
+                                    <div class="v-inbox-item">
+                                        <div class="v-inbox-avatar"><img src="https://i.postimg.cc/7YgYdR84/Image-1770474411684-498.jpg" style="width:100%;height:100%;border-radius:50%;object-fit:cover;"></div>
+                                        <div class="v-inbox-info">
+                                            <div class="v-inbox-name">Creator_01</div>
+                                            <div class="v-inbox-msg">Liked your recent post. · 2h</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 4. Profile 个人主页 -->
+                            <div class="v-page" id="v-page-profile">
+                                <div class="v-profile-header">
+                                    <div class="v-profile-username">@My_Profile <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:#FFF;fill:none;"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+                                    <svg class="v-profile-menu" viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                                </div>
+                                <div class="v-profile-info">
+                                    <img src="https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg" class="v-profile-avatar">
+                                    <div class="v-profile-stats">
+                                        <div class="v-stat-item"><span class="v-stat-num">128</span><span class="v-stat-label">Following</span></div>
+                                        <div class="v-stat-item"><span class="v-stat-num">10.5K</span><span class="v-stat-label">Followers</span></div>
+                                        <div class="v-stat-item"><span class="v-stat-num">1.2M</span><span class="v-stat-label">Likes</span></div>
+                                    </div>
+                                    <div class="v-profile-edit-btn">Edit Profile</div>
+                                </div>
+                                <div class="v-profile-tabs">
+                                    <svg class="active" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                                    <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                </div>
+                                <div class="v-grid" style="padding-top: 10px;">
+                                    <div class="v-grid-item"><img src="https://i.postimg.cc/kgD9CsbW/IMG-8012.jpg"><div class="views">▶ 12K</div></div>
+                                    <div class="v-grid-item"><img src="https://i.postimg.cc/yYrDHvG5/mmexport1766982633245.jpg"><div class="views">▶ 8K</div></div>
+                                </div>
+                            </div>
+
+                            <!-- 6. 私信详情页 -->
+                            <div class="v-page" id="v-page-inbox-detail">
+                                <div class="v-header-home" style="z-index: 20; background: #1A1A1A;">
+                                    <div class="v-icon-btn" onclick="switchVideoTab('inbox')">
+                                        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                    </div>
+                                    <div class="video-tabs">
+                                        <span class="active" id="v-inbox-detail-name">Name</span>
+                                    </div>
+                                    <div style="width: 28px;"></div>
+                                </div>
+                                <!-- 修改：将 padding-top 从 80px 增加到 110px，防止被顶栏遮挡 -->
+                                <div class="v-inbox-detail-chat" id="v-inbox-detail-chat" style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; background: #0A0A0B; padding-top: 110px;">
+                                    <!-- 聊天记录 -->
+                                </div>
+                                <div class="v-comments-input-area" style="background: #1A1A1A;">
+                                    <input type="text" placeholder="发送消息...">
+                                    <button>发送</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 底部导航栏 -->
+                        <div class="video-tabbar">
+                            <div class="v-tab active" onclick="switchVideoTab('home')">
+                                <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                                <span>Home</span>
+                            </div>
+                            <div class="v-tab" onclick="switchVideoTab('discover')">
+                                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                <span>Discover</span>
+                            </div>
+                            <div class="v-tab-add" onclick="alert('打开拍摄界面')">
+                                <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            </div>
+                            <div class="v-tab" onclick="switchVideoTab('inbox')">
+                                <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                                <span>Inbox</span>
+                            </div>
+                            <div class="v-tab" onclick="switchVideoTab('profile')">
+                                <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                <span>Profile</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 👆 新增结束 👆 -->
+                    <!-- 👇 新增：文件管理 APP (Files) 👇 -->
+                    <div id="wc-phone-app-files" class="wc-phone-app-view" style="display: none; background: #E5E5EA; z-index: 25;">
+                        <div class="fm-pages-container">
+                            <!-- Page 1: Home -->
+                            <div id="fm-page-home" class="fm-page active">
+                                <div class="fm-header">
+                                    <!-- 🔪 修改：点击左上角头像区域退出 -->
+                                    <div class="fm-user-info" onclick="wcClosePhoneApp()" style="cursor: pointer; transition: opacity 0.2s;" onmousedown="this.style.opacity=0.5" onmouseup="this.style.opacity=1">
+                                        <div class="fm-avatar" id="fm-user-avatar">Ta</div>
+                                        <div class="fm-greeting">
+                                            <h1 id="fm-user-name">Hello!</h1>
+                                            <p>查看他的私密文件？</p>
+                                        </div>
+                                    </div>
+                                    <!-- 🔪 修改：点击右上角铃铛调取 API 生成 -->
+                                    <div class="fm-notification-btn" onclick="wcGeneratePhoneFiles()" title="生成私密文件">
+                                        <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                                        <div class="fm-notification-dot"></div>
+                                    </div>
+                                </div>
+
+                                <div class="fm-search-bar">
+                                    <div class="fm-search-input-wrapper">
+                                        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                        <input type="text" placeholder="Search files..." readonly>
+                                    </div>
+                                    <div class="fm-filter-btn">
+                                        <svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                                    </div>
+                                </div>
+
+                                <div class="fm-tabs-container">
+                                    <div class="fm-tab-item active">Top Rates</div>
+                                    <div class="fm-tab-item">Best Offer</div>
+                                    <div class="fm-tab-item">Popular</div>
+                                    <div class="fm-tab-item">Nearby</div>
+                                </div>
+
+                                <!-- 动态渲染层叠卡片 -->
+                                <div class="fm-card-stack-container" id="fm-cardStack">
+                                    <div style="text-align: center; color: #888; margin-top: 50px; font-size: 14px;">点击右上角铃铛<br>生成 Ta 的私密文件...</div>
+                                </div>
+                            </div>
+
+                            <!-- Page 2: Photos -->
+                            <div id="fm-page-gallery" class="fm-page">
+                                <div class="fm-page-title-header">
+                                    <h1>Gallery</h1>
+                                    <p id="fm-photo-count">0 Secret Photos</p>
+                                </div>
+                                <!-- 动态渲染相册 -->
+                                <div class="fm-gallery-grid" id="fm-gallery-grid"></div>
+                            </div>
+
+                            <!-- Page 3: Audios -->
+                            <div id="fm-page-audio" class="fm-page">
+                                <div class="fm-page-title-header">
+                                    <h1>Voice Memos</h1>
+                                    <p id="fm-audio-count">0 Recorded Audios</p>
+                                </div>
+                                <!-- 动态渲染录音 -->
+                                <div class="fm-audio-list" id="fm-audio-list"></div>
+                            </div>
+
+                            <!-- Page 4: Docs -->
+                            <div id="fm-page-docs" class="fm-page">
+                                <div class="fm-page-title-header">
+                                    <h1>Documents</h1>
+                                    <p id="fm-doc-count">0 Saved Files</p>
+                                </div>
+                                <!-- 动态渲染文档 -->
+                                <div class="fm-doc-list" id="fm-doc-list"></div>
+                            </div>
+                        </div>
+
+                        <!-- 底部悬浮导航栏 -->
+                        <div class="fm-bottom-nav-wrapper">
+                            <div class="fm-nav-item active" onclick="fmSwitchTab('home', this)">
+                                <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                                <span class="fm-nav-text">Home</span>
+                            </div>
+                            <div class="fm-nav-item" onclick="fmSwitchTab('gallery', this)">
+                                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                            </div>
+                            <div class="fm-nav-item" onclick="fmSwitchTab('audio', this)">
+                                <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                            </div>
+                            <div class="fm-nav-item" onclick="fmSwitchTab('docs', this)">
+                                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            </div>
+                        </div>
+                                                <!-- 👇 新增：照片放大查看弹窗 👇 -->
+                        <div id="fm-photo-modal" class="fm-modal-overlay" onclick="fmClosePhotoDetail()">
+                            <div class="fm-photo-card" onclick="event.stopPropagation()">
+                                <div class="fm-photo-close" onclick="fmClosePhotoDetail()">×</div>
+                                <div class="fm-photo-tag">IMAGE DESC</div>
+                                <div class="fm-photo-content" id="fm-photo-detail-text"></div>
+                            </div>
+                        </div>
+
+                        <!-- 👇 新增：录音详情底部抽屉弹窗 👇 -->
+                        <div id="fm-audio-modal" class="fm-modal-overlay" onclick="fmCloseAudioDetail()">
+                            <div class="fm-audio-drawer" onclick="event.stopPropagation()">
+                                <div class="fm-drawer-drag-handle"></div>
+                                <div class="fm-audio-drawer-header">
+                                    <div class="fm-audio-drawer-title" id="fm-audio-detail-title">录音标题</div>
+                                    <div class="fm-audio-drawer-meta" id="fm-audio-detail-meta">昨天 02:15 • 04:20</div>
+                                </div>
+                                <!-- 模拟播放波形 -->
+                                <div class="fm-audio-drawer-wave">
+                                    <div class="fm-wave-line"></div><div class="fm-wave-line"></div><div class="fm-wave-line"></div>
+                                    <div class="fm-wave-line"></div><div class="fm-wave-line"></div><div class="fm-wave-line"></div>
+                                    <div class="fm-wave-line"></div><div class="fm-wave-line"></div><div class="fm-wave-line"></div>
+                                </div>
+                                <div class="fm-audio-drawer-label">录音转写内容：</div>
+                                <div class="fm-audio-drawer-content" id="fm-audio-detail-content"></div>
+                            </div>
+                        </div>
+                                                <!-- 👇 新增：文档详情全屏弹窗 👇 -->
+                        <div id="fm-doc-modal" class="fm-modal-overlay" onclick="fmCloseDocDetail()">
+                            <div class="fm-doc-card" onclick="event.stopPropagation()">
+                                <div class="fm-doc-header">
+                                    <div class="fm-doc-close" onclick="fmCloseDocDetail()">
+                                        <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                                        返回
+                                    </div>
+                                    <div class="fm-doc-title-bar" id="fm-doc-detail-title">文档标题</div>
+                                    <div style="width: 60px;"></div> <!-- 占位平衡 -->
+                                </div>
+                                <div class="fm-doc-meta-bar" id="fm-doc-detail-meta">昨天 09:41</div>
+                                <div class="fm-doc-content" id="fm-doc-detail-content"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 👆 新增结束 👆 -->
+
+                    <!-- 👆 新增结束 👆 -->
+
                     <!-- Phone App: Message (微信内部) -->
                     <div id="wc-phone-app-message" class="wc-phone-app-view" style="display: none; flex-direction: column; background: #F7F7F9;">
                         <!-- 静态高级 Header -->
@@ -1539,8 +1873,8 @@
 
                    </div>
                 
-                <!-- 指纹退出键 (仅在桌面显示) -->
-                <div id="wc-phone-fingerprint-btn" class="wc-phone-fingerprint" onclick="wcClosePhoneSim()">
+                <!-- 指纹退出键 (已隐藏，改为 Dock 栏退出) -->
+                <div id="wc-phone-fingerprint-btn" class="wc-phone-fingerprint" onclick="wcClosePhoneSim()" style="display: none !important;">
                     <svg viewBox="0 0 24 24" style="width:100%;height:100%;fill:none;stroke:rgba(255,255,255,0.8);stroke-width:2;"><path d="M12 2a5 5 0 0 1 5 5v1h-2V7a3 3 0 0 0-6 0v1H7V7a5 5 0 0 1 5-5z"/><rect x="5" y="8" width="14" height="14" rx="2"/></svg>
                 </div>
             </div>
@@ -2226,10 +2560,12 @@
 
                 <!-- 底部：额度查询 (固定在底部) -->
                 <div class="api-quota-bottom-bar">
-                    <div class="api-quota-info-clean">
-                        <span class="quota-label">当前 API 剩余额度</span>
+                    <!-- 👇 修改：加上点击事件和点击反馈 👇 -->
+                    <div class="api-quota-info-clean" onclick="openApiBillingModal()" style="cursor: pointer; transition: opacity 0.2s;" onmousedown="this.style.opacity=0.5" onmouseup="this.style.opacity=1" onmouseleave="this.style.opacity=1" title="点击查看今日消耗明细">
+                        <span class="quota-label">当前 API 剩余额度 <span style="font-size: 9px; color: #CCC; text-transform: none;">(点击查明细)</span></span>
                         <span class="quota-value" id="api-realtime-quota">--</span>
                     </div>
+                    <!-- 👆 修改结束 👆 -->
                     <button class="quota-refresh-btn" onclick="refreshCurrentApiQuota()">
                         <svg viewBox="0 0 24 24"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.85L2 9"></path></svg>
                         刷新
@@ -2532,6 +2868,14 @@
                                 <span>恢复默认背景</span>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
                             </div>
+                            <div class="dropdown-item" onclick="document.getElementById('music-fp-record-upload').click(); toggleMusicDropdownMenu(event);">
+                                <span>更换唱片封面</span>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+                            </div>
+                            <div class="dropdown-item" onclick="musicRestoreDefaultRecord(); toggleMusicDropdownMenu(event);">
+                                <span>恢复默认唱片</span>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
+                            </div>
                             <div class="dropdown-item danger" id="music-menu-end-listen" onclick="musicStopListenTogether(); toggleMusicDropdownMenu(event);">
                                 <span>结束一起听歌</span>
                                 <svg viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
@@ -2539,6 +2883,7 @@
                         </div>
                         
                         <input type="file" id="music-fp-bg-upload" style="display: none;" accept="image/*" onchange="musicHandleFpBgUpload(this)">
+                        <input type="file" id="music-fp-record-upload" style="display: none;" accept="image/*" onchange="musicHandleFpRecordUpload(this)">
                     </div>
 
                     <!-- 小聊天窗口 (右上角加了关闭键) -->
@@ -3001,6 +3346,7 @@
                         <div id="wc-context-menu">
                             <div class="wc-ctx-item" onclick="wcHandleReply()">引用</div>
                             <div class="wc-ctx-item" onclick="wcHandleEdit()">编辑</div>
+                            <div class="wc-ctx-item" id="wc-ctx-recall" onclick="wcHandleRecall()">撤回</div>
                             <div class="wc-ctx-item" onclick="wcHandleDelete()">删除</div>
                             <div class="wc-ctx-item" onclick="wcHandleMultiSelect()">多选</div>
                         </div>
@@ -3047,6 +3393,18 @@
                                     </div>
                                     <span class="wc-more-label">转账</span>
                                 </div>
+                                                                <!-- 👇 新增：红包按钮 (黑白灰高级感SVG) 👇 -->
+                                <div class="wc-more-item" onclick="wcOpenRedPacketPanel()">
+                                    <div class="wc-more-icon-box">
+                                        <svg class="wc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="3" y="4" width="18" height="16" rx="3"></rect>
+                                            <path d="M3 8.5C7.5 11.5 10.5 13.5 12 14.5C13.5 13.5 16.5 11.5 21 8.5"></path>
+                                            <circle cx="12" cy="14.5" r="3.5"></circle>
+                                        </svg>
+                                    </div>
+                                    <span class="wc-more-label">红包</span>
+                                </div>
+                                <!-- 👆 新增结束 👆 -->
                                 <div class="wc-more-item" onclick="wcActionMemory()">
                                     <div class="wc-more-icon-box">
                                         <svg class="wc-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
@@ -3077,6 +3435,7 @@
                                     </div>
                                     <span class="wc-more-label">购物</span>
                                 </div>
+
 <!-- 👇 新增：状态按钮 👇 -->
 <div class="wc-more-item" id="wc-more-item-status" onclick="wcOpenCharStatusModal()">
     <div class="wc-more-icon-box">
@@ -4394,16 +4753,19 @@
     <div class="wc-settings-section-title">API 消耗与状态</div>
     
     <!-- 剩余额度 -->
-    <div class="ins-token-row">
+    <!-- 👇 修改：加上 clickable 类和 onclick 事件 👇 -->
+    <div class="ins-token-row clickable" onclick="openApiBillingModal()">
         <div class="ins-token-left">
             <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" ry="2"></rect><path d="M21 12H17"></path><path d="M17 10V14"></path></svg>
-            <span>剩余 API 额度</span>
+            <span>剩余 API 额度 <span style="font-size: 9px; color: #CCC; font-weight: normal;"></span></span>
         </div>
         <div class="ins-token-right">
             <span class="ins-token-value highlight" id="ui-api-quota">--</span>
-            <svg class="ins-token-action-icon" viewBox="0 0 24 24" onclick="refreshApiQuota()"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.85L2 9"></path></svg>
+            <!-- 👇 修改：加上 event.stopPropagation() 防止点击刷新时弹出明细 👇 -->
+            <svg class="ins-token-action-icon" viewBox="0 0 24 24" onclick="event.stopPropagation(); refreshApiQuota()"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.85L2 9"></path></svg>
         </div>
     </div>
+    <!-- 👆 修改结束 👆 -->
 
     <!-- 占用 Token -->
     <div class="ins-token-row clickable" onclick="openTokenModal()">
@@ -4623,6 +4985,95 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 👇 新增：红包全屏页与弹窗 👇 -->
+                <!-- 发红包全屏页 -->
+                <div class="rp-fullscreen" id="rp-fullscreen">
+                    <div class="rp-nav">
+                        <div class="rp-nav-cancel" onclick="wcCloseRpModals()">取消</div>
+                        <div class="rp-nav-title">发红包</div>
+                        <div class="rp-nav-help">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        </div>
+                    </div>
+                    <div class="rp-type-switch-container" id="rp-type-switch-container">
+                        <div class="rp-type-switch">
+                            <div class="rp-type-item active" onclick="wcSwitchRpType('random')">拼手气</div>
+                            <div class="rp-type-item" onclick="wcSwitchRpType('normal')">普通</div>
+                            <!-- 👇 修复了这里的报错 👇 -->
+                            <div class="rp-type-item" onclick="wcSwitchRpType('exclusive')">专属</div>
+                        </div>
+                    </div>
+                    <div class="rp-form">
+                        <div class="rp-group" id="rp-group-target" style="display: none;">
+                            <div class="rp-row">
+                                <div class="rp-label">发给谁</div>
+                                <div class="rp-input-wrapper">
+                                    <select class="rp-select" id="rp-target-select"></select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="rp-group" id="rp-group-count" style="display: none;">
+                            <div class="rp-row">
+                                <div class="rp-label">红包个数</div>
+                                <!-- 👇 增加了 wrapper 包裹 👇 -->
+                                <div class="rp-input-wrapper">
+                                    <input type="number" class="rp-input" id="rp-count" placeholder="填写个数" oninput="wcCheckRpInput()">
+                                    <span class="rp-unit">个</span>
+                                </div>
+                            </div>
+                            <div style="font-size: 12px; color: #999; padding: 0 0 12px 0;" id="rp-group-member-count">本群共 0 人</div>
+                        </div>
+                        <div class="rp-group">
+                            <div class="rp-row">
+                                <div class="rp-label" id="rp-amount-label">金额</div>
+                                <!-- 👇 增加了 wrapper 包裹 👇 -->
+                                <div class="rp-input-wrapper">
+                                    <input type="number" class="rp-input" id="rp-amount" placeholder="0.00" oninput="wcCheckRpInput()">
+                                    <span class="rp-unit">元</span>
+                                </div>
+                            </div>
+                        </div>
+                        <textarea class="rp-textarea" id="rp-msg" placeholder="恭喜发财，大吉大利"></textarea>
+                        <div class="rp-amount-display" id="rp-amount-display">
+                            <span class="currency">¥</span><span id="rp-amount-text">0.00</span>
+                        </div>
+                        <button class="rp-submit-btn" id="rp-submit-btn" onclick="wcShowRpPassword()">塞钱进红包</button>
+                        <div class="rp-footer-hint">未领取的红包，将于24小时后发起退款</div>
+                    </div>
+                </div>
+
+                <!-- 拆红包弹窗 -->
+                <div class="rp-open-overlay" id="rp-open-overlay">
+                    <div class="rp-open-card">
+                        <div class="rp-open-close" onclick="wcCloseRpModals()">×</div>
+                        <img src="" class="rp-open-avatar" id="rp-open-avatar">
+                        <div class="rp-open-name" id="rp-open-sender-name">User</div>
+                        <div class="rp-open-desc" id="rp-open-desc-text">发了一个红包，金额随机</div>
+                        <div class="rp-open-msg" id="rp-open-msg-text">恭喜发财，大吉大利</div>
+                        <div class="rp-open-btn" id="rp-open-btn" onclick="wcPlayRpAnimation()">開</div>
+                        <div class="rp-open-detail-link" id="rp-open-detail-link" style="display: none;" onclick="wcShowRpDetail()">查看领取详情 &gt;</div>
+                    </div>
+                </div>
+
+                <!-- 红包详情全屏页 -->
+                <div class="rp-detail-fullscreen" id="rp-detail-fullscreen">
+                    <div class="rp-detail-header">
+                        <div class="rp-detail-nav">
+                            <div onclick="wcCloseRpModals()" style="cursor: pointer; font-size: 16px;">关闭</div>
+                            <div style="font-size: 16px;">红包记录</div>
+                        </div>
+                        <img src="" class="rp-detail-avatar" id="rp-detail-avatar">
+                        <div class="rp-detail-name" id="rp-detail-sender-name">User的红包</div>
+                        <div class="rp-detail-msg" id="rp-detail-msg-text">恭喜发财，大吉大利</div>
+                    </div>
+                    <div class="rp-detail-amount-box" id="rp-detail-my-amount-box" style="display: none;">
+                        <div class="rp-detail-amount"><span>¥</span><span id="rp-detail-my-amount">0.00</span></div>
+                    </div>
+                    <div class="rp-detail-list-header" id="rp-detail-list-header">已领取 0/0 个</div>
+                    <div class="rp-detail-list" id="rp-detail-list"></div>
+                </div>
+                <!-- 👆 新增结束 👆 -->
 
                 <!-- Hidden Inputs -->
                  <input type="file" id="wc-file-input-group" accept="image/*" onchange="wcHandleFileSelect(event, 'group')" style="display:none;">
@@ -6650,6 +7101,37 @@
             </div>
         </div>
     </div>
+
+    <!-- 👇 新增：API 消耗明细弹窗 👇 -->
+    <div class="api-billing-overlay" id="api-billing-modal" onclick="if(event.target===this) closeApiBillingModal()">
+        <div class="api-billing-card">
+            <div class="api-billing-header">
+                <div class="api-billing-title">今日 API 消耗明细</div>
+                <div class="api-billing-close" onclick="closeApiBillingModal()">
+                    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </div>
+            </div>
+            <div class="api-billing-summary">
+                <div class="summary-item">
+                    <span class="summary-label">今日调用</span>
+                    <span class="summary-value" id="billing-total-count">0 <span style="font-size:12px;color:#888;font-family:sans-serif;">次</span></span>
+                </div>
+                <div class="summary-divider"></div>
+                <div class="summary-item" style="align-items: flex-end;">
+                    <span class="summary-label">今日花费</span>
+                    <span class="summary-value highlight" id="billing-total-cost">$0.0000</span>
+                </div>
+            </div>
+            <div class="api-billing-list-title">消耗记录</div>
+            <div class="api-billing-list" id="api-billing-list-container">
+                <!-- 记录由 JS 注入 -->
+            </div>
+            <div class="api-billing-footer">
+                <button class="api-billing-btn" onclick="closeApiBillingModal()">我知道了</button>
+            </div>
+        </div>
+    </div>
+    <!-- 👆 新增结束 👆 -->
 
 </body>
 </html>
