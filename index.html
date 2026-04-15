@@ -241,208 +241,236 @@
 
             <!-- 3. 主空间页面 (已绑定) -->
             <div id="ls-view-main" class="ls-view">
-                <!-- 顶部信息区 -->
+<!-- 替换后 -->
+                <!-- 顶部导航 -->
                 <div class="ls-header">
-                    <div class="ls-header-top">
-                        <div class="ls-nav-btn" onclick="closeLoversSpace()">✕</div>
-                        <div class="ls-header-title">Lovers</div>
-                        <div class="ls-nav-btn"></div>
+                    <!-- 左上角双头像 (点击打开侧边栏) -->
+                    <div class="ls-double-avatar-btn" onclick="lsToggleSidebar(true)">
+                        <img id="ls-main-user-avatar" src="" alt="User">
+                        <img id="ls-main-char-avatar" src="" alt="Char">
                     </div>
-                    <div class="ls-couple-avatars">
-                        <div class="ls-avatar-circle" id="ls-main-user-avatar"></div>
-                        <div class="ls-heart-beat"><svg viewBox="0 0 24 24" fill="currentColor" width="1em" height="1em"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>
-                        <div class="ls-avatar-circle" id="ls-main-char-avatar"></div>
+                    
+                    <!-- 顶部标题：双方名字 -->
+                    <div class="ls-space-title" id="ls-space-title">User & Ta</div>
+                    
+                    <!-- 👇 修改：将右侧占位符变成可点击的 Back 按钮，同时保持宽度以维持标题居中 👇 -->
+                    <div class="ls-header-placeholder" onclick="closeLoversSpace()" style="cursor: pointer; display: flex; justify-content: flex-end; align-items: center; color: #111; font-weight: 700; font-size: 14px; transition: opacity 0.2s;" onmousedown="this.style.opacity=0.5" onmouseup="this.style.opacity=1">
+                        Back
                     </div>
-                        <div class="ls-days-counter" style="position: relative;">
-                        <span class="ls-days-label">Together</span>
-                        <span class="ls-days-num" id="ls-days-num">1</span>
-                        <span class="ls-days-label">Days</span>
-                        <!-- 隐藏的系统日期选择器，覆盖在文字上方 -->
-                        <input type="date" id="ls-date-picker" onchange="lsHandleDateChange(this.value)" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
-                    </div>                                        
-                    <div class="ls-date-display" id="ls-start-date-display">Since 2023.10.24</div>
                 </div>
 
-                <!-- 内容区域 (Tabs) -->
+                <!-- 内容区 -->
                 <div class="ls-main-content">
-                    <!-- Tab 1: 动态/日志 (关联消息) -->
+                    <!-- Tab 1: 动态 (Timeline) -->
                     <div id="ls-tab-feed" class="ls-tab-content active">
-                        <div class="ls-section-title">Timeline</div>
-                        <div id="ls-feed-list" class="ls-feed-list">
-                            <!-- 动态日志 -->
+                        <!-- 顶部大卡片 -->
+                        <div class="ls-hero-card">
+                            <div class="ls-hero-label">TOGETHER</div>
+                            <div class="ls-hero-days"><span id="ls-days-num">1</span> <span style="font-size: 16px; font-family: sans-serif; font-weight: normal;">Days</span></div>
+                            <div class="ls-hero-desc">“在这个宇宙，我们终会相遇。”</div>
+                            <!-- 隐藏的系统日期选择器，覆盖在文字上方 -->
+                            <input type="date" id="ls-date-picker" onchange="lsHandleDateChange(this.value)" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;">
+                        </div>
+
+                        <!-- 时间线 -->
+                        <div class="ls-timeline-container">
+                            <div class="ls-timeline-line"></div>
+                            <div id="ls-feed-list" class="ls-feed-list">
+                                <!-- 动态日志 -->
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Tab 2: 纪念 (简单展示) -->
+                    <!-- Tab 2: 互动 (Bento 网格) -->
                     <div id="ls-tab-album" class="ls-tab-content">
-                        <div class="ls-section-title">Interactive Space</div>
-                        <div class="ls-album-grid">
-                            <!-- 卡片 1：默契大挑战 -->
-                            <div class="ls-album-card" onclick="openLsQaView()">
-                                <div class="ls-album-card-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path><path d="M15 9h.01"></path><path d="M9 9h.01"></path><path d="M12 13.5c-1.5 0-2.5-.5-3-1.5"></path></svg>
+                        <div class="ls-bento-grid">
+                            <!-- 大模块：时光相册 -->
+                            <div class="ls-bento-item ls-bento-large" onclick="lsOpenTimeAlbum()">
+                                <div class="ls-bento-info">
+                                    <div class="ls-bento-title">时光相册</div>
+                                    <div class="ls-bento-desc">Photo Album</div>
                                 </div>
-                                <div class="ls-album-card-title">默契大挑战</div>
-                                <div class="ls-album-card-desc">Telepathy Challenge</div>
-                            </div>
-                            <!-- 卡片 2：时光相册 -->
-                            <div class="ls-album-card" onclick="lsOpenTimeAlbum()">
-                                <div class="ls-album-card-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                <div class="ls-bento-icon">
+                                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                                 </div>
-                                <div class="ls-album-card-title">时光相册</div>
-                                <div class="ls-album-card-desc">Photo Album</div>
                             </div>
-                            <!-- 卡片 3：纪念日 (占位) -->
-                            <div class="ls-album-card">
-                                <div class="ls-album-card-icon">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                                </div>
-                                <div class="ls-album-card-title">专属纪念</div>
-                                <div class="ls-album-card-desc">Anniversaries</div>
-                            </div>
-<!-- 未来信件入口卡片 -->
-<div class="ls-album-card" onclick="lsOpenLettersView()">
-    <div class="ls-album-card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-    </div>
-    <div class="ls-album-card-title">未来信件</div>
-    <div class="ls-album-card-desc">Time Mailbox</div>
-</div>
-<!-- 专属商城入口卡片 -->
-<div class="ls-album-card" onclick="lsOpenShopView()">
-    <div class="ls-album-card-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
-    </div>
-    <div class="ls-album-card-title">恋爱商城</div>
-    <div class="ls-album-card-desc">Couple Shop</div>
-</div>
-</div>
-</div> <!-- 👈 宝宝，就是在这里补上这行闭合标签！ -->
-                    <!-- Tab 3: 设置 -->
-                    <div id="ls-tab-settings" class="ls-tab-content">
-                        <div class="ls-setting-group">
-                            <div class="ls-setting-row">
-                                <div class="ls-setting-label">
-                                    <div class="ls-setting-title">关联账号</div>
-                                    <div class="ls-setting-desc">开启后，对方将实时感知你的其他聊天</div>
-                                </div>
-                                <input type="checkbox" id="ls-toggle-link" class="ls-toggle" onchange="lsToggleLink(this)">
-                            </div>
-                        </div>
 
-                        <!-- 新增：位置与运动同步开关 -->
-                        <div class="ls-setting-group">
-                            <div class="ls-setting-row">
-                                <div class="ls-setting-label">
-                                    <div class="ls-setting-title">位置与运动同步</div>
-                                    <div class="ls-setting-desc">开启后，对方将实时感知你的步数、距离和位置</div>
+                            <!-- 小模块 -->
+                            <div class="ls-bento-item" onclick="openLsQaView()">
+                                <div class="ls-bento-icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
+                                <div>
+                                    <div class="ls-bento-title">默契挑战</div>
+                                    <div class="ls-bento-desc">Telepathy</div>
                                 </div>
-                                <input type="checkbox" id="ls-toggle-location" class="ls-toggle" onchange="lsToggleLocationSync(this)">
                             </div>
-                        </div>
-                        
-                        <!-- 我的桌面小组件设置 -->
-                        <div class="ls-setting-group" id="ls-widget-settings-group">
-                            <div class="ls-setting-row">
-                                <div class="ls-setting-label">
-                                    <div class="ls-setting-title">我的桌面小组件</div>
-                                    <div class="ls-setting-desc">在主屏幕显示恋人空间小组件</div>
-                                </div>
-                                <input type="checkbox" id="ls-toggle-widget" class="ls-toggle" onchange="lsToggleWidget(this)">
-                            </div>
-                            <div id="ls-my-widget-controls" style="display: none; flex-direction: column; gap: 10px; padding: 15px 0; border-bottom: 1px solid #f5f5f5;">
-                                <div style="display: flex; justify-content: space-between; width: 100%; margin-bottom: 10px; align-items: center;">
-                                    <span style="font-size: 14px; color: #333;">聊天时更新小组件概率 (%)</span>
-                                    <!-- 修改：手动输入频率 -->
-                                    <input type="number" id="ls-widget-freq" class="ios-input" style="width: 60px; text-align: center; border: 1px solid #eee; border-radius: 8px; padding: 5px; font-size: 14px;" value="20" onchange="lsUpdateWidgetFreq(this.value)">
-                                </div>
-                                
-                                <div style="margin-top: 10px; font-size: 14px; color: #333;">小组件照片 (支持本地或URL)</div>
-                                <input type="text" id="ls-widget-photo-url" placeholder="输入图片URL..." value="" onblur="lsUpdateWidgetPhoto(this.value)" style="width: 100%; padding: 10px; border: 1px solid #eee; border-radius: 8px; font-size: 14px; background: #f9f9f9;">
-                                <button class="ls-btn-outline" onclick="document.getElementById('ls-widget-photo-upload').click()" style="width: 100%; margin-top: 5px;">上传本地照片</button>
-                                <input type="file" id="ls-widget-photo-upload" style="display: none;" accept="image/*" onchange="lsHandleWidgetPhotoUpload(this)">
-                                
-                                <button class="ls-btn-outline" onclick="lsResetWidgetPosition()" style="width: 100%; margin-top: 10px; color: #007aff; border-color: #007aff;">重置小组件位置</button>
-                            </div>
-                        </div>
-                        
-                        <!-- 对方桌面小组件控制 -->
-                        <div class="ls-setting-group">
-                            <div class="ls-setting-row">
-                                <div class="ls-setting-label">
-                                    <div class="ls-setting-title">对方桌面小组件</div>
-                                    <div class="ls-setting-desc">在对方手机桌面显示拍立得/便利贴</div>
-                                </div>
-                                <input type="checkbox" id="ls-toggle-char-widget" class="ls-toggle" onchange="lsToggleCharWidget(this)">
-                            </div>
-                            <div id="ls-char-widget-controls" style="display: none; flex-direction: column; gap: 10px; padding: 15px 0; border-bottom: 1px solid #f5f5f5;">
-                                <div style="font-size: 14px; color: #333; margin-bottom: 5px;">发送内容到对方桌面</div>
-                                <select id="ls-char-widget-type" class="ios-select" style="margin-bottom: 10px;" onchange="lsToggleCharWidgetInputType(this.value)">
-                                    <option value="photo">拍立得照片</option>
-                                    <option value="note">便利贴留言</option>
-                                </select>
-                                <textarea id="ls-char-widget-input" class="ios-textarea" style="min-height: 60px;" placeholder="描述图片画面 (AI将生成图片)..."></textarea>
-                                
-                                <!-- 👇 新增：本地图片上传区 👇 -->
-                                <div id="ls-char-widget-local-area" style="display: flex; flex-direction: column; gap: 5px;">
-                                    <div style="font-size: 12px; color: #888; text-align: center;">或</div>
-                                    <button class="ls-btn-outline" onclick="document.getElementById('ls-char-widget-photo-upload').click()" style="width: 100%; margin-top: 0;">上传本地照片</button>
-                                    <input type="file" id="ls-char-widget-photo-upload" style="display: none;" accept="image/*" onchange="lsHandleCharWidgetLocalUpload(this)">
-                                    <img id="ls-char-widget-preview" src="" style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 8px; display: none; margin-top: 5px; border: 1px solid #eee;">
-                                </div>
-                                <!-- 👆 新增结束 👆 -->
 
-                                <button class="ls-btn-primary" style="width: 100%; margin-top: 5px;" onclick="lsSendToCharWidget()">发送到对方桌面</button>
-                            </div>
-                        </div>
-                        
-                        <!-- NPC 消息频率 -->
-                        <div class="ls-setting-group">
-                            <div class="ls-setting-row">
-                                <div class="ls-setting-label">
-                                    <div class="ls-setting-title">NPC 消息频率 (分钟)</div>
-                                    <div class="ls-setting-desc">0 为关闭。开启后后台自动生成 NPC 给对方发消息。</div>
+                            <div class="ls-bento-item" onclick="lsOpenShopView()">
+                                <div class="ls-bento-icon"><svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line></svg></div>
+                                <div>
+                                    <div class="ls-bento-title">恋爱商城</div>
+                                    <div class="ls-bento-desc">Couple Shop</div>
                                 </div>
-                                <input type="number" id="ls-npc-freq" class="ios-input" style="width: 60px; text-align: center; border: 1px solid #eee; border-radius: 8px; padding: 5px; font-size: 16px;" value="30" onchange="lsUpdateNpcFreq(this.value)">
+                            </div>
+
+                            <div class="ls-bento-item" onclick="lsOpenLettersView()">
+                                <div class="ls-bento-icon"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg></div>
+                                <div>
+                                    <div class="ls-bento-title">未来信件</div>
+                                    <div class="ls-bento-desc">Time Mailbox</div>
+                                </div>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="ls-setting-group">
-                            <button class="ls-btn-outline" onclick="lsClearFeed()">清空关联消息记录</button>
+                    <!-- Tab 3: 空间回忆墙 (Widget Archive) -->
+                    <div id="ls-tab-archive" class="ls-tab-content">
+                        <!-- 瀑布流容器 -->
+                        <div class="archive-wall" id="archive-wall">
+                            <!-- 卡片将由 JS 动态生成 -->
                         </div>
-
-                        <button class="ls-btn-danger" onclick="lsUnbind()">解除关系</button>
                     </div>
                 </div>
 
-                <!-- 底部导航栏 -->
+                <!-- 底栏 -->
                 <div class="ls-tabbar">
                     <div class="ls-tab-item active" onclick="lsSwitchTab('feed')">
                         <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+                        <span class="ls-tab-label">Timeline</span>
                     </div>
                     <div class="ls-tab-item" onclick="lsSwitchTab('album')">
-                        <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path></svg>
+                        <span class="ls-tab-label">Interactive</span>
                     </div>
-                    <div class="ls-tab-item" onclick="lsSwitchTab('settings')">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    <div class="ls-tab-item" onclick="lsSwitchTab('archive')">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                        <span class="ls-tab-label">Archive</span>
                     </div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- 侧边栏 (设置页) -->
+            <!-- ========================================== -->
+            <div class="ls-sidebar-overlay" id="ls-sidebar-overlay" onclick="lsToggleSidebar(false)"></div>
+            <div class="ls-sidebar" id="ls-sidebar">
+                <div class="ls-sidebar-header">
+                    <div class="ls-sidebar-avatars">
+                        <img id="ls-sidebar-user-avatar" src="" alt="User">
+                        <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                        <img id="ls-sidebar-char-avatar" src="" alt="Char">
+                    </div>
+                    <div class="ls-sidebar-title" id="ls-sidebar-title">User & Ta</div>
+                    <div class="ls-sidebar-subtitle" id="ls-sidebar-subtitle">Connected for 99 Days</div>
+                </div>
+                
+                <div class="ls-sidebar-content">
+                    <!-- 原来的设置项全部搬到这里 -->
+                    <div class="ls-setting-group">
+                        <div class="ls-setting-row">
+                            <div class="ls-setting-label">
+                                <div class="ls-setting-title">关联账号</div>
+                                <div class="ls-setting-desc">开启后，对方将实时感知你的其他聊天</div>
+                            </div>
+                            <input type="checkbox" id="ls-toggle-link" class="ls-toggle" onchange="lsToggleLink(this)">
+                        </div>
+                    </div>
+
+                    <div class="ls-setting-group">
+                        <div class="ls-setting-row">
+                            <div class="ls-setting-label">
+                                <div class="ls-setting-title">位置与运动同步</div>
+                                <div class="ls-setting-desc">开启后，对方将实时感知你的步数、距离和位置</div>
+                            </div>
+                            <input type="checkbox" id="ls-toggle-location" class="ls-toggle" onchange="lsToggleLocationSync(this)">
+                        </div>
+                    </div>
+                    
+                    <div class="ls-setting-group" id="ls-widget-settings-group">
+                        <div class="ls-setting-row">
+                            <div class="ls-setting-label">
+                                <div class="ls-setting-title">我的桌面小组件</div>
+                                <div class="ls-setting-desc">在主屏幕显示恋人空间小组件</div>
+                            </div>
+                            <input type="checkbox" id="ls-toggle-widget" class="ls-toggle" onchange="lsToggleWidget(this)">
+                        </div>
+                        <div id="ls-my-widget-controls" style="display: none; flex-direction: column; gap: 10px; padding: 15px 0; border-bottom: 1px solid #f5f5f5;">
+                            <div style="display: flex; justify-content: space-between; width: 100%; margin-bottom: 10px; align-items: center;">
+                                <span style="font-size: 14px; color: #333;">聊天时更新小组件概率 (%)</span>
+                                <input type="number" id="ls-widget-freq" class="ios-input" style="width: 60px; text-align: center; border: 1px solid #eee; border-radius: 8px; padding: 5px; font-size: 14px;" value="20" onchange="lsUpdateWidgetFreq(this.value)">
+                            </div>
+                            
+                            <div style="margin-top: 10px; font-size: 14px; color: #333;">小组件照片 (支持本地或URL)</div>
+                            <input type="text" id="ls-widget-photo-url" placeholder="输入图片URL..." value="" onblur="lsUpdateWidgetPhoto(this.value)" style="width: 100%; padding: 10px; border: 1px solid #eee; border-radius: 8px; font-size: 14px; background: #f9f9f9;">
+                            <button class="ls-btn-outline" onclick="document.getElementById('ls-widget-photo-upload').click()" style="width: 100%; margin-top: 5px;">上传本地照片</button>
+                            <input type="file" id="ls-widget-photo-upload" style="display: none;" accept="image/*" onchange="lsHandleWidgetPhotoUpload(this)">
+                            
+                            <button class="ls-btn-outline" onclick="lsResetWidgetPosition()" style="width: 100%; margin-top: 10px; color: #007aff; border-color: #007aff;">重置小组件位置</button>
+                        </div>
+                    </div>
+                    
+                    <div class="ls-setting-group">
+                        <div class="ls-setting-row">
+                            <div class="ls-setting-label">
+                                <div class="ls-setting-title">对方桌面小组件</div>
+                                <div class="ls-setting-desc">在对方手机桌面显示拍立得/便利贴</div>
+                            </div>
+                            <input type="checkbox" id="ls-toggle-char-widget" class="ls-toggle" onchange="lsToggleCharWidget(this)">
+                        </div>
+                        <div id="ls-char-widget-controls" style="display: none; flex-direction: column; gap: 10px; padding: 15px 0; border-bottom: 1px solid #f5f5f5;">
+                            <div style="font-size: 14px; color: #333; margin-bottom: 5px;">发送内容到对方桌面</div>
+                            <select id="ls-char-widget-type" class="ios-select" style="margin-bottom: 10px;" onchange="lsToggleCharWidgetInputType(this.value)">
+                                <option value="photo">拍立得照片</option>
+                                <option value="note">便利贴留言</option>
+                            </select>
+                            <textarea id="ls-char-widget-input" class="ios-textarea" style="min-height: 60px;" placeholder="描述图片画面 (AI将生成图片)..."></textarea>
+                            
+                            <div id="ls-char-widget-local-area" style="display: flex; flex-direction: column; gap: 5px;">
+                                <div style="font-size: 12px; color: #888; text-align: center;">或</div>
+                                <button class="ls-btn-outline" onclick="document.getElementById('ls-char-widget-photo-upload').click()" style="width: 100%; margin-top: 0;">上传本地照片</button>
+                                <input type="file" id="ls-char-widget-photo-upload" style="display: none;" accept="image/*" onchange="lsHandleCharWidgetLocalUpload(this)">
+                                <img id="ls-char-widget-preview" src="" style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 8px; display: none; margin-top: 5px; border: 1px solid #eee;">
+                            </div>
+
+                            <button class="ls-btn-primary" style="width: 100%; margin-top: 5px;" onclick="lsSendToCharWidget()">发送到对方桌面</button>
+                        </div>
+                    </div>
+                    
+                    <div class="ls-setting-group">
+                        <div class="ls-setting-row">
+                            <div class="ls-setting-label">
+                                <div class="ls-setting-title">NPC 消息频率 (分钟)</div>
+                                <div class="ls-setting-desc">0 为关闭。开启后后台自动生成 NPC 给对方发消息。</div>
+                            </div>
+                            <input type="number" id="ls-npc-freq" class="ios-input" style="width: 60px; text-align: center; border: 1px solid #eee; border-radius: 8px; padding: 5px; font-size: 16px;" value="30" onchange="lsUpdateNpcFreq(this.value)">
+                        </div>
+                    </div>
+
+                    <div class="ls-setting-group">
+                        <button class="ls-btn-outline" onclick="lsClearFeed()">清空关联消息记录</button>
+                    </div>
+                </div>
+
+                <!-- 侧边栏底部：唯一的退出按钮 -->
+                <div class="ls-sidebar-footer">
+                    <button class="ls-action-btn ls-btn-exit" onclick="closeLoversSpace()">退出情侣空间</button>
+                    <button class="ls-action-btn ls-btn-unbind" onclick="lsUnbind()">解除羁绊 (Unbind)</button>
                 </div>
             </div>
         </div>
             <!-- 4. 默契大挑战全屏页面 -->
             <div id="ls-view-qa" class="ls-view" style="z-index: 5000; position: absolute; top: 0; left: 0; background: #FAFAFA;">
-                <div class="ls-navbar" style="background: #FFF; border-bottom: 1px solid #F0F0F0;">
-                    <div class="ls-nav-btn" onclick="closeLsQaView()">
+                <div class="ls-navbar" style="background: #FFF; border-bottom: 1px solid #F0F0F0; position: relative;">
+                    <div class="ls-nav-btn" onclick="closeLsQaView()" style="width: auto; z-index: 2;">
                         <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:none;stroke:#111;stroke-width:2;"><polyline points="15 18 9 12 15 6"></polyline></svg>
                     </div>
-                    <div class="ls-nav-title" style="font-family: 'Georgia', serif; font-style: italic;">Telepathy</div>
+                    <div class="ls-nav-title" style="font-family: 'Georgia', serif; font-style: italic; position: absolute; left: 50%; transform: translateX(-50%); z-index: 1;">Telepathy</div>
                     <!-- 👇 这里修改了：积分旁边加了仓库图标 👇 -->
-                    <div class="ls-nav-btn" style="text-align: right; width: auto; display: flex; align-items: center; gap: 12px;">
+                    <div class="ls-nav-btn" style="text-align: right; width: auto; display: flex; justify-content: flex-end; align-items: center; gap: 12px; z-index: 2; margin-left: auto;">
                         <span style="font-weight: bold; font-family: monospace; font-size: 14px; color: #111;">Score: <span id="ls-qa-score-display">0</span></span>
                         <svg onclick="openQaArchive()" viewBox="0 0 24 24" style="width:22px;height:22px;cursor:pointer;stroke:#111;fill:none;stroke-width:2;"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"></path></svg>
                     </div>
-                </div>        
+                </div>
+        
                     <!-- 顶部操作区 -->
                     <div class="ls-qa-actions">
                         <button class="ls-qa-btn ai" onclick="generateCharQa()">
@@ -3463,6 +3491,12 @@
                         </div>
                         <!-- Chat Footer -->
                         <div class="wc-chat-footer" id="wc-chat-footer">
+                            <!-- 👇 新增：@ 成员选择列表 👇 -->
+                            <div id="wc-at-mention-list" class="wc-at-list hidden">
+                                <!-- JS 动态注入 -->
+                            </div>
+                            <!-- 👆 新增结束 👆 -->
+
                             <!-- Quote Preview -->
                             <div id="wc-quote-preview-area">
                                 <span id="wc-quote-text-content">引用内容...</span>
@@ -4689,6 +4723,16 @@
                                                 <!-- JS 注入 -->
                                             </select>
                                         </div>
+                                        <!-- 👇 新增：群聊专属世界书关联 👇 -->
+                                        <div class="wc-form-group" style="margin-top: 15px; border-top: 1px solid #F0F0F0; padding-top: 15px;">
+                                            <label class="wc-form-label">关联世界书 (群聊背景)</label>
+                                            <div class="ins-wb-select-btn" onclick="openGlobalWbModal('wc-setting-group-worldbook-list', 'wc-setting-group-wb-count')">
+                                                <span class="title">选择要关联的世界书</span>
+                                                <span class="count" id="wc-setting-group-wb-count">已选 0 项</span>
+                                            </div>
+                                            <div id="wc-setting-group-worldbook-list" style="display: none;"></div>
+                                        </div>
+                                        <!-- 👆 新增结束 👆 -->
                                     </div>
                                     <!-- 👆 新增结束 👆 -->
                                     <!-- 👇 新增：角色所在城市设定 👇 -->

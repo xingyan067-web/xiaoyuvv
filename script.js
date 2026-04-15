@@ -754,6 +754,22 @@ updateAppViewportVars();
     
     // 初始化音乐进度条拖拽
     setTimeout(initMusicProgressDrag, 1000); // 延迟绑定，确保 DOM 已渲染
+
+    // 👇 新增：监听主聊天输入框的 @ 符号 👇
+    const mainChatInput = document.getElementById('wc-chat-input');
+    if (mainChatInput) {
+        mainChatInput.addEventListener('input', function(e) {
+            const val = this.value;
+            const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+            // 如果是群聊，且最后一个输入的字符是 @
+            if (char && char.isGroup && val.endsWith('@')) {
+                wcShowAtList(char);
+            } else if (!val.includes('@')) {
+                document.getElementById('wc-at-mention-list').classList.add('hidden');
+            }
+        });
+    }
+    // 👆 新增结束 👆
 };
 
 
@@ -5318,9 +5334,17 @@ function wcSendMsg() {
     const text = input.value.trim();
     if (!text) return;
 
-    // 👇 新增：主动发送消息时的时间感知记录
+    // 👇 新增：检查用户是否被禁言 👇
     const charId = wcState.activeChatId;
     const char = wcState.characters.find(c => c.id === charId);
+    if (char && char.isGroup && char.mutedMembers && char.mutedMembers.includes('user')) {
+        alert("你已被群主禁言，无法发送消息。");
+        input.value = '';
+        return;
+    }
+    // 👆 新增结束 👆
+
+    // 👇 新增：主动发送消息时的时间感知记录
     if (char && (!char.chatConfig || char.chatConfig.timePerceptionEnabled !== false)) {
         const msgs = wcState.chats[charId] || [];
         const validMsgs = msgs.filter(m => m.type !== 'system' && !m.isError);
@@ -5374,6 +5398,35 @@ function wcSendMsg() {
     wcAddMessage(wcState.activeChatId, 'me', 'text', text, extra);
     input.value = '';
 }
+
+// 👇 新增：群聊 @ 成员逻辑 👇
+window.wcShowAtList = function(groupChar) {
+    const list = document.getElementById('wc-at-mention-list');
+    list.innerHTML = '';
+    if (!groupChar.members) return;
+    
+    groupChar.members.forEach(mId => {
+        if (mId === 'user') return; // 一般不 @ 自己
+        const m = wcState.characters.find(c => c.id === mId);
+        if (m) {
+            const div = document.createElement('div');
+            div.className = 'wc-at-item';
+            div.innerHTML = `<img src="${m.avatar}"><span>${m.name}</span>`;
+            div.onclick = () => wcSelectAtMember(m.name);
+            list.appendChild(div);
+        }
+    });
+    list.classList.remove('hidden');
+};
+
+window.wcSelectAtMember = function(name) {
+    const input = document.getElementById('wc-chat-input');
+    // 将 @ 后面的内容补全为名字
+    input.value += name + ' ';
+    document.getElementById('wc-at-mention-list').classList.add('hidden');
+    input.focus();
+};
+// 👆 新增结束 👆
 
 // --- WeChat AI & API Logic ---
 async function wcTriggerAI(charIdOverride = null) {
@@ -5684,6 +5737,26 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             groupPrompt = `\n【群聊模式强制指令 (最高优先级)】\n`;
             groupPrompt += `这是一个名为【${char.name}】的微信群聊。\n`;
             groupPrompt += `群成员设定如下：\n${groupMembersInfo}\n`;
+            
+            // 👇 新增：将世界书注入群聊设定
+            if (worldBookContent && worldBookContent !== "无特定世界观设定。") {
+                groupPrompt += `【群聊世界观背景】：\n${worldBookContent}\n`;
+            }
+            // 👆 新增结束
+            
+            // 👇 新增：将禁言名单注入给 AI 👇
+            if (char.mutedMembers && char.mutedMembers.length > 0) {
+                const mutedNames = char.mutedMembers.map(id => {
+                    if (id === 'user') return chatConfig.userName || wcState.user.name;
+                    const m = wcState.characters.find(c => c.id === id);
+                    return m ? m.name : '';
+                }).filter(Boolean);
+                
+                if (mutedNames.length > 0) {
+                    groupPrompt += `\n【⚠️ 禁言状态警告】：成员 [${mutedNames.join(', ')}] 已被群主禁言！在本次回复中，绝对不能包含他们的发言！他们只能看着，不能说话！\n`;
+                }
+            }
+            // 👆 新增结束 👆
             
             // 👇【修改这一行】：强制 AI 多人发言，并允许群成员互相回复
             groupPrompt += `【活跃群聊铁律】：这是一个多人活跃群聊！当 User 发话时，绝对不能只有一个人回复！你必须让群里**至少 2 个不同的成员**出来接话。群成员之间也必须互相回复、吐槽、接梗，同时也不要只围着 User 转！如果某个成员说了一句话，其他成员可以针对这句话进行反驳或赞同，但是也不能完全不理User！禁止自说自话！严禁冷场！\n`;            
@@ -6995,6 +7068,19 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 } else {
                     lsState.widgetData.noteText = action.content;
                 }
+                
+                // 👇 新增：将 AI 发送的小组件存入回忆墙
+                const nowStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '.');
+                if (!lsState.widgetArchive) lsState.widgetArchive = [];
+                lsState.widgetArchive.unshift({
+                    id: Date.now(),
+                    type: isPhoto ? 'photo' : (Math.random() > 0.5 ? 'note_light' : 'note_dark'),
+                    img: null, // AI 发送的图片是文字描述，所以没有真实图片
+                    text: isPhoto ? `[AI画面] ${action.content}` : action.content,
+                    date: nowStr,
+                    sender: 'char'
+                });
+                // 👆 新增结束
                 
                 lsSaveData();
                 lsRenderWidget();
@@ -9191,15 +9277,21 @@ function renderGroupMembersInSettings(groupChar) {
     grid.innerHTML = '';
 
     const members = groupChar.members || [];
+    const mutedMembers = groupChar.mutedMembers || []; // 👈 获取禁言名单
+    const isCurrentUserOwner = groupChar.ownerId === 'user'; // 👈 判断我是否是群主
 
     // 1. 渲染用户(User)
     if (members.includes('user')) {
         const isUserOwner = groupChar.ownerId === 'user';
+        const isMuted = mutedMembers.includes('user');
+        const muteBadge = isMuted ? '<div style="position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); background: #FF3B30; color: white; font-size: 8px; padding: 2px 4px; border-radius: 6px; white-space: nowrap; z-index: 2;">已禁言</div>' : '';
+        
         grid.innerHTML += `
             <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative;">
-                <img src="${wcState.user.avatar}" style="width: 44px; height: 44px; border-radius: 12px; object-fit: cover; border: 1px solid #eee;">
+                <img src="${wcState.user.avatar}" class="${isMuted ? 'muted-avatar' : ''}" style="width: 44px; height: 44px; border-radius: 12px; object-fit: cover; border: 1px solid #eee;">
                 <span style="font-size: 10px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${wcState.user.name}</span>
-                ${isUserOwner ? '<div style="position: absolute; top: -6px; right: -6px; background: #F5A623; color: white; font-size: 8px; padding: 2px 4px; border-radius: 6px; font-weight: bold; border: 1px solid #fff;">群主</div>' : ''}
+                ${isUserOwner ? '<div style="position: absolute; top: -6px; right: -6px; background: #F5A623; color: white; font-size: 8px; padding: 2px 4px; border-radius: 6px; font-weight: bold; border: 1px solid #fff; z-index: 2;">群主</div>' : ''}
+                ${muteBadge}
             </div>
         `;
     }
@@ -9210,11 +9302,18 @@ function renderGroupMembersInSettings(groupChar) {
         const member = wcState.characters.find(c => c.id === memberId);
         if (member) {
             const isOwner = groupChar.ownerId === memberId;
+            const isMuted = mutedMembers.includes(memberId);
+            const muteBadge = isMuted ? '<div style="position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); background: #FF3B30; color: white; font-size: 8px; padding: 2px 4px; border-radius: 6px; white-space: nowrap; z-index: 2;">已禁言</div>' : '';
+            
+            // 👇 如果我是群主，点击头像可以禁言/解除禁言
+            const clickAction = isCurrentUserOwner ? `onclick="wcToggleMuteMember(${groupChar.id}, ${memberId})"` : '';
+
             grid.innerHTML += `
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative;">
-                    <img src="${member.avatar}" style="width: 44px; height: 44px; border-radius: 12px; object-fit: cover; border: 1px solid #eee;">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; cursor: ${isCurrentUserOwner ? 'pointer' : 'default'};" ${clickAction} title="${isCurrentUserOwner ? '点击禁言/解除' : ''}">
+                    <img src="${member.avatar}" class="${isMuted ? 'muted-avatar' : ''}" style="width: 44px; height: 44px; border-radius: 12px; object-fit: cover; border: 1px solid #eee;">
                     <span style="font-size: 10px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${member.name}</span>
-                    ${isOwner ? '<div style="position: absolute; top: -6px; right: -6px; background: #F5A623; color: white; font-size: 8px; padding: 2px 4px; border-radius: 6px; font-weight: bold; border: 1px solid #fff;">群主</div>' : ''}
+                    ${isOwner ? '<div style="position: absolute; top: -6px; right: -6px; background: #F5A623; color: white; font-size: 8px; padding: 2px 4px; border-radius: 6px; font-weight: bold; border: 1px solid #fff; z-index: 2;">群主</div>' : ''}
+                    ${muteBadge}
                 </div>
             `;
         }
@@ -9253,6 +9352,34 @@ function renderGroupMembersInSettings(groupChar) {
         });
     }
 }
+
+// 👇 新增：切换禁言状态 👇
+window.wcToggleMuteMember = function(groupId, memberId) {
+    const group = wcState.characters.find(c => c.id === groupId);
+    if (!group) return;
+    
+    if (group.ownerId !== 'user') {
+        alert("只有群主可以设置禁言哦~");
+        return;
+    }
+    if (memberId === 'user') {
+        alert("群主不能禁言自己哦~");
+        return;
+    }
+
+    if (!group.mutedMembers) group.mutedMembers = [];
+    
+    const idx = group.mutedMembers.indexOf(memberId);
+    if (idx > -1) {
+        group.mutedMembers.splice(idx, 1); // 解除禁言
+    } else {
+        group.mutedMembers.push(memberId); // 禁言
+    }
+    
+    wcSaveData();
+    renderGroupMembersInSettings(group); // 刷新 UI
+};
+// 👆 新增结束 👆
 
 function wcChangeGroupOwner(newOwnerId) {
     const groupChar = wcState.characters.find(c => c.id === wcState.activeChatId);
@@ -12531,16 +12658,21 @@ function wcOpenChatSettings() {
     }
     // 👆 新增结束 👆
 
-    const wbList = document.getElementById('wc-setting-worldbook-list');
-    wbList.innerHTML = '';
-    let wbCount = 0;
-    if (char.chatConfig.worldbookEntries) {
-        char.chatConfig.worldbookEntries.forEach(id => {
-            wbList.innerHTML += `<input type="checkbox" value="${id}" checked>`;
-            wbCount++;
-        });
+    // 👇 新增：群聊专属世界书列表初始化 👇
+    const groupWbList = document.getElementById('wc-setting-group-worldbook-list');
+    if (groupWbList) {
+        groupWbList.innerHTML = '';
+        let groupWbCount = 0;
+        if (char.chatConfig.worldbookEntries) {
+            char.chatConfig.worldbookEntries.forEach(id => {
+                groupWbList.innerHTML += `<input type="checkbox" value="${id}" checked>`;
+                groupWbCount++;
+            });
+        }
+        const groupWbCountEl = document.getElementById('wc-setting-group-wb-count');
+        if (groupWbCountEl) groupWbCountEl.innerText = `已选 ${groupWbCount} 项`;
     }
-    document.getElementById('wc-setting-wb-count').innerText = `已选 ${wbCount} 项`;
+    // 👆 新增结束 👆
 
     const stickerList = document.getElementById('wc-setting-sticker-group-list');
     stickerList.innerHTML = '';
@@ -12684,9 +12816,17 @@ async function wcSaveChatSettings() {
     }
     // 👆 新增结束 👆
 
+    // 👇 修改：合并两个列表的选中项，去重 👇
     const wbCheckboxes = document.querySelectorAll('#wc-setting-worldbook-list input[type="checkbox"]:checked');
-    // 【修复】：这里原本写成了 summaryWorldbookEntries，导致保存失败，现在改回 worldbookEntries
-    char.chatConfig.worldbookEntries = Array.from(wbCheckboxes).map(cb => cb.value);
+    const groupWbCheckboxes = document.querySelectorAll('#wc-setting-group-worldbook-list input[type="checkbox"]:checked');
+    
+    const selectedWbIds = new Set([
+        ...Array.from(wbCheckboxes).map(cb => cb.value),
+        ...Array.from(groupWbCheckboxes).map(cb => cb.value)
+    ]);
+    
+    char.chatConfig.worldbookEntries = Array.from(selectedWbIds);
+    // 👆 修改结束 👆
 
     const stickerCheckboxes = document.querySelectorAll('#wc-setting-sticker-group-list input[type="checkbox"]:checked');
     char.chatConfig.stickerGroupIds = Array.from(stickerCheckboxes).map(cb => parseInt(cb.value));
@@ -13337,6 +13477,7 @@ const lsState = {
     npcFreq: 30, 
     npcInterval: null, 
     feed: [], 
+    widgetArchive: [], // 👈 新增：用于存储小组件回忆墙数据
     widgetEnabled: false,
     widgetUpdateFreq: 20, 
     widgetData: {
@@ -13396,6 +13537,7 @@ async function lsLoadData() {
         if (data.coupleAvatars) lsState.coupleAvatars = data.coupleAvatars;
         if (data.avatarInviteEnabled !== undefined) lsState.avatarInviteEnabled = data.avatarInviteEnabled;
         if (data.inventory) lsState.inventory = data.inventory;
+        if (data.widgetArchive) lsState.widgetArchive = data.widgetArchive; // 👈 新增：读取回忆墙数据
         
         // 👇 新增：读取商城数据 👇
         if (data.shopCategories) lsState.shopCategories = data.shopCategories;
@@ -13427,6 +13569,7 @@ async function lsSaveData() {
         timeAlbum: lsState.timeAlbum,
         decorImages: lsState.decorImages,
         inventory: lsState.inventory,
+        widgetArchive: lsState.widgetArchive, // 👈 新增：保存回忆墙数据
         coupleAvatars: lsState.coupleAvatars,
         avatarInviteEnabled: lsState.avatarInviteEnabled,
         // 👇 新增：保存商城数据 👇
@@ -13560,17 +13703,24 @@ function lsRenderMain() {
     if (!char) return;             
         
     // ==========================================
-    // 1. 渲染双方头像
+    // 1. 渲染双方头像 (主页和侧边栏)
     // ==========================================
     const userAvatarEl = document.getElementById('ls-main-user-avatar');
-    if (userAvatarEl) {
-        userAvatarEl.style.backgroundImage = `url('${wcState.user.avatar}')`;
-    }
-    
     const charAvatarEl = document.getElementById('ls-main-char-avatar');
-    if (charAvatarEl) {
-        charAvatarEl.style.backgroundImage = `url('${char.avatar}')`;
-    }
+    const sidebarUserAvatarEl = document.getElementById('ls-sidebar-user-avatar');
+    const sidebarCharAvatarEl = document.getElementById('ls-sidebar-char-avatar');
+    
+    if (userAvatarEl) userAvatarEl.src = wcState.user.avatar;
+    if (charAvatarEl) charAvatarEl.src = char.avatar;
+    if (sidebarUserAvatarEl) sidebarUserAvatarEl.src = wcState.user.avatar;
+    if (sidebarCharAvatarEl) sidebarCharAvatarEl.src = char.avatar;
+
+    // 渲染名字
+    const spaceTitle = document.getElementById('ls-space-title');
+    const sidebarTitle = document.getElementById('ls-sidebar-title');
+    if (spaceTitle) spaceTitle.innerText = `${wcState.user.name} & ${char.name}`;
+    if (sidebarTitle) sidebarTitle.innerText = `${wcState.user.name} & ${char.name}`;
+
     // ==========================================
     // 2. 恢复开关状态逻辑
     // ==========================================
@@ -13591,9 +13741,8 @@ function lsRenderMain() {
     const daysNumEl = document.getElementById('ls-days-num');
     if (daysNumEl) daysNumEl.innerText = days;
     
-    const dateObj = new Date(lsState.startDate);
-    const startDateEl = document.getElementById('ls-start-date-display');
-    if (startDateEl) startDateEl.innerText = `Since ${dateObj.getFullYear()}.${dateObj.getMonth()+1}.${dateObj.getDate()}`;
+    const sidebarSubtitle = document.getElementById('ls-sidebar-subtitle');
+    if (sidebarSubtitle) sidebarSubtitle.innerText = `Connected for ${days} Days`;
     
     // ==========================================
     // 4. 桌面小组件逻辑
@@ -13630,6 +13779,7 @@ function lsRenderMain() {
     }            
 
     lsRenderFeed();
+    lsRenderWidgetArchive(); // 👈 新增：渲染回忆墙
 }    
 
 function lsSwitchTab(tabName) {
@@ -13637,10 +13787,34 @@ function lsSwitchTab(tabName) {
     document.getElementById(`ls-tab-${tabName}`).classList.add('active');
     
     document.querySelectorAll('.ls-tab-item').forEach(el => el.classList.remove('active'));
-    const tabs = ['feed', 'album', 'settings'];
+    const tabs = ['feed', 'album', 'archive']; // 👈 修改：第三个 Tab 变成了 archive
     const idx = tabs.indexOf(tabName);
-    document.querySelectorAll('.ls-tab-item')[idx].classList.add('active');
+    if (idx !== -1) {
+        document.querySelectorAll('.ls-tab-item')[idx].classList.add('active');
+    }
 }
+
+// 新增：侧边栏开关函数
+function lsToggleSidebar(show) {
+    const sidebar = document.getElementById('ls-sidebar');
+    const overlay = document.getElementById('ls-sidebar-overlay');
+    if (show) {
+        sidebar.classList.add('active');
+        overlay.classList.add('active');
+    } else {
+        sidebar.classList.remove('active');
+        overlay.classList.remove('active');
+    }
+}
+
+// 覆盖原有的 closeLoversSpace 函数，确保关闭时收起侧边栏
+const originalCloseLoversSpace = closeLoversSpace;
+closeLoversSpace = function() {
+    lsToggleSidebar(false);
+    setTimeout(() => {
+        originalCloseLoversSpace();
+    }, 200); // 等待侧边栏收起动画
+};
 
 function lsToggleLink(checkbox) {
     lsState.isLinked = checkbox.checked;
@@ -13688,19 +13862,22 @@ function lsUpdateWidgetPhoto(url) {
     lsRenderWidget();
 }
 
-function lsHandleWidgetPhotoUpload(input) {
+async function lsHandleWidgetPhotoUpload(input) {
     const file = input.files[0];
     if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            lsState.widgetData.customPhoto = e.target.result;
+        try {
+            const base64 = await wcCompressImage(file);
+            lsState.widgetData.customPhoto = base64;
             document.getElementById('ls-widget-photo-url').value = '已选择本地图片';
             lsSaveData();
             lsRenderWidget();
-        };
-        reader.readAsDataURL(file);
+        } catch (e) {
+            alert("图片处理失败");
+        }
     }
+    input.value = '';
 }
+
 
 function lsResetWidgetPosition() {
     lsState.widgetData.position = { top: '380px', left: '50%', transform: 'translateX(-50%)' };
@@ -13750,18 +13927,37 @@ async function lsHandleCharWidgetLocalUpload(input) {
     input.value = '';
 }
 
+// ==========================================
+// 替换后：
+// ==========================================
 function lsSendToCharWidget() {
     const type = document.getElementById('ls-char-widget-type').value;
     let content = document.getElementById('ls-char-widget-input').value.trim();
+    let isLocal = false;
     
     // 如果是照片模式且上传了本地图片，优先使用本地图片
     if (type === 'photo' && lsTempCharWidgetPhoto) {
         content = lsTempCharWidgetPhoto;
+        isLocal = true;
     }
     
     if (!content) return alert("请输入内容或上传图片");
     
     lsState.charWidgetData = { type, content };
+
+    // 👇 新增：将侧边栏发送的小组件也存入回忆墙 👇
+    const nowStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '.');
+    if (!lsState.widgetArchive) lsState.widgetArchive = [];
+    lsState.widgetArchive.unshift({
+        id: Date.now(),
+        type: type === 'photo' ? 'photo' : (Math.random() > 0.5 ? 'note_light' : 'note_dark'),
+        img: (type === 'photo' && isLocal) ? content : null,
+        text: (type === 'photo' && !isLocal) ? `[画面描述] ${content}` : (type === 'photo' ? '' : content),
+        date: nowStr,
+        sender: 'user'
+    });
+    // 👆 新增结束 👆
+
     lsSaveData();
     alert("已成功发送到对方桌面！");
     
@@ -13778,7 +13974,13 @@ function lsSendToCharWidget() {
     if (typeof wcRenderCharWidget === 'function') {
         wcRenderCharWidget();
     }
+    
+    // 实时刷新回忆墙
+    if (typeof lsRenderWidgetArchive === 'function') {
+        lsRenderWidgetArchive();
+    }
 }
+
 
 // --- 手机模拟器内对方桌面小组件渲染与交互 ---
 function wcRenderCharWidget() {
@@ -13839,19 +14041,24 @@ function wcToggleCharWidgetPhotoSource(source) {
     document.getElementById('wc-area-widget-photo-desc').style.display = source === 'desc' ? 'block' : 'none';
     document.getElementById('wc-area-widget-photo-local').style.display = source === 'local' ? 'block' : 'none';
 }
-
-function wcHandleCharWidgetPhotoUpload(input) {
+// ==========================================
+// 替换后：
+// ==========================================
+async function wcHandleCharWidgetPhotoUpload(input) {
     const file = input.files[0];
     if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            wcState.tempImage = e.target.result;
-            document.getElementById('wc-preview-char-widget-photo').src = e.target.result;
+        try {
+            // 核心修复：使用压缩函数，防止原图过大导致数据库保存失败
+            const base64 = await wcCompressImage(file);
+            wcState.tempImage = base64;
+            document.getElementById('wc-preview-char-widget-photo').src = base64;
             document.getElementById('wc-preview-char-widget-photo').style.display = 'block';
             document.getElementById('wc-text-char-widget-photo').style.display = 'none';
-        };
-        reader.readAsDataURL(file);
+        } catch (e) {
+            alert("图片处理失败，请重试");
+        }
     }
+    input.value = ''; // 清空 input，允许重复上传同一张图片
 }
 
 // --- 修复：发送到对方桌面小组件并触发系统通知 ---
@@ -13861,12 +14068,13 @@ function wcSendToCharWidgetFromSim() {
     let content = '';
     let aiMsg = '';
     let notifMsg = '';
+    let isLocal = false; // 👈 新增：在外部提前声明 isLocal 变量，扩大其作用域
 
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
     const charName = char ? char.name : "对方";
 
     if (isPhoto) {
-        const isLocal = document.getElementById('wc-seg-widget-photo-local').classList.contains('active');
+        isLocal = document.getElementById('wc-seg-widget-photo-local').classList.contains('active'); // 👈 修改：去掉 const，直接赋值
         if (isLocal) {
             if (!wcState.tempImage) return alert("请先上传图片");
             content = wcState.tempImage;
@@ -13886,6 +14094,20 @@ function wcSendToCharWidgetFromSim() {
     }
     
     lsState.charWidgetData = { type, content };
+    
+    // 👇 新增：将 User 发送的小组件存入回忆墙
+    const nowStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '.');
+    if (!lsState.widgetArchive) lsState.widgetArchive = [];
+    lsState.widgetArchive.unshift({
+        id: Date.now(),
+        type: isPhoto ? 'photo' : (Math.random() > 0.5 ? 'note_light' : 'note_dark'),
+        img: (isPhoto && isLocal) ? content : null,
+        text: (isPhoto && !isLocal) ? `[画面描述] ${content}` : (isPhoto ? '' : content),
+        date: nowStr,
+        sender: 'user'
+    });
+    // 👆 新增结束
+    
     lsSaveData();
     wcRenderCharWidget();
     
@@ -14003,12 +14225,17 @@ function lsRenderFeed() {
 
     lsState.feed.forEach(item => {
         const div = document.createElement('div');
-        div.className = 'ls-feed-item';
+        div.className = 'ls-timeline-item';
         div.innerHTML = `
-            <img src="${item.avatar}" class="ls-feed-avatar">
-            <div class="ls-feed-content">
-                <div class="ls-feed-text">${item.text}</div>
-                <div class="ls-feed-time">${new Date(item.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+            <div class="ls-timeline-dot"></div>
+            <div class="ls-timeline-time">${new Date(item.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+            <div class="ls-timeline-card">
+                <div class="ls-feed-item">
+                    <img src="${item.avatar}" class="ls-feed-avatar">
+                    <div class="ls-feed-content">
+                        <div class="ls-feed-text">${item.text}</div>
+                    </div>
+                </div>
             </div>
         `;
         list.appendChild(div);
@@ -14030,6 +14257,65 @@ async function lsCheckNpcTrigger() {
     if (rand < (1 / lsState.npcFreq)) {
         await lsTriggerNpcMessage();
     }
+}
+// ==========================================
+// 恋人空间：渲染小组件回忆墙 (瀑布流)
+// ==========================================
+function lsRenderWidgetArchive() {
+    const wall = document.getElementById('archive-wall');
+    if (!wall) return;
+    wall.innerHTML = '';
+
+    if (!lsState.widgetArchive || lsState.widgetArchive.length === 0) {
+        wall.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px; font-style:italic; width: 200%;">墙上空空如也，快互相发送小组件吧~</div>';
+        return;
+    }
+
+    // 图钉颜色库 (低饱和马卡龙色系)
+    const pinColors = ['#A8D5BA', '#F9E79F', '#B39DDB', '#F5B7B1', '#85C1E9', '#D7BDE2', '#FAD7A1'];
+
+    lsState.widgetArchive.forEach((item, index) => {
+        // 利用 ID 生成固定的伪随机数，保证每次渲染倾斜角度和颜色不变
+        const pseudoRandom = (item.id % 100) / 100; 
+        const rotateDeg = (pseudoRandom * 8 - 4).toFixed(1); // -4 到 4 度
+        const pinColor = pinColors[item.id % pinColors.length];
+
+        const card = document.createElement('div');
+        card.className = `archive-card ${item.type === 'photo' ? 'photo-card' : (item.type === 'note_dark' ? 'note-card-dark' : 'note-card-light')}`;
+        card.style.transform = `rotate(${rotateDeg}deg)`;
+        
+        // 点击卡片可以删除
+        card.onclick = () => {
+            if (confirm("确定要从回忆墙上撕下这张卡片吗？")) {
+                lsState.widgetArchive.splice(index, 1);
+                lsSaveData();
+                lsRenderWidgetArchive();
+            }
+        };
+
+        let innerHtml = `<div class="archive-pin" style="background-color: ${pinColor};"></div>`;
+
+        if (item.type === 'photo') {
+            if (item.img) {
+                innerHtml += `<img src="${item.img}">`;
+            } else {
+                // 如果没有真实图片（比如 AI 发的描述），用灰色方块代替
+                innerHtml += `<div style="width:100%; aspect-ratio:1; background:#F5F5F5; border:1px solid #F0F0F0; display:flex; align-items:center; justify-content:center; color:#CCC;"><svg viewBox="0 0 24 24" style="width:40px;height:40px;fill:currentColor;"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></div>`;
+            }
+            if (item.text) {
+                innerHtml += `<div class="note-text">${item.text.replace(/\n/g, '<br>')}</div>`;
+            }
+            innerHtml += `<div class="card-date">${item.date}</div>`;
+        } else {
+            innerHtml += `
+                <div class="note-text">${item.text.replace(/\n/g, '<br>')}</div>
+                <div class="card-date">${item.date}</div>
+            `;
+        }
+
+        card.innerHTML = innerHtml;
+        wall.appendChild(card);
+    });
 }
 
 // ==========================================
@@ -17300,6 +17586,36 @@ function wcBuyCharCartItem(index) {
             object-fit: cover; 
             cursor: pointer;
         }
+
+        /* 👇 新增：@ 列表与禁言样式 👇 */
+        .wc-at-list {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            width: 100%;
+            max-height: 200px;
+            background: rgba(249, 249, 249, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid #E5E5EA;
+            overflow-y: auto;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.05);
+        }
+        .wc-at-list.hidden { display: none !important; }
+        .wc-at-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 15px;
+            border-bottom: 1px solid #E5E5EA;
+            cursor: pointer;
+        }
+        .wc-at-item:active { background: #E5E5EA; }
+        .wc-at-item img { width: 30px; height: 30px; border-radius: 4px; margin-right: 10px; object-fit: cover; }
+        .wc-at-item span { font-size: 15px; color: #111; font-weight: 500; }
+        .muted-avatar { filter: grayscale(100%) opacity(0.6); }
+        /* 👆 新增结束 👆 */
     `;
     document.head.appendChild(style);
     

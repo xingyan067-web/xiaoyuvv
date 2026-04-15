@@ -2587,7 +2587,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 /* ========================================== */
 /* Lovers Space (App 2) Styles - Korean/Ins Style */
 /* ========================================== */
-.ls-view { display: none; flex-direction: column; height: 100%; width: 100%; background: #fff; font-family: inherit; }
+.ls-view { display: none; flex-direction: column; height: 100%; width: 100%; background: #FAFAFA; font-family: inherit; }
 .ls-view.active { display: flex; }
 .ls-navbar { height: 50px; display: flex; justify-content: space-between; align-items: center; padding: 0 16px; margin-top: env(safe-area-inset-top); }
 .ls-nav-btn { font-size: 16px; color: #333; cursor: pointer; width: 60px; }
@@ -2608,60 +2608,258 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .ls-btn-outline { padding: 10px 30px; border: 1px solid #ddd; background: transparent; border-radius: 20px; color: #666; margin-top: 10px; cursor: pointer; }
 .ls-btn-primary { padding: 10px 30px; background: #FF9A9E; border: none; border-radius: 20px; color: white; margin-top: 10px; cursor: pointer; box-shadow: 0 4px 10px rgba(255, 154, 158, 0.3); }
 
-.ls-header { padding: 20px; background: #fff; display: flex; flex-direction: column; align-items: center; border-bottom: 1px solid #f9f9f9; padding-top: env(safe-area-inset-top); }
-.ls-header-top { width: 100%; display: flex; justify-content: space-between; margin-bottom: 20px; }
-.ls-header-title { font-family: 'Georgia', serif; font-style: italic; font-size: 20px; color: #333; }
-.ls-couple-avatars { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; }
-.ls-avatar-circle { width: 70px; height: 70px; border-radius: 50%; background: #eee; background-size: cover; background-position: center; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-.ls-heart-beat { font-size: 20px; color: #FF9A9E; animation: lsPulse 1.5s infinite; }
-@keyframes lsPulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
-.ls-days-counter { text-align: center; cursor: pointer; }
-.ls-days-label { font-size: 12px; color: #ccc; letter-spacing: 2px; text-transform: uppercase; display: block; }
-.ls-days-num { font-size: 36px; font-weight: 300; color: #333; font-family: 'Helvetica Neue', sans-serif; display: block; margin: 5px 0; }
-.ls-date-display { font-size: 12px; color: #ccc; margin-top: 5px; }
-
-.ls-main-content { flex: 1; overflow-y: auto; background: #fff; padding-bottom: 60px; }
-.ls-tab-content { display: none; padding: 20px; }
-.ls-tab-content.active { display: block; animation: fadeIn 0.3s; }
-.ls-section-title { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 15px; letter-spacing: 1px; }
-
-.ls-feed-list { display: flex; flex-direction: column; gap: 15px; }
-.ls-feed-item { display: flex; gap: 12px; align-items: flex-start; }
-.ls-feed-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.ls-feed-content { flex: 1; display: flex; flex-direction: column; align-items: flex-start; }
-
-.ls-feed-text { 
-    font-size: 10px; 
-    color: #666; 
-    line-height: 1.4; 
-    background: #f0f0f0; 
-    padding: 8px 12px; 
-    border-radius: 12px; 
-    display: inline-block; 
-    max-width: 100%;
-    word-wrap: break-word;
+/* 顶部导航栏 (去掉了返回键) */
+.ls-header {
+    padding: 50px 20px 15px 20px;
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(250,250,250,0.9); backdrop-filter: blur(15px);
+    z-index: 30; position: relative;
 }
 
-.ls-feed-time { font-size: 10px; color: #999; margin-top: 4px; margin-left: 4px; }
+/* 左上角双头像 (点击打开侧边栏) */
+.ls-double-avatar-btn {
+    display: flex; align-items: center; cursor: pointer; position: relative;
+    transition: transform 0.2s;
+}
+.ls-double-avatar-btn:active { transform: scale(0.95); }
+.ls-double-avatar-btn img {
+    width: 48px; height: 48px; border-radius: 50%; object-fit: cover;
+    border: 3px solid #FAFAFA; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.ls-double-avatar-btn img:nth-child(2) { margin-left: -20px; z-index: 2; }
 
-.ls-empty-state { text-align: center; padding: 40px 0; color: #ccc; }
-.ls-icon-placeholder { font-size: 40px; margin-bottom: 10px; opacity: 0.5; }
-.ls-setting-group { margin-bottom: 20px; }
-.ls-setting-row { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid #f5f5f5; }
-.ls-setting-title-row { font-size: 14px; color: #333; margin-bottom: 10px; }
-.ls-setting-label { flex: 1; }
-.ls-setting-title { font-size: 16px; color: #333; margin-bottom: 4px; }
-.ls-setting-desc { font-size: 12px; color: #999; }
-.ls-toggle { width: 40px; height: 24px; appearance: none; background: #e5e5ea; border-radius: 12px; position: relative; outline: none; cursor: pointer; transition: background 0.3s; }
-.ls-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: transform 0.3s; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-.ls-toggle:checked { background: #34c759; }
-.ls-toggle:checked::after { transform: translateX(16px); }
-.ls-btn-danger { width: 100%; padding: 15px; background: #fff; border: 1px solid #ff3b30; color: #ff3b30; border-radius: 12px; font-size: 16px; margin-top: 20px; cursor: pointer; }
+.ls-space-title { font-family: 'Georgia', serif; font-size: 18px; font-weight: bold; font-style: italic; color: #111; position: absolute; left: 50%; transform: translateX(-50%); }
+.ls-header-placeholder { width: 76px; }
 
-.ls-tabbar { position: absolute; bottom: 0; left: 0; width: 100%; height: 60px; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); border-top: 1px solid #eee; display: flex; justify-content: space-around; align-items: center; padding-bottom: env(safe-area-inset-bottom); }
-.ls-tab-item { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: #ccc; cursor: pointer; transition: color 0.3s; }
-.ls-tab-item svg { width: 24px; height: 24px; fill: currentColor; }
-.ls-tab-item.active { color: #FF9A9E; }
+/* 内容区 */
+.ls-main-content { flex: 1; overflow-y: auto; padding-bottom: 90px; scrollbar-width: none; }
+.ls-main-content::-webkit-scrollbar { display: none; }
+.ls-tab-content { display: none; padding: 20px; animation: fadeIn 0.3s ease; }
+.ls-tab-content.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* --- Tab 1: 动态 (Timeline) --- */
+.ls-hero-card {
+    background: #111; border-radius: 24px; padding: 24px; color: #FFF;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.15); margin-bottom: 30px;
+    position: relative; overflow: hidden;
+}
+.ls-hero-card::after {
+    content: '♥'; position: absolute; right: -10px; bottom: -20px;
+    font-size: 120px; color: rgba(255,255,255,0.05); transform: rotate(-15deg); pointer-events: none;
+}
+.ls-hero-label { font-size: 10px; color: #888; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; font-weight: bold; }
+.ls-hero-days { font-family: 'Georgia', serif; font-size: 48px; font-weight: bold; line-height: 1; margin-bottom: 12px; }
+.ls-hero-desc { font-size: 13px; color: #CCC; line-height: 1.5; font-style: italic; font-family: 'Kaiti', 'STKaiti', serif; }
+
+.ls-timeline-container { position: relative; padding-left: 20px; }
+.ls-timeline-line { position: absolute; left: 5px; top: 10px; bottom: 0; width: 2px; background: #EAEAEA; z-index: 1; }
+.ls-feed-list { display: flex; flex-direction: column; gap: 24px; }
+.ls-feed-item { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 8px; }
+.ls-feed-item::before {
+    content: ''; position: absolute; left: -19px; top: 4px; width: 10px; height: 10px;
+    border-radius: 50%; background: #111; border: 2px solid #FAFAFA; box-shadow: 0 0 0 2px rgba(17,17,17,0.1);
+}
+.ls-feed-time { font-family: 'Courier New', Courier, monospace; font-size: 11px; font-weight: bold; color: #888; }
+.ls-feed-content { background: #FFF; border-radius: 16px; padding: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.02); border: 1px solid #F0F0F0; display: flex; align-items: center; gap: 12px; }
+.ls-feed-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.ls-feed-text { font-size: 14px; color: #333; line-height: 1.5; }
+
+/* --- Tab 2: 互动 (Bento 网格) --- */
+.ls-bento-grid { display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, 120px); gap: 15px; }
+.ls-bento-item { background: #FFF; border-radius: 24px; padding: 20px; box-shadow: 0 8px 25px rgba(0,0,0,0.03); border: 1px solid #F0F0F0; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: transform 0.2s; position: relative; overflow: hidden; }
+.ls-bento-item:active { transform: scale(0.95); }
+.ls-bento-icon { width: 40px; height: 40px; background: #F5F5F5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #111; }
+.ls-bento-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+.ls-bento-title { font-size: 15px; font-weight: 700; color: #111; }
+.ls-bento-desc { font-size: 11px; color: #888; margin-top: 4px; }
+.ls-bento-large { grid-column: span 2; grid-row: span 1; flex-direction: row; align-items: center; background: linear-gradient(135deg, #FFF 0%, #F9F9F9 100%); }
+.ls-bento-large .ls-bento-info { flex: 1; }
+.ls-bento-large .ls-bento-icon { width: 60px; height: 60px; background: #111; color: #FFF; }
+.ls-bento-large .ls-bento-icon svg { width: 28px; height: 28px; }
+
+/* 替换后 */
+/* --- Tab 3: 空间回忆墙 (Widget Archive) --- */
+.archive-wall {
+    column-count: 2;
+    column-gap: 15px;
+    padding: 10px 0;
+}
+
+.archive-card {
+    break-inside: avoid;
+    margin-bottom: 20px;
+    position: relative;
+    border-radius: 4px;
+    box-shadow: 2px 6px 15px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s ease;
+    cursor: pointer;
+}
+.archive-card:active {
+    transform: scale(0.95) !important;
+}
+
+/* 图钉 */
+.archive-pin {
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    box-shadow: inset -2px -2px 4px rgba(0,0,0,0.2), 1px 3px 5px rgba(0,0,0,0.3);
+    z-index: 10;
+}
+.archive-pin::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 4px;
+    height: 4px;
+    background: rgba(255,255,255,0.6);
+    border-radius: 50%;
+}
+
+/* 拍立得照片卡 */
+.photo-card {
+    background: #FFF;
+    padding: 10px 10px 30px 10px;
+    border: 1px solid #EAEAEA;
+}
+.photo-card img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    background: #F5F5F5;
+    border: 1px solid #EAEAEA;
+    border-radius: 2px;
+}
+.photo-card .note-text {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    color: #555;
+    margin-top: 12px;
+    text-align: center;
+    line-height: 1.4;
+}
+
+/* 浅色便利贴 */
+.note-card-light {
+    background: #FFFDE7;
+    padding: 20px 15px;
+    border: 1px solid #F0F0F0;
+}
+.note-card-light:nth-child(3n+1) { background: #F9EBEA; }
+.note-card-light:nth-child(3n+2) { background: #E8F8F5; }
+
+.note-card-light .note-text {
+    font-family: 'Kaiti', 'STKaiti', serif;
+    font-size: 14px;
+    color: #333;
+    line-height: 1.6;
+}
+
+/* 深色便利贴 */
+.note-card-dark {
+    background: #2C3E50;
+    padding: 20px 15px;
+    border: 1px solid #1A252F;
+}
+.note-card-dark:nth-child(2n) { background: #34495E; }
+
+.note-card-dark .note-text {
+    font-family: 'Kaiti', 'STKaiti', serif;
+    font-size: 14px;
+    color: #FDFEFE;
+    line-height: 1.6;
+}
+
+/* 日期 */
+.card-date {
+    font-family: monospace;
+    font-size: 9px;
+    color: #999;
+    text-align: right;
+    margin-top: 10px;
+    opacity: 0.8;
+}
+.note-card-dark .card-date {
+    color: #BDC3C7;
+}
+
+/* 底栏 */
+.ls-tabbar {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 80px;
+    background: rgba(250,250,250,0.9); backdrop-filter: blur(20px);
+    border-top: 1px solid #EAEAEA; display: flex; justify-content: space-around; align-items: center;
+    padding-bottom: env(safe-area-inset-bottom, 15px); z-index: 30;
+}
+.ls-tab-item { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #B2B2B2; cursor: pointer; transition: color 0.2s; width: 60px; }
+.ls-tab-item.active { color: #111; }
+.ls-tab-item svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; }
+.ls-tab-item.active svg { fill: currentColor; stroke: none; }
+.ls-tab-label { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+
+/* ========================================== */
+/* 侧边栏 (设置页) */
+/* ========================================== */
+.ls-sidebar-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); backdrop-filter: blur(3px); z-index: 100; opacity: 0; pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+.ls-sidebar-overlay.active { opacity: 1; pointer-events: auto; }
+
+.ls-sidebar {
+    position: absolute; top: 0; left: -85%; width: 85%; height: 100%;
+    background: #F9F9F9; z-index: 101; box-shadow: 10px 0 30px rgba(0,0,0,0.15);
+    transition: left 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    display: flex; flex-direction: column;
+}
+.ls-sidebar.active { left: 0; }
+
+.ls-sidebar-header { 
+    padding: 60px 20px 30px 20px; background: #FFF; border-bottom: 1px solid #F0F0F0; 
+    display: flex; flex-direction: column; align-items: center;
+}
+.ls-sidebar-avatars { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
+.ls-sidebar-avatars img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 2px solid #F5F5F5; }
+.ls-sidebar-avatars svg { width: 20px; height: 20px; fill: #FF3B30; }
+.ls-sidebar-title { font-size: 18px; font-weight: 800; color: #111; margin-bottom: 4px; }
+.ls-sidebar-subtitle { font-size: 12px; color: #888; font-family: monospace; }
+
+.ls-sidebar-content { flex: 1; overflow-y: auto; padding: 20px; }
+
+.ls-setting-group { background: #FFF; border-radius: 16px; overflow: hidden; margin-bottom: 20px; border: 1px solid #EAEAEA; box-shadow: 0 2px 10px rgba(0,0,0,0.02); }
+.ls-setting-row { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid #F5F5F5; }
+.ls-setting-row:last-child { border-bottom: none; }
+.ls-setting-label { display: flex; flex-direction: column; gap: 4px; }
+.ls-setting-title { font-size: 15px; font-weight: 600; color: #111; }
+.ls-setting-desc { font-size: 11px; color: #888; }
+
+.ls-toggle { width: 44px; height: 24px; appearance: none; background: #E5E5EA; border-radius: 12px; position: relative; outline: none; cursor: pointer; transition: background 0.3s; }
+.ls-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #FFF; border-radius: 50%; transition: transform 0.3s; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+.ls-toggle:checked { background: #111; }
+.ls-toggle:checked::after { transform: translateX(20px); }
+
+.ls-btn-outline { padding: 10px 30px; border: 1px solid #ddd; background: transparent; border-radius: 20px; color: #666; margin-top: 10px; cursor: pointer; }
+.ls-btn-primary { padding: 10px 30px; background: #111; border: none; border-radius: 20px; color: white; margin-top: 10px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+
+.ls-sidebar-footer {
+    padding: 20px; background: #FFF; border-top: 1px solid #F0F0F0;
+    display: flex; flex-direction: column; gap: 12px;
+}
+.ls-action-btn {
+    width: 100%; padding: 16px; border-radius: 16px; font-size: 15px; font-weight: bold;
+    text-align: center; cursor: pointer; transition: transform 0.1s; border: none;
+}
+.ls-action-btn:active { transform: scale(0.97); }
+.ls-btn-exit { background: #F5F5F5; color: #FF3B30; border: 1px solid rgba(255,59,48,0.2); }
+.ls-btn-unbind { background: #FFF; color: #FF3B30; border: 1px solid rgba(255,59,48,0.3); }
 
 .ls-check-phone-btn {
     margin-top: 10px;
