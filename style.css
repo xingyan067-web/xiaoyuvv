@@ -1692,6 +1692,15 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     position: relative; z-index: 1; overscroll-behavior: contain; scroll-behavior: auto;
 }
 
+/* 👇 新增：双头像模式下，顶栏加宽，聊天区域往下推 👇 */
+.wc-navbar.with-avatars {
+    height: calc(var(--wc-navbar-height) + 45px + var(--wc-safe-area-top)) !important;
+}
+#wc-view-chat-detail.with-avatars .wc-chat-scroll-area {
+    padding-top: calc(var(--wc-navbar-height) + 45px + var(--wc-safe-area-top) + 10px) !important;
+}
+/* 👆 新增结束 👆 */
+
 .wc-message-row { display: flex; align-items: flex-start; gap: 8px; max-width: 100%; position: relative; }
 .wc-message-row.me { flex-direction: row-reverse; }
 .wc-message-row.system { justify-content: center; flex-direction: row; align-items: center; margin: 0; }

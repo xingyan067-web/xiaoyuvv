@@ -4158,6 +4158,12 @@ function wcHandleBack() {
 
         const titleEl = document.getElementById('wc-nav-title');
         const navbar = document.querySelector('.wc-navbar');
+        
+        // 👇 新增：退出聊天时清除双头像加宽状态 👇
+        if (navbar) navbar.classList.remove('with-avatars');
+        document.getElementById('wc-view-chat-detail').classList.remove('with-avatars');
+        // 👆 新增结束 👆
+        
         navbar.classList.add('custom-chat-nav-mode');
         titleEl.innerHTML = wcGenerateChatHeaderHTML();
         titleEl.onclick = null;
@@ -4194,9 +4200,35 @@ function updateChatTopBarStatus(char) {
         statusHtml = `<div onclick="wcQuickEditLifeStatus(${char.id}, event)" style="font-size: 11px; color: #8E8E93; font-weight: normal; margin-top: 2px; line-height: 1; cursor: pointer;">${char.lifeStatus.action}</div>`;
     }
     
+    // 👇 新增：顶栏双头像逻辑 👇
+    let avatarsHtml = '';
+    const navbar = document.querySelector('.wc-navbar');
+    const chatDetailView = document.getElementById('wc-view-chat-detail');
+
+    if (char.chatConfig && char.chatConfig.topbarAvatarsEnabled) {
+        const userAvatar = char.chatConfig.userAvatar || wcState.user.avatar;
+        const charAvatar = char.avatar;
+        // 头像放大到 38px，增加间距和阴影质感
+        avatarsHtml = `
+            <div style="display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 6px;">
+                <img src="${userAvatar}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1.5px solid #FFF; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                <img src="${charAvatar}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1.5px solid #FFF; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+            </div>
+        `;
+        // 动态添加加宽类名
+        if (navbar) navbar.classList.add('with-avatars');
+        if (chatDetailView) chatDetailView.classList.add('with-avatars');
+    } else {
+        // 移除加宽类名
+        if (navbar) navbar.classList.remove('with-avatars');
+        if (chatDetailView) chatDetailView.classList.remove('with-avatars');
+    }
+    // 👆 新增结束 👆
+    
     titleEl.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2;">
-            <div style="font-size: 17px; font-weight: 600; color: #111;">${displayName}</div>
+            ${avatarsHtml}
+            <div id="wc-topbar-name" style="font-size: 17px; font-weight: 600; color: #111;">${displayName}</div>
             ${statusHtml}
         </div>
     `;
@@ -4427,6 +4459,7 @@ function wcRenderMessages(charId, preserveScroll = false) {
         lastTime = msg.time;
 
         const row = document.createElement('div');
+        row.id = `msg-row-${msg.id}`; // 新增：为每行消息添加 ID，方便跳转
         
         if (msg.type === 'system') {
             row.className = 'wc-message-row system';
@@ -5459,12 +5492,10 @@ async function wcTriggerAI(charIdOverride = null) {
         aiGeneratingLocks[charId] = false;
         return;
     }
-    // 【修复】：增加 titleEl 的判空保护
-    const titleEl = document.getElementById('wc-nav-title');
-    let originalTitle = "";
-    if (titleEl) {
-        originalTitle = titleEl.innerText;
-        if (!charIdOverride) titleEl.innerText = "对方正在输入...";
+    // 【修复】：只修改名字部分，保留头像和生活状态
+    const nameEl = document.getElementById('wc-topbar-name');
+    if (nameEl && !charIdOverride) {
+        nameEl.innerText = "正在输入...";
     }
     sessionApiCallCount++;
 
@@ -6303,8 +6334,10 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             wcAddMessage(charId, 'system', 'system', `[API Error] ${error.message}`, { style: 'transparent', isError: true });
         }
     } finally {
-        // 【修复】：恢复标题时也要判空
-        if (titleEl && !charIdOverride) titleEl.innerText = originalTitle;    
+        // 【修复】：恢复标题时直接重新渲染顶栏，确保状态最新且不影响其他元素
+        if (!charIdOverride) {
+            updateChatTopBarStatus(char);
+        }    
         
         // 【修复】：释放锁
         aiGeneratingLocks[charId] = false;
@@ -12694,6 +12727,13 @@ function wcOpenChatSettings() {
         timePerceptionToggle.checked = char.chatConfig.timePerceptionEnabled !== false; // 默认开启
     }
 
+    // 👇 新增：读取顶栏双头像设置 👇
+    const topbarAvatarsToggle = document.getElementById('wc-setting-topbar-avatars-toggle');
+    if (topbarAvatarsToggle) {
+        topbarAvatarsToggle.checked = char.chatConfig.topbarAvatarsEnabled === true;
+    }
+    // 👆 新增结束 👆
+
     document.getElementById('wc-setting-proactive-toggle').checked = char.chatConfig.proactiveEnabled || false;
 
     document.getElementById('wc-setting-proactive-interval').value = char.chatConfig.proactiveInterval || 60;
@@ -12864,6 +12904,13 @@ async function wcSaveChatSettings() {
     if (timePerceptionToggle) {
         char.chatConfig.timePerceptionEnabled = timePerceptionToggle.checked;
     }
+
+    // 👇 新增：保存顶栏双头像设置 👇
+    const topbarAvatarsToggle = document.getElementById('wc-setting-topbar-avatars-toggle');
+    if (topbarAvatarsToggle) {
+        char.chatConfig.topbarAvatarsEnabled = topbarAvatarsToggle.checked;
+    }
+    // 👆 新增结束 👆
 
     char.chatConfig.proactiveEnabled = document.getElementById('wc-setting-proactive-toggle').checked;
 
@@ -13037,7 +13084,12 @@ function wcSaveMask() {
     wcRenderMasks();
 }
 function wcDeleteMask(id) {
-    if(confirm('删除此面具？')) { wcState.masks = wcState.masks.filter(m => m.id !== id); wcSaveData(); wcRenderMasks(); }
+    if(confirm('删除此面具？')) { 
+        wcState.masks = wcState.masks.filter(m => m.id !== id); 
+        wcDb.delete('masks', id); // 新增：从底层数据库中彻底删除该面具
+        wcSaveData(); 
+        wcRenderMasks(); 
+    }
 }
 function wcApplyMask(id) {
     const mask = wcState.masks.find(m => m.id === id);
@@ -36071,3 +36123,112 @@ window.wcGeneratePhoneFiles = async function() {
         wcShowError("生成失败");
     }
 };
+// ==========================================
+// 新增：查找聊天记录功能
+// ==========================================
+window.wcOpenChatSearch = function() {
+    const view = document.getElementById('wc-view-chat-search');
+    if (!view) return;
+    document.getElementById('wc-chat-search-input').value = '';
+    document.getElementById('wc-chat-search-results').innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:14px;">输入关键字搜索聊天记录</div>';
+    view.style.display = 'flex';
+};
+
+window.wcCloseChatSearch = function() {
+    const view = document.getElementById('wc-view-chat-search');
+    if (view) view.style.display = 'none';
+};
+
+window.wcPerformChatSearch = function() {
+    const keyword = document.getElementById('wc-chat-search-input').value.trim().toLowerCase();
+    const container = document.getElementById('wc-chat-search-results');
+    
+    if (!keyword) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:14px;">请输入关键字</div>';
+        return;
+    }
+
+    const charId = wcState.activeChatId;
+    const msgs = wcState.chats[charId] || [];
+    // 过滤出包含关键字的文本消息
+    const results = msgs.filter(m => m.type === 'text' && m.content && m.content.toLowerCase().includes(keyword));
+
+    container.innerHTML = '';
+    if (results.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:14px;">未找到相关记录</div>';
+        return;
+    }
+
+    const char = wcState.characters.find(c => c.id === charId);
+    const myName = wcState.user.name;
+    const themName = char ? char.name : 'Ta';
+
+    // 倒序显示，最新的在前面
+    [...results].reverse().forEach(msg => {
+        const senderName = msg.sender === 'me' ? myName : (msg.name || themName);
+        const timeStr = new Date(msg.time).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        
+        // 高亮关键字
+        const regex = new RegExp(`(${keyword})`, 'gi');
+        const highlightedContent = msg.content.replace(regex, '<span style="color:#007AFF; font-weight:bold;">$1</span>');
+
+        const div = document.createElement('div');
+        div.style.cssText = 'padding: 15px 20px; border-bottom: 1px solid #E5E5EA; background: #FFF; cursor: pointer; transition: background 0.2s;';
+        div.onclick = () => wcJumpToMessage(msg.id);
+        div.onmousedown = () => div.style.background = '#F5F5F5';
+        div.onmouseup = () => div.style.background = '#FFF';
+        div.innerHTML = `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                <span style="font-size: 14px; font-weight: 600; color: #333;">${senderName}</span>
+                <span style="font-size: 12px; color: #999;">${timeStr}</span>
+            </div>
+            <div style="font-size: 14px; color: #666; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                ${highlightedContent}
+            </div>
+        `;
+        container.appendChild(div);
+    });
+};
+
+window.wcJumpToMessage = function(msgId) {
+    const charId = wcState.activeChatId;
+    const msgs = wcState.chats[charId] || [];
+    const msgIndex = msgs.findIndex(m => m.id === msgId);
+    if (msgIndex === -1) return;
+
+    // 计算该消息距离末尾的条数
+    const fromEnd = msgs.length - msgIndex;
+    // 如果当前显示的条数不够，增加显示条数，确保消息被渲染出来
+    if (wcState.chatDisplayCount < fromEnd) {
+        wcState.chatDisplayCount = fromEnd + 20; // 多加载20条作为缓冲
+        wcRenderMessages(charId, true);
+    }
+
+    wcCloseChatSearch();
+    wcCloseModal('wc-modal-chat-settings');
+
+    // 延迟等待 DOM 渲染完成
+    setTimeout(() => {
+        const row = document.getElementById(`msg-row-${msgId}`);
+        if (row) {
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // 添加高亮闪烁效果
+            const originalBg = row.style.backgroundColor;
+            row.style.transition = 'background-color 0.5s ease';
+            row.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
+            setTimeout(() => {
+                row.style.backgroundColor = originalBg;
+            }, 2000);
+        }
+    }, 300);
+};
+
+// 绑定回车搜索
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('wc-chat-search-input');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') wcPerformChatSearch();
+        });
+    }
+});

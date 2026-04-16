@@ -4911,7 +4911,13 @@
 
                                 <!-- Appearance -->
                                 <div class="wc-settings-section">
-                                    <div class="wc-settings-section-title">外观与美化</div>                                                                                                                
+                                    <div class="wc-settings-section-title">外观与美化</div>
+                                    <!-- 👇 新增：顶栏双头像开关 👇 -->
+                                    <div class="wc-form-group" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                                        <label class="wc-form-label" style="margin: 0;">顶栏显示双头像</label>
+                                        <input type="checkbox" id="wc-setting-topbar-avatars-toggle" class="ls-toggle">
+                                    </div>
+                                    <!-- 👆 新增结束 👆 -->
                                     <div class="wc-form-group">
                                         <label class="wc-form-label">聊天背景图</label>
                                         <div class="wc-upload-rect-placeholder" style="width: 100%; height: 120px;" onclick="wcTriggerUpload('setting-bg')">
@@ -4949,6 +4955,7 @@
                                 <!-- Data Management -->
                                 <div class="wc-settings-section">
                                     <div class="wc-settings-section-title">数据管理</div>
+                                    <button class="wc-ios-btn-block wc-btn-secondary" style="margin-bottom: 10px;" onclick="wcOpenChatSearch()">查找聊天记录</button>
                                     <button class="wc-ios-btn-block" style="background: var(--wc-danger-red);" onclick="wcClearChatHistory()">清空聊天记录</button>
                                 </div>
                             </div>
@@ -5127,8 +5134,22 @@
                 </div>
                 <!-- 👆 新增结束 👆 -->
 
-                <!-- Hidden Inputs -->
-                 <input type="file" id="wc-file-input-group" accept="image/*" onchange="wcHandleFileSelect(event, 'group')" style="display:none;">
+                <!-- 聊天记录搜索全屏页 -->
+                <div id="wc-view-chat-search" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #F2F2F7; z-index: 4000; display: none; flex-direction: column; overflow: hidden;">
+                    <div class="wc-phone-sim-navbar" style="background: #FFF; border-bottom: 0.5px solid #C6C6C8; padding: calc(env(safe-area-inset-top, 20px) + 10px) 16px 10px 16px; height: auto; display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+                        <div onclick="wcCloseChatSearch()" style="cursor: pointer; display: flex; align-items: center; color: #111;">
+                            <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        </div>
+                        <div style="flex: 1; position: relative; display: flex; align-items: center;">
+                            <input type="text" id="wc-chat-search-input" placeholder="搜索聊天记录..." style="width: 100%; background: #F2F2F7; border: none; border-radius: 8px; padding: 8px 36px 8px 12px; font-size: 15px; outline: none; color: #111;">
+                            <svg onclick="wcPerformChatSearch()" viewBox="0 0 24 24" style="position: absolute; right: 10px; width: 18px; height: 18px; stroke: #888; fill: none; stroke-width: 2; cursor: pointer;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        </div>
+                    </div>
+                    <div id="wc-chat-search-results" style="flex: 1; overflow-y: auto; padding: 0; background: #F2F2F7;">
+                        <!-- 搜索结果 -->
+                    </div>
+                </div>
+
 
                 <input type="file" id="wc-file-input-char" accept="image/*" onchange="wcHandleFileSelect(event, 'char')" style="display:none;">
                 <!-- 👇 新增：角色导入文件框 (支持 txt/docx) 👇 -->
