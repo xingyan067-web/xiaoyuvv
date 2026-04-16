@@ -12782,6 +12782,22 @@ function wcOpenChatSettings() {
     }
     // 👆 新增结束 👆
 
+    // 👇 新增：单聊专属世界书列表初始化 (修复串门Bug) 👇
+    const singleWbList = document.getElementById('wc-setting-worldbook-list');
+    if (singleWbList) {
+        singleWbList.innerHTML = '';
+        let singleWbCount = 0;
+        if (char.chatConfig.worldbookEntries) {
+            char.chatConfig.worldbookEntries.forEach(id => {
+                singleWbList.innerHTML += `<input type="checkbox" value="${id}" checked>`;
+                singleWbCount++;
+            });
+        }
+        const singleWbCountEl = document.getElementById('wc-setting-wb-count');
+        if (singleWbCountEl) singleWbCountEl.innerText = `已选 ${singleWbCount} 项`;
+    }
+    // 👆 新增结束 👆
+
     const stickerList = document.getElementById('wc-setting-sticker-group-list');
     stickerList.innerHTML = '';
     wcState.stickerCategories.forEach((cat, idx) => {
@@ -16038,11 +16054,11 @@ window.vTriggerShare = function(source, index) {
     if (!char || !char.phoneData || !char.phoneData.videoApp) return;
 
     let video = null;
-    if (source === 'home') {
-        video = char.phoneData.videoApp.homeFeed[index];
-    } else if (source === 'profile') {
-        video = char.phoneData.videoApp.profile.posts[index];
-    }
+    if (source === 'home') video = char.phoneData.videoApp.homeFeed[index];
+    else if (source === 'posts') video = char.phoneData.videoApp.profile.posts[index];
+    else if (source === 'private') video = char.phoneData.videoApp.profile.privatePosts[index];
+    else if (source === 'likes') video = char.phoneData.videoApp.profile.likedPosts[index];
+    else if (source === 'drafts') video = char.phoneData.videoApp.drafts[index];
 
     if (!video) return alert("无法读取视频数据");
 
@@ -34991,10 +35007,13 @@ window.wcClickRedPacket = function(msgId) {
 
     // 判断自己是否已经领过
     const hasReceived = rp.receivers.some(r => r.name === 'User');
+    
+    // 判断是否是单聊且是自己发的
+    const isSingleAndMine = !rp.isGroup && rp.sender === 'User';
 
     // 修复：如果是群聊，'opened' 代表红包还有剩余，只有 'empty' 才代表领完；单聊 'opened' 即代表领完
-    if (rp.status === 'empty' || hasReceived || (!rp.isGroup && rp.status === 'opened')) {
-        // 已经领过或领完了，直接进详情
+    if (rp.status === 'empty' || hasReceived || (!rp.isGroup && rp.status === 'opened') || isSingleAndMine) {
+        // 已经领过或领完了，或者单聊自己发的，直接进详情
         wcShowRpDetail(rp);
     } else {
         // 弹出拆红包界面
@@ -35407,6 +35426,12 @@ window.openVideoApp = function() {
     if (typeof wcRenderVideoApp === 'function') {
         wcRenderVideoApp();
     }
+
+    // 绑定底部加号按钮
+    const addBtn = document.querySelector('.v-tab-add');
+    if (addBtn) {
+        addBtn.onclick = vOpenCameraPage;
+    }
 };
 
 window.closeVideoApp = function() {
@@ -35474,17 +35499,19 @@ window.wcGenerateVideoAppData = async function() {
         prompt += `请根据 ${char.name} 的人设和我们最近的聊天记录，生成 Ta 短视频 APP 里的数据。\n`;
         prompt += `【核心要求（极具活人感与偷窥感）】：\n`;
         prompt += `1. 首页推荐 (homeFeed)：生成 3 到 5 个视频。内容必须和最近聊天的话题相关，或者是 Ta 潜意识里关注的事物。每个视频必须包含随机的点赞量(likes)、总评论量(commentCount)、收藏量(saves)和分享量(shares)。并且必须生成 5 条具体的网友评论内容 (comments)。\n`;
-        prompt += `2. 个人主页 (profile)：生成 Ta 自己发布的 4 个视频。**【重点】：文案和画面必须和 User 有关！表达 Ta 对 User 的真实情绪，也可以是记录user的相关事情，或者是自己和user之间的事情。** 每个视频必须包含随机的点赞量(likes)、总评论量(commentCount)、收藏量(saves)和分享量(shares)。并且必须生成 5 条具体的网友评论内容 (comments)。\n`;
+        prompt += `2. 个人主页 (profile)：生成 Ta 自己发布的 4 个视频(posts) ，并且同时生成 3 到 4  个 Ta 点赞过的视频(likedPosts)，以及。这些视频的文案和画面都必须和 User 有关表达对 User 的真实情绪，也可以是记录 User 相关的事情！每个视频必须包含随机的点赞量(likes)、总评论量(commentCount)、收藏量(saves)和分享量(shares)。并且必须生成 5 条具体的网友评论内容 (comments)。\n`;
+        prompt += `2. 个人主页 (profile)：生成2 个 Ta 设置为仅自己可见的私密视频(privatePosts)。这些视频的文案和画面都必须和最近的聊天记录有关，也可以是记录 User 相关的事情！\n`;        
         prompt += `3. 消息页 (inbox)：生成 2 到 4 条私信。**【重点】：私信内容必须是路人或熟人对 Ta 在个人主页 (profile) 发布的视频的反应或搭讪！**\n`;
         prompt += `4. 发现页 (discover)：生成 4 个热搜标题。符合世界观或 Ta 的兴趣。\n`;
-        prompt += `5. 所有视频不要真实图片链接，请用 imageDesc (画面描述) 代替。\n`;
+        prompt += `5. 草稿箱 (drafts)：生成 2 个 Ta 拍了但还没发布的草稿视频，内容可以是Ta 的使用抖音特效的自拍照或者是Ta 的日常生活照片。\n`;
+        prompt += `6. 所有视频不要真实图片链接，请用 imageDesc (画面描述) 代替。\n`;
         prompt += `返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "homeFeed": [
     {
       "author": "@视频博主名", "imageDesc": "[视频画面] 一只正在打呼噜的橘猫", "desc": "视频文案描述", "likes": "12.5k", "commentCount": "2.3k", "saves": "1.1k", "shares": "500",
       "comments": [
-        {"name": "网友A", "text": "太可爱了吧！"} // 确保固定生成5条
+        {"name": "网友A", "text": "太可爱了吧！"}
       ]
     }
   ],
@@ -35494,8 +35521,20 @@ window.wcGenerateVideoAppData = async function() {
       {
         "imageDesc": "[视频画面] 昏暗路灯下的两个影子", "desc": "暗戳戳关于User的文案", "views": "12K", "likes": "5.2K", "commentCount": "800", "saves": "1.1K", "shares": "500",
         "comments": [
-          {"name": "网友A", "text": "好浪漫！"} // 确保固定生成4条
+          {"name": "网友A", "text": "好浪漫！"}
         ]
+      }
+    ],
+    "likedPosts": [
+      {
+        "author": "@某网友", "imageDesc": "[视频画面] 搞笑猫咪", "desc": "哈哈哈哈", "views": "12K", "likes": "5.2K", "commentCount": "800", "saves": "1.1K", "shares": "500",
+        "comments": [{"name": "网友A", "text": "笑死我了"}]
+      }
+    ],
+    "privatePosts": [
+      {
+        "imageDesc": "[视频画面] 偷拍User的背影", "desc": "不敢发出去...", "views": "0", "likes": "0", "commentCount": "0", "saves": "0", "shares": "0",
+        "comments": []
       }
     ]
   },
@@ -35504,6 +35543,12 @@ window.wcGenerateVideoAppData = async function() {
   ],
   "discover": [
     {"title": "热搜标题1", "views": "1.2M"}
+  ],
+  "drafts": [
+    {
+      "imageDesc": "[草稿画面] 准备送给User的礼物", "desc": "不知道Ta会不会喜欢", "views": "0", "likes": "0", "commentCount": "0", "saves": "0", "shares": "0",
+      "comments": []
+    }
   ]
 }\n`;
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
@@ -35544,11 +35589,27 @@ window.wcGenerateVideoAppData = async function() {
                 msg.avatar = getRandomNpcAvatar();
             });
         }
-        if (videoData.profile && videoData.profile.posts) {
-            videoData.profile.posts.forEach(p => {
-                if (p.comments) {
-                    p.comments.forEach(c => c.avatar = getRandomNpcAvatar());
-                }
+        if (videoData.profile) {
+            if (videoData.profile.posts) {
+                videoData.profile.posts.forEach(p => {
+                    if (p.comments) p.comments.forEach(c => c.avatar = getRandomNpcAvatar());
+                });
+            }
+            if (videoData.profile.likedPosts) {
+                videoData.profile.likedPosts.forEach(p => {
+                    p.avatar = getRandomNpcAvatar();
+                    if (p.comments) p.comments.forEach(c => c.avatar = getRandomNpcAvatar());
+                });
+            }
+            if (videoData.profile.privatePosts) {
+                videoData.profile.privatePosts.forEach(p => {
+                    if (p.comments) p.comments.forEach(c => c.avatar = getRandomNpcAvatar());
+                });
+            }
+        }
+        if (videoData.drafts) {
+            videoData.drafts.forEach(p => {
+                if (p.comments) p.comments.forEach(c => c.avatar = getRandomNpcAvatar());
             });
         }
 
@@ -35568,17 +35629,30 @@ window.wcGenerateVideoAppData = async function() {
 // 渲染整个短视频 APP
 window.wcRenderVideoApp = function() {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    
+    // 1. 获取所有需要渲染的容器
+    const feedContainer = document.getElementById('v-home-feed');
+    const discoverGrid = document.querySelector('#v-page-discover .v-grid');
+    const inboxList = document.querySelector('#v-page-inbox .v-inbox-list');
+    const profileGrid = document.querySelector('#v-page-profile .v-grid');
+    
+    // 2. 核心修复：每次渲染前，先无条件清空所有旧的 DOM 数据，防止上一个角色的数据残留
+    if (feedContainer) feedContainer.innerHTML = '';
+    if (discoverGrid) discoverGrid.innerHTML = '';
+    if (inboxList) inboxList.innerHTML = '';
+    if (profileGrid) profileGrid.innerHTML = '';
+
     if (!char || !char.phoneData || !char.phoneData.videoApp) {
-        document.getElementById('v-home-feed').innerHTML = '<div style="text-align:center; color:#888; font-size:14px; margin-top:50%;">点击右上角搜索图标<br>生成 Ta 的短视频数据</div>';
+        if (feedContainer) {
+            feedContainer.innerHTML = '<div style="text-align:center; color:#888; font-size:14px; margin-top:50%;">点击右上角搜索图标<br>生成 Ta 的短视频数据</div>';
+        }
         return;
     }
 
     const data = char.phoneData.videoApp;
 
     // 1. 渲染 Home (多视频滑动)
-    if (data.homeFeed && data.homeFeed.length > 0) {
-        const feedContainer = document.getElementById('v-home-feed');
-        feedContainer.innerHTML = '';
+    if (data.homeFeed && data.homeFeed.length > 0 && feedContainer) {
         data.homeFeed.forEach((video, idx) => {
             feedContainer.innerHTML += `
                 <div class="video-card">
@@ -35602,11 +35676,9 @@ window.wcRenderVideoApp = function() {
     }
 
     // 2. 渲染 Discover
-    if (data.discover && data.discover.length > 0) {
-        const grid = document.querySelector('#v-page-discover .v-grid');
-        grid.innerHTML = '';
+    if (data.discover && data.discover.length > 0 && discoverGrid) {
         data.discover.forEach(item => {
-            grid.innerHTML += `
+            discoverGrid.innerHTML += `
                 <div class="v-grid-item" style="cursor:pointer;">
                     <div class="v-grid-item-desc" style="color:#FFF; font-weight:bold; font-style:normal; font-size:13px;">${item.title}</div>
                     <div class="views">▶ ${item.views}</div>
@@ -35616,11 +35688,9 @@ window.wcRenderVideoApp = function() {
     }
 
     // 3. 渲染 Inbox
-    if (data.inbox && data.inbox.length > 0) {
-        const list = document.querySelector('#v-page-inbox .v-inbox-list');
-        list.innerHTML = '';
+    if (data.inbox && data.inbox.length > 0 && inboxList) {
         data.inbox.forEach((item, idx) => {
-            list.innerHTML += `
+            inboxList.innerHTML += `
                 <div class="v-inbox-item" onclick="vOpenInboxDetail(${idx})">
                     <div class="v-inbox-avatar"><img src="${item.avatar || getRandomNpcAvatar()}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;"></div>
                     <div class="v-inbox-info">
@@ -35644,23 +35714,220 @@ window.wcRenderVideoApp = function() {
             stats[2].innerText = data.profile.likes;
         }
 
-        const pGrid = document.querySelector('#v-page-profile .v-grid');
-        pGrid.innerHTML = '';
-        if (data.profile.posts) {
-            data.profile.posts.forEach((post, idx) => {
-                let descText = post.imageDesc || '无画面描述';
-                if (descText.length > 25) descText = descText.substring(0, 25) + '...';
-                
-                pGrid.innerHTML += `
-                    <div class="v-grid-item" style="cursor:pointer;" onclick="vOpenVideoDetail(${idx})">
-                        <div class="v-grid-item-desc">${descText}</div>
-                        <div class="views">▶ ${post.views || '10K'}</div>
-                    </div>
-                `;
-            });
+        const pTabs = document.querySelector('.v-profile-tabs');
+        if (pTabs) {
+            pTabs.innerHTML = `
+                <svg class="v-profile-tab active" onclick="vSwitchProfileTab('posts')" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                <svg class="v-profile-tab" onclick="vSwitchProfileTab('private')" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <svg class="v-profile-tab" onclick="vSwitchProfileTab('likes')" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+            `;
         }
+
+        vRenderProfileGrid('posts');
+    }
+};
+
+window.vSwitchProfileTab = function(tab) {
+    document.querySelectorAll('.v-profile-tab').forEach(el => el.classList.remove('active'));
+    const activeTab = document.querySelector(`.v-profile-tab[onclick="vSwitchProfileTab('${tab}')"]`);
+    if (activeTab) activeTab.classList.add('active');
+    vRenderProfileGrid(tab);
+};
+
+window.vRenderProfileGrid = function(tab) {
+    const pGrid = document.querySelector('#v-page-profile .v-grid');
+    if (!pGrid) return;
+    
+    // 核心修复：每次渲染前先清空，防止旧数据残留
+    pGrid.innerHTML = '';
+
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.videoApp || !char.phoneData.videoApp.profile) {
+        pGrid.innerHTML = `<div style="grid-column: span 2; text-align: center; color: #888; padding: 40px 0; font-size: 13px;">这里空空如也</div>`;
+        return;
+    }
+    
+    const profileData = char.phoneData.videoApp.profile;
+    let list = [];
+    if (tab === 'posts') list = profileData.posts || [];
+    else if (tab === 'private') list = profileData.privatePosts || [];
+    else if (tab === 'likes') list = profileData.likedPosts || [];
+
+    if (list.length === 0) {
+        pGrid.innerHTML = `<div style="grid-column: span 2; text-align: center; color: #888; padding: 40px 0; font-size: 13px;">这里空空如也</div>`;
+        return;
     }
 
+    list.forEach((post, idx) => {
+        let descText = post.imageDesc || '无画面描述';
+        if (descText.length > 25) descText = descText.substring(0, 25) + '...';
+        
+        pGrid.innerHTML += `
+            <div class="v-grid-item" style="cursor:pointer;" onclick="vOpenVideoDetail('${tab}', ${idx})">
+                <div class="v-grid-item-desc">${descText}</div>
+                <div class="views">▶ ${post.views || '10K'}</div>
+            </div>
+        `;
+    });
+};
+
+window.vOpenCameraPage = function() {
+    vRenderCameraPage();
+    switchVideoTab('camera');
+};
+
+window.vRenderCameraPage = function() {
+    let page = document.getElementById('v-page-camera');
+    if (!page) {
+        page = document.createElement('div');
+        page.id = 'v-page-camera';
+        page.className = 'v-page';
+        document.querySelector('.v-pages').appendChild(page);
+    }
+    
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    const draftsCount = (char && char.phoneData && char.phoneData.videoApp && char.phoneData.videoApp.drafts) ? char.phoneData.videoApp.drafts.length : 0;
+
+    page.innerHTML = `
+        <div style="flex: 1; background: #000; display: flex; flex-direction: column; position: relative; overflow: hidden;">
+            
+            <!-- 🌟 新增：模拟摄像头实时画面 (带有景深模糊的网图) 🌟 -->
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: url('https://images.unsplash.com/photo-1516528387618-afa90b13e000?q=80&w=800&auto=format&fit=crop') center/cover; filter: blur(3px) brightness(0.75); z-index: 0; transform: scale(1.05);"></div>
+            
+            <!-- 🌟 新增：相机九宫格辅助线 🌟 -->
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; display: flex; flex-direction: column;">
+                <div style="flex: 1; border-bottom: 1px solid rgba(255,255,255,0.15);"></div>
+                <div style="flex: 1; border-bottom: 1px solid rgba(255,255,255,0.15);"></div>
+                <div style="flex: 1;"></div>
+            </div>
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; display: flex;">
+                <div style="flex: 1; border-right: 1px solid rgba(255,255,255,0.15);"></div>
+                <div style="flex: 1; border-right: 1px solid rgba(255,255,255,0.15);"></div>
+                <div style="flex: 1;"></div>
+            </div>
+
+            <!-- 顶部控制栏 (加上 position: relative 和 z-index 保证在画面上方) -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 50px 20px 20px; z-index: 10; position: relative;">
+                <div style="color: #FFF; font-size: 24px; cursor: pointer; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; text-shadow: 0 2px 4px rgba(0,0,0,0.5);" onclick="switchVideoTab('home')">✕</div>
+                
+                <div style="background: rgba(0,0,0,0.4); backdrop-filter: blur(10px); padding: 6px 16px; border-radius: 20px; display: flex; align-items: center; gap: 6px; color: #FFF; font-size: 14px; cursor: pointer;">
+                    <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                    选择音乐
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 20px; align-items: center;">
+                    <div style="color: #FFF; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                        <svg viewBox="0 0 24 24" style="width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 1 0 2.13-5.85L2 9"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 1 0-2.13 5.85L22 15"></path></svg>
+                        <span style="font-size: 10px;">翻转</span>
+                    </div>
+                    <div style="color: #FFF; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                        <svg viewBox="0 0 24 24" style="width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        <span style="font-size: 10px;">快慢</span>
+                    </div>
+                    <div style="color: #FFF; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                        <svg viewBox="0 0 24 24" style="width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        <span style="font-size: 10px;">倒计时</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 取景框对焦UI -->
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; pointer-events: none;">
+                <div style="position: absolute; top: 0; left: 0; width: 20px; height: 20px; border-top: 2px solid rgba(255,255,255,0.5); border-left: 2px solid rgba(255,255,255,0.5);"></div>
+                <div style="position: absolute; top: 0; right: 0; width: 20px; height: 20px; border-top: 2px solid rgba(255,255,255,0.5); border-right: 2px solid rgba(255,255,255,0.5);"></div>
+                <div style="position: absolute; bottom: 0; left: 0; width: 20px; height: 20px; border-bottom: 2px solid rgba(255,255,255,0.5); border-left: 2px solid rgba(255,255,255,0.5);"></div>
+                <div style="position: absolute; bottom: 0; right: 0; width: 20px; height: 20px; border-bottom: 2px solid rgba(255,255,255,0.5); border-right: 2px solid rgba(255,255,255,0.5);"></div>
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; border: 1px solid rgba(255,255,255,0.3); border-radius: 50%;"></div>
+            </div>
+
+            <!-- 底部操作区 -->
+            <div style="margin-top: auto; padding-bottom: 40px; display: flex; flex-direction: column; align-items: center; z-index: 10;">
+                
+                <!-- 拍摄模式切换 -->
+                <div style="display: flex; gap: 20px; color: rgba(255,255,255,0.6); font-size: 14px; font-weight: bold; margin-bottom: 20px;">
+                    <span>照片</span>
+                    <span style="color: #FFF; position: relative;">视频<div style="position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; background: #FFF; border-radius: 50%;"></div></span>
+                    <span>文字</span>
+                </div>
+
+                <!-- 拍摄按钮栏 -->
+                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 40px; margin-bottom: 30px;">
+                    <!-- 特效 -->
+                    <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer; gap: 6px;">
+                        <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;">
+                            <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: none; stroke: #FFF; stroke-width: 2;"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                        </div>
+                        <span style="color: #FFF; font-size: 12px;">特效</span>
+                    </div>
+
+                    <!-- 拍摄大圆圈 -->
+                    <div style="width: 80px; height: 80px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: center; cursor: pointer;" onclick="vPublishNewWork()">
+                        <div style="width: 60px; height: 60px; border-radius: 50%; background: #FF3B30;"></div>
+                    </div>
+
+                    <!-- 相册 -->
+                    <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer; gap: 6px;">
+                        <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center;">
+                            <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: none; stroke: #FFF; stroke-width: 2;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        </div>
+                        <span style="color: #FFF; font-size: 12px;">相册</span>
+                    </div>
+                </div>
+
+                <!-- 草稿箱入口 -->
+                <div style="display: flex; align-items: center; gap: 6px; color: #FFF; font-size: 14px; cursor: pointer; background: rgba(255,255,255,0.15); padding: 8px 16px; border-radius: 20px;" onclick="vOpenDrafts()">
+                    <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                    草稿箱 ${draftsCount > 0 ? `(${draftsCount})` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.vOpenDrafts = function() {
+    vRenderDraftsPage();
+    switchVideoTab('drafts');
+};
+
+window.vRenderDraftsPage = function() {
+    let page = document.getElementById('v-page-drafts');
+    if (!page) {
+        page = document.createElement('div');
+        page.id = 'v-page-drafts';
+        page.className = 'v-page';
+        document.querySelector('.v-pages').appendChild(page);
+    }
+
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    const drafts = (char && char.phoneData && char.phoneData.videoApp && char.phoneData.videoApp.drafts) ? char.phoneData.videoApp.drafts : [];
+
+    let gridHtml = '';
+    if (drafts.length === 0) {
+        gridHtml = '<div style="text-align: center; color: #888; padding: 40px 0; font-size: 13px; width: 100%;">草稿箱为空</div>';
+    } else {
+        drafts.forEach((draft, idx) => {
+            let descText = draft.imageDesc || '无画面描述';
+            if (descText.length > 25) descText = descText.substring(0, 25) + '...';
+            gridHtml += `
+                <div class="v-grid-item" style="cursor:pointer;" onclick="vOpenVideoDetail('drafts', ${idx})">
+                    <div class="v-grid-item-desc">${descText}</div>
+                    <div class="views" style="background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px;">草稿</div>
+                </div>
+            `;
+        });
+    }
+
+    page.innerHTML = `
+        <div style="padding: 50px 20px 15px; display: flex; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); background: #0A0A0B;">
+            <div onclick="vOpenCameraPage()" style="cursor: pointer; margin-right: 15px;">
+                <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; stroke: #FFF; fill: none; stroke-width: 2;"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </div>
+            <div style="font-size: 18px; font-weight: bold; color: #FFF;">草稿箱</div>
+        </div>
+        <div class="v-grid" style="padding-top: 15px;">
+            ${gridHtml}
+        </div>
+    `;
 };
 
 // 打开评论区
@@ -35671,14 +35938,16 @@ window.vOpenComments = function(source, index) {
     let comments = [];
     let totalCountStr = "0";
     
-    if (source === 'home') {
-        const video = char.phoneData.videoApp.homeFeed[index];
+    let video = null;
+    if (source === 'home') video = char.phoneData.videoApp.homeFeed[index];
+    else if (source === 'posts') video = char.phoneData.videoApp.profile.posts[index];
+    else if (source === 'private') video = char.phoneData.videoApp.profile.privatePosts[index];
+    else if (source === 'likes') video = char.phoneData.videoApp.profile.likedPosts[index];
+    else if (source === 'drafts') video = char.phoneData.videoApp.drafts[index];
+
+    if (video) {
         comments = video.comments || [];
         totalCountStr = video.commentCount || comments.length;
-    } else if (source === 'profile') {
-        const post = char.phoneData.videoApp.profile.posts[index];
-        comments = post.comments || [];
-        totalCountStr = post.commentCount || comments.length;
     }
 
     document.getElementById('v-comments-count').innerText = `${totalCountStr} 条评论`;
@@ -35709,59 +35978,181 @@ window.vCloseComments = function() {
 };
 
 // 打开个人主页的视频详情
-window.vOpenVideoDetail = function(postIndex) {
+window.vOpenVideoDetail = function(source, postIndex) {
     const char = wcState.characters.find(c => c.id === wcState.editingCharId);
-    if (!char || !char.phoneData || !char.phoneData.videoApp || !char.phoneData.videoApp.profile) return;
+    if (!char || !char.phoneData || !char.phoneData.videoApp) return;
     
-    const post = char.phoneData.videoApp.profile.posts[postIndex];
+    let post = null;
+    let authorName = char.name;
+    let authorAvatar = char.avatar;
+
+    if (source === 'posts') {
+        post = char.phoneData.videoApp.profile.posts[postIndex];
+    } else if (source === 'private') {
+        post = char.phoneData.videoApp.profile.privatePosts[postIndex];
+    } else if (source === 'likes') {
+        post = char.phoneData.videoApp.profile.likedPosts[postIndex];
+        authorName = post.author || "神秘网友";
+        authorAvatar = post.avatar || getRandomNpcAvatar();
+    } else if (source === 'drafts') {
+        post = char.phoneData.videoApp.drafts[postIndex];
+    }
+
     if (!post) return;
 
     const feedContainer = document.getElementById('v-detail-feed');
+    
+    let publishBtnHtml = '';
+    if (source === 'drafts') {
+        publishBtnHtml = `
+            <div style="position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%); z-index: 100;">
+                <button onclick="vPublishDraft(${postIndex})" style="background: #FF3B30; color: #FFF; border: none; padding: 12px 40px; border-radius: 24px; font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(255,59,48,0.4);">发布草稿</button>
+            </div>
+        `;
+    }
+
     feedContainer.innerHTML = `
         <div class="video-card">
             <div class="video-image-desc">${post.imageDesc || '无画面描述'}</div>
             <div class="video-actions">
                 <div class="action-item"><div class="action-icon"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div><span class="action-text">${post.likes || '10K'}</span></div>
-                <div class="action-item" onclick="vOpenComments('profile', ${postIndex})"><div class="action-icon"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></div><span class="action-text">${post.commentCount || (post.comments ? post.comments.length : 0)}</span></div>
+                <div class="action-item" onclick="vOpenComments('${source}', ${postIndex})"><div class="action-icon"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg></div><span class="action-text">${post.commentCount || (post.comments ? post.comments.length : 0)}</span></div>
                 <div class="action-item"><div class="action-icon"><svg viewBox="0 0 24 24" style="fill:none; stroke:#FFF; stroke-width:2;"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></div><span class="action-text">${post.saves || 'Save'}</span></div>
-                <div class="action-item" onclick="vTriggerShare('profile', ${postIndex})"><div class="action-icon"><svg viewBox="0 0 24 24" style="fill:none; stroke:#FFF; stroke-width:2;"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></div><span class="action-text">${post.shares || 'Share'}</span></div>
+                <div class="action-item" onclick="vTriggerShare('${source}', ${postIndex})"><div class="action-icon"><svg viewBox="0 0 24 24" style="fill:none; stroke:#FFF; stroke-width:2;"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></div><span class="action-text">${post.shares || 'Share'}</span></div>
             </div>
             <div class="video-info">
                 <div class="video-author">
-                    <img src="${char.avatar}" class="video-avatar">
-                    <span class="video-name">@${char.name}</span>
+                    <img src="${authorAvatar}" class="video-avatar">
+                    <span class="video-name">@${authorName}</span>
                 </div>
-                <div class="video-desc">${post.desc}</div>
+                <div class="video-desc">${post.desc || ''}</div>
             </div>
+            ${publishBtnHtml}
         </div>
     `;
 
     switchVideoTab('detail');
 };
 
+window.vPublishDraft = function(idx) {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.videoApp) return;
+    
+    const draft = char.phoneData.videoApp.drafts[idx];
+    if (!draft) return;
+    
+    if (confirm("确定要发布这条草稿吗？")) {
+        char.phoneData.videoApp.drafts.splice(idx, 1);
+        
+        if (!char.phoneData.videoApp.profile.posts) char.phoneData.videoApp.profile.posts = [];
+        
+        const newPost = {
+            ...draft,
+            views: "0",
+            likes: "0",
+            commentCount: "0",
+            saves: "0",
+            shares: "0",
+            comments: []
+        };
+        
+        char.phoneData.videoApp.profile.posts.unshift(newPost);
+        wcSaveData();
+        
+        const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚在你的短视频APP里，把你草稿箱里的一条视频发布出去了！视频画面描述：“${draft.imageDesc || ''}”，文案：“${draft.desc || ''}”。请在接下来的聊天中对此做出反应（比如惊讶、害羞、或者问User为什么要发）。]`;
+        wcAddMessage(char.id, 'system', 'system', aiPrompt, { hidden: true });
+        
+        alert("发布成功！");
+        switchVideoTab('profile');
+    }
+};
+
+window.vPublishNewWork = function() {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.videoApp) return;
+
+    // 清空输入框
+    document.getElementById('v-publish-image-desc').value = '';
+    document.getElementById('v-publish-desc').value = '';
+    
+    // 设置头像
+    const userAvatar = (char.chatConfig && char.chatConfig.userAvatar) ? char.chatConfig.userAvatar : wcState.user.avatar;
+    const dailyAvatarEl = document.getElementById('v-publish-daily-avatar');
+    if (dailyAvatarEl) dailyAvatarEl.src = userAvatar;
+    
+    // 切换到发布页面
+    switchVideoTab('publish');
+};
+
+window.vEditCoverDesc = function() {
+    const input = document.getElementById('v-publish-image-desc');
+    wcOpenGeneralInput("编辑封面描述", (text) => {
+        if (text) {
+            input.value = text;
+        }
+    });
+};
+
+window.vCancelPublish = function() {
+    switchVideoTab('camera'); // 返回拍摄页
+};
+
+window.vSubmitNewWork = function() {
+    const char = wcState.characters.find(c => c.id === wcState.editingCharId);
+    if (!char || !char.phoneData || !char.phoneData.videoApp) return;
+
+    const imageDesc = document.getElementById('v-publish-image-desc').value.trim();
+    const desc = document.getElementById('v-publish-desc').value.trim();
+
+    if (!imageDesc && !desc) {
+        return alert("请至少填写画面描述或文案哦~");
+    }
+
+    if (!char.phoneData.videoApp.profile.posts) char.phoneData.videoApp.profile.posts = [];
+    
+    const newPost = {
+        imageDesc: imageDesc ? `[视频画面] ${imageDesc}` : '[视频画面] 无',
+        desc: desc,
+        views: "0",
+        likes: "0",
+        commentCount: "0",
+        saves: "0",
+        shares: "0",
+        comments: []
+    };
+    
+    char.phoneData.videoApp.profile.posts.unshift(newPost);
+    wcSaveData();
+    
+    const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚拿你的手机，在你的短视频APP里发布了一条新作品！视频画面描述：“${imageDesc}”，文案是：“${desc}”。请在接下来的聊天中对此做出反应。]`;
+    wcAddMessage(char.id, 'system', 'system', aiPrompt, { hidden: true });
+    
+    alert("发布成功！");
+    switchVideoTab('profile');
+};
+
+
 // 覆盖原有的 switchVideoTab，增加 detail 页面的处理
 window.switchVideoTab = function(tabName) {
     document.querySelectorAll('.v-page').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.v-tab').forEach(el => el.classList.remove('active'));
     
-    document.getElementById(`v-page-${tabName}`).classList.add('active');
+    let targetPage = document.getElementById(`v-page-${tabName}`);
+    if (targetPage) targetPage.classList.add('active');
     
     const tabbar = document.querySelector('.video-tabbar');
     
-    // 如果不是详情页，才高亮底栏并显示底栏
-    if (tabName !== 'detail' && tabName !== 'inbox-detail') {
+    if (tabName === 'home' || tabName === 'discover' || tabName === 'inbox' || tabName === 'profile') {
         if (tabbar) tabbar.style.display = 'flex';
         const tabs = document.querySelectorAll('.v-tab');
-        if(tabName === 'home') tabs[0].classList.add('active');
-        if(tabName === 'discover') tabs[1].classList.add('active');
-        if(tabName === 'inbox') tabs[2].classList.add('active');
-        if(tabName === 'profile') tabs[3].classList.add('active');
+        if(tabName === 'home' && tabs[0]) tabs[0].classList.add('active');
+        if(tabName === 'discover' && tabs[1]) tabs[1].classList.add('active');
+        if(tabName === 'inbox' && tabs[2]) tabs[2].classList.add('active');
+        if(tabName === 'profile' && tabs[3]) tabs[3].classList.add('active');
     } else {
-        // 详情页隐藏底栏
         if (tabbar) tabbar.style.display = 'none';
     }
     
-    // 切换页面时关闭评论区
     vCloseComments();
 };
 

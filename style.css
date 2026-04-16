@@ -1574,6 +1574,70 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
         .v-inbox-name { font-size: 15px; font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .v-inbox-msg { font-size: 13px; color: rgba(255,255,255,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 
+/* 发布新作品页样式 (仿抖音) */
+.v-publish-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: calc(env(safe-area-inset-top, 20px) + 10px) 20px 10px;
+    background: #FFFFFF; z-index: 10; flex-shrink: 0;
+}
+.v-publish-back { width: 32px; height: 32px; display: flex; align-items: center; justify-content: flex-start; cursor: pointer; color: #111; }
+.v-publish-back svg { width: 24px; height: 24px; stroke: currentColor; stroke-width: 2; fill: none; }
+.v-publish-preview-text { font-size: 16px; font-weight: 600; color: #111; cursor: pointer; }
+
+.v-publish-scroll-content {
+    flex: 1; overflow-y: auto; padding: 0 20px 20px; display: flex; flex-direction: column;
+}
+
+.v-publish-cover-area { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
+.v-publish-cover-box {
+    width: 200px; height: 200px; border-radius: 12px; overflow: hidden; position: relative;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #F0F0F0;
+}
+.v-publish-cover-box img { width: 100%; height: 100%; object-fit: cover; }
+.v-publish-edit-cover {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.6); color: #FFF; font-size: 12px; padding: 6px 12px;
+    border-radius: 16px; backdrop-filter: blur(4px); cursor: pointer; white-space: nowrap;
+}
+.v-publish-thumbnails { display: flex; gap: 10px; margin-top: 15px; align-items: center; }
+.v-publish-thumb { width: 40px; height: 40px; border-radius: 6px; overflow: hidden; opacity: 0.6; border: 2px solid transparent; }
+.v-publish-thumb.active { opacity: 1; border-color: #FF3B30; }
+.v-publish-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.v-publish-thumb-add { width: 40px; height: 40px; border-radius: 6px; background: #F5F5F5; display: flex; align-items: center; justify-content: center; color: #888; cursor: pointer; }
+.v-publish-thumb-add svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+.v-publish-input-area { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.v-publish-title-input { font-size: 18px; font-weight: bold; color: #111; border: none; outline: none; padding: 10px 0; border-bottom: 1px solid #F5F5F5; background: transparent; }
+.v-publish-title-input::placeholder { color: #999; font-weight: normal; }
+.v-publish-desc-input { font-size: 15px; color: #333; border: none; outline: none; resize: none; height: 80px; padding: 10px 0; font-family: inherit; background: transparent; }
+.v-publish-desc-input::placeholder { color: #999; }
+
+.v-publish-tags-row { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
+.v-publish-tag-btn { background: #F5F5F5; color: #111; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 16px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.v-publish-tag-btn svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
+.v-publish-tag-expand { margin-left: auto; width: 32px; height: 32px; background: #F5F5F5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #111; cursor: pointer; }
+.v-publish-tag-expand svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+.v-publish-list-group { display: flex; flex-direction: column; border-top: 1px solid #F5F5F5; }
+.v-publish-list-item { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid #F5F5F5; cursor: pointer; }
+.v-publish-list-left { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; color: #111; }
+.v-publish-list-left svg { width: 20px; height: 20px; stroke: #111; stroke-width: 2; fill: none; }
+.v-publish-chevron { width: 16px; height: 16px; stroke: #CCC; stroke-width: 2; fill: none; }
+.v-publish-location-tags { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 16px; border-bottom: 1px solid #F5F5F5; scrollbar-width: none; }
+.v-publish-location-tags::-webkit-scrollbar { display: none; }
+.v-publish-location-tags span { background: #F5F5F5; color: #333; font-size: 12px; padding: 6px 12px; border-radius: 12px; white-space: nowrap; }
+
+.v-publish-footer { padding: 10px 20px calc(env(safe-area-inset-bottom, 20px) + 10px); background: #FFF; border-top: 1px solid #F5F5F5; flex-shrink: 0; }
+.v-publish-footer-hint { text-align: center; font-size: 11px; color: #999; margin-bottom: 12px; }
+.v-publish-footer-actions { display: flex; align-items: center; gap: 12px; }
+.v-publish-share-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #111; cursor: pointer; width: 40px; }
+.v-publish-share-btn svg { width: 24px; height: 24px; stroke: currentColor; stroke-width: 1.5; fill: none; }
+.v-publish-share-btn span { font-size: 10px; }
+.v-publish-daily-btn { flex: 1; background: #F5F5F5; color: #111; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.v-publish-daily-btn img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+.v-publish-submit-btn-new { flex: 1.5; background: #FF3B30; color: #FFF; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; font-weight: bold; cursor: pointer; }
+.v-publish-submit-btn-new svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; }
+
 /* 4. Profile 个人主页样式 */
 .v-profile-header { padding: 50px 20px 20px; display: flex; justify-content: space-between; align-items: center; }
 .v-profile-username { font-size: 18px; font-weight: bold; display: flex; align-items: center; gap: 4px; }
@@ -1588,8 +1652,8 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .v-profile-edit-btn { background: rgba(255,255,255,0.1); padding: 8px 30px; border-radius: 8px; font-size: 13px; font-weight: 600; }
 
 .v-profile-tabs { display: flex; justify-content: space-around; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-.v-profile-tabs svg { width: 24px; height: 24px; stroke: rgba(255,255,255,0.4); fill: none; stroke-width: 1.5; }
-.v-profile-tabs svg.active { stroke: #FFF; }
+.v-profile-tab { width: 24px; height: 24px; stroke: rgba(255,255,255,0.4); fill: none; stroke-width: 1.5; cursor: pointer; transition: stroke 0.2s; }
+.v-profile-tab.active { stroke: #FFF; }
 
 /* 底部导航栏 */
 .video-tabbar {
