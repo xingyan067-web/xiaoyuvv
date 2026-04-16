@@ -13044,6 +13044,23 @@ async function wcClearAllCssBeautification() {
     }
 }
 
+// ==========================================
+// 新增：清空当前聊天记录逻辑
+// ==========================================
+window.wcClearChatHistory = function() {
+    const charId = wcState.activeChatId;
+    if (!charId) return;
+    
+    if (confirm("确定要清空当前角色的所有聊天记录吗？此操作不可恢复！")) {
+        wcState.chats[charId] = [];
+        wcSaveData();
+        wcRenderMessages(charId);
+        wcRenderChats();
+        alert("聊天记录已清空！");
+        wcCloseModal('wc-modal-chat-settings');
+    }
+};
+
 // --- WeChat Render All ---
 
 function wcUpdateCssPresetSelect() {
