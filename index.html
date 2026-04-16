@@ -1278,14 +1278,14 @@
                         <div class="sim-dock">
                             <!-- 1. 抖音 (点击打开短视频页面) -->
                             <div class="wc-ios-app-item" onclick="openVideoApp()">
-                                <div class="wc-ios-app-icon" style="background: #FFF !important;">
+                                <div class="wc-ios-app-icon" id="wc-icon-video" style="background: #FFF !important;">
                                     <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; fill: #111;"><path d="M12 2v10.5c-.5-.3-1.2-.5-2-.5-2.2 0-4 1.8-4 4s1.8 4 4 4 4-1.8 4-4V6h4V2h-6z"/></svg>
                                 </div>
                             </div>
                             
                             <!-- 2. 退出 (白色背景 + 朝上的箭头) -->
                             <div class="wc-ios-app-item" onclick="wcClosePhoneSim()">
-                                <div class="wc-ios-app-icon" style="background: #FFF !important;">
+                                <div class="wc-ios-app-icon" id="wc-icon-exit" style="background: #FFF !important;">
                                     <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; fill: none; stroke: #111; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;">
                                         <line x1="12" y1="19" x2="12" y2="5"></line>
                                         <polyline points="5 12 12 5 19 12"></polyline>
@@ -1295,7 +1295,7 @@
                             
                             <!-- 3. 文件管理 (原相册) -->
                             <div class="wc-ios-app-item" onclick="wcOpenPhoneApp('files')">
-                                <div class="wc-ios-app-icon" style="background: #FFF !important;">
+                                <div class="wc-ios-app-icon" id="wc-icon-files" style="background: #FFF !important;">
                                     <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; fill: none; stroke: #111; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
                                 </div>
                             </div>
@@ -5265,6 +5265,9 @@
                 <input type="file" id="wc-file-input-icon-browser" accept="image/*" onchange="wcHandleFileSelect(event, 'icon-browser')" style="display:none;">
                 <input type="file" id="wc-file-input-icon-cart" accept="image/*" onchange="wcHandleFileSelect(event, 'icon-cart')" style="display:none;">
                 <input type="file" id="wc-file-input-icon-settings" accept="image/*" onchange="wcHandleFileSelect(event, 'icon-settings')" style="display:none;">
+                <input type="file" id="wc-file-input-icon-video" accept="image/*" onchange="wcHandleFileSelect(event, 'icon-video')" style="display:none;">
+                <input type="file" id="wc-file-input-icon-exit" accept="image/*" onchange="wcHandleFileSelect(event, 'icon-exit')" style="display:none;">
+                <input type="file" id="wc-file-input-icon-files" accept="image/*" onchange="wcHandleFileSelect(event, 'icon-files')" style="display:none;">
                 
                 <!-- 新增：小组件照片上传 -->
                 <input type="file" id="wc-file-input-widget-photo" accept="image/*" onchange="wcHandleCharWidgetPhotoUpload(this)" style="display:none;">
@@ -5567,6 +5570,24 @@
                                 <img id="wc-preview-icon-settings" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
                                 <span style="font-size: 10px;">Set</span>
                             </div>
+                        </div>
+                    </div>
+                    <div class="wc-form-group">
+                        <label class="wc-form-label">底栏图标 (Dock)</label>
+                        <div style="display: flex; gap: 10px; justify-content: space-between;">
+                            <div class="wc-upload-placeholder" style="width: 60px; height: 60px; margin: 0;" onclick="wcTriggerUpload('icon-video')">
+                                <img id="wc-preview-icon-video" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                                <span style="font-size: 10px;">Video</span>
+                            </div>
+                            <div class="wc-upload-placeholder" style="width: 60px; height: 60px; margin: 0;" onclick="wcTriggerUpload('icon-exit')">
+                                <img id="wc-preview-icon-exit" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                                <span style="font-size: 10px;">Exit</span>
+                            </div>
+                            <div class="wc-upload-placeholder" style="width: 60px; height: 60px; margin: 0;" onclick="wcTriggerUpload('icon-files')">
+                                <img id="wc-preview-icon-files" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+                                <span style="font-size: 10px;">Files</span>
+                            </div>
+                            <div style="width: 60px; height: 60px; margin: 0;"></div>
                         </div>
                     </div>
                     <!-- 修改：按钮背景色改为黑色 -->
