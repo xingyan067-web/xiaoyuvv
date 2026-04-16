@@ -6544,6 +6544,15 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
                 action.type = 'text';
                 action.content = `[图片描述] ${imgMatch[1].trim()}`;
             }
+            
+            // 👇 新增：纠正 AI 模仿历史记录发出的假转账文本幻觉
+            let transferMatch = action.content.match(/^[\[【]转账[：:]\s*(\d+(\.\d+)?)(?:元)?[，,]\s*备注[：:]\s*(.*?)[，,]\s*状态[：:]\s*(.*?)[\]】]$/);
+            if (transferMatch) {
+                action.type = 'transfer';
+                action.amount = transferMatch[1];
+                action.note = transferMatch[3].trim();
+                action.status = 'pending'; // 强制重置为 pending 状态，让用户可以点击收款
+            }
         }
         // 👆 纠正结束 👆
 
@@ -12947,17 +12956,17 @@ async function wcSaveChatSettings() {
     }
     // 👆 新增结束 👆
 
-    // 👇 修改：合并两个列表的选中项，去重 👇
-    const wbCheckboxes = document.querySelectorAll('#wc-setting-worldbook-list input[type="checkbox"]:checked');
-    const groupWbCheckboxes = document.querySelectorAll('#wc-setting-group-worldbook-list input[type="checkbox"]:checked');
-    
-    const selectedWbIds = new Set([
-        ...Array.from(wbCheckboxes).map(cb => cb.value),
-        ...Array.from(groupWbCheckboxes).map(cb => cb.value)
-    ]);
-    
-    char.chatConfig.worldbookEntries = Array.from(selectedWbIds);
-    // 👆 修改结束 👆
+    // 👇 核心修复：根据单聊/群聊状态，精准读取对应的世界书列表，防止旧数据互相污染 👇
+    let selectedWbIds = [];
+    if (char.isGroup) {
+        const groupWbCheckboxes = document.querySelectorAll('#wc-setting-group-worldbook-list input[type="checkbox"]:checked');
+        selectedWbIds = Array.from(groupWbCheckboxes).map(cb => cb.value);
+    } else {
+        const wbCheckboxes = document.querySelectorAll('#wc-setting-worldbook-list input[type="checkbox"]:checked');
+        selectedWbIds = Array.from(wbCheckboxes).map(cb => cb.value);
+    }
+    char.chatConfig.worldbookEntries = selectedWbIds;
+    // 👆 修复结束 👆
 
     const stickerCheckboxes = document.querySelectorAll('#wc-setting-sticker-group-list input[type="checkbox"]:checked');
     char.chatConfig.stickerGroupIds = Array.from(stickerCheckboxes).map(cb => parseInt(cb.value));
