@@ -10233,9 +10233,9 @@ function wcOpenPhoneSim() {
     }
 
     const icons = char.phoneConfig && char.phoneConfig.icons ? char.phoneConfig.icons : {};
-    ['msg', 'browser', 'cart', 'settings'].forEach(id => {
+    ['msg', 'browser', 'cart', 'settings', 'video', 'exit', 'files'].forEach(id => {
         const iconEl = document.getElementById(`wc-icon-${id === 'msg' ? 'message' : id}`);
-        if (icons[id]) iconEl.innerHTML = `<img src="${icons[id]}">`;
+        if (iconEl && icons[id]) iconEl.innerHTML = `<img src="${icons[id]}">`;
     });
     
     // 渲染对方桌面小组件 (仅当是绑定的恋人时)
@@ -10278,8 +10278,9 @@ function wcOpenPhoneSettings() {
     document.getElementById('wc-text-phone-bg').style.display = 'block';
     document.getElementById('wc-preview-sticky-note').style.display = 'none';
     document.getElementById('wc-text-sticky-note').style.display = 'block';
-    ['msg', 'browser', 'cart', 'settings'].forEach(id => {
-        document.getElementById(`wc-preview-icon-${id}`).style.display = 'none';
+    ['msg', 'browser', 'cart', 'settings', 'video', 'exit', 'files'].forEach(id => {
+        const previewEl = document.getElementById(`wc-preview-icon-${id}`);
+        if (previewEl) previewEl.style.display = 'none';
     });
     
     const modal = document.getElementById('wc-modal-phone-settings');
@@ -10307,12 +10308,11 @@ function wcSavePhoneSettings() {
     
     const noteBg = document.getElementById('wc-sticky-note-bg');
     if (char.phoneConfig.stickyNote) noteBg.style.backgroundImage = `url('${char.phoneConfig.stickyNote}')`;
-
-    
-
+   
     const icons = char.phoneConfig.icons || {};
-    ['msg', 'browser', 'cart', 'settings'].forEach(id => {
-        if (icons[id]) document.getElementById(`wc-icon-${id === 'msg' ? 'message' : id}`).innerHTML = `<img src="${icons[id]}">`;
+    ['msg', 'browser', 'cart', 'settings', 'video', 'exit', 'files'].forEach(id => {
+        const iconEl = document.getElementById(`wc-icon-${id === 'msg' ? 'message' : id}`);
+        if (iconEl && icons[id]) iconEl.innerHTML = `<img src="${icons[id]}">`;
     });
 }
 
@@ -13004,20 +13004,48 @@ async function wcSaveChatSettings() {
     wcCloseModal('wc-modal-chat-settings');
 }
 
-function wcClearChatHistory() {
-      if (confirm("确定清空与该角色的所有聊天记录吗？此操作不可恢复。")) {
-        // 同步删除恋人空间日志
-        const msgs = wcState.chats[wcState.activeChatId] || [];
-        msgs.forEach(m => lsRemoveFeedByMsgId(m.id));
-        
-        wcState.chats[wcState.activeChatId] = [];
-        wcSaveData();
-        wcRenderMessages(wcState.activeChatId);
-        wcCloseModal('wc-modal-chat-settings');
+async function wcClearData() {
+    if (confirm("警告：此操作将永久删除 WeChat 的所有数据！确定要继续吗？")) {
+        const stores = ['kv_store', 'characters', 'chats', 'moments', 'masks'];
+        for (const store of stores) {
+            await wcClearStore(store);
+        }
+        await wcClearCharactersPersistentSnapshot();
+        alert("WeChat 数据已清空，页面将重置。");
+        location.reload();
     }
 }
 
-// --- WeChat CSS Presets ---
+async function wcClearAllCssBeautification() {
+    if (confirm("确定要清空所有角色的 CSS 美化代码吗？\n（仅清空当前应用的 CSS，不影响预设库和其他聊天设置）")) {
+        let clearedCount = 0;
+        
+        // 遍历所有角色，精准清空 customCss 字段
+        wcState.characters.forEach(char => {
+            if (char.chatConfig && char.chatConfig.customCss) {
+                char.chatConfig.customCss = "";
+                clearedCount++;
+            }
+        });
+        
+        if (clearedCount > 0) {
+            await wcSaveData();
+            
+            // 如果当前正好停留在某个聊天界面，实时移除样式
+            if (wcState.activeChatId) {
+                const activeChar = wcState.characters.find(c => c.id === wcState.activeChatId);
+                if (activeChar) wcApplyChatConfig(activeChar);
+            }
+            
+            alert(`清理完毕！已成功清空 ${clearedCount} 个角色的 CSS 美化代码。`);
+        } else {
+            alert("当前没有任何角色使用了 CSS 美化代码哦~");
+        }
+    }
+}
+
+// --- WeChat Render All ---
+
 function wcUpdateCssPresetSelect() {
     const select = document.getElementById('wc-setting-css-preset-select');
     select.innerHTML = '<option value="">选择预设...</option>';
@@ -16425,7 +16453,10 @@ function wcSavePhonePreset() {
             msg: (wcState.tempPhoneConfig.icons && wcState.tempPhoneConfig.icons.msg) || (currentConfig.icons && currentConfig.icons.msg) || '',
             browser: (wcState.tempPhoneConfig.icons && wcState.tempPhoneConfig.icons.browser) || (currentConfig.icons && currentConfig.icons.browser) || '',
             cart: (wcState.tempPhoneConfig.icons && wcState.tempPhoneConfig.icons.cart) || (currentConfig.icons && currentConfig.icons.cart) || '',
-            settings: (wcState.tempPhoneConfig.icons && wcState.tempPhoneConfig.icons.settings) || (currentConfig.icons && currentConfig.icons.settings) || ''
+            settings: (wcState.tempPhoneConfig.icons && wcState.tempPhoneConfig.icons.settings) || (currentConfig.icons && currentConfig.icons.settings) || '',
+            video: (wcState.tempPhoneConfig.icons && wcState.tempPhoneConfig.icons.video) || (currentConfig.icons && currentConfig.icons.video) || '',
+            exit: (wcState.tempPhoneConfig.icons && wcState.tempPhoneConfig.icons.exit) || (currentConfig.icons && currentConfig.icons.exit) || '',
+            files: (wcState.tempPhoneConfig.icons && wcState.tempPhoneConfig.icons.files) || (currentConfig.icons && currentConfig.icons.files) || ''
         }
     };
     
@@ -16456,10 +16487,13 @@ function wcApplyPhonePreset(idx) {
         document.getElementById('wc-preview-sticky-note').style.display = 'block';
         document.getElementById('wc-text-sticky-note').style.display = 'none';
     }
-    ['msg', 'browser', 'cart', 'settings'].forEach(id => {
+    ['msg', 'browser', 'cart', 'settings', 'video', 'exit', 'files'].forEach(id => {
         if (preset.icons[id]) {
-            document.getElementById(`wc-preview-icon-${id}`).src = preset.icons[id];
-            document.getElementById(`wc-preview-icon-${id}`).style.display = 'block';
+            const previewEl = document.getElementById(`wc-preview-icon-${id}`);
+            if (previewEl) {
+                previewEl.src = preset.icons[id];
+                previewEl.style.display = 'block';
+            }
         }
     });
 }
