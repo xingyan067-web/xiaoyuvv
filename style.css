@@ -6179,17 +6179,30 @@ input::-webkit-inner-spin-button {
 }
 .airdrop-close svg { width: 12px; height: 12px; stroke: #111; stroke-width: 3; stroke-linecap: round; }
 
-/* 身份卡片列表容器 */
+/* 身份卡片列表容器 (横向滑动版) */
 .id-card-list {
     display: flex;
-    flex-direction: column;
+    flex-direction: row; /* 👈 改为横向排列 */
     gap: 16px;
     width: 100%;
     margin-bottom: 40px;
+    overflow-x: auto; /* 👈 允许横向滚动 */
+    scroll-snap-type: x mandatory; /* 👈 开启滚动捕捉，让卡片滑动时自动吸附居中 */
+    scrollbar-width: none; /* 隐藏火狐浏览器滚动条 */
+    -webkit-overflow-scrolling: touch; /* 苹果手机丝滑滚动 */
+}
+
+/* 隐藏苹果/谷歌浏览器的滚动条，保持极简 */
+.id-card-list::-webkit-scrollbar {
+    display: none; 
 }
 
 /* 单张身份卡片 */
 .id-card-item {
+    width: 100%; /* 👈 每张卡片占满屏幕宽度 */
+    flex-shrink: 0; /* 👈 绝对禁止卡片被挤压变形 */
+    scroll-snap-align: center; /* 👈 滑动停止时自动吸附到中间 */
+    box-sizing: border-box; /* 确保内边距不撑破宽度 */
     background: #FFFFFF;
     border: 1px solid #E5E5EA;
     border-radius: 20px;
