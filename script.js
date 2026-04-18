@@ -1806,7 +1806,8 @@ function resetWallpaper() {
     saveThemeSettings(); 
 }
 function resetIcons() {
-    const defaultNames = ['App 1', 'App 2', 'App 3', 'App 4', 'Theme', 'Settings', '世界书', 'Wish'];
+    // 补全了第9个APP：短信
+    const defaultNames = ['App 1', 'App 2', 'App 3', 'App 4', 'Theme', 'Settings', '世界书', 'Wish', '短信'];
     for (let i = 0; i < totalApps; i++) {
         const iconDiv = document.getElementById(`icon-${i}`);
         const nameDiv = document.getElementById(`name-${i}`);
@@ -3358,7 +3359,15 @@ function updateAppIconUrl(id, url) {
     iconEl.style.backgroundImage = bg;
     iconEl.style.backgroundColor = 'transparent';
     saveAppsData();
-    renderAppEditors();
+    
+    // 局部更新预览图，防止页面回顶
+    const list = document.getElementById('appEditorList');
+    if (list && list.children[id]) {
+        const previewEl = list.children[id].querySelector('.app-edit-preview');
+        if (previewEl) {
+            previewEl.style.backgroundImage = bg;
+        }
+    }
 }
 
 function triggerAppIconUpload(id) {
@@ -3375,20 +3384,34 @@ function handleAppIconUpload(id, input) {
             iconEl.style.backgroundImage = bg;
             iconEl.style.backgroundColor = 'transparent';
             saveAppsData();
-            renderAppEditors();
+            
+            // 局部更新预览图，防止页面回顶
+            const previewEl = input.parentElement.querySelector('.app-edit-preview');
+            if (previewEl) {
+                previewEl.style.backgroundImage = bg;
+            }
         };
         reader.readAsDataURL(file);
     }
 }
 
 function resetSingleApp(id) {
-    const defaultNames = ['App 1', 'App 2', 'App 3', 'App 4', 'Theme', 'Settings', '世界书', 'Wish'];
+    // 补全了第9个APP：短信
+    const defaultNames = ['App 1', 'App 2', 'App 3', 'App 4', 'Theme', 'Settings', '世界书', 'Wish', '短信'];
     document.getElementById(`name-${id}`).innerText = defaultNames[id];
     const iconEl = document.getElementById(`icon-${id}`);
     iconEl.style.backgroundImage = '';
     iconEl.style.backgroundColor = '#f0f0f0';
     saveAppsData();
-    renderAppEditors();
+    
+    // 局部更新，防止页面回顶
+    const list = document.getElementById('appEditorList');
+    if (list && list.children[id]) {
+        const previewEl = list.children[id].querySelector('.app-edit-preview');
+        if (previewEl) previewEl.style.backgroundImage = '';
+        const inputEl = list.children[id].querySelector('input[type="text"]');
+        if (inputEl) inputEl.value = defaultNames[id];
+    }
 }
 
 function renderWallpaperGrid() {
