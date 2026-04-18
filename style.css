@@ -4795,30 +4795,35 @@ input::-webkit-inner-spin-button {
 /* --- 修复：悬浮输入框样式 (去掉了关闭键) --- */
 .floating-chat-input {
     position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
-    width: 90%; max-width: 340px; background: rgba(255,255,255,0.9);
-    backdrop-filter: blur(15px); border-radius: 20px; padding: 10px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 100;
+    width: 90%; max-width: 340px; background: transparent; /* 去掉外层背景，让内层做胶囊 */
+    z-index: 100;
     display: flex; flex-direction: column; align-items: center;
 }
 .drag-handle {
-    width: 40px; height: 4px; background: #CCC; border-radius: 2px;
-    margin-bottom: 10px; cursor: grab;
+    width: 40px; height: 4px; background: rgba(255,255,255,0.5); border-radius: 2px;
+    margin-bottom: 8px; cursor: grab; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 .drag-handle:active { cursor: grabbing; }
-.input-row { display: flex; width: 100%; gap: 8px; align-items: center; }
+.input-row { 
+    display: flex; width: 100%; gap: 8px; align-items: center; 
+    background: #FFFFFF; border-radius: 24px; padding: 6px 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
 .input-row input {
-    flex: 1; border: none; background: rgba(0,0,0,0.05); border-radius: 16px;
-    padding: 10px 15px; font-size: 14px; outline: none; color: #111;
+    flex: 1; border: none; background: transparent; 
+    padding: 8px 4px; font-size: 14px; outline: none; color: #333;
 }
-.input-row button {
-    background: #111; color: #FFF; border: none; border-radius: 16px;
-    padding: 10px 15px; font-weight: bold; cursor: pointer;
+.input-row .send-btn {
+    background: #111; color: #FFF; border: none; border-radius: 20px;
+    padding: 8px 16px; font-weight: bold; font-size: 13px; cursor: pointer;
+    letter-spacing: 1px; transition: transform 0.1s;
 }
+.input-row .send-btn:active { transform: scale(0.95); }
 .input-row .ai-btn { 
-    background: transparent; color: #AF52DE; padding: 5px;
-    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; color: #888; padding: 0 4px 0 8px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
 }
-.input-row .ai-btn svg { width: 24px; height: 24px; fill: currentColor; }
+.input-row .ai-btn svg { width: 20px; height: 20px; transform: rotate(-45deg); }
 
 /* ========================================== */
 /* 聊天气泡：180x100px 高级黑白灰邀请卡片 */
@@ -4931,29 +4936,52 @@ input::-webkit-inner-spin-button {
         }
         .music-chat-input-area {
             display: flex;
-            padding: 10px;
-            background: rgba(255,255,255,0.6);
-            border-top: 1px solid rgba(0,0,0,0.05);
+            padding: 6px 8px;
+            background: #FFFFFF;
+            border-radius: 24px;
             align-items: center;
+            margin: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            gap: 8px;
         }
         .music-chat-input-area input {
             flex: 1;
             border: none;
-            background: rgba(0,0,0,0.05);
-            border-radius: 18px;
-            padding: 8px 14px;
+            background: transparent;
+            padding: 8px 4px;
             font-size: 14px;
             outline: none;
             color: #333;
         }
-        .music-chat-input-area button {
+        .music-chat-input-area .music-ai-btn {
             background: transparent;
             border: none;
-            color: #007AFF;
-            font-weight: 600;
-            padding: 0 0 0 10px;
-            font-size: 15px;
+            color: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
+            padding: 0 4px 0 8px;
+        }
+        .music-chat-input-area .music-ai-btn svg {
+            width: 20px;
+            height: 20px;
+            transform: rotate(-45deg);
+        }
+        .music-chat-input-area .music-send-btn {
+            background: #111;
+            color: #FFF;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: transform 0.1s;
+        }
+        .music-chat-input-area .music-send-btn:active {
+            transform: scale(0.95);
         }
         .music-chat-msg {
             max-width: 85%;
@@ -5405,27 +5433,74 @@ input::-webkit-inner-spin-button {
 .dream-ext-item-preview { font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
 .dream-ext-item-actions { display: flex; gap: 15px; align-items: center; }
 /* ========================================== */
-/* 梦境底部输入框重构 (强制横向排列) */
+/* 梦境底部输入框重构 (模型选择 + 极简输入栏) */
 /* ========================================== */
 .dream-chat-footer {
-    padding: 12px 15px calc(12px + env(safe-area-inset-bottom, 20px)) 15px !important;
     background: #FAFAFA !important; 
     border-top: 1px solid #E5E5EA !important;
     display: flex !important; 
-    flex-direction: row !important; /* 核心修复：强制横向排列 */
-    align-items: flex-end !important; /* 底部对齐，让按钮和输入框底边平齐 */
+    flex-direction: column !important; 
     gap: 12px !important;
 }
 
-.dream-chat-footer textarea {
+.dream-model-tag {
+    background-color: #F5F5F5;
+    color: #555;
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #EAEAEA;
+    cursor: pointer;
+    width: fit-content;
+    transition: background 0.2s;
+}
+.dream-model-tag:active { background-color: #EBEBEB; }
+
+.dream-input-row {
+    display: flex;
+    width: 100%;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.dream-input-wrapper {
+    flex: 1;
+    background-color: #FFFFFF;
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    padding: 4px 16px 4px 8px;
+    border: 1px solid #EAEAEA;
+    box-sizing: border-box;
+    min-height: 48px;
+}
+
+.dream-api-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    cursor: pointer;
+    margin-right: 8px;
+    transition: color 0.2s;
+    flex-shrink: 0;
+}
+.dream-api-icon:active { color: #111; }
+.dream-api-icon svg { width: 22px; height: 22px; }
+
+.dream-input-wrapper textarea {
     flex: 1 !important; 
-    height: 44px; /* 👉 删掉这里的 !important，允许 JS 动态撑开高度 */
-    min-height: 44px !important; 
+    height: 40px; 
+    min-height: 40px !important; 
     max-height: 120px !important;
-    background: #FFF !important; 
-    border: 1px solid #E5E5EA !important; 
-    border-radius: 22px !important;
-    padding: 12px 16px !important; 
+    background: transparent !important; 
+    border: none !important; 
+    padding: 10px 4px !important; 
     font-size: 15px !important; 
     color: #111 !important; 
     resize: none !important; 
@@ -5435,34 +5510,39 @@ input::-webkit-inner-spin-button {
     margin: 0 !important; 
 }
 
-.dream-footer-btn {
-    width: 40px !important; 
-    height: 40px !important; 
-    border-radius: 50% !important; 
-    background: #111 !important; 
-    color: #FFF !important;
-    display: flex !important; 
-    align-items: center !important; 
-    justify-content: center !important; 
-    flex-shrink: 0 !important; /* 防止按钮被挤压变形 */
-    cursor: pointer !important; 
-    transition: transform 0.1s !important; 
-    margin-bottom: 2px !important; /* 微调对齐 */
+.dream-send-btn-wrapper {
+    background-color: #111111;
+    color: #FFFFFF;
+    height: 48px;
+    padding: 0 20px;
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 15px;
+    cursor: pointer;
+    transition: transform 0.1s, background 0.2s;
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+.dream-send-btn-wrapper:active {
+    transform: scale(0.95);
+    background-color: #333;
 }
 
-.dream-footer-btn:active { 
-    transform: scale(0.9) !important; 
+/* 模型选择列表 */
+.dream-model-option {
+    padding: 14px;
+    text-align: center;
+    border-bottom: 1px solid #F0F0F0;
+    color: #333;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background 0.2s;
 }
-
-.dream-footer-btn svg { 
-    width: 20px !important; 
-    height: 20px !important; 
-    fill: none !important; 
-    stroke: currentColor !important; 
-    stroke-width: 2 !important; 
-    stroke-linejoin: round !important; 
-    stroke-linecap: round !important; 
-}
+.dream-model-option:last-of-type { border-bottom: none; }
+.dream-model-option:active { background-color: #F5F5F5; }
 /* ========================================== */
 /* AI 回复卡片与对话/旁白分离排版 (仿小说居中) */
 /* ========================================== */ 
@@ -5483,7 +5563,8 @@ input::-webkit-inner-spin-button {
 /* 旁白文本 (无气泡) */
 .dream-narrative-text {
     font-size: var(--dream-font-size, 14px); 
-    color: #555; line-height: 1.8;
+    color: var(--dream-font-color, #555); /* 👈 核心修改：使用 CSS 变量控制颜色 */
+    line-height: 1.8;
     font-family: var(--dream-font-family, 'Kaiti', 'STKaiti', '楷体', serif);
     text-align: center; /* 居中 */
 }
@@ -5494,7 +5575,8 @@ input::-webkit-inner-spin-button {
     border-left: none; /* 去除左侧黑线 */
     padding: 5px 0;
     font-size: calc(var(--dream-font-size, 14px) + 1px); /* 对话稍微大一点点 */
-    color: #111; font-weight: bold;
+    color: var(--dream-font-color, #111); /* 👈 核心修改：使用 CSS 变量控制颜色 */
+    font-weight: bold;
     border-radius: 0; 
     font-family: var(--dream-font-family, 'Kaiti', 'STKaiti', '楷体', serif);
     margin: 0;
@@ -6220,7 +6302,7 @@ input::-webkit-inner-spin-button {
     justify-content: space-between;
     align-items: center;
     /* 👇 修改这里：增加 padding-top 将内容往下推，同时加高了整个顶栏 */
-    padding: 40px 20px 15px 20px; 
+    padding: 55px 20px 15px 20px; 
     position: relative;
     background: transparent;
     z-index: 10;
@@ -12642,3 +12724,73 @@ body.edit-mode-active .widget-remove-btn { display: flex; }
     border-radius: 14px; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform 0.2s;
 }
 .api-billing-btn:active { transform: scale(0.96); }
+/* ========================================== */
+/* 音乐分享卡片 (风格1：经典微信/网易云风) */
+/* ========================================== */
+.chat-shared-song-card {
+    width: 240px; 
+    background: #FFFFFF; 
+    border-radius: 12px; 
+    padding: 12px; 
+    box-shadow: 0 2px 10px rgba(0,0,0,0.03); 
+    border: 1px solid #EAEAEA; 
+    cursor: pointer; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    box-sizing: border-box;
+    white-space: normal !important;
+    line-height: normal !important;
+}
+.chat-shared-song-card:active { 
+    transform: scale(0.98); 
+    background: #F9F9F9; 
+}
+.css-song-info-row { 
+    display: flex; 
+    align-items: center; 
+    gap: 12px; 
+}
+.css-song-cover { 
+    width: 48px; 
+    height: 48px; 
+    border-radius: 8px; 
+    object-fit: cover; 
+    border: 1px solid #F0F0F0; 
+    flex-shrink: 0; 
+}
+.css-song-text { 
+    flex: 1; 
+    overflow: hidden; 
+}
+.css-song-title { 
+    font-size: 15px; 
+    font-weight: 500; 
+    color: #111; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+    margin-bottom: 4px; 
+}
+.css-song-artist { 
+    font-size: 12px; 
+    color: #888; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+}
+.css-song-footer { 
+    border-top: 1px solid #F5F5F5; 
+    padding-top: 8px; 
+    display: flex; 
+    align-items: center; 
+    gap: 4px; 
+    font-size: 10px; 
+    color: #999; 
+}
+.css-song-footer svg { 
+    width: 12px; 
+    height: 12px; 
+    fill: #FF3A3A; 
+}

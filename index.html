@@ -1181,6 +1181,15 @@
 
             </div>
         </div>
+                <!-- ========================================== -->
+        <!-- App 8: 短信 (iMessage) 容器 -->
+        <!-- ========================================== -->
+        <div class="settings-modal" id="smsModal" style="padding: 0; z-index: 3500; background: #000;">
+            <div id="sms-root" style="width: 100%; height: 100%; position: relative; background: #EAEAEA; display: flex; flex-direction: column;">
+                <!-- 视图将由 sms.js 动态渲染到这里 -->
+            </div>
+        </div>
+
         <!-- ========================================== -->
         <!-- Phone Simulator View (移出 WeChat，置于顶层) -->
         <!-- ========================================== -->
@@ -3007,12 +3016,12 @@
                         <div class="music-chat-close-btn" onclick="document.getElementById('music-chat-window').style.display='none'">×</div>
                         <div class="music-chat-history" id="music-chat-history"></div>
                         <div class="music-chat-input-area">
-                            <input type="text" id="music-chat-input" placeholder="和 Ta 聊聊这首歌..." onkeypress="musicHandleChatEnter(event)">
-                            <button onclick="musicTriggerAI()" title="让Ta回复">
-                                <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:currentColor;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                            <button class="music-ai-btn" onclick="musicTriggerAI()" title="Send...">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
                             </button>
-                            <button onclick="musicSendChatMessage()" title="发送">
-                                <svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:currentColor;"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                            <input type="text" id="music-chat-input" placeholder="" onkeypress="musicHandleChatEnter(event)">
+                            <button class="music-send-btn" onclick="musicSendChatMessage()" title="发送">
+                                SEND
                             </button>
                         </div>
                     </div>
@@ -3087,9 +3096,15 @@
                                 </svg>
                             </div>
                             <div class="ins-music-fp-time-center">
-                                <!-- 爱心聊天按钮 (点击打开悬浮输入框) -->
-                                <div class="chat-heart-btn" onclick="toggleFloatingInput(event)" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
-                                    <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                <div style="display: flex; gap: 20px; pointer-events: auto; align-items: center;">
+                                    <!-- 爱心聊天按钮 -->
+                                    <div class="chat-heart-btn" onclick="toggleFloatingInput(event)" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+                                        <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                    </div>
+                                    <!-- 分享按钮 -->
+                                    <div class="chat-heart-btn" onclick="musicOpenShareSheet(event)" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()" style="color: #888; transition: color 0.2s;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="fill: none !important; width: 18px; height: 18px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+                                    </div>
                                 </div>
                                 <span class="ins-music-fp-time-text"><span id="music-time-current">0:00</span> / <span id="music-time-total">-:-</span></span>
                             </div>
@@ -3121,11 +3136,11 @@
                     <div id="floating-chat-input" class="floating-chat-input" style="display: none;">
                         <div class="drag-handle" id="floating-drag-handle"></div>
                         <div class="input-row">
-                            <button class="ai-btn" onclick="triggerFloatingAI()" title="让Ta回复">
-                                <svg viewBox="0 0 24 24"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+                            <button class="ai-btn" onclick="triggerFloatingAI()" title="Send...">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
                             </button>
-                            <input type="text" id="floating-input-text" placeholder="说点什么..." onkeypress="if(event.key==='Enter') sendFloatingMsg()">
-                            <button class="send-btn" onclick="sendFloatingMsg()">发送</button>
+                            <input type="text" id="floating-input-text" placeholder="" onkeypress="if(event.key==='Enter') sendFloatingMsg()">
+                            <button class="send-btn" onclick="sendFloatingMsg()">SEND</button>
                         </div>
                     </div>
                     
@@ -3203,6 +3218,71 @@
                     <div class="ins-music-tab" onclick="musicSwitchTab('profile')" id="music-tab-profile">
                         <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 音乐分享：底部 Action Sheet -->
+        <div id="music-share-action-sheet" class="wc-modal hidden" style="z-index: 3900; align-items: flex-end;">
+            <div class="wc-modal-content" style="height: auto; border-radius: 16px 16px 0 0; width: 100%; max-width: 100%; background: #F2F2F7; padding-bottom: env(safe-area-inset-bottom);">
+                <div style="padding: 16px; font-size: 13px; color: #888; text-align: center;">分享</div>
+                <div style="display: flex; gap: 20px; padding: 10px 20px 20px; overflow-x: auto; scrollbar-width: none;">
+                    <!-- 微信好友 -->
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; flex-shrink: 0;" onclick="musicSelectShareTarget('chat')">
+                        <div style="width: 50px; height: 50px; background: #FFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                            <svg viewBox="0 0 24 24" style="width: 28px; height: 28px; fill: #07C160;"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM9 11H7V9h2v2zm4 0h-2V9h2v2zm4 0h-2V9h2v2z"/></svg>
+                        </div>
+                        <span style="font-size: 11px; color: #333;">微信好友</span>
+                    </div>
+                    <!-- 朋友圈 -->
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; flex-shrink: 0;" onclick="musicSelectShareTarget('moment')">
+                        <div style="width: 50px; height: 50px; background: #FFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                            <svg viewBox="0 0 24 24" style="width: 28px; height: 28px; fill: none; stroke: #FF9500; stroke-width: 2;"><circle cx="12" cy="12" r="10"></circle><line x1="14.31" y1="8" x2="20.05" y2="17.94"></line><line x1="9.69" y1="8" x2="21.17" y2="8"></line><line x1="7.38" y1="12" x2="13.12" y2="2.06"></line><line x1="9.69" y1="16" x2="3.95" y2="6.06"></line><line x1="14.31" y1="16" x2="2.83" y2="16"></line><line x1="16.62" y1="12" x2="10.88" y2="21.94"></line></svg>
+                        </div>
+                        <span style="font-size: 11px; color: #333;">朋友圈</span>
+                    </div>
+                    <!-- 论坛 -->
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; flex-shrink: 0;" onclick="musicSelectShareTarget('forum')">
+                        <div style="width: 50px; height: 50px; background: #FFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                            <svg viewBox="0 0 24 24" style="width: 28px; height: 28px; fill: #007AFF;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                        </div>
+                        <span style="font-size: 11px; color: #333;">论坛</span>
+                    </div>
+                </div>
+                <div style="background: #FFF; padding: 16px; text-align: center; font-size: 16px; color: #111; cursor: pointer; border-top: 1px solid #EAEAEA;" onclick="wcCloseModal('music-share-action-sheet')">取消</div>
+            </div>
+        </div>
+
+        <!-- 音乐分享：填写文案弹窗 -->
+        <div id="music-share-detail-modal" class="wc-modal hidden" style="z-index: 4000; align-items: flex-end;">
+            <div class="wc-modal-content" style="height: auto; border-radius: 24px 24px 0 0; width: 100%; max-width: 100%; background: #FFF; display: flex; flex-direction: column;">
+                <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 20px;">
+                    <h3 style="color: #111; font-size: 18px; font-weight: 700;">分享歌曲</h3>
+                    <button class="wc-close-btn" onclick="wcCloseModal('music-share-detail-modal')">&times;</button>
+                </div>
+                <div class="wc-modal-body" style="padding: 20px;">
+                    <div class="wc-form-group">
+                        <label class="wc-form-label">分享文案 (选填)</label>
+                        <textarea id="music-share-text" class="wc-form-textarea" placeholder="写点什么吧..." style="height: 60px;"></textarea>
+                    </div>
+                    <!-- 隐藏的 target 字段，用于记录分享到哪里 -->
+                    <input type="hidden" id="music-share-target-hidden">
+                    
+                    <div class="wc-form-group" id="music-share-chat-target-group" style="display: none;">
+                        <label class="wc-form-label">选择角色</label>
+                        <div id="music-share-char-list" class="wc-checkbox-list" style="max-height: 200px; overflow-y: auto; background: #F9F9F9; border: 1px solid #EAEAEA; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+                            <!-- JS 动态注入 -->
+                        </div>
+                        <input type="hidden" id="music-share-char-selected-id">
+                    </div>
+                    <div class="wc-form-group" id="music-share-forum-target-group" style="display: none;">
+                        <label class="wc-form-label">选择论坛窗口</label>
+                        <select id="music-share-forum-select" class="ios-select" style="margin-bottom: 12px;"></select>
+                        
+                        <label class="wc-form-label">选择发布身份</label>
+                        <select id="music-share-forum-mask-select" class="ios-select"></select>
+                    </div>
+                    <button class="wc-btn-primary" style="background: #111; color: #FFF;" onclick="musicExecuteShareSong()">发送</button>
                 </div>
             </div>
         </div>
@@ -3398,7 +3478,6 @@
                 </div>
             </div>
         </div>
-
         <!-- ========================================== -->
         <!-- WeChat App 容器 (App 1) -->
         <!-- ========================================== -->
@@ -6292,6 +6371,8 @@
     <style id="dynamic-font-style"></style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
     <script src="script.js"></script>
+    <!-- 👇 新增：引入独立的短信 APP 逻辑文件 👇 -->
+    <script src="sms.js"></script>
     <script>
         // PWA Service Worker Registration
         if ('serviceWorker' in navigator) {
@@ -6557,6 +6638,13 @@
             </div>
         </div>
         <div class="dream-modal-body">
+            <!-- 新增：线下上下文条数 -->
+            <div class="dream-section-title">当前场景上下文条数</div>
+            <div style="margin-bottom: 20px;">
+                <input type="number" id="dream-offline-context-limit" class="dream-font-input" placeholder="默认 20 条" onchange="saveDreamOfflineContextLimit(this.value)">
+                <div style="font-size: 11px; color: #888; margin-top: 4px;">设置线下/梦境交互时，AI 每轮读取的对话记录条数。</div>
+            </div>
+
             <!-- 新增：梦境字体设置 -->
             <div class="dream-section-title">梦境字体设置</div>
             <div class="dream-font-settings-box">
@@ -6567,6 +6655,11 @@
                 <!-- 将 min 改为 8，max 改为 20 -->
                 <input type="range" id="dream-font-slider" class="dream-font-slider" min="8" max="20" value="14" oninput="changeDreamFontSize(this.value)">
                 
+                <div class="dream-font-settings-row" style="margin-top: 10px; margin-bottom: 15px; align-items: center;">
+                    <span>字体颜色</span>
+                    <input type="color" id="dream-font-color-input" onchange="changeDreamFontColor(this.value)" style="width: 40px; height: 30px; border: none; border-radius: 4px; cursor: pointer; background: transparent;">
+                </div>
+
                 <div style="font-size: 13px; color: #555; margin-bottom: 8px;">自定义字体 URL (WOFF/TTF)</div>
                 <div style="display: flex; gap: 10px;">
                     <input type="text" id="dream-font-url-input" class="dream-font-input" placeholder="https://.../font.woff2">
@@ -6666,33 +6759,66 @@
 </div>
 <!-- 3. 梦境交互(聊天)页面 -->
 <div id="dream-chat-page" class="dream-fullscreen-view">
-    <div class="dream-header">
-        <div class="dream-icon-btn" onclick="exitDreamChat()">
+    <!-- 👇 新增：独立的背景层，调节亮度只影响它，不影响文字 👇 -->
+    <div id="dream-chat-bg" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--dream-bg-color, #0A0A0B); z-index: 0; transition: background-color 0.2s ease; background-size: cover; background-position: center;"></div>
+    
+    <!-- 全新顶栏：包含头像、名字、亮度、字体、设置、总结 -->
+    <div class="dream-header" style="padding: calc(env(safe-area-inset-top, 20px) + 10px) 15px 10px 15px; height: auto; position: relative; z-index: 10; background: transparent; border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <div class="dream-icon-btn" onclick="exitDreamChat()" style="margin-right: 10px; color: var(--dream-font-color, #FFF);">
             <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
         </div>
-        <div class="dream-title" id="dream-chat-title" style="font-family: sans-serif; font-size: 14px;">IN THE DREAM...</div>
-        <!-- 修复：加上了 id="dream-btn-summarize" -->
-        <div id="dream-btn-summarize" class="dream-icon-btn" onclick="endDreamAndSummarize()" style="width: auto; padding: 0 10px; font-size: 12px; font-weight: bold;">
-            醒来(总结)
+        <div class="dream-char-info" style="display: flex; align-items: center; flex: 1; overflow: hidden;">
+            <img src="" id="dream-chat-avatar" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; margin-right: 10px; border: 1px solid #333;">
+            <div style="display: flex; flex-direction: column; overflow: hidden;">
+                <div id="dream-chat-name" style="font-size: 15px; font-weight: bold; color: var(--dream-font-color, #FFF); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Name</div>
+                <div id="dream-chat-title" style="font-size: 11px; color: var(--dream-font-color, #888); opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">IN THE DREAM...</div>
+            </div>
+        </div>
+        <div class="dream-header-right" style="display: flex; gap: 12px; align-items: center;">
+            <!-- 亮度调节 -->
+            <svg onclick="openBrightnessModal()" viewBox="0 0 24 24" style="width: 20px; height: 20px; stroke: var(--dream-font-color, #CCC); fill: none; stroke-width: 2; cursor: pointer;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            <!-- 字体大小/更换 -->
+            <svg onclick="openDreamSettings()" viewBox="0 0 24 24" style="width: 20px; height: 20px; stroke: var(--dream-font-color, #CCC); fill: none; stroke-width: 2; cursor: pointer;"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+            <!-- 线下设置 (世界书/预设) -->
+            <svg onclick="openDreamExtModal()" viewBox="0 0 24 24" style="width: 20px; height: 20px; stroke: var(--dream-font-color, #CCC); fill: none; stroke-width: 2; cursor: pointer;"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+            <!-- 总结记忆 -->
+            <svg onclick="openDreamSummaryModal()" viewBox="0 0 24 24" style="width: 20px; height: 20px; stroke: var(--dream-font-color, #CCC); fill: none; stroke-width: 2; cursor: pointer;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         </div>
     </div>
     
-    <div class="dream-chat-content" id="dream-chat-history">
+    <div class="dream-chat-content" id="dream-chat-history" style="position: relative; z-index: 10; background: transparent;">
         <!-- 聊天记录 -->
     </div>
-    <!-- 梦境底部输入区 (左AI，右发送) -->
-    <div class="dream-chat-footer">
-        <div class="dream-footer-btn" onclick="triggerDreamAI()">
-            <!-- AI 魔法棒图标 -->
-            <svg viewBox="0 0 24 24"><path d="M21 16.05L15.95 21 4 9.05 9.05 4 21 16.05zM15.95 21l-5.05-5.05M9.05 4l5.05 5.05M13 3l1.5 3.5L18 8l-3.5 1.5L13 13l-1.5-3.5L8 8l3.5-1.5L13 3z"/></svg>
+    
+    <!-- 梦境底部输入区 (模型选择 + 极简输入栏) -->
+    <div class="dream-chat-footer" style="position: relative; z-index: 10; background: var(--dream-bg-color, #111111) !important; border-top: 1px solid var(--dream-border-color, #222) !important; flex-direction: column !important; align-items: flex-start !important; padding: 10px 15px calc(10px + env(safe-area-inset-bottom, 20px)) 15px !important; transition: background-color 0.2s ease, border-color 0.2s ease;">
+        <!-- 模型选择标签 -->
+        <div class="dream-model-tag" onclick="openDreamModelSelectModal()" style="background-color: #222; color: #CCC; border: 1px solid #333;">
+            ✨ <span id="dream-current-model-text">高级双子座3.1 pro</span>
         </div>
-        <textarea id="dream-chat-input" placeholder="描述你的动作或对话..."></textarea>
-        <div class="dream-footer-btn" onclick="sendDreamMessage()">
-            <!-- 发送 纸飞机图标 -->
-            <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        
+        <!-- 极简黑白灰输入栏 -->
+        <div class="dream-input-row" style="display: flex; width: 100%; gap: 10px; align-items: flex-end;">
+            <div class="dream-input-wrapper" style="flex: 1; background-color: #FFFFFF; border-radius: 24px; display: flex; align-items: center; padding: 4px 16px 4px 8px; min-height: 48px;">
+                <!-- 调取 API 回复键 (波形圆角矩形) -->
+                <div class="dream-api-icon" onclick="triggerDreamAI()" title="调取 API 回复" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: #888; cursor: pointer; margin-right: 8px; flex-shrink: 0;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 22px; height: 22px;">
+                        <rect x="3" y="4" width="18" height="16" rx="5" ry="5"></rect>
+                        <line x1="9" y1="10" x2="9" y2="14"></line>
+                        <line x1="12" y1="8" x2="12" y2="16"></line>
+                        <line x1="15" y1="10" x2="15" y2="14"></line>
+                    </svg>
+                </div>
+                <textarea id="dream-chat-input" placeholder="Send a message..." style="flex: 1; height: 40px; min-height: 40px; max-height: 120px; background: transparent; border: none; padding: 10px 4px; font-size: 15px; color: #111; resize: none; outline: none; font-family: inherit; line-height: 1.4; margin: 0;"></textarea>
+            </div>
+            <!-- 右侧发送键 -->
+            <div class="dream-send-btn-wrapper" onclick="sendDreamMessage()" style="background-color: #EAEAEA; color: #111; height: 48px; padding: 0 20px; border-radius: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 15px; cursor: pointer; flex-shrink: 0;">
+                发送
+            </div>
         </div>
     </div>
 </div>
+
 <!-- 状态栏预览弹窗 -->
 <div id="dream-html-preview-modal" class="dream-modal-overlay" style="align-items: center;" onclick="closeDreamHtmlPreview()">
     <div id="dream-html-preview-content" style="background: #FFF; padding: 20px; border-radius: 16px; max-width: 90%; max-height: 90%; overflow: auto; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.15);" onclick="event.stopPropagation()">
@@ -7315,6 +7441,51 @@
         </div>
     </div>
     <!-- 👆 新增结束 👆 -->
+<!-- 总结选项弹窗 -->
+<div class="dream-modal-overlay" id="dream-summary-modal" style="align-items: center;" onclick="if(event.target===this) closeDreamSummaryModal()">
+    <div class="dream-preset-paper" style="width: 85%; max-width: 320px; padding: 24px; border-radius: 16px; border: 1px solid #EAEAEA; box-shadow: 0 20px 40px rgba(0,0,0,0.1); background: #FFF;">
+        <div style="font-size: 16px; font-weight: bold; text-align: center; color: #111; margin-bottom: 15px;">结束当前场景</div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="dream-btn-secondary" style="width: 100%; border-radius: 12px; padding: 14px; font-size: 14px;" onclick="closeDreamSummaryModal(); saveAndExitDreamChat();">先不总结，储存记录退出</button>
+            <button class="dream-btn-primary" style="width: 100%; border-radius: 12px; padding: 14px; font-size: 14px;" onclick="closeDreamSummaryModal(); endDreamAndSummarize();">直接总结内容然后退出</button>
+            <button class="dream-btn-secondary" style="width: 100%; border-radius: 12px; padding: 14px; font-size: 14px; background: transparent; border-color: transparent; color: #888;" onclick="closeDreamSummaryModal()">取消</button>
+        </div>
+    </div>
+</div>
+
+<!-- 模型选择弹窗 (动态加载) -->
+<div class="dream-modal-overlay" id="dream-model-select-modal" style="align-items: center;" onclick="if(event.target===this) closeDreamModelSelectModal()">
+    <div class="dream-preset-paper" style="width: 85%; max-width: 320px; padding: 20px 0; border-radius: 16px; border: 1px solid #EAEAEA; box-shadow: 0 20px 40px rgba(0,0,0,0.1); background: #FFF; max-height: 70vh; display: flex; flex-direction: column;">
+        <div style="font-size: 16px; font-weight: bold; text-align: center; color: #111; margin-bottom: 10px; flex-shrink: 0;">选择 API 模型</div>
+        
+        <div style="padding: 0 20px 10px 20px; flex-shrink: 0;">
+            <select id="dream-api-preset-select" class="ios-select-clean" style="margin-bottom: 10px; border: 1px solid #EAEAEA;" onchange="fetchDreamModelsFromPreset()">
+                <option value="">当前默认 API</option>
+            </select>
+            <button class="dream-btn-secondary" style="width: 100%; border-radius: 12px; padding: 8px; font-size: 13px;" onclick="fetchDreamModelsFromPreset()">拉取模型</button>
+        </div>
+
+        <div id="dream-model-list-container" style="display: flex; flex-direction: column; overflow-y: auto; flex: 1; border-top: 1px solid #F0F0F0;">
+            <!-- JS 动态注入模型列表 -->
+        </div>
+        <div style="padding: 10px 20px 0 20px; flex-shrink: 0;">
+            <button class="dream-btn-secondary" style="width: 100%; border-radius: 12px; padding: 12px; font-size: 14px;" onclick="closeDreamModelSelectModal()">取消</button>
+        </div>
+    </div>
+</div>
+
+<!-- 亮度调节弹窗 -->
+<div class="dream-modal-overlay" id="brightness-modal" style="align-items: center;" onclick="if(event.target===this) closeBrightnessModal()">
+    <div class="dream-preset-paper" style="width: 85%; max-width: 320px; padding: 24px; border-radius: 16px; border: 1px solid #EAEAEA; box-shadow: 0 20px 40px rgba(0,0,0,0.1); background: #FFF;">
+        <div style="font-size: 16px; font-weight: bold; text-align: center; color: #111; margin-bottom: 20px;">调节背景亮度</div>
+        <input type="range" id="brightness-slider" min="0" max="100" value="100" oninput="changeBrightness(this.value)" style="width: 100%; accent-color: #111;">
+        <div style="text-align: center; font-size: 13px; color: #888; margin-top: 15px; font-weight: bold;" id="brightness-val-display">100%</div>
+        <button class="dream-btn-primary" style="margin-top: 20px; width: 100%; border-radius: 12px; padding: 12px; font-size: 14px;" onclick="saveBrightness()">保存</button>
+    </div>
+</div>
+
+<!-- 全局亮度遮罩层 (放在最顶层，但不阻挡点击) -->
+<div id="global-brightness-mask" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0); pointer-events: none; z-index: 99998; transition: background 0.1s;"></div>
 
 </body>
 </html>

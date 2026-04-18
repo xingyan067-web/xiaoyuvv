@@ -404,7 +404,7 @@ function generateCodeForQQ(qq) {
     return `V2-${qqInfo}-${hexHash}`.substring(0, 16);
 }
 // --- 全局变量 ---
-const totalApps = 8; // 👈 修改：增加到 8 个 APP
+const totalApps = 9; // 👈 修改：增加到 9 个 APP (新增短信APP)
 let iconPresets = [];
 let fontPresets = [];
 let wallpaperPresets = [];
@@ -1856,7 +1856,9 @@ function initGrid() {
         // Forum: 实心星球/社区 + 内部镂空纹理
         { id: 'app-3', iconId: 'icon-3', nameId: 'name-3', name: 'Forum', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>' },
         // 👇 新增：App 7 (Wish & To-Do) 放在网格的第 5 个位置
-        { id: 'app-7', iconId: 'icon-7', nameId: 'name-7', name: 'Wish', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' }
+        { id: 'app-7', iconId: 'icon-7', nameId: 'name-7', name: 'Wish', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' },
+        // 👇 新增：App 8 (短信 iMessage) 放在第二页第二个格子
+        { id: 'app-8', iconId: 'icon-8', nameId: 'name-8', name: '短信', svg: '<svg class="default-icon-svg" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM9 11H7V9h2v2zm4 0h-2V9h2v2zm4 0h-2V9h2v2z"/></svg>' }
     ];
     const cells1 = Array.from(grid1.children).slice(1); // 第一页的格子 (避开小组件)
     const cells2 = Array.from(grid2.children); // 第二页的格子
@@ -1879,11 +1881,14 @@ function initGrid() {
             if (data.id === 'app-2') openMusicApp(); 
             if (data.id === 'app-3') openForumApp(); 
             if (data.id === 'app-7') openWishApp(); 
+            if (data.id === 'app-8') { if(typeof openSmsApp === 'function') openSmsApp(); } // 👈 绑定打开短信APP
         });
 
-        // 核心：前 7 个放第一页，第 8 个 (Wish) 放第二页
+        // 核心：前 7 个放第一页，Wish 和 短信 放第二页
         if (data.id === 'app-7') {
             if (cells2[0]) cells2[0].appendChild(appDiv);
+        } else if (data.id === 'app-8') {
+            if (cells2[1]) cells2[1].appendChild(appDiv); // 👈 放在第二页第二个格子
         } else {
             if (cells1[index]) cells1[index].appendChild(appDiv);
         }
@@ -4886,6 +4891,17 @@ function wcRenderMessages(charId, preserveScroll = false) {
         const checkboxHtml = `<div class="wc-msg-checkbox ${wcState.multiSelectedIds.includes(msg.id) ? 'checked' : ''}" onclick="wcToggleMultiSelectMsg(${msg.id})"></div>`;
         const timeHtml = `<span class="wc-msg-timestamp-outside">${wcFormatTime(msg.time)}</span>`;
 
+        // 👇 核心修改：如果是拉黑拒收的消息，添加红色感叹号 👇
+        if (msg.isBlockedError) {
+            const errorIconHtml = `<div style="margin: 0 8px; width: 20px; height: 20px; background: #FF3B30; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px; cursor: pointer; flex-shrink: 0; z-index: 10;" onclick="alert('消息被拒收')">!</div>`;
+            if (msg.sender === 'me') {
+                contentHtml = `<div style="display: flex; align-items: center;">${errorIconHtml}${contentHtml}</div>`;
+            } else {
+                contentHtml = `<div style="display: flex; align-items: center;">${contentHtml}${errorIconHtml}</div>`;
+            }
+        }
+        // 👆 修改结束 👆
+
         const bubbleWrapper = document.createElement('div');
         bubbleWrapper.className = 'wc-bubble-container';
         bubbleWrapper.innerHTML = displayNameHtml + contentHtml; // 👈 把名字拼进去
@@ -5368,17 +5384,17 @@ function wcSendMsg() {
     const text = input.value.trim();
     if (!text) return;
 
-    // 👇 新增：检查用户是否被禁言 👇
     const charId = wcState.activeChatId;
     const char = wcState.characters.find(c => c.id === charId);
+    
+    // 检查用户是否被禁言
     if (char && char.isGroup && char.mutedMembers && char.mutedMembers.includes('user')) {
         alert("你已被群主禁言，无法发送消息。");
         input.value = '';
         return;
     }
-    // 👆 新增结束 👆
 
-    // 👇 新增：主动发送消息时的时间感知记录
+    // 主动发送消息时的时间感知记录
     if (char && (!char.chatConfig || char.chatConfig.timePerceptionEnabled !== false)) {
         const msgs = wcState.chats[charId] || [];
         const validMsgs = msgs.filter(m => m.type !== 'system' && !m.isError);
@@ -5387,7 +5403,7 @@ function wcSendMsg() {
             const now = Date.now();
             const gapMs = now - lastMsg.time;
             
-            if (gapMs >= 10 * 60 * 1000) { // 超过10分钟触发时间感知
+            if (gapMs >= 10 * 60 * 1000) { 
                 const gapMinutes = Math.floor(gapMs / 60000);
                 const gapHours = Math.floor(gapMinutes / 60);
                 const gapDays = Math.floor(gapHours / 24);
@@ -5405,16 +5421,18 @@ function wcSendMsg() {
             }
         }
     }
-    // 👆 新增结束
 
+    // 👇 核心修复：统一声明 extra 对象，并打上拉黑拒收标记 👇
     let extra = {};
+    if (char && char.isBlocked) {
+        extra.isBlockedError = true;
+    }
+
     if (wcState.replyingToMsgId) {
         const msgs = wcState.chats[wcState.activeChatId];
         const replyMsg = msgs.find(m => m.id === wcState.replyingToMsgId);
         if (replyMsg) {
             let replyContentHtml = '';
-            
-            // 判断被引用的消息类型，生成对应的 HTML
             if (replyMsg.type === 'text') {
                 replyContentHtml = replyMsg.content;
             } else if (replyMsg.type === 'sticker' || replyMsg.type === 'image') {
@@ -5422,7 +5440,6 @@ function wcSendMsg() {
             } else {
                 replyContentHtml = `[${replyMsg.type}]`;
             }
-            
             const senderName = replyMsg.sender === 'me' ? wcState.user.name : wcState.characters.find(c=>c.id===wcState.activeChatId).name;
             extra.quote = `${senderName}: ${replyContentHtml}`;
         }
@@ -5949,6 +5966,7 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         systemPrompt += `5. 转账/语音(按需使用): {"type":"transfer", "amount":金额, "note":"备注"}, {"type":"voice", "content":"语音内容"}\n`;
         systemPrompt += `6. 朋友圈互动(如果你在【朋友圈动态】中看到了感兴趣的内容，或者有人评论了你，你可以进行互动): {"type":"moment_like", "content": 朋友圈ID}, {"type":"moment_comment", "momentId": 朋友圈ID, "content":"评论内容"}\n`;
         systemPrompt += `7. 音乐邀请回应(如果用户向你发送了 [邀请听歌] 的卡片，你必须根据当前人设和心情决定是否同意。): {"type":"music_accept", "content":"同意话语"} 或 {"type":"music_reject", "content":"拒绝话语"}\n`;
+        systemPrompt += `7.5. 分享歌曲(按需使用，如果你听到一首好歌想分享给User，或者想发到朋友圈表达心情): {"type":"share_song", "songName":"歌名", "artist":"歌手", "content":"分享文案", "target":"chat或moment"}\n`;
         systemPrompt += `8. 主动语音通话(如果你想念User 或者你觉得当前氛围极佳，又或者有非常重要/暧昧的话想对 User 说，你可以主动向 User 发起语音通话！注意**按需使用**): {"type":"call_invite", "content":"发起通话时的内心OS"}\n`;
         systemPrompt += `9. 食谱互动(**按需使用**): {"type":"recipe_send", "b":"早餐", "l":"午餐", "d":"晚餐", "content":"想说的话"}, {"type":"recipe_edit", "meal":"b/l/d", "newText":"修改内容", "content":"想说的话"}\n`;
         systemPrompt += `10. 主动点外卖(**按需使用**如果你觉得User饿了，或者想给User一个惊喜，你可以主动给User点外卖！):{"type":"order_delivery", "foodName":"外卖名称", "price":"价格", "msg":"备注留言", "content":"想说的话"}\n`;
@@ -6264,7 +6282,7 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
 
         let replyText = data.choices[0].message.content;
 
-        // 👇 增强版：拉黑拦截逻辑 (支持多条消息队列和表情包) 👇
+        // 👇 核心修改：拉黑后，AI 的消息直接转入短信 APP 👇
         if (char.isBlocked) {
             let actions = [];
             try {
@@ -6275,49 +6293,29 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
                 if (start !== -1 && end !== -1) {
                     actions = JSON.parse(cleanText.substring(start, end + 1));
                 } else {
-                    // 降级处理
                     actions = [{ type: 'text', content: cleanText }];
                 }
             } catch (e) {
                 actions = [{ type: 'text', content: replyText.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim() }];
             }
 
-            if (!char.blockedMessages) char.blockedMessages = [];
-
-            // 遍历解析出的每一条消息
+            // 遍历解析出的每一条消息，发送到短信 APP
             for (let action of actions) {
                 if (!action || !action.content) continue;
-                
-                let finalType = action.type || 'text';
                 let finalContent = action.content;
-
-                // 处理表情包转换
-                if (finalType === 'sticker') {
-                    const url = wcFindStickerUrlMulti(config.stickerGroupIds, finalContent);
-                    if (url) {
-                        finalContent = url;
-                    } else {
-                        finalType = 'text';
-                        finalContent = `[表情: ${finalContent}]`;
-                    }
-                }
-
-                const blockedMsg = {
-                    id: Date.now() + Math.random(),
-                    type: finalType,
-                    content: finalContent,
-                    time: Date.now()
-                };
-
-                // 存入小黑屋记录
-                char.blockedMessages.unshift(blockedMsg);
+                if (action.type === 'sticker') finalContent = `[表情包: ${action.content}]`;
+                if (action.type === 'image') finalContent = `[图片]`;
                 
-                // 加入弹窗队列
-                blockedAlertQueue.push({ char: char, msg: blockedMsg });
+                // 调用短信 APP 的接收函数 (明确指定发给默认马甲)
+                if (typeof smsReceiveMessage === 'function') {
+                    smsReceiveMessage(char.name, char.avatar, finalContent, char.id, '我 (User)');
+                }
             }
             
+            // 记录到小黑屋（保留原有的查岗功能）
+            if (!char.blockedMessages) char.blockedMessages = [];
+            char.blockedMessages.unshift({ id: Date.now(), type: 'text', content: "已转入短信APP", time: Date.now() });
             wcSaveData();
-            processBlockedAlertQueue(); // 触发弹窗队列
 
         } else {
             // 正常情况，发送到聊天界面
@@ -6530,6 +6528,51 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
     });
     actions = splitActions;
     // 👆 拆分结束 👆
+
+    // 👇 核心修改：拉黑后，前两次在微信发感叹号，之后转入短信 APP 👇
+    if (char && char.isBlocked) {
+        char.blockedCount = (char.blockedCount || 0) + 1;
+
+        if (char.blockedCount <= 2) {
+            // 前两次：渲染在微信界面，带红色感叹号
+            for (let action of actions) {
+                if (!action || !action.content) continue;
+                let extra = { isBlockedError: true }; // 打上拒收标记
+                
+                if (action.type === 'sticker') {
+                    const url = wcFindStickerUrlMulti(stickerGroupIds, action.content);
+                    if (url) wcAddMessage(charId, 'them', 'sticker', url, extra);
+                    else wcAddMessage(charId, 'them', 'text', `[表情: ${action.content}]`, extra);
+                } else if (action.type === 'image') {
+                    wcAddMessage(charId, 'them', 'image', action.content, extra);
+                } else {
+                    wcAddMessage(charId, 'them', 'text', action.content, extra);
+                }
+            }
+            // 注入系统提示，让 AI 知道被拒收了
+            wcAddMessage(charId, 'system', 'system', `[系统强制警告：你刚才发送的消息旁边出现了红色的感叹号，提示“消息已发出，但被对方拒收了”。你意识到自己已经被 User 拉黑了！请在接下来的行动中，改用【手机短信】联系 User！]`, { hidden: true });
+            wcSaveData();
+        } else {
+            // 超过两次：直接转入短信 APP
+            for (let action of actions) {
+                if (!action || !action.content) continue;
+                let finalContent = action.content;
+                if (action.type === 'sticker') finalContent = `[表情包: ${action.content}]`;
+                if (action.type === 'image') finalContent = `[图片]`;
+                
+                if (typeof smsReceiveMessage === 'function') {
+                    smsReceiveMessage(char.name, char.avatar, finalContent, char.id);
+                }
+            }
+            if (!char.blockedMessages) char.blockedMessages = [];
+            char.blockedMessages.unshift({ id: Date.now(), type: 'text', content: "已转入短信APP", time: Date.now() });
+            wcSaveData();
+        }
+        
+        // 拉黑状态下，直接结束解析，不执行后续的正常渲染
+        return;
+    }
+    // 👆 拉黑拦截结束 👆
 
     for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
@@ -6768,6 +6811,54 @@ async function wcParseAIResponse(charId, text, stickerGroupIds) {
             wcAddMessage(charId, 'them', 'text', action.content || "我先不听啦~", extra);
             musicForceStopListenTogether(charId);
             
+        // 👇 新增：解析 AI 主动分享歌曲指令 👇
+        } else if (action.type === 'share_song') {
+            const songName = action.songName || '未知歌曲';
+            const artist = action.artist || '未知歌手';
+            const text = action.content || '';
+            const target = action.target || 'chat';
+            
+            // 构造风格1的分享卡片 HTML
+            const cardHtml = `
+                <div class="chat-shared-song-card">
+                    <div class="css-song-info-row">
+                        <div style="width: 48px; height: 48px; border-radius: 8px; background: #111; display: flex; align-items: center; justify-content: center; color: #FFF; flex-shrink: 0;">
+                            <svg viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: currentColor;"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        </div>
+                        <div class="css-song-text">
+                            <div class="css-song-title">${songName}</div>
+                            <div class="css-song-artist">${artist}</div>
+                        </div>
+                    </div>
+                    <div class="css-song-footer">
+                        <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        网易云音乐
+                    </div>
+                </div>
+            `;
+
+            if (target === 'moment') {
+                const newMoment = {
+                    id: Date.now(),
+                    name: char.name,
+                    avatar: char.avatar,
+                    text: text ? `${text}<br><br>${cardHtml}` : cardHtml,
+                    image: null,
+                    imageDesc: null,
+                    time: Date.now(),
+                    likes: [],
+                    comments: [],
+                    visibleGroup: char.groupName || 'Default'
+                };
+                wcState.moments.unshift(newMoment);
+                wcSaveData();
+                wcRenderMoments();
+                wcAddMessage(charId, 'system', 'system', `[系统内部信息(仅AI可见): 你刚刚在朋友圈分享了歌曲《${songName}》。]`, { hidden: true });
+            } else {
+                if (text) wcAddMessage(charId, 'them', 'text', text, extra);
+                wcAddMessage(charId, 'them', 'receipt', cardHtml, extra);
+            }
+        // 👆 新增结束 👆
         } else if (action.type === 'music_invite_user' || action.type === 'music_invite') {
             // 1. 先把 AI 说的邀请话语发出来
             if (action.content) {
@@ -10652,6 +10743,7 @@ async function wcGeneratePhonePrivacy() {
         const realMsgs = wcState.chats[char.id] || [];
         const recentMsgs = realMsgs.slice(-30).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
         const chatConfig = char.chatConfig || {};
+        const userName = chatConfig.userName || wcState.user.name;
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
 
         // 核心修复：只读取关联的世界书
@@ -10673,9 +10765,9 @@ async function wcGeneratePhonePrivacy() {
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
-        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【用户(${userName})设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; // 新增
-        prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的私密记录APP。\n`;
+        prompt += `【核心场景设定】：我（${userName}）现在正在偷偷查看你（${char.name}）手机上的私密记录APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
         prompt += `请基于你的人设、我的设定，以及我们**最近的聊天上下文**，生成你最近的【私密自慰记录】和【春梦记录】。\n`;
@@ -10688,12 +10780,12 @@ async function wcGeneratePhonePrivacy() {
             "time": "昨晚深夜 / 刚刚",
             "status": "简短的状态概括，如：极度渴望、边哭边弄等",
             "action": "具体的动作描述，你是如何触碰自己的，用了什么物品，或者看着什么东西（比如我的照片/聊天记录）",
-            "feeling": "详细的内心感受，对User的情感，身体的反应等"
+            "feeling": "详细的内心感受，对${userName}的情感，身体的反应等"
           },
           "wetDream": {
             "time": "前天夜里 / 昨晚",
             "status": "梦醒后的状态，如：满头大汗、内裤湿透、回味无穷等",
-            "dream": "梦境的具体描述，梦里User对你做了什么，场景是怎样的",
+            "dream": "梦境的具体描述，梦里${userName}对你做了什么，场景是怎样的",
             "feeling": "醒来后的内心感受，羞耻、渴望还是空虚"
           }
         }\n`;
@@ -11444,7 +11536,9 @@ async function wcGeneratePhoneChats() {
 
     try {
         const chatConfig = char.chatConfig || {};
+        const userName = chatConfig.userName || wcState.user.name;
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+
         const msgs = wcState.chats[char.id] || [];
         const recentMsgs = msgs.slice(-20).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
 
@@ -11469,16 +11563,16 @@ async function wcGeneratePhoneChats() {
 
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【当前时间】：${timeString}\n`;
-        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【重要：用户身份】\n用户(${userName})的名字是：${userName}。\n用户在你的生活中的角色/人设是：${userPersona}。\n`;
         prompt += `【最近你与User的聊天记录】：\n${recentMsgs}\n\n`;
         prompt += `${contactsInfo}\n\n`;
         
         prompt += `请根据角色的人设、当前生活状态、最近的聊天内容，以及【通讯录NPC列表】，生成该角色手机微信里的【聊天列表】和【详细聊天记录】。\n`;
         prompt += `【严格要求（极具活人感与独立社交）】：\n`;
         prompt += `1. 必须生成 3 到 8 个聊天会话。\n`;
-        prompt += `2. 必须包含一个与用户(User)的会话，isUser 设为 true。\n`;
+        prompt += `2. 必须包含一个与用户(${userName})的会话，isUser 设为 true。\n`;
         prompt += `3. 其他会话必须从【通讯录NPC列表】中挑选人物/群聊生成，isGroup 表示是否为群聊。\n`;
-        prompt += `4. 【最重要：独立社交指令】：你和 NPC 的聊天内容必须是真实的社交日常！例如：吐槽奇葩老板、聊游戏开黑、拼单点外卖、借钱、分享搞笑视频等。**绝对不要在每个群里都聊 User！你的世界不是只有 User！**同时要确保 User 可以隐秘体现在你的社交圈和你的生活里面！\n`;
+        prompt += `4. 【最重要：独立社交指令】：你和 NPC 的聊天内容必须是真实的社交日常！例如：吐槽奇葩老板、聊游戏开黑、拼单点外卖、借钱、分享搞笑视频等。**绝对不要在每个群里都聊 ${userName}！你的世界不是只有 ${userName}！**同时要确保 ${userName} 可以隐秘体现在你的社交圈和你的生活里面！\n`;
         prompt += `5. 每个会话必须包含一个 "history" 数组，里面必须包含 8 到 15 条具体的聊天记录！绝对不能少于8条！\n`;
         prompt += `6. history 中的消息，sender 为 "me" 代表手机主人(${char.name})发出的，sender 为 "them" 代表对方发出的。\n`;
         prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
@@ -11489,7 +11583,7 @@ async function wcGeneratePhoneChats() {
         prompt += `推演结束后，直接返回纯 JSON 数组，格式如下：\n`;
         prompt += `[
   {
-    "name": "User的备注名", "isUser": true, "isGroup": false, "lastMsg": "最近的一条消息", "time": "10:30",
+    "name": "${userName}的备注名", "isUser": true, "isGroup": false, "lastMsg": "最近的一条消息", "time": "10:30",
     "history": [
       {"sender": "them", "content": "在干嘛？"},
       {"sender": "me", "content": "刚吃完饭"}
@@ -15677,15 +15771,16 @@ async function wcGeneratePhoneFavorites() {
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
-        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【用户(${userName})设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; // 新增
-        prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的微信“我的收藏”。\n`;
+        prompt += `【核心场景设定】：我（${userName}）现在正在偷偷查看你（${char.name}）手机上的微信“我的收藏”。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;               
         prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的微信收藏内容。\n`;       
         prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
         prompt += `1. 【反模板化警告】：绝对禁止生成空泛的随笔！所有的内容必须是对【今天发生的事情】和【聊天中的情绪】的深刻复盘！\n`;
-        prompt += `1. 备忘录 (memos) 3-8个：【独立生活指令】：可以是关于你个人的生活琐事（如：晦涩的工作纪要、奇怪的菜谱、无聊的脑洞、游戏连招记录、购物清单）。也可以是关于 User 的观察日志或计划。保持高度随机性，拒绝重复！重点是要和今天行程事件与聊天记录关联！！要注意你是一个真实的人！\n`;
-        prompt += `2. 手写日记 (diaries) 1-2个：这是你深夜写下的私密文字。可以是对未来的迷茫、对某件生活琐事的愤怒吐槽也可以是无聊时的闲谈随笔，也可以是夹杂着对 User${userName} 复杂情感的碎碎念，对User${userName} 想说却不敢说的真心话。必须充满真实的活人情绪起伏。\n`;
+        prompt += `2. 私密记录 (privacy)：必须夹杂着对 ${userName} 的幻想，且情绪要承接最近聊天中的氛围（如：聊天中吵架了，私密记录里可能是带着恨意的发泄；聊天很甜，则是温柔的渴望）。\n`;
+        prompt += `3. 收藏-备忘录 (memos) 3-8个：记录今天行程中遇到的琐事，或者为了下次和${userName}见面做的攻略/计划也可以是记录关于${userName}的一些事情和小事。\n`;
+        prompt += `4. 收藏-手写日记 (diaries) 1-2个：这是你深夜写下的真心话。必须是对今天某件具体事情（行程或聊天中的某句话）的深刻反思、纠结或偏执。\n`;
         prompt += `   - **字数要求**：每篇日记必须不少于 100 字！\n`;
         prompt += `   - **排版与手账风格**：为了模拟真实的手写草稿和拼贴手账感，请在文本中随机使用以下标记：\n`;
         prompt += `     - [涂改]写错或不想承认的话[/涂改] （例如：我[涂改]一点也不[/涂改]很想你）\n`;
@@ -15698,7 +15793,7 @@ async function wcGeneratePhoneFavorites() {
         prompt += `{
 
   "memos": [
-    {"title": "User的饲养观察守则", "content": "1. 不能给Ta喝冰水会胃痛。2. 撒谎的时候眼睛会往右下角看。3. 极度吃软不吃硬。", "time": "2023-10-24 14:30"}
+    {"title": "${userName}的饲养观察守则", "content": "1. 不能给Ta喝冰水会胃痛。2. 撒谎的时候眼睛会往右下角看。3. 极度吃软不吃硬。", "time": "2023-10-24 14:30"}
   ],
   "diaries": [
     {"content": "今天Ta又对着别人笑了。[涂改]真想把那个人杀了[/涂改] 我必须克制自己。可是[高亮]Ta只能看着我[/高亮]不是吗？[拼贴]“我们只是普通朋友”[/拼贴] 这句话真刺耳。", "time": "昨天深夜 03:15"}
@@ -15927,8 +16022,8 @@ async function wcGeneratePhoneBrowser() {
         const realMsgs = wcState.chats[char.id] || [];
         const recentMsgs = realMsgs.slice(-30).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
         const chatConfig = char.chatConfig || {};
+        const userName = chatConfig.userName || wcState.user.name;
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
-
         // 核心修复：只读取关联的世界书
         let wbInfo = "";
         if (worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
@@ -15948,17 +16043,17 @@ async function wcGeneratePhoneBrowser() {
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
-        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【用户(${userName})设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; 
-        prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的浏览器APP。\n`;
+        prompt += `【核心场景设定】：我（${userName}）现在正在偷偷查看你（${char.name}）手机上的浏览器APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
         prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的浏览器数据。\n`;
         prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
         prompt += `1. 【反模板化警告】：绝对禁止生成毫无关联的随机搜索！每一条浏览记录都必须能在【今日行程】或【聊天记录】中找到原因！\n`;
-        prompt += `2. 浏览记录(history) 4-8条：如果今天行程里去了超市，可能会搜某个菜的做法；如果聊天里User提到了某部电影，可能会搜影评；如果今天心情烦躁，可能会搜缓解焦虑的方法。必须是顺理成章的延伸！\n`;
+        prompt += `2. 浏览记录(history) 4-8条：如果今天行程里去了超市，可能会搜某个菜的做法；如果聊天里${userName}提到了某部电影，可能会搜影评；如果今天心情烦躁，可能会搜缓解焦虑的方法。必须是顺理成章的延伸！\n`;
         prompt += `3. 内心批注(annotation)：这是你浏览该网页时的真实想法。必须结合你当下的心情(mood)来写，展现你最真实的心理活动。\n`;
-        prompt += `4. 论坛帖子(posts) 2-5个：你在匿名论坛发帖求助/吐槽。帖子的内容必须是对【今天发生的事情】或【刚刚和User聊天的内容】的复盘、纠结或吐槽！\n`;
+        prompt += `4. 论坛帖子(posts) 2-5个：你在匿名论坛发帖求助/吐槽。帖子的内容必须是对【今天发生的事情】或【刚刚和${userName}聊天的内容】的复盘、纠结或吐槽！\n`;
         prompt += `5. 帖子评论5-10个：可以是各种路人或者的NPC评论，也可以是你回复路人或NPC的评论，评论要模拟真实论坛，具备活人感！\n`;
         prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
         prompt += `1. 仔细阅读【今日行程】和【聊天记录】，提取出 3-5 个关键事件或情绪点。\n`;
@@ -17493,6 +17588,7 @@ async function wcGeneratePhoneCart() {
         const realMsgs = wcState.chats[char.id] || [];
         const recentMsgs = realMsgs.slice(-30).map(m => `${m.sender==='me'?'User':char.name}: ${m.content}`).join('\n');
         const chatConfig = char.chatConfig || {};
+        const userName = chatConfig.userName || wcState.user.name;
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
 
         // 读取关联的世界书
@@ -17508,17 +17604,17 @@ async function wcGeneratePhoneCart() {
 
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
-        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【用户(${userName})设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; 
-        prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）手机上的购物APP。\n`;
+        prompt += `【核心场景设定】：我（${userName}）现在正在偷偷查看你（${char.name}）手机上的购物APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
         prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的私密购物数据。\n`;
         prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
         prompt += `1. 【反模板化警告】：绝对禁止生成老套的“防小人”、“智商税”等固定模板商品！商品必须与今天发生的事强相关！\n`;
-        prompt += `2. 购物车(cart) 5-10条：如果聊天里User说冷，你可能会加购暖宝宝；如果今天行程里你去了健身房，可能会加购蛋白粉；如果你们吵架了，可能会加购道歉礼物。必须有明确的因果关系！\n`;
+        prompt += `2. 购物车(cart) 5-10条：如果聊天里${userName}说冷，你可能会加购暖宝宝；如果今天行程里你去了健身房，可能会加购蛋白粉；如果你们吵架了，可能会加购道歉礼物。必须有明确的因果关系！\n`;
         prompt += `3. 购买记录(history) 5-10条：最近已经买下的东西。同样必须映射你们最近的聊天话题或你的生活状态。\n`;
-        prompt += `4. 内心OS(desc)：商品描述必须是你添加购物车时的【真实内心OS】。要体现出你买这个东西的动机（是因为User，还是因为今天遇到的某件事）。\n`;
+        prompt += `4. 内心OS(desc)：商品描述必须是你添加购物车时的【真实内心OS】。要体现出你买这个东西的动机（是因为${userName}，还是因为今天遇到的某件事）。\n`;
         prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
         prompt += `1. 仔细阅读【今日行程】和【聊天记录】，找出你目前最缺什么，或者最想给User买什么。\n`;
         prompt += `2. 构思具体的商品名称（带品牌或定语，显得真实）。\n`;
@@ -19366,6 +19462,206 @@ window.toggleFloatingInput = function(e) {
     }
 };
 
+// ==========================================
+// 音乐分享逻辑 (底部面板 + 风格1卡片)
+// ==========================================
+window.musicOpenShareSheet = function(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (!musicState.currentSong) {
+        alert("请先播放一首歌曲哦~");
+        return;
+    }
+    wcOpenModal('music-share-action-sheet');
+};
+
+window.musicSelectShareTarget = function(target) {
+    wcCloseModal('music-share-action-sheet');
+    
+    setTimeout(() => {
+        document.getElementById('music-share-target-hidden').value = target;
+        document.getElementById('music-share-text').value = '';
+        
+        const chatGroup = document.getElementById('music-share-chat-target-group');
+        const forumGroup = document.getElementById('music-share-forum-target-group');
+        
+        chatGroup.style.display = 'none';
+        forumGroup.style.display = 'none';
+
+        if (target === 'chat') {
+            chatGroup.style.display = 'block';
+            const charList = document.getElementById('music-share-char-list');
+            charList.innerHTML = '';
+            let selectedId = null;
+            document.getElementById('music-share-char-selected-id').value = '';
+            
+            wcState.characters.forEach(c => {
+                if (c.isGroup) return; // 排除群聊
+                const isSelected = (wcState.activeChatId === c.id || (musicState.listenTogether.active && musicState.listenTogether.charId === c.id));
+                if (isSelected && !selectedId) selectedId = c.id;
+                
+                const div = document.createElement('div');
+                div.className = 'wc-list-item';
+                div.style.padding = '8px 12px';
+                div.style.borderBottom = 'none';
+                div.style.cursor = 'pointer';
+                div.style.background = isSelected ? '#E5E5EA' : '#FFF';
+                div.style.borderRadius = '8px';
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.innerHTML = `
+                    <img src="${c.avatar}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; margin-right: 12px; border: 1px solid #F0F0F0;">
+                    <span style="font-size: 14px; color: #111; font-weight: 500; flex: 1;">${c.name}</span>
+                    ${isSelected ? '<svg viewBox="0 0 24 24" style="width: 18px; height: 18px; stroke: #007AFF; fill: none; stroke-width: 2;"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
+                `;
+                div.onclick = () => {
+                    document.getElementById('music-share-char-selected-id').value = c.id;
+                    Array.from(charList.children).forEach(child => {
+                        child.style.background = '#FFF';
+                        const svg = child.querySelector('svg');
+                        if (svg) svg.remove();
+                    });
+                    div.style.background = '#E5E5EA';
+                    div.innerHTML += '<svg viewBox="0 0 24 24" style="width: 18px; height: 18px; stroke: #007AFF; fill: none; stroke-width: 2;"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                };
+                charList.appendChild(div);
+            });
+            if (selectedId) {
+                document.getElementById('music-share-char-selected-id').value = selectedId;
+            }
+        } else if (target === 'forum') {
+            forumGroup.style.display = 'block';
+            const forumSelect = document.getElementById('music-share-forum-select');
+            forumSelect.innerHTML = '';
+            if (typeof forumState !== 'undefined' && forumState.windows) {
+                forumState.windows.forEach(w => {
+                    const opt = document.createElement('option');
+                    opt.value = w.id;
+                    opt.innerText = w.name;
+                    if (forumState.activeWindowId === w.id) opt.selected = true;
+                    forumSelect.appendChild(opt);
+                });
+            }
+            
+            // 动态加载面具(身份)列表
+            const maskSelect = document.getElementById('music-share-forum-mask-select');
+            if (maskSelect) {
+                maskSelect.innerHTML = '<option value="default">默认身份 (User)</option>';
+                wcState.masks.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.innerText = `扮演: ${m.name}`;
+                    maskSelect.appendChild(opt);
+                });
+            }
+        }
+
+        wcOpenModal('music-share-detail-modal');
+    }, 300); // 等待底部面板收起
+};
+
+window.musicExecuteShareSong = function() {
+    const target = document.getElementById('music-share-target-hidden').value;
+    const text = document.getElementById('music-share-text').value.trim();
+    const song = musicState.currentSong;
+    if (!song) return;
+
+    // 构造风格1的分享卡片 HTML
+    const cardHtml = `
+        <div class="chat-shared-song-card">
+            <div class="css-song-info-row">
+                <img src="${song.cover}" class="css-song-cover">
+                <div class="css-song-text">
+                    <div class="css-song-title">${song.title}</div>
+                    <div class="css-song-artist">${song.artist}</div>
+                </div>
+            </div>
+            <div class="css-song-footer">
+                <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                网易云音乐
+            </div>
+        </div>
+    `;
+
+    if (target === 'chat') {
+        const charId = parseInt(document.getElementById('music-share-char-selected-id').value);
+        if (!charId) return alert("请选择角色");
+        
+        if (text) wcAddMessage(charId, 'me', 'text', text);
+        wcAddMessage(charId, 'me', 'receipt', cardHtml);
+        
+        const aiPrompt = `[系统内部信息(仅AI可见): User 刚刚向你分享了一首歌曲《${song.title}》- ${song.artist}。${text ? 'User的留言是：“'+text+'”。' : ''}请在接下来的回复中，根据这首歌做出自然的反应。]`;
+        wcAddMessage(charId, 'system', 'system', aiPrompt, { hidden: true });
+        
+        alert("已分享给角色！");
+    } else if (target === 'moment') {
+        const newMoment = {
+            id: Date.now(),
+            name: wcState.user.name,
+            avatar: wcState.user.avatar,
+            text: text ? `${text}<br><br>${cardHtml}` : cardHtml,
+            image: null,
+            imageDesc: null,
+            time: Date.now(),
+            likes: [],
+            comments: [],
+            visibleGroup: 'All'
+        };
+        wcState.moments.unshift(newMoment);
+        wcSaveData();
+        if (document.getElementById('wc-view-moments').classList.contains('active')) {
+            wcRenderMoments();
+        }
+        alert("已分享至朋友圈！");
+    } else if (target === 'forum') {
+        const winId = document.getElementById('music-share-forum-select').value;
+        if (!winId) return alert("请选择论坛窗口");
+        
+        // 获取选中的发布身份
+        const maskId = document.getElementById('music-share-forum-mask-select').value;
+        let authorName = forumState.profile.name;
+        let authorHandle = forumState.profile.handle;
+        let authorAvatar = forumState.profile.avatar;
+        
+        if (maskId !== 'default') {
+            const mask = wcState.masks.find(m => m.id.toString() === maskId);
+            if (mask) {
+                authorName = mask.name;
+                authorHandle = '@' + mask.name;
+                authorAvatar = mask.avatar;
+            }
+        }
+        
+        const newPost = {
+            id: Date.now(),
+            windowId: winId,
+            type: 'home', 
+            isStory: false, 
+            title: `分享歌曲: 《${song.title}》`, 
+            author: {
+                name: authorName,
+                handle: authorHandle,
+                avatar: authorAvatar
+            },
+            content: text ? `${text}<br><br>${cardHtml}` : cardHtml,
+            image: null,
+            imageDesc: null,
+            time: Date.now(),
+            likes: [], 
+            saves: [],
+            comments: []
+        };
+        
+        forumState.posts.unshift(newPost);
+        forumSaveData();
+        if (document.getElementById('forum-view-home').classList.contains('active')) {
+            forumRenderPosts('home');
+        }
+        alert("已分享至论坛！");
+    }
+
+    wcCloseModal('music-share-detail-modal');
+};
+
 // 悬浮输入框拖拽逻辑
 let floatDrag = { active: false, startY: 0, initialTop: 0 };
 document.addEventListener('DOMContentLoaded', () => {
@@ -20853,6 +21149,8 @@ const dreamState = {
     currentChat: [],
     fontSize: 14, // 新增：梦境字体大小
     fontUrl: '',  // 新增：梦境字体URL
+    fontColor: '#111111', // 新增：梦境字体颜色
+    offlineContextLimit: 20, // 新增：线下上下文条数
     // 新增：扩展组件数据
     ext: {
         currentTab: 'css', // 当前停留的tab
@@ -20886,6 +21184,8 @@ async function dreamLoadData() {
         if (data.ext) dreamState.ext = { ...dreamState.ext, ...data.ext };
         if (data.fontSize) dreamState.fontSize = data.fontSize;
         if (data.fontUrl !== undefined) dreamState.fontUrl = data.fontUrl;
+        if (data.fontColor !== undefined) dreamState.fontColor = data.fontColor;
+        if (data.offlineContextLimit !== undefined) dreamState.offlineContextLimit = data.offlineContextLimit;
     }
     applyDreamCss(); // 加载时自动应用全局 CSS
     applyDreamFontSettings(); // 加载时应用字体设置
@@ -20899,7 +21199,9 @@ async function dreamSaveData() {
         selectedPresetId: dreamState.selectedPresetId,
         ext: dreamState.ext,
         fontSize: dreamState.fontSize,
-        fontUrl: dreamState.fontUrl
+        fontUrl: dreamState.fontUrl,
+        fontColor: dreamState.fontColor,
+        offlineContextLimit: dreamState.offlineContextLimit
     });
 }
 
@@ -21119,10 +21421,17 @@ function closeDreamSettings() {
     document.getElementById('dream-settings-modal').classList.remove('active');
 }
 
+function saveDreamOfflineContextLimit(val) {
+    dreamState.offlineContextLimit = parseInt(val) || 20;
+    dreamSaveData();
+}
+
 function dreamRenderSettings() {
-    // 0. 渲染字体设置
+    // 0. 渲染线下上下文条数和字体设置
+    document.getElementById('dream-offline-context-limit').value = dreamState.offlineContextLimit || 20;
     document.getElementById('dream-font-slider').value = dreamState.fontSize || 14;
     document.getElementById('dream-font-size-val').innerText = (dreamState.fontSize || 14) + 'px';
+    document.getElementById('dream-font-color-input').value = dreamState.fontColor || '#111111';
     document.getElementById('dream-font-url-input').value = dreamState.fontUrl || '';
 
     // 1. 渲染世界书列表
@@ -21413,11 +21722,15 @@ async function triggerDreamAI() {
 
     // 构造消息体
     const messages = [{ role: "system", content: systemPrompt }];
-    dreamState.currentChat.forEach(m => {
-        if (m.role === 'user' || m.role === 'assistant') {
-            // 传给 AI 的历史记录剥离掉 HTML 状态栏，防止污染 AI 的认知
-            messages.push({ role: m.role, content: m.rawContent || m.content });
-        }
+    
+    // 👇 核心修改：根据设置截断当前场景的上下文条数
+    const chatLimit = dreamState.offlineContextLimit > 0 ? dreamState.offlineContextLimit : 20;
+    const validChats = dreamState.currentChat.filter(m => m.role === 'user' || m.role === 'assistant');
+    const recentChats = validChats.slice(-chatLimit);
+
+    recentChats.forEach(m => {
+        // 传给 AI 的历史记录剥离掉 HTML 状态栏，防止污染 AI 的认知
+        messages.push({ role: m.role, content: m.rawContent || m.content });
     });
 
     dreamState.currentChat.push({ role: 'system', content: '梦境正在演化...' });
@@ -21580,11 +21893,31 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 // 覆盖原本的 enterDreamChat 和 sendDreamMessage，让它们调用支持 HTML 的渲染函数
-function enterDreamChat(mode = 'dream') {
-    currentDreamCardId = null; // 👇 新增：新建梦境时清空卡片ID，防止覆盖旧卡片
+async function enterDreamChat(mode = 'dream') {
+    currentDreamCardId = null; // 新增：新建梦境时清空卡片ID，防止覆盖旧卡片
     dreamState.currentMode = mode; // 记录模式
     dreamState.currentChat = []; 
     document.getElementById('dream-chat-page').classList.add('active');
+    
+    // 更新顶栏头像和名字
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (char) {
+        const avatarEl = document.getElementById('dream-chat-avatar');
+        const nameEl = document.getElementById('dream-chat-name');
+        if (avatarEl) avatarEl.src = char.avatar;
+        if (nameEl) nameEl.innerText = char.name;
+    }
+    
+    // 👇 新增：读取当前生效的 API 模型并显示在底部标签上
+    try {
+        const activeConfig = await getActiveApiConfig('chat');
+        const modelTextEl = document.getElementById('dream-current-model-text');
+        if (modelTextEl) {
+            modelTextEl.innerText = activeConfig.model || '未选择模型';
+        }
+    } catch (e) {
+        console.warn("读取模型失败", e);
+    }
     
     const titleEl = document.getElementById('dream-chat-title');
     if (mode === 'offline') {
@@ -21608,6 +21941,264 @@ function sendDreamMessage() {
     dreamRenderChatWithHTML();
     syncDreamChatHistory(); // 👇 新增：用户发送消息后同步保存
 }
+// ==========================================
+// 梦境总结、模型选择与亮度调节逻辑
+// ==========================================
+function openDreamSummaryModal() {
+    const modal = document.getElementById('dream-summary-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('active'), 10);
+    }
+}
+
+function closeDreamSummaryModal() {
+    const modal = document.getElementById('dream-summary-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => modal.style.display = 'none', 200);
+    }
+}
+
+// 动态打开模型选择弹窗
+async function openDreamModelSelectModal() {
+    const container = document.getElementById('dream-model-list-container');
+    if (!container) return;
+    
+    const modal = document.getElementById('dream-model-select-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('active'), 10);
+    }
+
+    // 填充 API 预设
+    const presetSelect = document.getElementById('dream-api-preset-select');
+    if (presetSelect) {
+        presetSelect.innerHTML = '<option value="">当前默认 API</option>';
+        apiPresets.forEach((p, idx) => {
+            const opt = document.createElement('option');
+            opt.value = idx;
+            opt.innerText = p.name;
+            presetSelect.appendChild(opt);
+        });
+    }
+
+    // 默认加载当前模型的列表
+    renderDreamModelList();
+}
+
+async function fetchDreamModelsFromPreset() {
+    const presetIdx = document.getElementById('dream-api-preset-select').value;
+    const container = document.getElementById('dream-model-list-container');
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:#888; font-size: 14px;">拉取中...</div>';
+
+    let baseUrl, key;
+    if (presetIdx !== "") {
+        const p = apiPresets[presetIdx];
+        baseUrl = p.baseUrl;
+        key = p.key;
+    } else {
+        const activeConfig = await getActiveApiConfig('chat');
+        baseUrl = activeConfig.baseUrl;
+        key = activeConfig.key;
+    }
+
+    if (!baseUrl || !key) {
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:#FF3B30; font-size: 14px;">API 配置不完整</div>';
+        return;
+    }
+
+    try {
+        const res = await fetch(`${baseUrl}/models`, {
+            headers: { 'Authorization': `Bearer ${key}` }
+        });
+        const data = await res.json();
+        
+        if (data.data && Array.isArray(data.data)) {
+            dreamState.tempModels = data.data.map(m => m.id);
+            renderDreamModelList();
+        } else {
+            container.innerHTML = '<div style="text-align:center; padding:20px; color:#FF3B30; font-size: 14px;">拉取失败：格式不正确</div>';
+        }
+    } catch (e) {
+        container.innerHTML = `<div style="text-align:center; padding:20px; color:#FF3B30; font-size: 14px;">拉取失败：${e.message}</div>`;
+    }
+}
+
+async function renderDreamModelList() {
+    const container = document.getElementById('dream-model-list-container');
+    container.innerHTML = '';
+
+    let models = dreamState.tempModels;
+    
+    const activeConfig = await getActiveApiConfig('chat');
+    const currentModel = activeConfig.model || '';
+
+    if (!models || models.length === 0) {
+        // 尝试从主副 API 缓存中读取
+        const fullConfig = await idb.get('ios_theme_api_config') || {};
+        const secondary = fullConfig.secondary || {};
+        const isSecondary = (activeConfig === secondary);
+        models = isSecondary ? fetchedModelsSecondary : fetchedModelsPrimary;
+        
+        if (!models || models.length === 0) {
+            const selectId = isSecondary ? 'secModelSelect' : 'modelSelect';
+            const selectEl = document.getElementById(selectId);
+            if (selectEl && selectEl.options.length > 0) {
+                models = Array.from(selectEl.options).map(opt => opt.value);
+            }
+        }
+    }
+
+    if (!models || models.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:#888; font-size: 14px;">暂无模型列表，请点击拉取</div>';
+        return;
+    }
+
+    models.forEach(model => {
+        const div = document.createElement('div');
+        div.className = 'dream-model-option';
+        if (model === currentModel) {
+            div.style.color = '#007AFF';
+            div.style.fontWeight = 'bold';
+            div.innerText = model + ' (当前)';
+        } else {
+            div.innerText = model;
+        }
+        div.onclick = () => selectDreamModel(model);
+        container.appendChild(div);
+    });
+}
+
+function closeDreamModelSelectModal() {
+    const modal = document.getElementById('dream-model-select-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => modal.style.display = 'none', 200);
+    }
+}
+
+// 选中模型并保存到数据库
+async function selectDreamModel(modelName) {
+    const presetIdx = document.getElementById('dream-api-preset-select').value;
+    
+    // 1. 更新底部标签 UI
+    const textEl = document.getElementById('dream-current-model-text');
+    if (textEl) textEl.innerText = modelName;
+    
+    // 2. 更新数据库
+    try {
+        const fullConfig = await idb.get('ios_theme_api_config') || {};
+        const activeConfig = await getActiveApiConfig('chat');
+        const isSecondary = (activeConfig === fullConfig.secondary);
+
+        if (presetIdx !== "") {
+            // 如果选择了预设，将预设的 baseUrl, key, model 覆盖到当前生效的 API 中
+            const p = apiPresets[presetIdx];
+            if (isSecondary) {
+                if (!fullConfig.secondary) fullConfig.secondary = {};
+                fullConfig.secondary.baseUrl = p.baseUrl;
+                fullConfig.secondary.key = p.key;
+                fullConfig.secondary.model = modelName;
+                fullConfig.secondary.temp = p.temp;
+            } else {
+                if (!fullConfig.primary) fullConfig.primary = {};
+                fullConfig.primary.baseUrl = p.baseUrl;
+                fullConfig.primary.key = p.key;
+                fullConfig.primary.model = modelName;
+                fullConfig.primary.temp = p.temp;
+            }
+        } else {
+            // 仅修改模型
+            if (isSecondary) {
+                if (!fullConfig.secondary) fullConfig.secondary = {};
+                fullConfig.secondary.model = modelName;
+            } else {
+                if (!fullConfig.primary) fullConfig.primary = {};
+                fullConfig.primary.model = modelName;
+            }
+        }
+        
+        await idb.set('ios_theme_api_config', fullConfig);
+        
+        // 同步更新设置页面的 select 和 input
+        if (isSecondary) {
+            const selectEl = document.getElementById('secModelSelect');
+            if (selectEl) selectEl.value = modelName;
+            if (presetIdx !== "") {
+                const urlEl = document.getElementById('secApiBaseUrl');
+                const keyEl = document.getElementById('secApiKey');
+                if (urlEl) urlEl.value = fullConfig.secondary.baseUrl;
+                if (keyEl) keyEl.value = fullConfig.secondary.key;
+            }
+        } else {
+            const selectEl = document.getElementById('modelSelect');
+            if (selectEl) selectEl.value = modelName;
+            if (presetIdx !== "") {
+                const urlEl = document.getElementById('apiBaseUrl');
+                const keyEl = document.getElementById('apiKey');
+                if (urlEl) urlEl.value = fullConfig.primary.baseUrl;
+                if (keyEl) keyEl.value = fullConfig.primary.key;
+            }
+        }
+        
+    } catch (e) {
+        console.error("保存模型设置失败", e);
+    }
+    
+    closeDreamModelSelectModal();
+}
+
+// --- 亮度调节逻辑 ---
+function openBrightnessModal() {
+    const modal = document.getElementById('brightness-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        setTimeout(() => modal.classList.add('active'), 10);
+    }
+}
+
+function closeBrightnessModal() {
+    const modal = document.getElementById('brightness-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => modal.style.display = 'none', 200);
+    }
+}
+
+function changeBrightness(val) {
+    const displayEl = document.getElementById('brightness-val-display');
+    if (displayEl) displayEl.innerText = val + '%';
+    
+    // 调节背景颜色，从白(100)变暗(0)
+    const lightness = Math.floor((val / 100) * 255);
+    const bgColor = `rgb(${lightness}, ${lightness}, ${lightness})`;
+    // 让边框颜色比背景稍微深一点点，增加层次感
+    const borderColor = `rgb(${Math.max(0, lightness - 20)}, ${Math.max(0, lightness - 20)}, ${Math.max(0, lightness - 20)})`;
+    
+    // 使用 CSS 变量统一控制背景层和底栏的颜色
+    document.documentElement.style.setProperty('--dream-bg-color', bgColor);
+    document.documentElement.style.setProperty('--dream-border-color', borderColor);
+}
+
+function saveBrightness() {
+    const val = document.getElementById('brightness-slider').value;
+    localStorage.setItem('ios_theme_brightness', val);
+    closeBrightnessModal();
+    alert("亮度已保存！");
+}
+
+// 页面加载时初始化亮度
+document.addEventListener('DOMContentLoaded', () => {
+    const savedBrightness = localStorage.getItem('ios_theme_brightness');
+    if (savedBrightness) {
+        const slider = document.getElementById('brightness-slider');
+        if (slider) slider.value = savedBrightness;
+        changeBrightness(savedBrightness);
+    } else {
+        changeBrightness(100); // 默认白色
+    }
+});
 
 // --- 梦境预设卡片编辑与保存逻辑 ---
 function openDreamPresetEditor(id = null) {
@@ -22247,6 +22838,12 @@ function changeDreamFontSize(val) {
     dreamSaveData();
 }
 
+function changeDreamFontColor(val) {
+    dreamState.fontColor = val;
+    document.documentElement.style.setProperty('--dream-font-color', val);
+    dreamSaveData();
+}
+
 function applyDreamFontUrl() {
     const url = document.getElementById('dream-font-url-input').value.trim();
     dreamState.fontUrl = url;
@@ -22259,6 +22856,12 @@ function applyDreamFontSettings() {
     // 应用大小
     if (dreamState.fontSize) {
         document.documentElement.style.setProperty('--dream-font-size', dreamState.fontSize + 'px');
+    }
+    // 应用颜色
+    if (dreamState.fontColor) {
+        document.documentElement.style.setProperty('--dream-font-color', dreamState.fontColor);
+    } else {
+        document.documentElement.style.setProperty('--dream-font-color', '#111111');
     }
     // 应用字体文件
     let styleTag = document.getElementById('dream-custom-font-inject');
@@ -22277,6 +22880,41 @@ function applyDreamFontSettings() {
         styleTag.innerHTML = `:root { --dream-font-family: 'Kaiti', 'STKaiti', '楷体', serif; }`;
     }
 }
+
+// --- 新增：先不总结，储存记录退出 ---
+function saveAndExitDreamChat() {
+    if (dreamState.currentChat.length > 1) {
+        if (!currentDreamCardId) {
+            // 如果是新开的梦境，生成一张新卡片
+            const summaryPrefix = dreamState.currentMode === 'offline' ? "[线下见面]" : "[梦境残影]";
+            
+            // 尝试获取最后一条有意义的消息作为预览
+            let previewText = "未总结的记录...";
+            const validMsgs = dreamState.currentChat.filter(m => m.role === 'user' || m.role === 'assistant');
+            if (validMsgs.length > 0) {
+                previewText = validMsgs[validMsgs.length - 1].content.replace(/<[^>]*>?/gm, '').substring(0, 30) + "...";
+            }
+            
+            const newCard = {
+                id: Date.now(),
+                time: Date.now(),
+                content: `${summaryPrefix} ${previewText} (未总结)`,
+                chatHistory: JSON.parse(JSON.stringify(dreamState.currentChat)),
+                charId: wcState.activeChatId
+            };
+            dreamState.cards.push(newCard);
+            currentDreamCardId = newCard.id;
+            dreamSaveData();
+        } else {
+            // 如果是已有的卡片，确保数据同步
+            syncDreamChatHistory();
+        }
+    }
+    
+    document.getElementById('dream-chat-page').classList.remove('active');
+    dreamRenderCards(); // 刷新主页卡片列表
+}
+
 // --- 将梦境作为潜意识注入给角色 ---
 function injectDreamToChar(cardId) {
     const charId = wcState.activeChatId;
@@ -22693,6 +23331,7 @@ function executeBlockToggle() {
     if (char) {
         const wasBlocked = char.isBlocked; // 记录之前的状态
         char.isBlocked = pendingBlockState; // 更新为新状态
+        char.blockedCount = 0; // 👈 新增：重置拉黑拦截计数器
         wcSaveData();
         
         // 更新按钮 UI
@@ -29402,6 +30041,11 @@ async function refreshApiQuota() {
         if (finalBalance !== "未知") {
             quotaEl.innerText = finalBalance;
             quotaEl.style.fontSize = "12px"; 
+            
+            // 👇 新增：触发短信 APP 的话费检查 👇
+            if (typeof checkApiQuotaForSms === 'function') {
+                checkApiQuotaForSms(finalBalance);
+            }
         } else {
             quotaEl.innerText = "格式不支持";
         }
@@ -34706,6 +35350,7 @@ async function wcGenerateAllPhoneData() {
         const chatConfig = char.chatConfig || {};
         
         // 1. 读取用户面具/设定
+        const userName = chatConfig.userName || wcState.user.name;
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
         
         // 2. 读取最近 30 条聊天记录
@@ -34744,9 +35389,9 @@ async function wcGenerateAllPhoneData() {
         let prompt = `你扮演角色：${char.name}。\n`;
         prompt += timePrompt;
         prompt += `【你的人设】：${char.prompt}\n${wbInfo}\n`;
-        prompt += `【用户(User)设定】：${userPersona}\n`;
+        prompt += `【用户(${userName})设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; 
-        prompt += `【核心场景设定】：我（User）现在正在偷偷查看你（${char.name}）的手机。\n`;
+        prompt += `【核心场景设定】：我（${userName}）现在正在偷偷查看你（${char.name}）的手机。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         prompt += `${contactsInfo}\n\n`;
         
@@ -34758,7 +35403,7 @@ async function wcGenerateAllPhoneData() {
         prompt += `3. 私密记录 (privacy)：包含 masturbation(自慰记录) 和 wetDream(春梦记录)。\n`;
         prompt += `4. 购物车 (cartApp)：包含 cart(3-6条购物车商品) 和 history(3-6条购买记录)。\n`;
         prompt += `5. 钱包 (wallet)：包含 balance(余额数字) 和 transactions(4-8条交易记录，type为income或expense)。\n`;
-        prompt += `6. 聊天记录 (chats)：生成 3-6 个聊天会话。必须包含一个与用户(User)的会话(isUser为true)。其他会话从【通讯录NPC列表】中挑选。每个会话的 history 数组包含 5-10 条具体聊天记录(sender为me或them)。\n`;
+        prompt += `6. 聊天记录 (chats)：生成 3-6 个聊天会话。必须包含一个与用户(${userName})的会话(isUser为true)。其他会话从【通讯录NPC列表】中挑选。每个会话的 history 数组包含 5-10 条具体聊天记录(sender为me或them)。\n`;
         prompt += `【内在逻辑要求】：所有数据必须相互呼应！例如行程里去了便利店，钱包里就该有支出；聊天里提到了某物，浏览器或购物车里就该有相关记录。\n`;
         prompt += `推演结束后，直接返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
@@ -34785,7 +35430,7 @@ async function wcGenerateAllPhoneData() {
   },
   "chats": [
     {
-      "name": "User的备注名", "isUser": true, "isGroup": false, "lastMsg": "最近的一条消息", "time": "10:30",
+      "name": "${userName}的备注名", "isUser": true, "isGroup": false, "lastMsg": "最近的一条消息", "time": "10:30",
       "history": [
         {"sender": "them", "content": "在干嘛？"},
         {"sender": "me", "content": "刚吃完饭"}
@@ -35532,6 +36177,7 @@ window.wcGenerateVideoAppData = async function() {
 
     try {
         const chatConfig = char.chatConfig || {};
+        const userName = chatConfig.userName || wcState.user.name;
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
         
         // 提取最近 30 条聊天记录
@@ -36499,7 +37145,9 @@ window.wcGeneratePhoneFiles = async function() {
 
     try {
         const chatConfig = char.chatConfig || {};
+        const userName = chatConfig.userName || wcState.user.name;
         const userPersona = chatConfig.userPersona || wcState.user.persona || "无";
+
         
         // 提取最近 30 条聊天记录
         const msgs = wcState.chats[char.id] || [];
@@ -36518,29 +37166,29 @@ window.wcGeneratePhoneFiles = async function() {
             }
         }
 
-        let prompt = `你现在是一个手机文件管理系统的后台数据引擎。我（User）正在偷偷查看【${char.name}】的手机文件。\n`;
+        let prompt = `你现在是一个手机文件管理系统的后台数据引擎。我（${userName}）正在偷偷查看【${char.name}】的手机文件。\n`;
         prompt += `【${char.name} 的人设】：${char.prompt}\n${wbInfo}\n`;
-        prompt += `【我(User) 的设定】：${userPersona}\n`;
+        prompt += `【我(${userName}) 的设定】：${userPersona}\n`;
         prompt += `【最近我们的聊天记录】：\n${recentMsgs}\n\n`;
         
         prompt += `请根据 ${char.name} 的人设和我们最近的聊天记录，生成 Ta 手机里的私密文件数据。\n`;
         prompt += `【核心要求（极具活人感与偷窥感）】：\n`;
-        prompt += `1. 相册 (photos)：生成 4-8 张照片的画面描述。必须体现偷窥感（如：偷存的User照片、奇怪的截图、日常风景、聊天中提到的事物）。\n`;
-        prompt += `2. 录音 (audios)：生成 3-6 条录音记录。包含标题(title)、时长(duration, 如"04:20")、日期(date)，以及【录音的具体文字转写内容(content)】。内容可以是深夜emo的碎碎念、工作会议录音、想发给User但没敢发的语音草稿。\n`;
+        prompt += `1. 相册 (photos)：生成 4-8 张照片的画面描述。必须体现偷窥感（如：偷存的${userName}照片、奇怪的截图、日常风景、聊天中提到的事物）。\n`;
+        prompt += `2. 录音 (audios)：生成 3-6 条录音记录。包含标题(title)、时长(duration, 如"04:20")、日期(date)，以及【录音的具体文字转写内容(content)】。内容可以是深夜emo的碎碎念、工作会议录音、想发给${userName}但没敢发的语音草稿。\n`;
         prompt += `3. 文档 (docs)：生成 3-6 个私密文件。包含标题(title, 带后缀)、大小(size, 如"2.4 MB")、日期(date)、类型(type: pdf/doc/xls)，以及【文档的具体正文内容(content，50-150字)】。内容可以是旅游攻略、记账本、工作文档、日记草稿。\n`;
         prompt += `4. 首页推荐 (homeCards)：从上面生成的资源中，挑选最具有代表性、最私密的 3 个（最好是1图1音1文），生成详细的画面描述或内容摘要(desc)。\n`;
         prompt += `返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "homeCards": [
-    {"type": "image", "title": "IMG_8924.jpg", "desc": "一张在海边看日落的照片，光线很温柔，画面边缘似乎有User的侧影。", "meta": "Lubin, Poland", "size": "4.2"},
+    {"type": "image", "title": "IMG_8924.jpg", "desc": "一张在海边看日落的照片，光线很温柔，画面边缘似乎有${userName}的侧影。", "meta": "Lubin, Poland", "size": "4.2"},
     {"type": "audio", "title": "深夜碎碎念.m4a", "desc": "一段深夜录制的音频，背景里有微弱的雨声和 Ta 轻轻的叹息。", "meta": "昨天 02:15", "size": "04:20"},
-    {"type": "doc", "title": "Travel_Plan.pdf", "desc": "一份写着未来旅行计划的文档，里面提到了User最想去的海岛。", "meta": "10月20日 14:30", "size": "2.4"}
+    {"type": "doc", "title": "Travel_Plan.pdf", "desc": "一份写着未来旅行计划的文档，里面提到了${userName}最想去的海岛。", "meta": "10月20日 14:30", "size": "2.4"}
   ],
   "photos": [
-    {"desc": "User 昨天发来的自拍，偷偷存下来了"}
+    {"desc": "${userName} 昨天发来的自拍，偷偷存下来了"}
   ],
   "audios": [
-    {"title": "关于 User 的想法", "duration": "02:15", "date": "10月20日", "content": "其实我今天看到Ta的时候，心跳得好快...但我不敢说。"}
+    {"title": "关于 ${userName} 的想法", "duration": "02:15", "date": "10月20日", "content": "其实我今天看到Ta的时候，心跳得好快...但我不敢说。"}
   ],
   "docs": [
     {"title": "周末旅行攻略.pdf", "size": "2.4 MB", "date": "昨天 09:41", "type": "pdf", "content": "第一天：早上9点出发去海边，中午吃海鲜大排档。第二天：去爬山看日出..."}
