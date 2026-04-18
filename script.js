@@ -4016,12 +4016,20 @@ function wcSwitchTab(tabId) {
     const btnCalendar = document.getElementById('wc-btn-calendar'); 
     
     if (btnBack) btnBack.style.display = 'none';
-    if (btnExit) btnExit.style.display = 'flex'; 
     if (btnCalendar) btnCalendar.style.display = 'none'; 
 
     const titleMap = { 'chat': '', 'contacts': 'Contacts', 'moments': 'Moments', 'user': 'User' };
     const titleEl = document.getElementById('wc-nav-title');
     const navbar = document.querySelector('.wc-navbar');
+
+    // 🔪 核心修复：如果是 User 页面，彻底隐藏顶栏和退出键
+    if (tabId === 'user') {
+        if (navbar) navbar.style.display = 'none';
+        if (btnExit) btnExit.style.display = 'none';
+    } else {
+        if (navbar) navbar.style.display = 'flex';
+        if (btnExit) btnExit.style.display = 'flex';
+    }
 
     if (tabId === 'chat') {
         navbar.classList.add('custom-chat-nav-mode');
@@ -4503,7 +4511,11 @@ function wcRenderMessages(charId, preserveScroll = false) {
             
             let displayContent = msg.originalContent;
             if (msg.originalType === 'image' || msg.originalType === 'sticker') {
-                displayContent = `<img src="${msg.originalContent}" style="max-width: 100px; max-height: 100px; border-radius: 4px;">`;
+                if (msg.originalContent.startsWith('data:video/')) {
+                    displayContent = `<video src="${msg.originalContent}" style="max-width: 100px; max-height: 100px; border-radius: 4px;" muted playsinline></video>`;
+                } else {
+                    displayContent = `<img src="${msg.originalContent}" style="max-width: 100px; max-height: 100px; border-radius: 4px;">`;
+                }
             } else if (msg.originalType === 'voice') {
                 displayContent = `[语音] ${msg.originalContent}`;
             } else if (msg.originalType !== 'text') {
@@ -4575,7 +4587,11 @@ function wcRenderMessages(charId, preserveScroll = false) {
         else if (msg.type === 'sticker') {
             contentHtml = `<div class="wc-bubble wc-bubble-sticker ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}<img src="${msg.content}" class="wc-sticker-img"></div>`;
         } else if (msg.type === 'image') {
-            contentHtml = `<div class="wc-bubble wc-bubble-sticker ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}<img src="${msg.content}" class="wc-bubble-img"></div>`;
+            if (msg.content.startsWith('data:video/')) {
+                contentHtml = `<div class="wc-bubble wc-bubble-sticker ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}<video src="${msg.content}" class="wc-bubble-img" controls autoplay loop muted playsinline></video></div>`;
+            } else {
+                contentHtml = `<div class="wc-bubble wc-bubble-sticker ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}<img src="${msg.content}" class="wc-bubble-img"></div>`;
+            }
         } else if (msg.type === 'voice') {
             if (msg.showText) {
                 contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" onclick="wcToggleVoiceText(${msg.id})">${quoteHtml}[语音转文字] ${msg.content}</div>`;
@@ -5123,7 +5139,11 @@ function wcHandleReply() {
         if (msg.type === 'text') {
             displayHtml = msg.content;
         } else if (msg.type === 'sticker' || msg.type === 'image') {
-            displayHtml = `[图片] <img src="${msg.content}">`;
+            if (msg.content.startsWith('data:video/')) {
+                displayHtml = `[视频] <video src="${msg.content}" muted playsinline></video>`;
+            } else {
+                displayHtml = `[图片] <img src="${msg.content}">`;
+            }
         } else {
             displayHtml = `[${msg.type}]`;
         }
@@ -5215,7 +5235,31 @@ function wcHandleEdit() {
         const stickerGroupIds = char && char.chatConfig ? char.chatConfig.stickerGroupIds : [];
 
         // 根据选中的格式，重新构造消息
-        if (currentType === 'text') {
+        if (currentType === 'split') {
+            // 按换行符拆分文本
+            const lines = newText.split('\n').filter(line => line.trim() !== '');
+            if (lines.length > 0) {
+                // 第一行更新当前消息
+                msg.type = 'text';
+                msg.content = lines[0].trim();
+                
+                // 后续行作为新消息插入到当前消息之后
+                const msgs = wcState.chats[wcState.activeChatId];
+                const msgIndex = msgs.findIndex(m => m.id === msg.id);
+                
+                for (let i = 1; i < lines.length; i++) {
+                    const newMsg = {
+                        id: Date.now() + Math.random() + i,
+                        sender: msg.sender,
+                        type: 'text',
+                        content: lines[i].trim(),
+                        time: msg.time + i, // 稍微增加一点时间保证顺序
+                        name: msg.name // 继承发送者名字（群聊兼容）
+                    };
+                    msgs.splice(msgIndex + i, 0, newMsg);
+                }
+            }
+        } else if (currentType === 'text') {
             msg.type = 'text';
             msg.content = newText;
         } else if (currentType === 'image_desc') {
@@ -5941,10 +5985,17 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
 
         // 4. 输出格式与 JSON 结构约束 (精简后台更新版)
         const bgUpdateFreq = (char.chatConfig && char.chatConfig.bgUpdateFreq !== undefined) ? char.chatConfig.bgUpdateFreq : 30;
+        const shouldTriggerBgUpdate = Math.random() * 100 < bgUpdateFreq;
 
         systemPrompt += `<format_rules>\n`;
         systemPrompt += `【最高优先级绝对强制】：你的回复 **必须且只能** 是一个合法的、可被 JSON.parse() 完美解析的 JSON 对象！\n`;
-        systemPrompt += `该对象必须包含 "replies" 数组（用于回复User），并可以包含 "phoneUpdate" 对象（用于暗中修改你的手机数据）。\n`;
+        
+        if (shouldTriggerBgUpdate) {
+            systemPrompt += `该对象必须包含 "replies" 数组（用于回复User），并包含 "phoneUpdate" 对象（用于暗中修改你的手机数据）。\n`;
+        } else {
+            systemPrompt += `该对象必须且只能包含 "replies" 数组（用于回复User）。\n`;
+        }
+        
         systemPrompt += `- 必须使用双引号 " 包裹键名和字符串值。\n`;
         systemPrompt += `- 严禁输出损坏的 JSON，严禁在 JSON 外部输出任何多余的字符。\n`;
         
@@ -5954,10 +6005,11 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         systemPrompt += `- 必须模拟真人打字聊天习惯/线上聊天的碎片化习惯，保持对话口语化、碎片化，保持回复气泡的随机性和多样性！\n`;        
         systemPrompt += `- 语义完整：确保每一条短消息本身在语义上是完整的，不能将一句话从中间断开。\n\n`;        
         
-        systemPrompt += `【手机后台暗中更新机制 (概率触发)】\n`;
-        systemPrompt += `你有 ${bgUpdateFreq}% 的概率在回复我的同时，暗中修改你手机里的数据。\n`;
-        systemPrompt += `如果你决定触发暗中更新，请在 JSON 中提供 "phoneUpdate" 对象。如果不触发，"phoneUpdate" 填 null。\n`;
-        systemPrompt += `> 极度克制警告：正常人绝对不会频繁修改备注和个性签名！除非你们的关系刚刚发生了重大突破、严重争吵或极度暧昧，否则 newRemark, newNickname, newSign 必须填 null！宁可什么都不做，也不要为了改而改！\n\n`;
+        if (shouldTriggerBgUpdate) {
+            systemPrompt += `【手机后台暗中更新机制】\n`;
+            systemPrompt += `你现在可以暗中修改你手机里的数据。请在 JSON 中提供 "phoneUpdate" 对象。\n`;
+            systemPrompt += `> 极度克制警告：正常人绝对不会频繁修改备注和个性签名！除非你们的关系刚刚发生了重大突破、严重争吵或极度暧昧，否则 newRemark, newNickname, newSign 必须填 null！宁可什么都不做，也不要为了改而改！\n\n`;
+        }
 
         systemPrompt += `【"replies" 数组中的每个元素代表一条消息、表情包或动作指令，你可以根据聊天上下文，根据聊天氛围，聊天情绪**按需使用**，请把特殊格式视为增强互动的“调味剂”，请遵循**自然、主动触发逻辑**，不要每轮都发，也不要用户不提就一直不发。请严格遵守以下结构】：\n`;
         systemPrompt += `1. 文本消息: {"type":"text", "content":"完整的一句话。", "quote":"(可选)引用的内容"}\n`;
@@ -6013,42 +6065,24 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
         
         systemPrompt += `\n示例输出：\n`;
         if (config.bilingualEnabled) {
-            systemPrompt += `{
-  "replies": [
-    {"type":"text", "content":"I just went to the convenience store.<br><span style='font-size: 0.85em; opacity: 0.7;'>刚才去便利店了。</span>"},
-    {"type":"text", "content":"Bought an ice cream, do you want some?<br><span style='font-size: 0.85em; opacity: 0.7;'>买了个冰淇淋，你要吃吗？</span>"},
-    {"type":"sticker", "content":"开心"}
-  ],
-  "phoneUpdate": {
-    "newRemark": "给User的新备注名(不改填null)",
-    "newNickname": "你的新网名(不改填null)",
-    "newSign": "你的新个性签名(不改填null)"
-  }
-}\n`;
+            systemPrompt += `{\n  "replies": [\n    {"type":"text", "content":"I just went to the convenience store.<br><span style='font-size: 0.85em; opacity: 0.7;'>刚才去便利店了。</span>"},\n    {"type":"text", "content":"Bought an ice cream, do you want some?<br><span style='font-size: 0.85em; opacity: 0.7;'>买了个冰淇淋，你要吃吗？</span>"},\n    {"type":"sticker", "content":"开心"}\n  ]`;
+            if (shouldTriggerBgUpdate) {
+                systemPrompt += `,\n  "phoneUpdate": {\n    "newRemark": "给User的新备注名(不改填null)",\n    "newNickname": "你的新网名(不改填null)",\n    "newSign": "你的新个性签名(不改填null)"\n  }`;
+            }
+            systemPrompt += `\n}\n`;
         } else {
             if (char.isGroup) {
-                systemPrompt += `{
-  "replies": [
-    {"type":"text", "senderName":"张三", "content":"大家晚上好"},
-    {"type":"text", "senderName":"李四", "content":"终于下班了！"},
-    {"type":"sticker", "senderName":"王五", "content":"开心"},
-    {"type":"private_chat", "senderName":"张三", "content":"User，刚才群里那件事你怎么看？"}
-  ],
-  "phoneUpdate": null
-}\n`;
+                systemPrompt += `{\n  "replies": [\n    {"type":"text", "senderName":"张三", "content":"大家晚上好"},\n    {"type":"text", "senderName":"李四", "content":"终于下班了！"},\n    {"type":"sticker", "senderName":"王五", "content":"开心"},\n    {"type":"private_chat", "senderName":"张三", "content":"User，刚才群里那件事你怎么看？"}\n  ]`;
+                if (shouldTriggerBgUpdate) {
+                    systemPrompt += `,\n  "phoneUpdate": null`;
+                }
+                systemPrompt += `\n}\n`;
             } else {
-                systemPrompt += `{
-  "replies": [
-    {"type":"text", "content":"刚才去便利店了。"},
-    {"type":"text", "content":"买了个冰淇淋，你要吃吗？"},
-    {"type":"sticker", "content":"开心"}
-  ],
-  "phoneUpdate": {
-    "newRemark": "给User的新备注名(不改填null)",
-    "newNickname": "你的新网名(不改填null)",
-    "newSign": "你的新个性签名(不改填null)"
-  }
-}\n`;
+                systemPrompt += `{\n  "replies": [\n    {"type":"text", "content":"刚才去便利店了。"},\n    {"type":"text", "content":"买了个冰淇淋，你要吃吗？"},\n    {"type":"sticker", "content":"开心"}\n  ]`;
+                if (shouldTriggerBgUpdate) {
+                    systemPrompt += `,\n  "phoneUpdate": {\n    "newRemark": "给User的新备注名(不改填null)",\n    "newNickname": "你的新网名(不改填null)",\n    "newSign": "你的新个性签名(不改填null)"\n  }`;
+                }
+                systemPrompt += `\n}\n`;
             }
         }
         systemPrompt += `</format_rules>\n\n`;
@@ -8829,9 +8863,7 @@ function wcCloseWallet() {
     // 恢复底部 Tabbar
     document.getElementById('wc-main-tabbar').style.display = 'flex';
     
-    // 恢复全局顶部导航栏
-    const globalNavbar = document.querySelector('.wc-navbar');
-    if (globalNavbar) globalNavbar.style.display = 'flex';
+    // 🔪 核心修复：删除了强行恢复顶栏的代码，交给 wcSwitchTab 统一处理
 }
 
 function wcRenderWallet() {
@@ -9104,10 +9136,6 @@ function wcRenderChats() {
         return timeB - timeA;
     });
 
-    // 创建无缝隙卡片的外层包裹
-    const wrapper = document.createElement('div');
-    wrapper.className = 'chat-list-wrapper';
-
     const createChatItem = (char) => {
         const msgs = wcState.chats[char.id] || [];
         const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
@@ -9131,30 +9159,40 @@ function wcRenderChats() {
         
         const unreadCount = wcState.unreadCounts[char.id] || 0;
         const badgeHtml = unreadCount > 0 ? `<div class="wc-unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : '';
-        
+
         // 移除了 swipe-actions，加入了 ontouchstart 和 oncontextmenu 触发长按菜单
         div.innerHTML = `
             <div class="wc-chat-swipe-content ${pinClass}" onclick="wcOpenChat(${char.id})" ontouchstart="wcChatTouchStart(event, ${char.id})" ontouchend="wcChatTouchEnd()" oncontextmenu="wcShowChatContextMenu(event, ${char.id}); return false;">
-                <div style="position: relative;">
-                    <img src="${char.avatar}" class="wc-avatar">
+                <div class="wc-chat-avatar-wrapper">
+                    <img src="${char.avatar}" class="wc-avatar-square">
                     ${badgeHtml}
                 </div>
                 <div class="wc-item-content">
                     <div class="wc-item-title">${char.note || char.name}${char.isGroup && char.members ? ` (${char.members.length})` : ''}</div>
                     <div class="wc-item-subtitle">${subtitle}</div>
                 </div>
-                <div style="font-size: 12px; color: #C7C7CC;">${timeStr}</div>
+                <div class="wc-chat-time">${timeStr}</div>
             </div>
         `;
         return div;
     };
 
-    pinnedChars.forEach(char => wrapper.appendChild(createChatItem(char)));
-    otherChars.forEach(char => wrapper.appendChild(createChatItem(char)));
+    // 分别创建置顶和普通的包裹容器
+    if (pinnedChars.length > 0) {
+        const pinnedWrapper = document.createElement('div');
+        pinnedWrapper.className = 'chat-list-wrapper pinned-wrapper';
+        pinnedChars.forEach(char => pinnedWrapper.appendChild(createChatItem(char)));
+        list.appendChild(pinnedWrapper);
+    }
     
-    if (pinnedChars.length > 0 || otherChars.length > 0) {
-        list.appendChild(wrapper);
-    } else {
+    if (otherChars.length > 0) {
+        const otherWrapper = document.createElement('div');
+        otherWrapper.className = 'chat-list-wrapper other-wrapper';
+        otherChars.forEach(char => otherWrapper.appendChild(createChatItem(char)));
+        list.appendChild(otherWrapper);
+    }
+    
+    if (pinnedChars.length === 0 && otherChars.length === 0) {
         list.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0;">该分组下暂无会话</div>';
     }
 }
@@ -9320,9 +9358,104 @@ function wcRenderMoments() {
 }
 
 function wcRenderUser() { 
-    if (wcState.user.avatar) document.getElementById('wc-user-center-avatar').src = wcState.user.avatar; 
-    document.getElementById('wc-user-name-display').innerText = wcState.user.name; 
+    // 1. 更新顶部卡片的名字
+    const nameDisplay = document.getElementById('wc-user-airdrop-name');
+    if (nameDisplay) {
+        nameDisplay.innerText = 'Name: ' + wcState.user.name;
+    }
+
+    // 2. 动态渲染身份卡片 (有几个面具渲染几个)
+    const avatarContainer = document.getElementById('wc-user-mask-avatars');
+    if (avatarContainer) {
+        // 动态修改 class 以应用新样式
+        avatarContainer.className = 'id-card-list';
+        avatarContainer.innerHTML = '';
+        let cardsHtml = '';
+        
+        // 转义当前身份的引号和换行
+        const safeCurrentName = wcState.user.name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+        const safeCurrentPrompt = (wcState.user.persona || '暂无设定').replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, '<br>');
+        
+        // 辅助函数：根据名字生成固定的 7 位数字编号
+        const generateNo = (name) => {
+            let hash = 0;
+            for (let i = 0; i < name.length; i++) {
+                hash = name.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return Math.abs(hash).toString().substring(0, 7).padStart(7, '0');
+        };
+
+        // 渲染当前身份 (状态为 LINKED)
+        cardsHtml += `
+            <div class="id-card-item" onclick="wcShowPersona('当前身份: ${safeCurrentName}', '${safeCurrentPrompt}')">
+                <div class="id-card-top">
+                    <img src="${wcState.user.avatar}" class="id-card-avatar">
+                    <div class="id-card-info">
+                        <div class="id-card-label">SUBJECT NAME</div>
+                        <div class="id-card-name">${safeCurrentName}</div>
+                        <div class="id-card-meta-row">
+                            <div class="id-card-no">NO. ${generateNo(safeCurrentName)}</div>
+                            <div class="id-card-status">LINKED</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="id-card-barcode"></div>
+            </div>
+        `;
+        
+        // 渲染备用面具身份 (状态为 STANDBY)
+        if (wcState.masks && wcState.masks.length > 0) {
+            wcState.masks.forEach(m => {
+                // 避免重复渲染当前正在使用的面具
+                if (m.avatar !== wcState.user.avatar || m.name !== wcState.user.name) {
+                    const safeName = m.name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+                    const safePrompt = (m.prompt || '暂无设定').replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, '<br>');
+                    cardsHtml += `
+                        <div class="id-card-item" onclick="wcShowPersona('面具: ${safeName}', '${safePrompt}')">
+                            <div class="id-card-top">
+                                <img src="${m.avatar}" class="id-card-avatar">
+                                <div class="id-card-info">
+                                    <div class="id-card-label">SUBJECT NAME</div>
+                                    <div class="id-card-name">${safeName}</div>
+                                    <div class="id-card-meta-row">
+                                        <div class="id-card-no">NO. ${generateNo(safeName)}</div>
+                                        <div class="id-card-status" style="color: #888; border-color: #CCC;">STANDBY</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="id-card-barcode"></div>
+                        </div>
+                    `;
+                }
+            });
+        }
+        
+        avatarContainer.innerHTML = cardsHtml;
+    }
 }
+
+// 新增：点击头像查看人设的弹窗函数
+window.wcShowPersona = function(name, prompt) {
+    let modal = document.getElementById('wc-modal-ios-confirm');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'wc-modal-ios-confirm';
+        modal.className = 'ios-alert-overlay';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+        <div class="ios-alert-box" style="width: 280px;">
+            <div class="ios-alert-title" style="font-size: 16px;">${name}</div>
+            <div class="ios-alert-message" style="padding-bottom: 15px; max-height: 300px; overflow-y: auto; text-align: left; font-size: 13px; color: #555; line-height: 1.5;">
+                ${prompt}
+            </div>
+            <div style="display: flex; border-top: 0.5px solid rgba(60, 60, 67, 0.29);">
+                <button class="ios-alert-btn" style="flex: 1; font-weight: bold; color: #007AFF;" onclick="document.getElementById('wc-modal-ios-confirm').classList.remove('active')">关闭</button>
+            </div>
+        </div>
+    `;
+    modal.classList.add('active');
+};
 
 // --- WeChat Character & User Management ---
 function wcTriggerUpload(type) { document.getElementById(`wc-file-input-${type}`).click(); }
@@ -9330,8 +9463,29 @@ function wcTriggerUpload(type) { document.getElementById(`wc-file-input-${type}`
 async function wcHandleFileSelect(event, type) {
     const file = event.target.files[0];
     if (!file) return;
+    
+    // ⚠️ 安全限制：视频文件过大会导致浏览器卡死或数据库存不下
+    if (file.type.startsWith('video/') && file.size > 15 * 1024 * 1024) {
+        alert("视频文件过大！请选择 15MB 以内的视频，否则会导致数据丢失哦~");
+        event.target.value = '';
+        return;
+    }
+
     try {
-        const base64 = await wcCompressImage(file);
+        let base64 = '';
+        // 如果是 GIF 动图或视频，跳过压缩，直接转为 Base64
+        if (file.type === 'image/gif' || file.type.startsWith('video/')) {
+            base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = err => reject(err);
+                reader.readAsDataURL(file);
+            });
+        } else {
+            // 普通图片继续使用压缩
+            base64 = await wcCompressImage(file);
+        }
+
         wcState.tempImage = base64;
         wcState.tempImageType = type; 
 
@@ -12202,7 +12356,11 @@ function renderSimHistory(history, meAvatar, themAvatar, isGroup = false) {
         
         // --- 新增：表情包和图片渲染逻辑 ---
         if (msg.type === 'sticker' || msg.type === 'image') {
-            bubble.innerHTML = `<img src="${msg.content}" style="max-width: 120px; max-height: 120px; border-radius: 8px; display: block; object-fit: cover;">`;
+            if (msg.content.startsWith('data:video/')) {
+                bubble.innerHTML = `<video src="${msg.content}" style="max-width: 120px; max-height: 120px; border-radius: 8px; display: block; object-fit: cover;" controls autoplay loop muted playsinline></video>`;
+            } else {
+                bubble.innerHTML = `<img src="${msg.content}" style="max-width: 120px; max-height: 120px; border-radius: 8px; display: block; object-fit: cover;">`;
+            }
             bubble.style.background = 'transparent';
             bubble.style.padding = '0';
         } else {
@@ -15664,35 +15822,67 @@ function wcRenderPhoneFavoritesContent() {
                 const sig = getFavSignature('diary', '手写日记', diary.time, diary.content);
                 const isFav = wcState.myFavorites && wcState.myFavorites.some(f => f.sig === sig);
 
-                const rot1 = (Math.random() * 4 - 2).toFixed(1);
-                const rot2 = (Math.random() * 6 - 3).toFixed(1);
-                const tapeColor = ['rgba(255,200,200,0.4)', 'rgba(200,255,200,0.4)', 'rgba(200,200,255,0.4)', 'rgba(240,240,200,0.5)'][Math.floor(Math.random()*4)];
-                
+                // 保留 AI 生成的涂改、高亮等特殊标记解析
                 let processedContent = diary.content
                     .replace(/\[涂改\](.*?)\[\/涂改\]/g, '<span style="text-decoration: line-through; text-decoration-color: #333; text-decoration-thickness: 2px; opacity: 0.7;">$1</span>')
                     .replace(/\[高亮\](.*?)\[\/高亮\]/g, '<span style="background: linear-gradient(transparent 60%, rgba(255,255,0,0.6) 60%);">$1</span>')
-                    .replace(/\[拼贴\](.*?)\[\/拼贴\]/g, `<span style="background: #fff; border: 1px dashed #ccc; padding: 2px 4px; font-family: monospace; transform: rotate(${rot2}deg); display: inline-block; box-shadow: 1px 1px 2px rgba(0,0,0,0.1); margin: 2px;">$1</span>`);
+                    .replace(/\[拼贴\](.*?)\[\/拼贴\]/g, `<span style="background: #f5f5f5; border: 1px dashed #ccc; padding: 2px 4px; font-family: monospace; display: inline-block; border-radius: 4px; margin: 2px;">$1</span>`);
+
+                // 动态判断收藏图标状态
+                const favIconSvg = isFav 
+                    ? `<svg viewBox="0 0 24 24" style="fill: #111; stroke: #111;"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>`
+                    : `<svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path><line x1="12" y1="7" x2="12" y2="13"></line><line x1="9" y1="10" x2="15" y2="10"></line></svg>`;
 
                 html += `
-                    <div style="background: #faf9f5; border-radius: 4px; padding: 25px 20px; box-shadow: 2px 4px 12px rgba(0,0,0,0.08); position: relative; overflow: hidden; transform: rotate(${rot1}deg); margin-bottom: 15px; border: 1px solid #eaeaea;">
-                        <div style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%) rotate(-2deg); width: 60px; height: 25px; background: ${tapeColor}; backdrop-filter: blur(2px); box-shadow: 0 1px 2px rgba(0,0,0,0.05);"></div>
-                        <div style="font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #d35400; border: 1px solid #d35400; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; text-align: center; position: absolute; top: 15px; right: 15px; transform: rotate(15deg); opacity: 0.6; line-height: 1;">
-                            ${diary.time.split(' ')[0] || 'DATE'}
-                        </div>
-                        <div style="font-family: 'Kaiti', 'STKaiti', '楷体', serif; font-size: 16px; color: #3a3a3a; line-height: 2; letter-spacing: 1px; margin-top: 15px; white-space: pre-wrap; background-image: repeating-linear-gradient(transparent, transparent 31px, #e0e0e0 31px, #e0e0e0 32px); background-attachment: local; background-position: 0 4px;">${processedContent}</div>
-                        
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
-                            <div style="display: flex; gap: 8px;">
-                                <!-- 收藏按钮 -->
-                                <div onclick="wcToggleFavorite(event, 'diary', ${idx})" style="color: ${isFav ? '#111' : '#CCC'}; display: flex; align-items: center; gap: 4px; font-size: 11px; font-family: sans-serif; font-weight: bold; cursor: pointer; background: rgba(0,0,0,0.05); padding: 4px 10px; border-radius: 12px; transition: all 0.2s;">
-                                    <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: ${isFav ? 'currentColor' : 'none'}; stroke: currentColor; stroke-width: 2;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> FAV
-                                </div>
-                                <!-- 分享按钮 -->
-                                <div onclick="wcTriggerShare(event, 'diary', ${idx})" style="color: #111; display: flex; align-items: center; gap: 4px; font-size: 11px; font-family: sans-serif; font-weight: bold; cursor: pointer; background: rgba(0,0,0,0.05); padding: 4px 10px; border-radius: 12px; transition: background 0.2s;">
-                                    <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg> SHARE
-                                </div>
+                    <div class="icity-card">
+                        <div class="icity-header">
+                            <img src="${char.avatar}" class="icity-avatar" alt="avatar">
+                            <div class="icity-info">
+                                <div class="icity-name">${char.name}</div>
+                                <div class="icity-handle">@${char.name}</div>
                             </div>
-                            <div style="font-size: 11px; color: #a09e9b; font-family: sans-serif;">${diary.time}</div>
+                        </div>
+                        
+                        <div class="icity-content">
+                            ${processedContent}
+                        </div>
+                        
+                        <div class="icity-time">
+                            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            ${diary.time}
+                        </div>
+                        
+                        <div class="icity-divider"></div>
+                        
+                        <div class="icity-actions">
+                            <!-- 喜欢 (仅视觉反馈) -->
+                            <div class="icity-action-btn" onclick="this.style.color='#FF3B30'; this.querySelector('svg').style.fill='#FF3B30'; this.querySelector('svg').style.stroke='#FF3B30';">
+                                <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                                <span>喜欢</span>
+                            </div>
+                            
+                            <div class="icity-action-divider"></div>
+                            
+                            <!-- 小纸条 (收藏) -->
+                            <div class="icity-action-btn" onclick="wcToggleFavorite(event, 'diary', ${idx})" style="color: ${isFav ? '#111' : '#B2B2B2'};">
+                                ${favIconSvg}
+                                <span>小纸条</span>
+                            </div>
+                            
+                            <div class="icity-action-divider"></div>
+                            
+                            <!-- 存为图片 (分享给 Char) -->
+                            <div class="icity-action-btn" onclick="wcTriggerShare(event, 'diary', ${idx})">
+                                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                <span>存为图片</span>
+                            </div>
+                            
+                            <div class="icity-action-divider"></div>
+                            
+                            <!-- 更多 -->
+                            <div class="icity-action-btn more" onclick="alert('更多功能开发中...')">
+                                <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="19" cy="12" r="2"></circle></svg>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -16379,9 +16569,7 @@ function wcCloseMyFavorites() {
     // 恢复底部导航栏
     document.getElementById('wc-main-tabbar').style.display = 'flex';
     
-    // 🔪 核心修改：恢复全局的微信顶栏
-    const globalNavbar = document.querySelector('.wc-navbar');
-    if (globalNavbar) globalNavbar.style.display = 'flex';
+    // 🔪 核心修复：删除了强行恢复顶栏的代码，交给 wcSwitchTab 统一处理
 }
 
 // 预设的文件夹颜色库 (后层深色, 前层浅色)
@@ -16658,7 +16846,7 @@ function wcCloseShoppingPage() {
 function wcSwitchShopTab(tab) {
     // 兼容旧的 shop-tab 和新的 shop-cap-tab
     document.querySelectorAll('.shop-tab, .shop-cap-tab').forEach(el => el.classList.remove('active'));
-    const activeTab = document.getElementById(`shop-tab-${tab}`);
+    const activeTab = document.getElementById(`shop-tab-${tab}`) || document.getElementById(`cap-tab-${tab}`);
     if (activeTab) activeTab.classList.add('active');
     
     document.querySelectorAll('.shop-list').forEach(el => el.style.display = 'none');
@@ -16795,34 +16983,31 @@ async function wcGenerateShopItems() {
 }
 
 // ==========================================
-// 商城全局状态与分类轨道逻辑 (支持商城与外卖双模式)
+// 商城全局状态与侧边栏逻辑 (支持商城与外卖双模式)
 // ==========================================
 let wcShopCurrentTab = 'mall'; // 记录当前是大 Tab 是商城还是外卖
 let wcShopCurrentItems = [];
 let wcCatCurrentIndex = 0;
-const wcCatRadius = 300; 
-const wcCatStepAngle = 30; 
 
 // 动态获取当前 Tab 的分类
 function getShopCategories() {
     if (wcShopCurrentTab === 'mall') {
         return [
-            { id: 'all', label: 'ALL' },
-            { id: 'daily', label: 'DAILY' },
-            { id: 'fav', label: 'FAV' },
-            { id: 'add', label: 'ADD' }
+            { id: 'all', label: '全部' },
+            { id: 'daily', label: '日常' },
+            { id: 'fav', label: '推荐' },
+            { id: 'add', label: '自选' }
         ];
     } else {
         return [
-            { id: 'all', label: 'ALL' },
-            { id: 'snack', label: 'SNACK' },
-            { id: 'fav', label: 'FAV' },
-            { id: 'add', label: 'ADD' }
+            { id: 'all', label: '全部' },
+            { id: 'snack', label: '小吃' },
+            { id: 'fav', label: '推荐' },
+            { id: 'add', label: '自选' }
         ];
     }
 }
 
-// 覆盖原有的 wcSwitchShopTab，让外卖也支持轨道
 function wcSwitchShopTab(tab) {
     wcShopCurrentTab = tab; // 更新当前大 Tab 状态
     
@@ -16834,61 +17019,40 @@ function wcSwitchShopTab(tab) {
     const activeList = document.getElementById(`shop-list-${tab}`);
     if (activeList) activeList.style.display = 'flex'; // 保持 flex 布局
     
-    // 无论是商城还是外卖，都显示星际轨道
-    document.querySelector('.orbit-category-container').style.display = 'flex';
-    
-    // 切换大 Tab 时，重置轨道到 ALL 分类
+    // 切换大 Tab 时，重置侧边栏到 ALL 分类
     wcCatCurrentIndex = 0;
-    wcRenderCatOrbit();
+    wcRenderShopSidebar();
 }
 
-function wcRenderCatOrbit() {
-    const wheel = document.getElementById('wc-cat-orbit-wheel');
-    if (!wheel) return;
-    wheel.innerHTML = '';
+function wcRenderShopSidebar() {
+    const sidebar = document.getElementById('shop-sidebar');
+    if (!sidebar) return;
+    sidebar.innerHTML = '';
     
     const categories = getShopCategories();
     categories.forEach((cat, i) => {
-        const angleDeg = i * wcCatStepAngle;
-        const angleRad = (angleDeg - 90) * (Math.PI / 180);
-        const x = wcCatRadius * Math.cos(angleRad);
-        const y = wcCatRadius * Math.sin(angleRad);
-
         const node = document.createElement('div');
-        node.className = `orbit-node ${i === wcCatCurrentIndex ? 'active' : ''}`;
-        node.style.transform = `translate(${x}px, ${y}px)`;
-        
-        node.innerHTML = `
-            <div class="orbit-node-content" id="wc-cat-content-${i}">
-                <div class="orbit-dot"></div>
-                <div class="orbit-label">${cat.label}</div>
-            </div>
-        `;
+        node.className = `shop-sidebar-item ${i === wcCatCurrentIndex ? 'active' : ''}`;
+        node.innerText = cat.label;
         node.onclick = () => {
             wcCatCurrentIndex = i;
-            wcUpdateCatOrbit();
+            wcUpdateShopSidebar();
         };
-        wheel.appendChild(node);
+        sidebar.appendChild(node);
     });
-    wcUpdateCatOrbit();
+    wcUpdateShopSidebar();
 }
 
-function wcUpdateCatOrbit() {
-    const wheel = document.getElementById('wc-cat-orbit-wheel');
-    if (!wheel) return;
-    const rotation = -wcCatCurrentIndex * wcCatStepAngle;
-    wheel.style.transform = `rotate(${rotation}deg)`;
+function wcUpdateShopSidebar() {
+    const sidebar = document.getElementById('shop-sidebar');
+    if (!sidebar) return;
 
     const categories = getShopCategories();
-    categories.forEach((_, i) => {
-        const content = document.getElementById(`wc-cat-content-${i}`);
-        if (content) {
-            content.style.transform = `rotate(${-rotation}deg) ${i === wcCatCurrentIndex ? 'scale(1.2)' : 'scale(1)'}`;
-        }
-        const node = wheel.children[i];
-        if (node) {
-            if (i === wcCatCurrentIndex) node.classList.add('active');
-            else node.classList.remove('active');
+    Array.from(sidebar.children).forEach((node, i) => {
+        if (i === wcCatCurrentIndex) {
+            node.classList.add('active');
+        } else {
+            node.classList.remove('active');
         }
     });
 
@@ -16915,23 +17079,6 @@ function wcUpdateCatOrbit() {
     // 渲染当前 Tab 的商品列表
     wcRenderShopItems(wcShopCurrentTab, catId === 'add');
 }
-
-// 分类轨道滑动事件
-let wcCatStartX = 0;
-let wcCatIsDragging = false;
-window.wcCatTouchStart = function(e) { wcCatStartX = e.touches[0].clientX; wcCatIsDragging = true; };
-window.wcCatTouchMove = function(e) { if (wcCatIsDragging && e.cancelable) e.preventDefault(); };
-window.wcCatTouchEnd = function(e) {
-    if (!wcCatIsDragging) return;
-    wcCatIsDragging = false;
-    const diff = e.changedTouches[0].clientX - wcCatStartX;
-    const categories = getShopCategories();
-    if (diff > 40 && wcCatCurrentIndex > 0) {
-        wcCatCurrentIndex--; wcUpdateCatOrbit();
-    } else if (diff < -40 && wcCatCurrentIndex < categories.length - 1) {
-        wcCatCurrentIndex++; wcUpdateCatOrbit();
-    }
-};
 
 // ==========================================
 // 商品列表渲染与添加/编辑/删除逻辑
@@ -17260,28 +17407,65 @@ function wcRenderCart() {
 
     let html = '';
     let total = 0;
+    
+    // 将商品按名称和价格分组，计算数量
+    const groupedCart = {};
     cart.forEach((item, idx) => {
+        const key = item.name + '_' + item.price;
+        if (!groupedCart[key]) {
+            groupedCart[key] = { ...item, quantity: 0, indices: [] };
+        }
+        groupedCart[key].quantity += 1;
+        groupedCart[key].indices.push(idx);
         total += parseFloat(item.price);
+    });
+
+    Object.values(groupedCart).forEach(group => {
         html += `
-            <div class="cart-item">
-                <div class="cart-item-info">
-                    <div class="cart-item-title">${item.name}</div>
-                    <div style="color:#FF3B30; font-size:14px; font-weight:bold; margin-top:4px;">¥ ${parseFloat(item.price).toFixed(2)}</div>
+            <div class="cart-item" style="display: flex; align-items: center; gap: 12px; padding: 15px 0; border-bottom: 1px solid #F0F0F0;">
+                <div class="cart-item-checkbox" style="width: 20px; height: 20px; border-radius: 50%; background: #111; display: flex; align-items: center; justify-content: center; color: #FFF; flex-shrink: 0;">
+                    <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; stroke: currentColor; stroke-width: 3; fill: none;"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </div>
-                <div class="cart-item-remove" onclick="wcRemoveFromCart(${idx})">×</div>
+                <div class="cart-item-img" style="width: 60px; height: 60px; border-radius: 8px; background: #F5F5F5; flex-shrink: 0;"></div>
+                <div class="cart-item-info" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; height: 60px;">
+                    <div class="cart-item-title" style="font-size: 15px; font-weight: 600; color: #111;">${group.name}</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="color:#111; font-size:16px; font-weight:bold;">¥${parseFloat(group.price).toFixed(2)}</div>
+                        <div class="cart-item-quantity-control" style="display: flex; align-items: center; gap: 10px;">
+                            <div class="qty-btn minus" onclick="wcRemoveOneFromCart('${group.name}', '${group.price}')" style="width: 24px; height: 24px; background: #F5F5F5; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #111; font-weight: bold;">-</div>
+                            <span class="qty-num" style="font-size: 14px; font-weight: 600; color: #111; min-width: 16px; text-align: center;">${group.quantity}</span>
+                            <div class="qty-btn plus" onclick="wcAddOneToCart('${group.name}', '${group.price}')" style="width: 24px; height: 24px; background: #F5F5F5; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #111; font-weight: bold;">+</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
     });
     container.innerHTML = html;
     document.getElementById('shop-cart-total').innerText = `¥ ${total.toFixed(2)}`;
 }
-function wcRemoveFromCart(idx) {
+
+window.wcRemoveOneFromCart = function(name, price) {
     if (!wcState.shopData.cart) return;
-    wcState.shopData.cart.splice(idx, 1);
-    wcSaveData();
-    wcUpdateCartBadge();
-    wcRenderCart();
-}
+    const idx = wcState.shopData.cart.findIndex(item => item.name === name && item.price == price);
+    if (idx !== -1) {
+        wcState.shopData.cart.splice(idx, 1);
+        wcSaveData();
+        wcUpdateCartBadge();
+        wcRenderCart();
+    }
+};
+
+window.wcAddOneToCart = function(name, price) {
+    if (!wcState.shopData.cart) return;
+    const item = wcState.shopData.cart.find(item => item.name === name && item.price == price);
+    if (item) {
+        wcState.shopData.cart.push({ ...item, id: Date.now() + Math.random() });
+        wcSaveData();
+        wcUpdateCartBadge();
+        wcRenderCart();
+    }
+};
 
 // --- 找到 wcCheckoutCart 函数，替换为以下内容 ---
 function wcCheckoutCart() {

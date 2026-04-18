@@ -3703,46 +3703,61 @@
                         <div id="wc-moments-feed"></div>
                     </div>
 
-                    <!-- User Page -->
-                    <div id="wc-view-user" class="wc-page">
-                        <div class="wc-user-header">
-                            <img id="wc-user-center-avatar" src="" class="wc-user-avatar-lg" onclick="wcTriggerUpload('user')">
-                            <h2 id="wc-user-name-display">User</h2>
-                        </div>
+                    <!-- User Page (Airdrop Style) -->
+                    <div id="wc-view-user" class="wc-page" style="background-color: #F9F9F9; padding: 40px 30px; display: none; flex-direction: column; align-items: center;">
                         
-                        <div class="wc-list-group">
-                            <div class="wc-list-item" onclick="wcOpenWallet()">
-                                <svg class="wc-icon" style="margin-right: 10px;" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
-                                <div class="wc-item-content">
-                                    <div class="wc-item-title">钱包</div>
-                                </div>
-                                <svg class="wc-icon" style="color: #C7C7CC; width: 20px;" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        <!-- 顶部卡片 (点击切换面具) -->
+                        <div class="airdrop-card" onclick="wcOpenMasksModal()">
+                            <div class="airdrop-icon-wrapper">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 5h-2V4c0-1.1-.9-2-2-2H9c-1.1 0-2 .9-2 2v1H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-8-1h2v1h-2V4zm8 15H5V7h14v12z"/>
+                                    <circle cx="9" cy="11" r="2"/>
+                                    <path d="M13 10h4v2h-4zm0 4h4v2h-4zm-6 0c0-1.33 2-2 2-2s2 .67 2 2v2H7v-2z"/>
+                                </svg>
                             </div>
-                            <div class="wc-list-item" onclick="wcOpenMasksModal()">
-                                <svg class="wc-icon" style="margin-right: 10px;" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                <div class="wc-item-content">
-                                    <div class="wc-item-title">面具 (Masks)</div>
-                                    <div class="wc-item-subtitle">切换身份与人设</div>
-                                </div>
-                                <svg class="wc-icon" style="color: #C7C7CC; width: 20px;" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            <div class="airdrop-info">
+                                <div class="airdrop-title">正在切换账号...</div>
+                                <div class="airdrop-name" id="wc-user-airdrop-name">Name: User</div>
                             </div>
-                                        <!-- 新增：我的收藏入口 -->
-                            <div class="wc-list-item" onclick="wcOpenMyFavorites()">
-                                <svg class="wc-icon" style="margin-right: 10px; color: #FFC107;" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                                <div class="wc-item-content">
-                                    <div class="wc-item-title">我的收藏</div>
-                                    <div class="wc-item-subtitle">来自 Ta 手机的秘密</div>
-                                </div>
-                                <svg class="wc-icon" style="color: #C7C7CC; width: 20px;" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                            </div>                
-                            <div class="wc-list-item" onclick="wcOpenWechatSettings()">
-<svg class="wc-icon" style="margin-right: 10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <div class="airdrop-close">
+                                <svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="6" y1="18" x2="18" y2="6"></line></svg>
+                            </div>
+                        </div>
 
-                                <div class="wc-item-content">
-                                    <div class="wc-item-title">设置</div>
-                                    <div class="wc-item-subtitle">数据备份与管理</div>
+                        <!-- 头像组 (由 JS 动态注入面具头像) -->
+                        <div class="avatar-group" id="wc-user-mask-avatars">
+                            <!-- 动态渲染 -->
+                        </div>
+
+                        <!-- 列表 -->
+                        <div class="user-list-group">
+                            <div class="user-list-item" onclick="wcOpenWallet()">
+                                <div class="user-list-icon">
+                                    <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
                                 </div>
-                                <svg class="wc-icon" style="color: #C7C7CC; width: 20px;" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                <div class="user-list-text">钱包 (Wallet)</div>
+                                <div class="user-list-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                            </div>
+                            <div class="user-list-item" onclick="wcOpenMasksModal()">
+                                <div class="user-list-icon">
+                                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                </div>
+                                <div class="user-list-text">面具 (Masks)</div>
+                                <div class="user-list-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                            </div>
+                            <div class="user-list-item" onclick="wcOpenMyFavorites()">
+                                <div class="user-list-icon">
+                                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                </div>
+                                <div class="user-list-text">我的收藏 (Favorites)</div>
+                                <div class="user-list-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
+                            </div>
+                            <div class="user-list-item" onclick="wcOpenWechatSettings()">
+                                <div class="user-list-icon">
+                                    <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+                                </div>
+                                <div class="user-list-text">设置 (Settings)</div>
+                                <div class="user-list-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
                             </div>
                         </div>
                     </div>
@@ -3851,9 +3866,9 @@
                         </div>
                     </div>
                     <!-- Shopping Full Page (New Full Screen) -->
-                    <div id="wc-view-shopping" style="background: #FFFFFF;">
+                    <div id="wc-view-shopping" style="background: #F5F5F5;">
                         <!-- 全新高级感顶栏 -->
-                        <div class="ins-shop-header">
+                        <div class="ins-shop-header" style="background: #F5F5F5;">
                             <div class="ins-shop-title" onclick="wcCloseShoppingPage()">
                                 <span class="ins-shop-title-en">STORE</span>
                                 <span class="ins-shop-title-cn">商城</span>
@@ -3869,23 +3884,21 @@
                             </div>
                         </div>
 
-                        <!-- 横向滚动商品列表 -->
-                        <div class="wc-main-content" style="padding: 0; background: transparent; position: relative; display: flex; flex-direction: column; z-index: 5;">
-                            <div id="shop-list-mall" class="shop-list ins-shop-scroll-container active">
-                                <div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">点击右上角生成商品</div>
+                        <!-- 左右分栏容器 -->
+                        <div class="shop-body-wrapper">
+                            <!-- 左侧边栏 -->
+                            <div id="shop-sidebar" class="shop-sidebar">
+                                <!-- 侧边栏节点由 JS 生成 -->
                             </div>
-                            <div id="shop-list-takeout" class="shop-list ins-shop-scroll-container" style="display: none;">
-                                <div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">点击右上角生成外卖</div>
-                            </div>
-                        </div>
 
-                        <!-- 主页：星际环绕分类轨道 -->
-                        <div class="orbit-category-container" 
-                             ontouchstart="wcCatTouchStart(event)" 
-                             ontouchmove="wcCatTouchMove(event)" 
-                             ontouchend="wcCatTouchEnd(event)">
-                            <div class="orbit-wheel" id="wc-cat-orbit-wheel">
-                                <!-- 节点由 JS 生成 -->
+                            <!-- 右侧滚动商品列表 -->
+                            <div class="wc-main-content" style="padding: 0; background: transparent; position: relative; display: flex; flex-direction: column; z-index: 5; flex: 1;">
+                                <div id="shop-list-mall" class="shop-list ins-shop-scroll-container active">
+                                    <div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">点击右上角生成商品</div>
+                                </div>
+                                <div id="shop-list-takeout" class="shop-list ins-shop-scroll-container" style="display: none;">
+                                    <div style="text-align: center; color: #999; margin: 50px auto; width: 100%;">点击右上角生成外卖</div>
+                                </div>
                             </div>
                         </div>
                         
@@ -3932,7 +3945,7 @@
                                 <div class="shop-cap-tab" id="shop-tab-takeout" onclick="wcSwitchShopTab('takeout')">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
                                     <span>外卖</span>
-                                </div>
+                                </div>                       
                             </div>
                         </div>
 
@@ -4592,6 +4605,7 @@
                                 <div style="font-size: 12px; font-weight: 600; color: #999; margin-bottom: 12px;">修复：</div>
                                 <div style="display: flex; flex-wrap: wrap; gap: 10px;" id="wc-edit-format-btns">
                                     <div class="format-btn active" data-type="text">文本</div>
+                                    <div class="format-btn" data-type="split">拆分(按换行)</div>
                                     <div class="format-btn" data-type="image_desc">图片</div>
                                     <div class="format-btn" data-type="voice">语音</div>
                                     <div class="format-btn" data-type="sticker">表情包</div>
@@ -5333,7 +5347,7 @@
                 <input type="file" id="wc-file-input-cover" accept="image/*" onchange="wcHandleFileSelect(event, 'cover')" style="display:none;">
                 <input type="file" id="wc-file-input-moment" accept="image/*" onchange="wcHandleFileSelect(event, 'moment')" style="display:none;">
                 <input type="file" id="wc-file-input-mask" accept="image/*" onchange="wcHandleFileSelect(event, 'mask')" style="display:none;">
-                <input type="file" id="wc-file-input-chat-img" accept="image/*" onchange="wcHandleFileSelect(event, 'chat-img')" style="display:none;">
+                <input type="file" id="wc-file-input-chat-img" accept="image/*,video/*" onchange="wcHandleFileSelect(event, 'chat-img')" style="display:none;">
                 
                 <!-- Settings Inputs -->
                 <input type="file" id="wc-file-input-setting-char" accept="image/*" onchange="wcHandleFileSelect(event, 'setting-char')" style="display:none;">

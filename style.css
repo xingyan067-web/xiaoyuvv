@@ -2561,28 +2561,43 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .wc-phone-tab-item { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: #8E8E93; cursor: pointer; }
 .wc-phone-tab-item.active { color: #007AFF; }
 
-/* 聊天列表外层包裹，实现无缝隙卡片效果 */
+/* 融合后的聊天列表外层包裹：加宽、圆角、阴影 */
 .chat-list-wrapper {
     background: #FFFFFF;
-    border-radius: 12px;
-    border: 1px solid #E5E5EA;
-    margin: 10px 16px 20px 16px;
+    border-radius: 16px !important;
+    border: 1px solid #F0F0F0 !important;
+    margin: 10px 4px !important; /* 👈 左右减小到 4px，实现加宽 */
     overflow: hidden;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03) !important;
 }
-/* 移除单项的外边距和圆角，只保留底部分割线 */
+/* 最后一个 wrapper 留出底部空间给导航栏 */
+.chat-list-wrapper:last-child {
+    margin-bottom: 90px !important;
+}
+/* 👈 核心：置顶列表和普通列表之间的 8px 间距 */
+.chat-list-wrapper.pinned-wrapper {
+    margin-bottom: 8px !important;
+}
+
+/* 单个会话容器：去除底部分割线 */
 .wc-chat-swipe-container { 
-    position: relative; overflow: hidden; background: var(--wc-card-color); 
+    position: relative; overflow: hidden; background: #FF9500 !important; 
     margin: 0 !important; border-radius: 0 !important; box-shadow: none !important;
-    border-bottom: 1px solid #F0F0F0 !important;
+    border-bottom: none !important; /* 👈 去除横线 */
 }
 .wc-chat-swipe-container:last-child { border-bottom: none !important; }
 .wc-chat-swipe-actions { position: absolute; right: 0; top: 0; bottom: 0; display: flex; z-index: 1; }
-.wc-chat-action-btn { width: 80px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; }
+.wc-chat-action-btn { width: 80px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 15px; }
 .wc-btn-pin { background-color: var(--wc-pin-gray); }
-.wc-btn-group { background-color: #FF9500; } /* 分组按钮颜色 */
-/* 增加上下 padding，拉长会话高度 */
-.wc-chat-swipe-content { position: relative; z-index: 2; background: var(--wc-card-color); width: 100%; height: 100%; display: flex; align-items: center; padding: 18px 16px !important; transition: transform 0.2s ease-out; }
+.wc-btn-group { background-color: #FF9500; }
+
+/* 减小上下 padding，压缩会话高度 */
+.wc-chat-swipe-content { 
+    position: relative; z-index: 2; background: #fff !important; 
+    width: 100%; height: 100%; display: flex; align-items: center; 
+    padding: 12px 16px !important; /* 👈 减小高度 */
+    transition: transform 0.2s ease-out; 
+}
 .wc-pinned-chat { background: linear-gradient(135deg, #FFFFFF 0%, #F8F8F8 100%) !important; }
 .wc-list-separator { display: none !important; }
 
@@ -3521,7 +3536,7 @@ input::-webkit-inner-spin-button {
     left: 0;
     width: 100%;
     height: 100%;
-    background: #fdfbf7; 
+    background: #F5F5F5; 
     z-index: 1400;
     display: none;
     flex-direction: column;
@@ -3654,46 +3669,60 @@ input::-webkit-inner-spin-button {
     .ins-shop-card.add-card .ins-shop-card-name { flex: none; color: #888; text-shadow: none; font-size: 15px; letter-spacing: 2px; font-weight: 500; }
 
     /* ========================================== */
-    /* 星际环绕半圆滑动键 (主页分类) */
+    /* 左右分栏布局与侧边栏样式 */
     /* ========================================== */
-    .orbit-category-container {
-        position: absolute; bottom: 90px; left: 0; width: 100%; height: 120px;
-        overflow: hidden; display: flex; justify-content: center; z-index: 50;
-        mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-        -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    .shop-body-wrapper {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+        background: #F5F5F5;
     }
-    .orbit-wheel {
-        position: absolute; top: 40px; width: 600px; height: 600px;
-        border-radius: 50%; border: 1px dashed #E5E5EA;
-        transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-        display: flex; align-items: center; justify-content: center;
+
+    .shop-sidebar {
+        width: 85px;
+        background: #F5F5F5;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        scrollbar-width: none;
+        flex-shrink: 0;
+        padding-top: 20px; /* 👈 新增：让侧边栏的按键整体往下移一点 */
     }
-    .orbit-wheel::before {
-        content: ''; position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2px;
-        border-radius: 50%; border: 2px solid transparent;
-        background: linear-gradient(180deg, rgba(17,17,17,0.1) 0%, transparent 20%) border-box;
-        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-        -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none;
+    .shop-sidebar::-webkit-scrollbar { display: none; }
+
+    .shop-sidebar-item {
+        padding: 16px 10px;
+        font-size: 14px;
+        color: #888;
+        text-align: center;
+        position: relative;
+        cursor: pointer;
+        transition: all 0.2s;
     }
-    .orbit-node {
-        position: absolute; top: 50%; left: 50%; width: 60px; height: 60px;
-        margin: -30px 0 0 -30px; display: flex; align-items: center; justify-content: center;
+    .shop-sidebar-item.active {
+        background: #FFFFFF;
+        color: #111;
+        font-weight: bold;
+        border-radius: 12px 0 0 12px;
     }
-    .orbit-node-content {
-        display: flex; flex-direction: column; align-items: center; gap: 4px;
-        transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s;
-        opacity: 0.4; cursor: pointer;
+    .shop-sidebar-item.active::before {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 4px;
+        height: 16px;
+        background: #111;
+        border-radius: 2px;
     }
-    .orbit-node.active .orbit-node-content { opacity: 1; transform: scale(1.1); }
-    .orbit-dot {
-        width: 8px; height: 8px; background: #FFF; border: 2px solid #111; border-radius: 50%;
-        box-shadow: 0 0 10px rgba(0,0,0,0.2); transition: all 0.3s;
-    }
-    .orbit-node.active .orbit-dot { background: #111; box-shadow: 0 0 15px rgba(17,17,17,0.4); }
-    .orbit-label {
-        font-size: 9px; font-family: -apple-system, sans-serif; font-weight: bold;
-        color: #111; letter-spacing: 0.5px; white-space: normal; text-align: center;
-        max-width: 70px; line-height: 1.2; margin-top: 4px;
+
+    /* 调整商品列表容器，使其在右侧正常显示 */
+    .ins-shop-scroll-container {
+        background: #FFFFFF;
+        border-radius: 16px 0 0 0;
+        padding: 15px;
+        margin-bottom: 100px; /* 留出底部胶囊空间 */
     }
 
     /* ========================================== */
@@ -3895,15 +3924,15 @@ input::-webkit-inner-spin-button {
     border: 2px solid #5d5350; 
 }
 
-#wc-modal-shop-cart .wc-modal-content { background: #fdfbf7; }
-#wc-modal-shop-cart .wc-modal-header { background: #fdfbf7; }
+#wc-modal-shop-cart .wc-modal-content { background: #FFFFFF; }
+#wc-modal-shop-cart .wc-modal-header { background: #FFFFFF; }
 
 .cart-item { 
     display: flex; 
     align-items: center; 
     gap: 12px; 
     padding: 15px 0; 
-    border-bottom: 1px dashed #e8dfd8; 
+    border-bottom: 1px solid #F0F0F0; 
 }
 .cart-item-img { 
     width: 60px; 
@@ -5851,39 +5880,104 @@ input::-webkit-inner-spin-button {
 .wc-char-avatar-item { width: 50px; height: 50px; border-radius: 16px; object-fit: cover; flex-shrink: 0; background: #eee; border: 2px solid #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.08); cursor: pointer; transition: transform 0.2s; }
 .wc-char-avatar-item:active { transform: scale(0.92); }
 
-/* 聊天列表外层包裹：去除边框、圆角、左右间距，让其完全扁平化贴合屏幕边缘 */
+/* 聊天列表外层包裹：使用负 margin 突破父级 padding 限制，实现极致贴边 */
 .chat-list-wrapper {
-    margin: 0 0 90px 0 !important; /* 左右 margin 设为 0，贴边 */
-    border: none !important; /* 彻底去除外边框 */
-    border-radius: 0 !important; /* 去除圆角 */
+    margin: 0 -8px 0 -8px !important; /* 👈 核心修改：左右使用负数 -8px，强行向两边拉伸贴边 */
+    border: 1px solid #F0F0F0 !important; 
+    border-radius: 16px !important; 
     background: #fff;
     overflow: hidden;
-    box-shadow: none !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03) !important; 
 }
-/* 单个会话容器：无缝隙，仅保留极细的底部分割线 */
+
+/* 置顶容器和普通容器之间的间距 */
+.chat-list-wrapper.pinned-wrapper {
+    margin-bottom: 8px !important; /* 👈 新增：置顶和未置顶之间保持 8px 距离 */
+}
+
+.chat-list-wrapper.other-wrapper {
+    margin-bottom: 90px !important; /* 👈 新增：底部留白，防止被导航栏遮挡 */
+}
+
+/* 单个会话容器：彻底去除所有边框和缝隙 */
 .wc-chat-swipe-container { 
-    position: relative; overflow: hidden; background: #FF9500 !important; 
-    margin: 0 !important; border-radius: 0 !important; box-shadow: none !important;
-    border-bottom: 0.5px solid #E5E5EA !important; /* 极细的底部分割线，符合图1 */
+    position: relative !important; 
+    overflow: hidden !important; 
+    background: #FF9500 !important; 
+    margin: 0 !important; 
+    padding: 0 !important;
+    border-radius: 0 !important; 
+    box-shadow: none !important;
+    border: none !important; /* 👈 核心修改：彻底去除所有方向的边框和横线 */
 }
-.wc-chat-swipe-container:last-child { border-bottom: none !important; }
 .wc-chat-swipe-actions { position: absolute; right: 0; top: 0; bottom: 0; display: flex; z-index: 1; }
 .wc-chat-action-btn { width: 80px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 15px; }
 .wc-btn-pin { background-color: var(--wc-pin-gray); }
 .wc-btn-group { background-color: #FF9500; }
-/* 增加上下 padding 到 20px，拉长会话高度，匹配图1的宽松感 */
+
+/* 会话内容区：确保无外边距无边框 */
 .wc-chat-swipe-content { 
-    position: relative; z-index: 2; background: #fff !important; 
-    width: 100%; height: 100%; display: flex; align-items: center; 
-    padding: 7px 15px !important; /* 增加高度 */
-    transition: transform 0.2s ease-out; 
+    position: relative !important; 
+    z-index: 2 !important; 
+    background: #fff !important; 
+    width: 100% !important; 
+    height: 100% !important; 
+    display: flex !important; 
+    align-items: center !important; 
+    padding: 12px 16px !important; 
+    margin: 0 !important; /* 👈 核心修改：确保内部内容也没有任何外边距产生缝隙 */
+    border: none !important;
+    transition: transform 0.2s ease-out !important; 
 }
-/* 确保头像是正圆形 (图1样式)，去除图2的圆角矩形 */
-.wc-chat-swipe-content .wc-avatar {
-    width: 45px !important;
-    height: 45px !important;
-    border-radius: 50% !important; /* 强制正圆 */
-    border: none !important; /* 去除多余边框 */
+
+/* 头像外框，模拟拍立得白边，整体减小 */
+.wc-chat-avatar-wrapper {
+    position: relative;
+    width: 48px !important; /* 头像整体减小到 48px */
+    height: 48px !important;
+    background: #fff;
+    border: 1px solid #EAEAEA;
+    padding: 2px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    margin-right: 15px;
+    flex-shrink: 0;
+}
+
+.wc-avatar-square {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.wc-chat-swipe-content .wc-item-title {
+    font-size: 16px !important;
+    font-weight: 500 !important;
+    color: #111 !important;
+    margin-bottom: 6px !important;
+    display: flex;
+    align-items: center;
+}
+
+.wc-chat-swipe-content .wc-item-subtitle {
+    font-size: 13px !important;
+    color: #999 !important;
+}
+
+.wc-chat-time {
+    font-size: 12px;
+    color: #B2B2B2;
+    margin-left: 10px;
+    align-self: flex-start;
+    margin-top: 4px;
+}
+
+.wc-chat-time {
+    font-size: 12px;
+    color: #B2B2B2;
+    margin-left: 10px;
+    align-self: flex-start;
+    margin-top: 4px;
 }
 .wc-pinned-chat { background: linear-gradient(135deg, #FFFFFF 0%, #F8F8F8 100%) !important; }
 .wc-list-separator { display: none !important; }
@@ -6045,39 +6139,174 @@ input::-webkit-inner-spin-button {
     font-weight: 600;
 }
 
-/* 7. 个人中心页面 (User) - 极简设置页 */
-.wc-user-header {
-    padding: 50px 0 30px 0;
+/* 7. 个人中心页面 (User) - 隔空投送极简风 */
+#wc-view-user.active {
+    display: flex !important; 
 }
-.wc-user-avatar-lg {
-    border-radius: 35%;
-    width: 100px;
-    height: 100px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-    border: 4px solid #FFFFFF;
+#wc-view-user {
+    /* 隐藏顶栏后，增加顶部安全距离 */
+    padding-top: calc(env(safe-area-inset-top, 20px) + 40px) !important;
 }
-#wc-user-name-display {
-    color: #111111;
-    font-size: 24px;
-    font-weight: 700;
-    margin-top: 12px;
-}
-.wc-list-group {
-    background: transparent;
-    box-shadow: none;
-    padding: 0 16px;
-}
-.wc-list-group .wc-list-item {
+
+.airdrop-card {
     background: #FFFFFF;
-    border-radius: 20px;
-    margin-bottom: 12px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
-    border: 1px solid #F5F5F5;
+    border-radius: 40px;
     padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+    margin-bottom: 50px;
+    cursor: pointer;
+    transition: transform 0.2s;
 }
-.wc-list-group .wc-list-item .wc-icon {
-    color: #111111; /* 图标统一为黑色 */
+.airdrop-card:active { transform: scale(0.98); }
+
+.airdrop-icon-wrapper {
+    width: 46px; height: 46px; border-radius: 50%; border: 1px solid #E5E5EA;
+    display: flex; align-items: center; justify-content: center; margin-right: 16px; flex-shrink: 0;
 }
+.airdrop-icon-wrapper svg { width: 22px; height: 22px; fill: #888; }
+
+.airdrop-info { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.airdrop-title { font-size: 12px; color: #888; font-weight: 600; letter-spacing: 1px; }
+.airdrop-name { font-size: 11px; color: #333; font-weight: 600; letter-spacing: 0.5px; font-family: 'Courier New', Courier, monospace; }
+
+.airdrop-close {
+    width: 28px; height: 28px; background: #E5E5EA; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.airdrop-close svg { width: 12px; height: 12px; stroke: #111; stroke-width: 3; stroke-linecap: round; }
+
+/* 身份卡片列表容器 */
+.id-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    margin-bottom: 40px;
+}
+
+/* 单张身份卡片 */
+.id-card-item {
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
+    border-radius: 20px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+}
+.id-card-item:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+}
+
+/* 卡片上半部分：头像 + 信息 */
+.id-card-top {
+    display: flex;
+    gap: 16px;
+}
+
+/* 左侧头像 (正方形 + 恢复彩色) */
+.id-card-avatar {
+    width: 64px;
+    height: 64px; /* 👈 改为和宽度一样，变成正方形 */
+    border-radius: 8px;
+    object-fit: cover;
+    background: #F5F5F5;
+    /* 👈 删除了 filter 属性，恢复彩色 */
+    border: 1px solid #EAEAEA;
+    flex-shrink: 0;
+}
+
+/* 右侧信息区 */
+.id-card-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.id-card-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: #A0A0A0;
+    letter-spacing: 1.5px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}
+
+.id-card-name {
+    font-size: 22px;
+    font-weight: 900;
+    color: #111;
+    margin-bottom: 12px;
+    letter-spacing: 1px;
+}
+
+.id-card-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.id-card-no {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    color: #888;
+    letter-spacing: 1px;
+}
+
+.id-card-status {
+    font-size: 10px;
+    font-weight: 800;
+    color: #111;
+    border: 1.5px solid #111;
+    padding: 3px 8px;
+    border-radius: 6px;
+    letter-spacing: 1px;
+}
+
+/* 底部条形码 (纯CSS绘制) */
+.id-card-barcode {
+    margin-top: 16px;
+    height: 24px;
+    width: 100%;
+    opacity: 0.3;
+    background-image: repeating-linear-gradient(
+        to right,
+        #111 0,
+        #111 2px,
+        transparent 2px,
+        transparent 4px,
+        #111 4px,
+        #111 5px,
+        transparent 5px,
+        transparent 8px,
+        #111 8px,
+        #111 12px,
+        transparent 12px,
+        transparent 14px
+    );
+}
+
+.user-list-group { width: 100%; display: flex; flex-direction: column; gap: 30px; padding: 0 10px; box-sizing: border-box; }
+.user-list-item { display: flex; align-items: center; cursor: pointer; transition: opacity 0.2s; }
+.user-list-item:active { opacity: 0.5; }
+.user-list-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; margin-right: 16px; }
+.user-list-icon svg { width: 20px; height: 20px; stroke: #333; fill: none; stroke-width: 1.5; }
+.user-list-text { flex: 1; font-size: 14px; color: #333; font-weight: 600; letter-spacing: 0.5px; }
+.user-list-arrow { width: 22px; height: 22px; background: #EAEAEA; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.user-list-arrow svg { width: 12px; height: 12px; stroke: #888; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 兼容旧的 wc-list-group 防止其他地方样式崩坏 */
+.wc-list-group { background: transparent; box-shadow: none; padding: 0 16px; }
+.wc-list-group .wc-list-item { background: #FFFFFF; border-radius: 20px; margin-bottom: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02); border: 1px solid #F5F5F5; padding: 16px 20px; }
+.wc-list-group .wc-list-item .wc-icon { color: #111111; }
 
 /* 🌟 8. 通讯录角色详情卡片 - 极简黑白灰相框风 🌟 */
 #wc-modal-char-detail .wc-modal-content {
@@ -7645,6 +7874,9 @@ input::-webkit-inner-spin-button {
     box-shadow: 0 2px 10px rgba(0,0,0,0.03);
     transition: all 0.3s ease;
     border: 1px solid #F5F5F5;
+    flex-shrink: 0; /* 🔪 核心修复：绝对禁止卡片被挤压变形 */
+    display: flex;
+    flex-direction: column;
 }
 .fav-accordion-header {
     padding: 16px;
@@ -12793,4 +13025,134 @@ body.edit-mode-active .widget-remove-btn { display: flex; }
     width: 12px; 
     height: 12px; 
     fill: #FF3A3A; 
+}
+/* ========================================== */
+/* 新增：icity 风格日记卡片样式 */
+/* ========================================== */
+.icity-card {
+    width: 100%;
+    background: #FFFFFF;
+    border-radius: 5px;
+    padding: 20px;
+    box-sizing: border-box;
+    border: 1px solid #EAEAEA;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+    margin-bottom: 15px;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.icity-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.icity-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #E5E5EA;
+    border: 1px solid #F5F5F5;
+}
+
+.icity-info {
+    margin-left: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.icity-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #111111;
+    margin-bottom: 2px;
+    letter-spacing: 0.5px;
+}
+
+.icity-handle {
+    font-size: 14px;
+    color: #B2B2B2;
+}
+
+.icity-content {
+    font-size: 17px;
+    color: #111111;
+    line-height: 1.6;
+    margin-bottom: 16px;
+    word-break: break-word;
+    text-align: justify;
+    letter-spacing: 0.5px;
+    white-space: pre-wrap;
+}
+
+.icity-time {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #B2B2B2;
+    margin-bottom: 16px;
+}
+
+.icity-time svg {
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+}
+
+.icity-divider {
+    width: 100%;
+    height: 1px;
+    background: #F0F0F0;
+    margin-bottom: 12px;
+}
+
+.icity-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 4px;
+}
+
+.icity-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #B2B2B2;
+    font-size: 14px;
+    cursor: pointer;
+    transition: color 0.2s;
+    flex: 1;
+}
+
+.icity-action-btn:active {
+    color: #555;
+}
+
+.icity-action-btn svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    fill: none;
+}
+
+.icity-action-divider {
+    width: 1px;
+    height: 14px;
+    background: #F0F0F0;
+}
+
+.icity-action-btn.more {
+    flex: 0.5;
+}
+
+.icity-action-btn.more svg {
+    fill: currentColor;
+    stroke: none;
 }
