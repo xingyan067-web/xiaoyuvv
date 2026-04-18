@@ -5612,8 +5612,9 @@ async function wcTriggerAI(charIdOverride = null) {
         const msgs = wcState.chats[charId] || [];
         
         // 👇 核心修复：将 limit 和 recentMsgs 的定义提前到这里 👇
-        let limit = config.contextLimit > 0 ? config.contextLimit : 30;
-        const recentMsgs = msgs.slice(-limit);
+        let limit = config.contextLimit;
+        // 如果没填或者填了0，则不进行 slice 截断，直接读取全部上下文
+        const recentMsgs = (limit && limit > 0) ? msgs.slice(-limit) : msgs;
         
         const timeGapPrompt = wcGenerateTimeGapPrompt(msgs, now.getTime());
 
@@ -29898,8 +29899,8 @@ function calculateRealtimeTokens() {
     // 2. 计算聊天上下文 (从当前输入的限制条数读取)
     const msgs = wcState.chats[char.id] || [];
     let limit = parseInt(document.getElementById('wc-setting-context-limit').value);
-    if (isNaN(limit) || limit <= 0) limit = 30; // 默认30
-    const recentMsgs = msgs.slice(-limit);
+    // 如果没填或者填了0，则计算全部上下文的 Token
+    const recentMsgs = (isNaN(limit) || limit <= 0) ? msgs : msgs.slice(-limit);
     recentMsgs.forEach(m => {
         if (!m.isError) {
             chatTokens += estimateTokens(m.content);

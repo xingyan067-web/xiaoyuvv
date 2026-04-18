@@ -153,7 +153,7 @@ function smsRenderRoot() {
                     <input type="text" id="sms-chat-input" placeholder="iMessage" onkeypress="if(event.key==='Enter') smsSendMessage()" style="flex: 1; height: 36px; border-radius: 18px; border: 1px solid #F0F0F0; padding: 0 16px; font-size: 15px; outline: none; background: #F9F9F9;">
                     <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
                         <div style="width: 32px; height: 32px; background: #111; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FFF; font-weight: bold; font-family: sans-serif; font-size: 14px;">in</div>
-                        <div style="width: 32px; height: 32px; background: #111; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FFF;">
+                        <div onclick="smsSendMessage()" style="width: 32px; height: 32px; background: #111; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FFF; cursor: pointer;">
                             <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path><line x1="12" y1="8" x2="12" y2="14"></line><line x1="9" y1="11" x2="15" y2="11"></line></svg>
                         </div>
                     </div>
@@ -468,25 +468,85 @@ async function smsTriggerAI(charId, userText, fakeSender, targetChatId) {
     if (!apiConfig || !apiConfig.key) return;
 
     try {
-        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n\n`;
+        const chatConfig = char.chatConfig || {};
+        const userName = chatConfig.userName || (typeof wcState !== 'undefined' ? wcState.user.name : 'User');
+        const userPersona = chatConfig.userPersona || (typeof wcState !== 'undefined' ? wcState.user.persona : '无');
         
-        // 👇 核心修复：动态判断是否真的被拉黑 👇
-        if (char.isBlocked) {
-            prompt += `【核心情境警告】：你目前在微信上被 User 拉黑了！你现在只能通过【手机短信】接收和发送消息。\n`;
-        } else {
-            prompt += `【当前情境】：你正在和 User 通过【手机短信/iMessage】进行聊天。\n`;
-        }
-        
-        if (fakeSender === '我 (User)') {
-            prompt += `User 刚刚通过短信给你发了一条消息：“${userText}”。\n`;
-        } else {
-            prompt += `你刚刚收到了一条来自【${fakeSender}】的短信：“${userText}”。\n`;
-            prompt += `注意：这可能是 User 伪装的，也可能是真实的系统/广告短信，请根据你的人设做出真实的反应（比如疑惑、回复退订、或者识破是 User）。\n`;
+        // 1. 读取关联的世界书
+        let wbInfo = "";
+        if (typeof worldbookEntries !== 'undefined' && worldbookEntries.length > 0 && chatConfig.worldbookEntries && chatConfig.worldbookEntries.length > 0) {
+            const linkedEntries = worldbookEntries.filter(e => chatConfig.worldbookEntries.includes(e.id.toString()));
+            if (linkedEntries.length > 0) {
+                wbInfo = "【附加设定和内容补充参考(世界书)】:\n" + linkedEntries.map(e => `${e.title}: ${e.desc}`).join('\n') + "\n\n";
+            }
         }
 
-        // 👇 新增：读取微信聊天设置中的气泡数限制 👇
-        const rMin = (char.chatConfig && char.chatConfig.replyMin !== undefined) ? char.chatConfig.replyMin : 1;
-        const rMax = (char.chatConfig && char.chatConfig.replyMax !== undefined) ? char.chatConfig.replyMax : 3;
+        // 2. 读取记忆与潜意识
+        let memoryText = "暂无特殊记忆。";
+        if (char.memories && char.memories.length > 0) {
+            const readCount = chatConfig.aiMemoryCount || 5;
+            memoryText = char.memories.slice(0, readCount).map(m => {
+                // 调用微信的记忆格式化函数，剥离多余标签
+                return typeof formatMemoryForAI === 'function' ? `- ${formatMemoryForAI(m.content).replace(/^\[.*?\]\s*/, '')}` : `- ${m.content}`;
+            }).join('\n');
+        }
+
+        // 3. 读取上下文条数限制
+        const contextLimit = (chatConfig.contextLimit > 0) ? chatConfig.contextLimit : 30;
+
+        // 4. 提取微信聊天记录
+        let recentWechatMsgs = "暂无微信聊天记录。";
+        if (typeof wcState !== 'undefined' && wcState.chats[charId]) {
+            const msgs = wcState.chats[charId];
+            recentWechatMsgs = msgs.filter(m => !m.isError && m.type !== 'system')
+                                 .slice(-contextLimit)
+                                 .map(m => {
+                                     let content = m.content;
+                                     if (m.type !== 'text') content = `[${m.type}]`;
+                                     return `${m.sender === 'me' ? userName : char.name}: ${content}`;
+                                 })
+                                 .join('\n');
+        }
+
+        // 5. 提取短信聊天记录 (同样受 contextLimit 限制)
+        const smsChat = smsState.chats.find(c => c.id === targetChatId);
+        let recentSmsMsgs = "暂无短信历史。";
+        if (smsChat && smsChat.history && smsChat.history.length > 0) {
+            // 排除当前刚刚发出的这条消息，取之前的 contextLimit 条
+            const historyToRead = smsChat.history.slice(-(contextLimit + 1), -1); 
+            if (historyToRead.length > 0) {
+                recentSmsMsgs = historyToRead.map(m => {
+                    const senderName = m.sender === 'me' ? (m.fakeSender || userName) : char.name;
+                    return `${senderName}: ${m.content}`;
+                }).join('\n');
+            }
+        }
+
+        // 6. 组装终极 Prompt
+        let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n\n`;
+        prompt += wbInfo;
+        prompt += `【用户(${userName})设定/面具】：${userPersona}\n\n`;
+        prompt += `【你们的共同记忆】：\n${memoryText}\n\n`;
+        prompt += `【你们最近在微信上的聊天记录（作为前情提要）】：\n${recentWechatMsgs}\n\n`;
+        prompt += `【你们最近的短信记录】：\n${recentSmsMsgs}\n\n`;
+
+        // 7. 动态判断是否真的被拉黑
+        if (char.isBlocked) {
+            prompt += `【核心情境警告】：你目前在微信上被 ${userName} 拉黑了！你现在只能通过【手机短信】接收和发送消息。\n`;
+        } else {
+            prompt += `【当前情境】：你正在和 ${userName} 通过【手机短信/iMessage】进行聊天。\n`;
+        }
+        
+        if (fakeSender === '我 (User)' || fakeSender === userName) {
+            prompt += `${userName} 刚刚通过短信给你发了一条消息：“${userText}”。\n`;
+        } else {
+            prompt += `你刚刚收到了一条来自【${fakeSender}】的短信：“${userText}”。\n`;
+            prompt += `注意：这可能是 ${userName} 伪装的，也可能是真实的系统/广告短信，请根据你的人设做出真实的反应（比如疑惑、回复退订、或者识破是 ${userName}）。\n`;
+        }
+
+        // 8. 读取微信聊天设置中的气泡数限制
+        const rMin = (chatConfig.replyMin !== undefined) ? chatConfig.replyMin : 1;
+        const rMax = (chatConfig.replyMax !== undefined) ? chatConfig.replyMax : 3;
 
         prompt += `请直接输出你的短信回复内容（纯文本，不要 JSON，不要动作描写，就像真实的短信一样简短）。\n`;
         prompt += `【碎片化口语化强制指令】：必须像真人聊天一样，将长回复拆分成 ${rMin}-${rMax} 条短消息！严禁把所有话挤在一个气泡里！每条短消息之间请用换行符分隔。\n`;
