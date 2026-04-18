@@ -4022,8 +4022,8 @@ function wcSwitchTab(tabId) {
     const titleEl = document.getElementById('wc-nav-title');
     const navbar = document.querySelector('.wc-navbar');
 
-    // 🔪 核心修复：如果是 User 页面，彻底隐藏顶栏和退出键
-    if (tabId === 'user') {
+    // 🔪 核心修复：如果是 User 或 Moments 页面，彻底隐藏顶栏和退出键
+    if (tabId === 'user' || tabId === 'moments') {
         if (navbar) navbar.style.display = 'none';
         if (btnExit) btnExit.style.display = 'none';
     } else {
@@ -4044,10 +4044,10 @@ function wcSwitchTab(tabId) {
         navbar.classList.remove('custom-contacts-nav-mode');
         
         if (btnExit) btnExit.style.display = 'none';
-        if (btnCalendar) btnCalendar.style.display = 'flex';
+        if (btnCalendar) btnCalendar.style.display = 'none'; // 👈 隐藏日历按钮
         
         // 顶栏恢复极简标题
-        titleEl.innerHTML = `<span style="font-family: 'Georgia', serif; font-style: italic; letter-spacing: 2px; font-size: 16px;">MOMENTS</span>`;
+        titleEl.innerHTML = `<span style="font-family: 'Georgia', serif; font-style: italic; letter-spacing: -0.5px; font-size: 26px; font-weight: bold; color: #111;">Moments</span>`;
         
     } else if (tabId === 'contacts') {
         navbar.classList.remove('custom-chat-nav-mode');
@@ -4075,50 +4075,31 @@ function wcSwitchTab(tabId) {
         wcRenderChats(); 
     } else if (tabId === 'moments') {
         document.getElementById('wc-main-tabbar').style.display = 'flex';
-
-        // 发朋友圈按钮 (恢复原样，去掉魔法棒)
-        const btn = document.createElement('button');
-        btn.className = 'wc-nav-btn';
-        btn.innerHTML = '<svg class="wc-icon" viewBox="0 0 24 24" style="stroke: #111;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>';
-        btn.onclick = () => {
-            const groupSelect = document.getElementById('wc-input-moment-group');
-            if (groupSelect) {
-                groupSelect.innerHTML = '<option value="All">所有人可见</option>';
-                if (wcState.chatGroups) {
-                    wcState.chatGroups.forEach(g => {
-                        if (g !== 'All') {
-                            const opt = document.createElement('option');
-                            opt.value = g;
-                            opt.innerText = g;
-                            groupSelect.appendChild(opt);
-                        }
-                    });
-                }
-            }
-            wcOpenModal('wc-modal-post-moment');
-            // 👇 新增：设置发布页面的头像
-            const postAvatar = document.getElementById('ins-post-user-avatar');
-            if (postAvatar) postAvatar.src = wcState.user.avatar;
-        };
-        rightContainer.appendChild(btn);
         
         // 默认选中今天
         const now = new Date();
         wcState.momentFilter = 'specificDate';
         wcState.momentFilterDate = { year: now.getFullYear(), month: now.getMonth(), day: now.getDate() };
         wcRenderMoments();
-    } else if (tabId === 'contacts' || tabId === 'user') {
+    }
+ else if (tabId === 'contacts' || tabId === 'user') {
         document.getElementById('wc-main-tabbar').style.display = 'flex';
     }
 }
-window.wcFilterMoments = function(type, timestamp) {
+window.wcFilterMoments = function(type, value) {
     if (type === 'all') {
         wcState.momentFilter = 'all';
         wcState.momentFilterDate = null;
-    } else if (timestamp) {
-        const d = new Date(timestamp);
+        wcState.momentFilterChar = null;
+    } else if (type === 'date') {
+        const d = new Date(value);
         wcState.momentFilter = 'specificDate';
         wcState.momentFilterDate = { year: d.getFullYear(), month: d.getMonth(), day: d.getDate() };
+        wcState.momentFilterChar = null;
+    } else if (type === 'char') {
+        wcState.momentFilter = 'char';
+        wcState.momentFilterChar = value; // 传入角色名
+        wcState.momentFilterDate = null;
     }
     wcRenderMoments();
 }
@@ -9202,42 +9183,86 @@ function wcRenderMoments() {
     const feed = document.getElementById('wc-moments-feed');
     feed.innerHTML = '';
     
-    const coverEl = document.getElementById('wc-moments-cover');
-    const avatarEl = document.getElementById('wc-moments-user-avatar');
-    
-    if (wcState.user.cover && coverEl) coverEl.src = wcState.user.cover;
-    if (wcState.user.avatar && avatarEl) avatarEl.src = wcState.user.avatar;
-    
-    // 🌟 核心：点击头像展示所有朋友圈 (ALL)
-    if (avatarEl) {
-        avatarEl.onclick = () => wcFilterMoments('all');
-        // 如果当前是 ALL 状态，给头像加个高级黑圈提示
-        if (wcState.momentFilter === 'all') {
-            avatarEl.classList.add('all-active');
-        } else {
-            avatarEl.classList.remove('all-active');
+    // 动态构建顶部个人信息区 (包含背景、标题、头像、名字、故事圈)
+    const profileSection = document.getElementById('wc-moments-profile-section');
+    if (profileSection) {
+        const coverBg = wcState.user.cover ? `url('${wcState.user.cover}')` : 'none';
+        const userName = wcState.user.name || 'User';
+        const userBio = wcState.user.persona || '记录生活的美好';
+        
+        const bubbleText = wcState.user.bubbleText || 'why'; // 读取气泡文字，默认 why
+        
+        profileSection.innerHTML = `
+            <!-- 背景图层 (原图直出，无任何效果) -->
+            <div class="wc-moments-bg-layer" style="background-image: ${coverBg};"></div>
+            
+            <!-- 顶部导航 (图标 + Moments 标题) -->
+            <div class="wc-moments-top-nav">
+                <div class="wc-moments-nav-left" onclick="closeWechat()">
+                    <!-- 换成黑色圆底的相机图标 -->
+                    <div class="wc-moments-home-icon" style="width: 28px; height: 28px; background-color: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: #fff; stroke: none;"><circle cx="12" cy="12" r="3.2"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+                    </div>
+                    <div class="wc-moments-title">Moments</div>
+                </div>
+            </div>
+
+            <div class="wc-moments-profile-header">
+                <div class="wc-moments-avatar-container">
+                    <div class="wc-moments-bubble">${bubbleText}</div>
+                    <img id="wc-moments-user-avatar" src="${wcState.user.avatar}" class="wc-moments-avatar" alt="avatar">
+                    <div class="wc-moments-add-btn" onclick="wcOpenModal('wc-modal-post-moment')">+</div>
+                </div>
+                <div class="wc-moments-user-info">
+                    <div class="wc-moments-username">@${userName}</div>
+                    <div class="wc-moments-bio">${userBio}</div>
+                </div>
+            </div>
+            
+            <!-- 加回 Edit Profile 按钮，并提高层级防止被背景遮挡 -->
+            <button class="wc-moments-edit-btn" onclick="wcOpenMomentEditModal()">Edit Profile</button>
+            
+            <!-- 故事圈 (Char 头像)，提高层级防止被背景遮挡 -->
+            <div class="wc-moments-story-highlights" id="wc-moments-story-highlights" style="position: relative; z-index: 2;"></div>
+        `;
+
+        // 绑定头像点击事件 (过滤 ALL)
+        const avatarEl = document.getElementById('wc-moments-user-avatar');
+        if (avatarEl) {
+            avatarEl.onclick = () => wcFilterMoments('all');
+            if (wcState.momentFilter === 'all') {
+                avatarEl.style.border = '2px solid #111';
+            } else {
+                avatarEl.style.border = 'none';
+            }
+        }
+
+        // 渲染故事圈
+        const storyContainer = document.getElementById('wc-moments-story-highlights');
+        if (storyContainer) {
+            wcState.characters.filter(c => !c.isGroup).forEach(char => {
+                const isActive = wcState.momentFilter === 'char' && wcState.momentFilterChar === char.name;
+                storyContainer.innerHTML += `
+                    <div class="wc-moments-story-item" onclick="wcFilterMoments('char', '${char.name}')">
+                        <div class="wc-moments-story-circle ${isActive ? 'active' : ''}"><img src="${char.avatar}"></div>
+                    </div>
+                `;
+            });
         }
     }
 
-    // 🌟 核心：在头像下方动态生成 7 天滚动日历
+    // 🌟 核心：在头像下方动态生成 7 天滚动日历 (新版横线贯穿样式)
     let calContainer = document.getElementById('wc-moments-calendar-bar');
-    if (!calContainer) {
-        calContainer = document.createElement('div');
-        calContainer.id = 'wc-moments-calendar-bar';
-        const header = document.querySelector('.wc-moments-header');
-        header.parentNode.insertBefore(calContainer, feed);
-    }
+    if (!calContainer) return;
 
     const now = new Date();
     let weekHtml = '';
-    const weekNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const weekNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     
     // 生成以“今天”为中心的 7 天 (-3天 到 +3天)
     for(let i = -3; i <= 3; i++) {
         const d = new Date(now.getTime() + i * 86400000);
-        const dayNum = d.getDate();
         const dayOfWeek = weekNames[d.getDay()];
-        const isToday = (i === 0);
         
         // 判断是否被选中
         let isActive = false;
@@ -9250,26 +9275,36 @@ function wcRenderMoments() {
         }
         
         weekHtml += `
-            <div class="cal-item ${isActive ? 'active' : ''}" onclick="wcFilterMoments('date', ${d.getTime()})">
-                <span class="cal-day">${dayNum}</span>
-                <span class="cal-label">${dayOfWeek}</span>
-                ${isToday ? '<div class="cal-today-dot"></div>' : ''}
+            <div class="wc-cal-day-item ${isActive ? 'active' : ''}" onclick="wcFilterMoments('date', ${d.getTime()})">
+                <div class="wc-cal-active-bg"></div>
+                <span class="wc-cal-day-text">${dayOfWeek}</span>
+                <div class="wc-cal-dot"></div>
             </div>`;
     }
     
     calContainer.innerHTML = `
-        <div class="ins-calendar-nav moments-inline-cal">
-            ${weekHtml}
+        <div class="wc-timeline-calendar">
+            <div class="wc-cal-star-btn" title="进入日历" onclick="wcOpenCalendarModal()">
+                <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            </div>
+            <div class="wc-cal-timeline-wrapper">
+                <div class="wc-cal-line"></div>
+                <div class="wc-cal-days">
+                    ${weekHtml}
+                </div>
+            </div>
         </div>
     `;
 
-    // 日期过滤逻辑
+    // 日期/角色过滤逻辑
     let filteredMoments = wcState.moments;
     
     if (wcState.momentFilter === 'specificDate' && wcState.momentFilterDate) {
         const targetStart = new Date(wcState.momentFilterDate.year, wcState.momentFilterDate.month, wcState.momentFilterDate.day).getTime();
         const targetEnd = targetStart + 86400000;
         filteredMoments = wcState.moments.filter(m => m.time >= targetStart && m.time < targetEnd);
+    } else if (wcState.momentFilter === 'char' && wcState.momentFilterChar) {
+        filteredMoments = wcState.moments.filter(m => m.name === wcState.momentFilterChar);
     }
 
     if (filteredMoments.length === 0) {
@@ -9356,6 +9391,65 @@ function wcRenderMoments() {
         feed.appendChild(div);
     });
 }
+// ==========================================
+// 新增：朋友圈 Edit Profile 弹窗逻辑
+// ==========================================
+window.wcOpenMomentEditModal = function() {
+    let modal = document.getElementById('wc-modal-moment-edit');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'wc-modal-moment-edit';
+        modal.className = 'wc-modal hidden';
+        modal.style.zIndex = '3500';
+        modal.style.alignItems = 'flex-end';
+        document.getElementById('wechat-root').appendChild(modal);
+    }
+    
+    modal.innerHTML = `
+        <div class="wc-modal-content" style="height: auto; border-radius: 16px 16px 0 0; width: 100%; max-width: 100%; background: #FFF; padding-bottom: env(safe-area-inset-bottom);">
+            <div class="wc-modal-header" style="border-bottom: 1px solid #F0F0F0; padding: 16px 20px;">
+                <h3 style="color: #111; font-size: 18px; font-weight: 700;">Edit Profile</h3>
+                <button class="wc-close-btn" onclick="wcCloseModal('wc-modal-moment-edit')">&times;</button>
+            </div>
+            <div class="wc-modal-body" style="padding: 20px;">
+                <div class="wc-form-group">
+                    <label class="wc-form-label" style="color: #888; font-weight: bold;">名称</label>
+                    <input type="text" id="wc-moment-edit-name" class="wc-form-input" style="background: #F5F5F5; border: 1px solid #EAEAEA;" value="${wcState.user.name}">
+                </div>
+                <div class="wc-form-group">
+                    <label class="wc-form-label" style="color: #888; font-weight: bold;">个性签名</label>
+                    <input type="text" id="wc-moment-edit-bio" class="wc-form-input" style="background: #F5F5F5; border: 1px solid #EAEAEA;" value="${wcState.user.persona || ''}">
+                </div>
+                <div class="wc-form-group">
+                    <label class="wc-form-label" style="color: #888; font-weight: bold;">气泡文字</label>
+                    <input type="text" id="wc-moment-edit-bubble" class="wc-form-input" style="background: #F5F5F5; border: 1px solid #EAEAEA;" value="${wcState.user.bubbleText || 'why'}">
+                </div>
+                <div class="wc-form-group">
+                    <label class="wc-form-label" style="color: #888; font-weight: bold;">背景壁纸</label>
+                    <button class="wc-btn-secondary" style="width: 100%; padding: 12px; border-radius: 12px; background: #F5F5F5; color: #111; border: 1px solid #EAEAEA; font-weight: bold; margin: 0;" onclick="wcTriggerUpload('cover')">从相册选择新背景</button>
+                </div>
+                <button class="wc-btn-primary" style="background: #111; color: #FFF; border-radius: 16px; margin-top: 10px;" onclick="wcSaveMomentProfile()">保存修改</button>
+            </div>
+        </div>
+    `;
+    
+    wcOpenModal('wc-modal-moment-edit');
+};
+
+window.wcSaveMomentProfile = function() {
+    const name = document.getElementById('wc-moment-edit-name').value.trim();
+    const bio = document.getElementById('wc-moment-edit-bio').value.trim();
+    const bubble = document.getElementById('wc-moment-edit-bubble').value.trim();
+    
+    if (name) wcState.user.name = name;
+    wcState.user.persona = bio;
+    wcState.user.bubbleText = bubble; // 保存气泡文字
+    
+    wcSaveData();
+    wcRenderMoments();
+    wcRenderUser();
+    wcCloseModal('wc-modal-moment-edit');
+};
 
 function wcRenderUser() { 
     // 1. 更新顶部卡片的名字

@@ -8018,126 +8018,314 @@ input::-webkit-inner-spin-button {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02) !important;
 }
 
-/* 2. 头部背景与居中头像 */
-.wc-moments-header {
-    position: relative !important;
-    margin-bottom: 0 !important; /* 底部留白交给日历容器 */
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-}
-.wc-moments-cover {
-    width: 100% !important;
-    height: 260px !important;
-    object-fit: cover !important;
-    border-bottom-left-radius: 30px !important;
-    border-bottom-right-radius: 30px !important;
-    filter: brightness(0.9) grayscale(10%) !important; /* 降低亮度，突出头像 */
-}
-.wc-moments-user-avatar {
-    position: absolute !important;
-    bottom: -5px !important; /* 头像往上移，大部分在背景图内 */
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: 84px !important;
-    height: 84px !important;
-    border-radius: 50% !important;
-    border: 4px solid var(--wc-bg-color) !important; 
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08) !important;
-    z-index: 10 !important;
-    cursor: pointer !important;
-    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1) !important;
-}
-.wc-moments-user-avatar:active {
-    transform: translateX(-50%) scale(0.9) !important;
-}
-/* 点击头像展示 ALL 时的黑圈特效 */
-.wc-moments-user-avatar.all-active {
-    border-color: #111111 !important;
+/* 2. 个人信息区与故事圈 */
+.wc-moments-profile-section {
+    position: relative;
+    /* 👈 核心修改：减小顶部 padding，压缩背景高度，整体上移 */
+    padding: calc(env(safe-area-inset-top, 20px) + 5px) 20px 10px 20px; 
+    background: #FFF;
+    border-radius: 0 0 24px 24px;
+    margin-bottom: 10px;
+    overflow: hidden; 
 }
 
-/* 3. 🌟 悬浮在头像下方的日历卡片 🌟 */
-#wc-moments-calendar-bar {
-    margin-top: -40px; /* 整个日历容器往上提，紧挨背景图 */
-    padding: 40px 16px 20px 16px; /* 缩小顶部留白，让日历紧挨着头像 */
-    background: transparent;
-    position: relative;
-    z-index: 5;
+/* 🌟 新增：背景图层 (原图直出，无任何效果) 🌟 */
+.wc-moments-bg-layer {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background-size: cover;
+    background-position: center;
+    opacity: 1; 
+    z-index: 0;
+    pointer-events: none;
+    /* 彻底去除了滤镜、透明度等任何效果 */
 }
-.moments-inline-cal {
-    background: #FFFFFF;
-    border-radius: 24px;
-    padding: 16px 10px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.04);
-    border: 1px solid #F5F5F5;
+/* 彻底删除了 ::after 遮罩 */
+
+/* 🌟 新增：顶部导航 (图标 + Moments 标题) 🌟 */
+.wc-moments-top-nav {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-}
-
-/* 单个日期块：平滑的弹性动画 */
-.cal-item {
-    display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    flex: 1;
-    gap: 6px; 
+    margin-bottom: 20px;
     position: relative;
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.cal-item:active {
-    transform: scale(0.85); 
+    z-index: 1;
 }
 
-/* 日期数字：使用优雅的衬线体 (Serif) */
-.cal-day {
-    font-family: 'Georgia', 'Times New Roman', serif;
-    font-size: 16px;
-    color: #8E8E93;
-    width: 32px;
-    height: 32px;
+.wc-moments-nav-left {
     display: flex;
     align-items: center;
-    justify-content: center;
-    border-radius: 50%; 
-    transition: all 0.3s ease;
-    background: transparent;
+    gap: 12px;
+    cursor: pointer;
 }
+.wc-moments-nav-left:active { opacity: 0.6; }
 
-/* 星期标签：极小字号、加粗、宽字距 */
-.cal-label {
-    font-size: 9px;
-    color: #B2B2B2;
-    font-weight: 600;
+/* 删除了旧的 .wc-moments-home-icon 样式，因为已经在 HTML 中内联写好了 */
+
+.wc-moments-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: #000;
     letter-spacing: 0.5px;
-    text-transform: uppercase;
-    transition: color 0.3s ease;
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-/* 🌟 选中状态 (Active)：纯黑圆底 + 纯白文字 🌟 */
-.cal-item.active .cal-day {
-    background: #111111;
-    color: #FFFFFF;
-    font-weight: bold;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); 
-    transform: translateY(-2px); 
+/* 新增 Edit 按钮样式 */
+.wc-moments-edit-btn {
+    width: 100%;
+    padding: 8px 0;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid #EAEAEA;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #111;
+    cursor: pointer;
+    margin-bottom: 15px; /* 👈 减小底部间距，整体上移 */
+    transition: background 0.2s;
+    position: relative;
+    z-index: 2;
 }
-.cal-item.active .cal-label {
-    color: #111111;
-    font-weight: 800;
+.wc-moments-edit-btn:active {
+    background: #F5F5F5;
 }
 
-/* 今天的特殊小黑点提示 */
-.cal-today-dot {
-    width: 4px;
-    height: 4px;
-    background: #111;
+/* 👈 核心修改：改为左右横向排版 */
+.wc-moments-profile-header {
+    display: flex;
+    flex-direction: row; /* 横向排列 */
+    align-items: center; /* 垂直居中 */
+    margin-bottom: 15px; /* 减小底部间距，让 Edit 按钮上移 */
+    position: relative;
+    z-index: 1;
+}
+.wc-moments-avatar-container {
+    position: relative;
+    width: 80px; /* 稍微缩小一点头像，更精致 */
+    height: 80px;
+    margin-bottom: 0; /* 去除底部间距 */
+    margin-right: 15px; /* 增加右侧间距，与文字隔开 */
+    flex-shrink: 0;
+}
+.wc-moments-avatar {
+    width: 100%;
+    height: 100%;
     border-radius: 50%;
+    object-fit: cover;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.wc-moments-avatar:active { transform: scale(0.95); }
+.wc-moments-bubble {
     position: absolute;
-    bottom: -10px;
+    top: -10px;
+    left: -10px;
+    background: #FFF;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    z-index: 2;
+}
+.wc-moments-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    right: 10px;
+    width: 8px;
+    height: 8px;
+    background: #FFF;
+    transform: rotate(45deg);
+}
+.wc-moments-add-btn {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 24px;
+    height: 24px;
+    background: #111;
+    color: #FFF;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 300;
+    border: 2px solid #FFF;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+}
+.wc-moments-add-btn:active { transform: scale(0.9); }
+/* 👈 核心修改：文字信息占据右侧剩余空间 */
+.wc-moments-user-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1; 
+}
+.wc-moments-username {
+    font-size: 18px;
+    font-weight: 800;
+    color: #111;
+    cursor: pointer;
+    display: inline-block;
+    width: fit-content;
+}
+.wc-moments-bio {
+    font-size: 14px;
+    color: #555;
+    cursor: pointer;
+    display: inline-block;
+    margin-top: 4px;
+    width: fit-content;
+}
+.wc-moments-story-highlights {
+    display: flex;
+    gap: 15px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 10px;
+}
+.wc-moments-story-highlights::-webkit-scrollbar { display: none; }
+.wc-moments-story-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.wc-moments-story-item:active { transform: scale(0.95); }
+.wc-moments-story-circle {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 1px solid #EAEAEA;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s;
+}
+.wc-moments-story-circle.active {
+    border: 2px solid #111; /* 👈 选中角色时的黑圈提示 */
+    padding: 1px;
+}
+.wc-moments-story-circle img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* 3. 🌟 全新：横线贯穿式星期日历系统 🌟 */
+.wc-timeline-calendar {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px 20px 20px;
+    background: #FAFAFA;
+}
+.wc-cal-star-btn {
+    width: 20px;
+    height: 20px;
+    color: #8E8E93; /* 👈 改成灰色 */
+    cursor: pointer;
+    margin-right: 18px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+    margin-top: 22px;
+}
+.wc-cal-star-btn:active {
+    transform: scale(0.8);
+}
+.wc-cal-star-btn svg {
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+}
+.wc-cal-timeline-wrapper {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.wc-cal-line {
+    position: absolute;
+    left: -25px; 
+    right: 10px;
+    bottom: 10px; /* 对齐圆点中心 */
+    height: 2px;
+    background: #EAEAEA;
+    z-index: 1;
+}
+.wc-cal-days {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    position: relative;
+    z-index: 2;
+}
+.wc-cal-day-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    height: 46px;
+    width: 38px;
+    position: relative;
+    cursor: pointer;
+}
+.wc-cal-day-text {
+    font-size: 13px;
+    color: #CCC;
+    font-weight: 600;
+    z-index: 3;
+    margin-top: 4px;
+    transition: color 0.2s;
+}
+.wc-cal-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #EAEAEA;
+    z-index: 3;
+    margin-bottom: 7px;
+    transition: background 0.2s;
+}
+.wc-cal-active-bg {
+    position: absolute;
+    top: -4px;
+    bottom: -2px;
+    left: -2px;
+    right: -2px;
+    background-color: #EFEFEF;
+    background-image: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.04) 2px,
+        rgba(0,0,0,0.04) 4px
+    );
+    border-radius: 14px;
+    z-index: 1;
+    display: none;
+}
+.wc-cal-day-item.active .wc-cal-active-bg {
+    display: block;
+}
+.wc-cal-day-item.active .wc-cal-day-text {
+    color: #111;
+}
+.wc-cal-day-item.active .wc-cal-dot {
+    background: #555;
 }
 
 /* 4. 朋友圈卡片重构 (高级留白) */

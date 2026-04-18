@@ -3021,7 +3021,7 @@
                             </button>
                             <input type="text" id="music-chat-input" placeholder="" onkeypress="musicHandleChatEnter(event)">
                             <button class="music-send-btn" onclick="musicSendChatMessage()" title="发送">
-                                SEND
+                                Enter
                             </button>
                         </div>
                     </div>
@@ -3695,11 +3695,14 @@
                     </div>
 
                     <!-- Moments Page -->
-                    <div id="wc-view-moments" class="wc-page" style="padding: 0;">
-                        <div class="wc-moments-header">
-                            <img id="wc-moments-cover" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="wc-moments-cover" onclick="wcTriggerUpload('cover')">
-                            <img id="wc-moments-user-avatar" src="" class="wc-moments-user-avatar">
+                    <div id="wc-view-moments" class="wc-page" style="padding: 0; background: #FAFAFA;">
+                        <div class="wc-moments-profile-section" id="wc-moments-profile-section">
+                            <!-- 内容将由 JS 动态注入，包含标题、背景、头像、名字和故事圈 -->
                         </div>
+                        
+                        <!-- 日历容器 -->
+                        <div id="wc-moments-calendar-bar"></div>
+                        
                         <div id="wc-moments-feed"></div>
                     </div>
 
@@ -3733,28 +3736,50 @@
                         <div class="user-list-group">
                             <div class="user-list-item" onclick="wcOpenWallet()">
                                 <div class="user-list-icon">
-                                    <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+                                    <!-- 钱包 (银行卡) -->
+                                    <svg viewBox="0 0 24 24">
+                                        <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                                        <line x1="2" y1="10" x2="22" y2="10"></line>
+                                        <path d="M6 15h4"></path>
+                                    </svg>
                                 </div>
                                 <div class="user-list-text">钱包 (Wallet)</div>
                                 <div class="user-list-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
                             </div>
                             <div class="user-list-item" onclick="wcOpenMasksModal()">
                                 <div class="user-list-icon">
-                                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                    <!-- 面具 (学生证/ID卡) -->
+                                    <svg viewBox="0 0 24 24">
+                                        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                                        <circle cx="8" cy="10" r="2.5"></circle>
+                                        <path d="M4.5 16c0-1.5 1.5-2.5 3.5-2.5s3.5 1 3.5 2.5"></path>
+                                        <line x1="14" y1="10" x2="19" y2="10"></line>
+                                        <line x1="14" y1="14" x2="19" y2="14"></line>
+                                    </svg>
                                 </div>
                                 <div class="user-list-text">面具 (Masks)</div>
                                 <div class="user-list-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
                             </div>
                             <div class="user-list-item" onclick="wcOpenMyFavorites()">
                                 <div class="user-list-icon">
-                                    <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                    <!-- 我的收藏 (带加号的文件袋) -->
+                                    <svg viewBox="0 0 24 24">
+                                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                        <line x1="12" y1="11" x2="12" y2="17"></line>
+                                        <line x1="9" y1="14" x2="15" y2="14"></line>
+                                    </svg>
                                 </div>
                                 <div class="user-list-text">我的收藏 (Favorites)</div>
                                 <div class="user-list-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
                             </div>
                             <div class="user-list-item" onclick="wcOpenWechatSettings()">
                                 <div class="user-list-icon">
-                                    <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+                                    <!-- 设置 (云端备份/手机) -->
+                                    <svg viewBox="0 0 24 24">
+                                        <path d="M17.5 19c2.48 0 4.5-2.02 4.5-4.5 0-2.33-1.77-4.26-4.05-4.48C17.2 6.52 13.9 4 10 4 6.14 4 3 7.14 3 11c0 .17.01.34.04.5C1.3 11.83 0 13.26 0 15c0 2.21 1.79 4 4 4h13.5z"></path>
+                                        <polyline points="16 12 12 8 8 12"></polyline>
+                                        <line x1="12" y1="8" x2="12" y2="15"></line>
+                                    </svg>
                                 </div>
                                 <div class="user-list-text">设置 (Settings)</div>
                                 <div class="user-list-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
