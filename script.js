@@ -9189,41 +9189,40 @@ function wcRenderMoments() {
         const coverBg = wcState.user.cover ? `url('${wcState.user.cover}')` : 'none';
         const userName = wcState.user.name || 'User';
         const userBio = wcState.user.persona || '记录生活的美好';
-        
-        const bubbleText = wcState.user.bubbleText || 'why'; // 读取气泡文字，默认 why
+        const bubbleText = wcState.user.bubbleText || 'why'; 
         
         profileSection.innerHTML = `
-            <!-- 背景图层 (原图直出，无任何效果) -->
-            <div class="wc-moments-bg-layer" style="background-image: ${coverBg};"></div>
-            
-            <!-- 顶部导航 (图标 + Moments 标题) -->
-            <div class="wc-moments-top-nav">
-                <div class="wc-moments-nav-left" onclick="closeWechat()">
-                    <!-- 换成黑色圆底的相机图标 -->
-                    <div class="wc-moments-home-icon" style="width: 28px; height: 28px; background-color: #000; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                        <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: #fff; stroke: none;"><circle cx="12" cy="12" r="3.2"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
-                    </div>
-                    <div class="wc-moments-title">Moments</div>
-                </div>
+            <!-- 顶部背景区域 (高度减小) -->
+            <div class="wc-moments-cover-area" style="background-image: ${coverBg};">
+                <!-- 退出键已彻底去除 -->
             </div>
-
-            <div class="wc-moments-profile-header">
-                <div class="wc-moments-avatar-container">
-                    <div class="wc-moments-bubble">${bubbleText}</div>
-                    <img id="wc-moments-user-avatar" src="${wcState.user.avatar}" class="wc-moments-avatar" alt="avatar">
+            
+            <!-- 下方信息区域 (包含悬浮头像、名字、签名、故事圈) -->
+            <div class="wc-moments-info-area">
+                <!-- 移至卡片右上角的 Done 按钮 -->
+                <div class="wc-moments-edit-text-card" onclick="wcOpenMomentEditModal()">Edit</div>
+                
+                <!-- 居中悬浮头像 (带气泡和加号) -->
+                <div class="wc-moments-avatar-wrapper">
+                    <div class="wc-moments-bubble" onclick="wcOpenMomentEditModal()">${bubbleText}</div>
+                    <img id="wc-moments-user-avatar" src="${wcState.user.avatar}" class="wc-moments-avatar" alt="avatar" onclick="wcOpenMomentEditModal()">
                     <div class="wc-moments-add-btn" onclick="wcOpenModal('wc-modal-post-moment')">+</div>
                 </div>
-                <div class="wc-moments-user-info">
-                    <div class="wc-moments-username">@${userName}</div>
-                    <div class="wc-moments-bio">${userBio}</div>
+                
+                <!-- 居中名字 -->
+                <div class="wc-moments-username">
+                    ${userName}
+                    <svg class="verified-icon" viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-1.9 14.7L6 12.6l1.5-1.5 2.6 2.6 6.4-6.4 1.5 1.5-7.9 7.9z"/></svg>
+                </div>
+                
+                <!-- 居中签名 -->
+                <div class="wc-moments-bio">${userBio}</div>
+                
+                <!-- 故事圈区域 (仅保留头像列表，居中显示) -->
+                <div class="wc-moments-story-container">
+                    <div class="wc-moments-story-highlights" id="wc-moments-story-highlights"></div>
                 </div>
             </div>
-            
-            <!-- 加回 Edit Profile 按钮，并提高层级防止被背景遮挡 -->
-            <button class="wc-moments-edit-btn" onclick="wcOpenMomentEditModal()">Edit Profile</button>
-            
-            <!-- 故事圈 (Char 头像)，提高层级防止被背景遮挡 -->
-            <div class="wc-moments-story-highlights" id="wc-moments-story-highlights" style="position: relative; z-index: 2;"></div>
         `;
 
         // 绑定头像点击事件 (过滤 ALL)

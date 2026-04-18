@@ -8018,95 +8018,89 @@ input::-webkit-inner-spin-button {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02) !important;
 }
 
-/* 2. 个人信息区与故事圈 */
+/* 2. 个人信息区与故事圈 (整体卡片) */
 .wc-moments-profile-section {
     position: relative;
-    /* 👈 核心修改：减小顶部 padding，压缩背景高度，整体上移 */
-    padding: calc(env(safe-area-inset-top, 20px) + 5px) 20px 10px 20px; 
-    background: #FFF;
-    border-radius: 0 0 24px 24px;
-    margin-bottom: 10px;
-    overflow: hidden; 
+    background: transparent;
+    border-radius: 0;
+    margin-bottom: 0;
 }
 
-/* 🌟 新增：背景图层 (原图直出，无任何效果) 🌟 */
-.wc-moments-bg-layer {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
+/* 顶部背景区域 */
+.wc-moments-cover-area {
+    position: relative;
+    width: 100%;
+    height: 240px; /* 👈 核心修改：加高背景图，让视觉更舒展 */
     background-size: cover;
     background-position: center;
-    opacity: 1; 
-    z-index: 0;
-    pointer-events: none;
-    /* 彻底去除了滤镜、透明度等任何效果 */
-}
-/* 彻底删除了 ::after 遮罩 */
-
-/* 🌟 新增：顶部导航 (图标 + Moments 标题) 🌟 */
-.wc-moments-top-nav {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    position: relative;
-    z-index: 1;
+    background-color: #EAEAEA;
 }
 
-.wc-moments-nav-left {
+/* 极简返回键 */
+.wc-moments-back-btn {
+    position: absolute;
+    top: calc(env(safe-area-inset-top, 20px) + 15px);
+    left: 20px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: center;
     cursor: pointer;
+    z-index: 10;
 }
-.wc-moments-nav-left:active { opacity: 0.6; }
+.wc-moments-back-btn svg {
+    width: 24px;
+    height: 24px;
+    stroke: #FFF;
+    stroke-width: 2.5;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+}
 
-/* 删除了旧的 .wc-moments-home-icon 样式，因为已经在 HTML 中内联写好了 */
-
-.wc-moments-title {
-    font-size: 28px;
+/* 卡片右上角 Done 按钮 */
+.wc-moments-edit-text-card {
+    position: absolute;
+    top: 16px; /* 👈 稍微上移一点，更紧凑 */
+    right: 20px;
+    font-size: 15px;
     font-weight: 800;
-    color: #000;
-    letter-spacing: 0.5px;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-/* 新增 Edit 按钮样式 */
-.wc-moments-edit-btn {
-    width: 100%;
-    padding: 8px 0;
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(10px);
-    border: 1px solid #EAEAEA;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #111;
+    color: #333; /* 👈 改为低饱和深灰 */
     cursor: pointer;
-    margin-bottom: 15px; /* 👈 减小底部间距，整体上移 */
-    transition: background 0.2s;
-    position: relative;
-    z-index: 2;
+    letter-spacing: 0.5px;
+    z-index: 10;
 }
-.wc-moments-edit-btn:active {
-    background: #F5F5F5;
+.wc-moments-edit-text-card:active { opacity: 0.6; }
+
+/* 下方信息区域 (白色卡片) */
+.wc-moments-info-area {
+    position: relative;
+    background: #FFF;
+    border-radius: 24px;
+    margin: -40px 15px 15px 15px; /* 👈 卡片整体往上移，融入加高的背景 */
+    padding: 32px 15px 2px 15px; /* 👈 顶部 padding 再次减小，底部压到 2px */
+    box-shadow: 0 8px 30px rgba(0,0,0,0.04);
+    display: flex;
+    flex-direction: column;
+    align-items: center; 
+    border: 1px solid #F5F5F5;
 }
 
-/* 👈 核心修改：改为左右横向排版 */
-.wc-moments-profile-header {
-    display: flex;
-    flex-direction: row; /* 横向排列 */
-    align-items: center; /* 垂直居中 */
-    margin-bottom: 15px; /* 减小底部间距，让 Edit 按钮上移 */
-    position: relative;
-    z-index: 1;
-}
-.wc-moments-avatar-container {
-    position: relative;
-    width: 80px; /* 稍微缩小一点头像，更精致 */
-    height: 80px;
-    margin-bottom: 0; /* 去除底部间距 */
-    margin-right: 15px; /* 增加右侧间距，与文字隔开 */
-    flex-shrink: 0;
+/* 居中悬浮头像容器 */
+.wc-moments-avatar-wrapper {
+    position: absolute;
+    top: -30px; /* 👈 核心魔法：头像往上推，露出更多在背景上，减少卡片内部占用 */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #FFF;
+    padding: 0px; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    z-index: 10;
 }
 .wc-moments-avatar {
     width: 100%;
@@ -8114,20 +8108,24 @@ input::-webkit-inner-spin-button {
     border-radius: 50%;
     object-fit: cover;
     cursor: pointer;
-    transition: transform 0.2s;
 }
-.wc-moments-avatar:active { transform: scale(0.95); }
+.wc-moments-avatar:active { opacity: 0.8; }
+
+/* 找回气泡 */
 .wc-moments-bubble {
     position: absolute;
     top: -10px;
-    left: -10px;
+    left: -30px; 
     background: #FFF;
     padding: 4px 10px;
     border-radius: 12px;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
+    color: #111;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    z-index: 2;
+    z-index: 12;
+    white-space: nowrap;
+    cursor: pointer;
 }
 .wc-moments-bubble::after {
     content: '';
@@ -8139,56 +8137,74 @@ input::-webkit-inner-spin-button {
     background: #FFF;
     transform: rotate(45deg);
 }
+
+/* 找回加号 */
 .wc-moments-add-btn {
     position: absolute;
     bottom: 0;
-    right: 0;
-    width: 24px;
-    height: 24px;
+    right: -5px;
+    width: 22px;
+    height: 22px;
     background: #111;
     color: #FFF;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 300;
     border: 2px solid #FFF;
     cursor: pointer;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    z-index: 12;
     transition: transform 0.2s;
 }
 .wc-moments-add-btn:active { transform: scale(0.9); }
-/* 👈 核心修改：文字信息占据右侧剩余空间 */
-.wc-moments-user-info {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1; 
-}
+
+/* 名字 */
 .wc-moments-username {
-    font-size: 18px;
+    font-size: 17px; 
     font-weight: 800;
-    color: #111;
-    cursor: pointer;
-    display: inline-block;
-    width: fit-content;
+    color: #111; 
+    margin-bottom: 0; 
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
+.verified-icon {
+    width: 14px;
+    height: 14px;
+    fill: #555; 
+}
+
+/* 签名 */
 .wc-moments-bio {
-    font-size: 14px;
-    color: #555;
-    cursor: pointer;
-    display: inline-block;
-    margin-top: 4px;
-    width: fit-content;
+    font-size: 12px;
+    color: #888; 
+    text-align: center;
+    margin-bottom: 4px; 
+    font-weight: 600;
+    letter-spacing: 0.5px;
 }
+
+/* 故事圈容器 (居中) */
+.wc-moments-story-container {
+    width: 100%;
+    display: flex;
+    justify-content: center; 
+    align-items: center;
+}
+
+/* 故事圈列表 */
 .wc-moments-story-highlights {
     display: flex;
-    gap: 15px;
+    gap: 10px; 
     overflow-x: auto;
     scrollbar-width: none;
-    padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 10px; /* 👈 底部 padding 彻底清零 */
 }
+
 .wc-moments-story-highlights::-webkit-scrollbar { display: none; }
 .wc-moments-story-item {
     display: flex;
@@ -8197,11 +8213,12 @@ input::-webkit-inner-spin-button {
     gap: 4px;
     cursor: pointer;
     transition: transform 0.2s;
+    flex-shrink: 0;
 }
 .wc-moments-story-item:active { transform: scale(0.95); }
 .wc-moments-story-circle {
-    width: 60px;
-    height: 60px;
+    width: 46px; /* 👈 减小 Char 头像尺寸 */
+    height: 46px; /* 👈 减小 Char 头像尺寸 */
     border-radius: 50%;
     border: 1px solid #EAEAEA;
     padding: 2px;
@@ -8211,7 +8228,7 @@ input::-webkit-inner-spin-button {
     transition: border-color 0.2s;
 }
 .wc-moments-story-circle.active {
-    border: 2px solid #111; /* 👈 选中角色时的黑圈提示 */
+    border: 2px solid #111; 
     padding: 1px;
 }
 .wc-moments-story-circle img {
@@ -8226,7 +8243,7 @@ input::-webkit-inner-spin-button {
     display: flex;
     align-items: center;
     padding: 10px 20px 20px 20px;
-    background: #FAFAFA;
+    background: transparent; /* 👈 核心修复：去除灰色背景，统一融入全局底色 */
 }
 .wc-cal-star-btn {
     width: 20px;
