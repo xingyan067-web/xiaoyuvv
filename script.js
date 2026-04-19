@@ -5350,14 +5350,36 @@ function wcHandleDelete() {
     wcHideContextMenu();
 }
 
+// 👇 新增：用于在多选模式下备份原始聊天记录
+let wcMultiSelectBackupChat = null;
+
 function wcHandleMultiSelect() {
     wcState.isMultiSelectMode = true;
     wcState.multiSelectedIds = [wcState.selectedMsgId];
+    
+    // 🌟 核心机制：进入多选模式时，深拷贝备份当前聊天记录
+    const charId = wcState.activeChatId;
+    if (wcState.chats[charId]) {
+        wcMultiSelectBackupChat = JSON.parse(JSON.stringify(wcState.chats[charId]));
+    }
+    
     wcHideContextMenu();
     wcRenderMessages(wcState.activeChatId);
     document.getElementById('wc-multi-select-footer').style.display = 'flex';
     document.getElementById('wc-chat-footer').style.display = 'none';
-    // 修复：进入多选模式后强制滚动到底部，防止被遮挡
+    
+    // 隐藏原有的全局导航栏
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'none';
+    
+    // 显示专属独立顶栏
+    const multiHeader = document.getElementById('wc-multi-select-header');
+    const multiTitle = document.getElementById('wc-multi-header-title');
+    if (multiHeader && multiTitle) {
+        multiHeader.classList.add('active');
+        multiTitle.innerText = `已选择 ${wcState.multiSelectedIds.length} 条消息`;
+    }
+
     setTimeout(() => wcScrollToBottom(true), 50);
 }
 
@@ -5368,32 +5390,235 @@ function wcToggleMultiSelectMsg(msgId) {
         wcState.multiSelectedIds.push(msgId);
     }
     wcRenderMessages(wcState.activeChatId);
+    
+    // 实时更新专属顶栏数量
+    const multiTitle = document.getElementById('wc-multi-header-title');
+    if (multiTitle && wcState.isMultiSelectMode) {
+        multiTitle.innerText = `已选择 ${wcState.multiSelectedIds.length} 条消息`;
+    }
 }
 
 function wcHandleMultiDeleteAction() {
     if (wcState.multiSelectedIds.length === 0) return;
-    if (confirm(`确定删除选中的 ${wcState.multiSelectedIds.length} 条消息吗？`)) {
-        // 同步删除恋人空间日志 (增加容错保护)
-        try {
-            wcState.multiSelectedIds.forEach(id => lsRemoveFeedByMsgId(id));
-        } catch (e) {
-            console.warn("同步删除日志失败", e);
-        }
+    if (confirm(`确定删除选中的 ${wcState.multiSelectedIds.length} 条消息吗？\n(注意：删除后需点击右上角[保存]才会真正生效)`)) {
         
         if (wcState.chats[wcState.activeChatId]) {
+            // 🌟 核心机制：只修改内存数据，不调用 wcSaveData()
             wcState.chats[wcState.activeChatId] = wcState.chats[wcState.activeChatId].filter(m => !wcState.multiSelectedIds.includes(m.id));
-            wcSaveData();
-            wcExitMultiSelectMode();
+            
+            // 清空选中项，但保持多选模式开启，以便预览
+            wcState.multiSelectedIds = [];
+            wcRenderMessages(wcState.activeChatId);
+            
+            const multiTitle = document.getElementById('wc-multi-header-title');
+            if (multiTitle) multiTitle.innerText = `已选择 0 条消息`;
         }
     }
 }
 
+function wcHandleMultiAutoRepairAction() {
+    if (wcState.multiSelectedIds.length === 0) return alert("请先勾选掉格式的消息哦~");
+    
+    const charId = wcState.activeChatId;
+    const char = wcState.characters.find(c => c.id === charId);
+    const msgs = wcState.chats[charId];
+    if (!char || !msgs) return;
+
+    // 1. 提取并按时间排序选中的消息
+    const selectedMsgs = msgs.filter(m => wcState.multiSelectedIds.includes(m.id)).sort((a, b) => a.time - b.time);
+    const firstMsg = selectedMsgs[0];
+    const insertIndex = msgs.findIndex(m => m.id === firstMsg.id); 
+    
+    // 2. 拼接所有残缺的文本
+    let rawText = selectedMsgs.map(m => m.content).join('');
+    let cleanText = rawText.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
+    cleanText = cleanText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    let actions = [];
+
+    // 3. 终极碎片提取模式
+    let extractedObjects = [];
+    let depth = 0; 
+    let start = -1; 
+    let inString = false; 
+    let escapeNext = false;
+
+    for (let i = 0; i < cleanText.length; i++) {
+        const charStr = cleanText[i];
+        if (escapeNext) { escapeNext = false; continue; }
+        if (charStr === '\\') { escapeNext = true; continue; }
+        if (charStr === '"') { inString = !inString; continue; }
+        
+        if (!inString) {
+            if (charStr === '{') { 
+                if (depth === 0) start = i; 
+                depth++; 
+            } else if (charStr === '}') {
+                depth--;
+                if (depth === 0 && start !== -1) {
+                    let objStr = cleanText.substring(start, i + 1);
+                    try {
+                        objStr = objStr.replace(/\n/g, '\\n').replace(/\r/g, '');
+                        let obj = JSON.parse(objStr);
+                        extractedObjects.push(obj);
+                    } catch(err) {
+                        const typeMatch = objStr.match(/"type"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                        const contentMatch = objStr.match(/"content"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                        const senderMatch = objStr.match(/"senderName"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                        if (contentMatch) {
+                            let fallbackObj = {
+                                type: typeMatch ? typeMatch[1].replace(/\\"/g, '"') : 'text',
+                                content: contentMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n')
+                            };
+                            if (senderMatch) fallbackObj.senderName = senderMatch[1].replace(/\\"/g, '"');
+                            extractedObjects.push(fallbackObj);
+                        }
+                    }
+                    start = -1;
+                }
+            }
+        }
+    }
+
+    // 4. 处理提取到的对象
+    if (extractedObjects.length > 0) {
+        extractedObjects.forEach(obj => {
+            if (obj.replies && Array.isArray(obj.replies)) {
+                actions.push(...obj.replies);
+            } else if (obj.type && obj.content) {
+                actions.push(obj);
+            } else if (obj.content) {
+                actions.push({ type: 'text', content: obj.content });
+            }
+        });
+    } else {
+        const contentRegex = /"content"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+        let match;
+        while ((match = contentRegex.exec(cleanText)) !== null) {
+            actions.push({ type: 'text', content: match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') });
+        }
+    }
+
+    if (actions.length === 0) {
+        return alert("解析失败：选中的文本中没有找到任何有效的格式标签，请尝试取消多选后，长按单条消息进行手动编辑。");
+    }
+
+    // 6. 将解析出的 actions 转换为真正的消息对象
+    const stickerGroupIds = char.chatConfig ? char.chatConfig.stickerGroupIds : [];
+    let newParsedMsgs = [];
+    let baseTime = firstMsg.time;
+
+    actions.forEach((action, idx) => {
+        if (!action || !action.content) return;
+        
+        let finalType = action.type || 'text';
+        let finalContent = action.content;
+        
+        if (finalType === 'text') {
+            let imgMatch = finalContent.match(/[\[【]发送了一张图片[，,]?\s*图片ID[：:]\s*(.*?)[\]】]/) || 
+                           finalContent.match(/[\[【]图片[：:]\s*(.*?)[\]】]/) || 
+                           finalContent.match(/^[\[【]图片描述[\]】][：:]?\s*(.*)/);
+            if (imgMatch) {
+                finalType = 'text';
+                finalContent = `[图片描述] ${imgMatch[1].trim()}`;
+            }
+        }
+        
+        if (finalType === 'sticker') {
+            const url = wcFindStickerUrlMulti(stickerGroupIds, finalContent);
+            if (url) {
+                finalContent = url;
+            } else {
+                finalType = 'text';
+                finalContent = `[表情: ${finalContent}]`;
+            }
+        }
+
+        newParsedMsgs.push({
+            id: Date.now() + Math.random() + idx,
+            sender: firstMsg.sender, 
+            name: action.senderName || firstMsg.name, 
+            type: finalType,
+            content: finalContent,
+            time: baseTime + idx 
+        });
+    });
+
+    // 7. 替换原数组中的数据
+    let finalMsgs = msgs.filter(m => !wcState.multiSelectedIds.includes(m.id));
+    finalMsgs.splice(insertIndex, 0, ...newParsedMsgs);
+    
+    // 🌟 核心机制：只修改内存数据，不调用 wcSaveData()
+    wcState.chats[charId] = finalMsgs;
+    
+    // 清空选中项，保持多选模式开启，以便预览
+    wcState.multiSelectedIds = [];
+    wcRenderMessages(charId);
+    
+    const multiTitle = document.getElementById('wc-multi-header-title');
+    if (multiTitle) multiTitle.innerText = `已选择 0 条消息`;
+    
+    alert(`✨ 智能修复预览成功！\n已将选中的残缺文本解析为 ${newParsedMsgs.length} 个气泡。\n请确认无误后，点击右上角【保存】生效。`);
+}
+
+// 👇 新增：点击“取消”按钮的逻辑
+function wcCancelMultiSelectMode() {
+    wcExitMultiSelectMode(); // 直接调用退出，里面已经包含了恢复备份的逻辑
+}
+
+// 👇 新增：点击“保存”按钮的逻辑
+function wcSaveMultiSelectMode() {
+    const charId = wcState.activeChatId;
+    
+    // 真正执行保存，写入数据库
+    wcSaveData();
+    
+    // 同步清理恋人空间日志中可能已经失效的 msgId
+    if (typeof lsState !== 'undefined' && lsState.feed && wcState.chats[charId]) {
+        const currentMsgIds = wcState.chats[charId].map(m => m.id);
+        lsState.feed = lsState.feed.filter(f => !f.msgId || currentMsgIds.includes(f.msgId));
+        if (typeof lsSaveData === 'function') lsSaveData();
+    }
+    
+    // 清空备份，这样 wcExitMultiSelectMode 就不会触发恢复逻辑了
+    wcMultiSelectBackupChat = null; 
+    wcExitMultiSelectMode();
+}
+
+// 👇 核心修复：恢复 wcExitMultiSelectMode 命名，防止返回键报错
 function wcExitMultiSelectMode() {
+    const charId = wcState.activeChatId;
+    
+    // 如果还有备份数据没清空（说明不是通过点保存退出的），默认执行取消恢复原状
+    if (wcMultiSelectBackupChat && wcState.chats[charId]) {
+        wcState.chats[charId] = JSON.parse(JSON.stringify(wcMultiSelectBackupChat));
+    }
+    wcMultiSelectBackupChat = null; // 清空备份
+
     wcState.isMultiSelectMode = false;
     wcState.multiSelectedIds = [];
-    document.getElementById('wc-multi-select-footer').style.display = 'none';
-    document.getElementById('wc-chat-footer').style.display = 'flex';
+    
+    const footer = document.getElementById('wc-multi-select-footer');
+    if (footer) footer.style.display = 'none';
+    
+    const chatFooter = document.getElementById('wc-chat-footer');
+    if (chatFooter) chatFooter.style.display = 'flex';
+    
     wcRenderMessages(wcState.activeChatId);
+    
+    // 隐藏专属独立顶栏
+    const multiHeader = document.getElementById('wc-multi-select-header');
+    if (multiHeader) {
+        multiHeader.classList.remove('active');
+    }
+    
+    // 恢复原有的全局导航栏
+    const globalNavbar = document.querySelector('.wc-navbar');
+    if (globalNavbar) globalNavbar.style.display = 'flex';
+    
+    // 恢复顶栏状态显示
+    const char = wcState.characters.find(c => c.id === wcState.activeChatId);
+    if (char) updateChatTopBarStatus(char);
 }
 
 let wcBackspaceCount = 0;
