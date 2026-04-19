@@ -9211,7 +9211,7 @@ function wcRenderMoments() {
     if (profileSection) {
         const coverBg = wcState.user.cover ? `url('${wcState.user.cover}')` : 'none';
         const userName = wcState.user.name || 'User';
-        const userBio = wcState.user.persona || '记录生活的美好';
+        const userBio = wcState.user.bio || '记录生活的美好'; // 👈 修改：使用独立的 bio 字段
         const bubbleText = wcState.user.bubbleText || 'why'; 
         
         profileSection.innerHTML = `
@@ -9440,7 +9440,7 @@ window.wcOpenMomentEditModal = function() {
                 </div>
                 <div class="wc-form-group">
                     <label class="wc-form-label" style="color: #888; font-weight: bold;">个性签名</label>
-                    <input type="text" id="wc-moment-edit-bio" class="wc-form-input" style="background: #F5F5F5; border: 1px solid #EAEAEA;" value="${wcState.user.persona || ''}">
+                    <input type="text" id="wc-moment-edit-bio" class="wc-form-input" style="background: #F5F5F5; border: 1px solid #EAEAEA;" value="${wcState.user.bio || ''}">
                 </div>
                 <div class="wc-form-group">
                     <label class="wc-form-label" style="color: #888; font-weight: bold;">气泡文字</label>
@@ -9464,8 +9464,17 @@ window.wcSaveMomentProfile = function() {
     const bubble = document.getElementById('wc-moment-edit-bubble').value.trim();
     
     if (name) wcState.user.name = name;
-    wcState.user.persona = bio;
-    wcState.user.bubbleText = bubble; // 保存气泡文字
+    wcState.user.bio = bio; // 👈 修改：保存到独立的 bio 字段，不碰 persona
+    wcState.user.bubbleText = bubble; 
+    
+    // 同步更新到当前使用的面具，防止切换后丢失
+    if (wcState.user.maskId) {
+        const mask = wcState.masks.find(m => m.id === wcState.user.maskId);
+        if (mask) {
+            if (name) mask.name = name;
+            mask.bio = bio; // 👈 修改：保存到面具的 bio 字段，不碰 prompt
+        }
+    }
     
     wcSaveData();
     wcRenderMoments();
@@ -13533,7 +13542,11 @@ function wcDeleteMask(id) {
 function wcApplyMask(id) {
     const mask = wcState.masks.find(m => m.id === id);
     if (mask) {
-        wcState.user.name = mask.name; wcState.user.avatar = mask.avatar; wcState.user.persona = mask.prompt;
+        wcState.user.name = mask.name; 
+        wcState.user.avatar = mask.avatar; 
+        wcState.user.persona = mask.prompt; // 正常读取人设给AI看
+        wcState.user.bio = mask.bio || '记录生活的美好'; // 👈 新增：读取面具专属的个性签名
+        wcState.user.maskId = mask.id; 
         wcSaveData(); wcRenderUser(); wcCloseModal('wc-modal-masks'); alert(`已切换身份为：${mask.name}`);
     }
 }
