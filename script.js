@@ -4891,17 +4891,17 @@ function wcRenderMessages(charId, preserveScroll = false) {
         
         } else {
         
-            // 检测是否为双语格式 (支持跨行匹配，兼容多个 <br> 或 \n)
-            const bilingualRegex = /^([\s\S]*?)(?:<br\s*\/?>|\n)*\s*<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
-            const match = msg.content.match(bilingualRegex);
+            // 检测是否包含 <span> 标签 (支持多段翻译交替)
+            const hasTranslation = /<span[^>]*>([\s\S]*?)<\/span>/i.test(msg.content);
             
-            if (match) {
-                // 深度清理首尾的多余换行和空白
-                const originalText = match[1].replace(/^(<br\s*\/?>|\s)+|(<br\s*\/?>|\s)+$/gi, '');
-                const translatedText = match[2].replace(/^(<br\s*\/?>|\s)+|(<br\s*\/?>|\s)+$/gi, '');
+            if (hasTranslation) {
+                // 提取原文：移除所有 <span>...</span> 及其前面的 <br> 或 \n
+                const originalText = msg.content.replace(/(?:<br\s*\/?>|\n)*\s*<span[^>]*>[\s\S]*?<\/span>\s*/gi, '').replace(/^(<br\s*\/?>|\s)+|(<br\s*\/?>|\s)+$/gi, '');
+                // 提取译文：提取所有 <span> 里面的内容，并用 <br> 连接
+                const translatedText = Array.from(msg.content.matchAll(/<span[^>]*>([\s\S]*?)<\/span>/gi)).map(m => m[1]).join('<br>');
+                
                 const transId = 'trans-' + Math.random().toString(36).substr(2, 9);
                 
-                // 核心修复：压缩为单行，彻底消除 pre-wrap 带来的幽灵空白
                 contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}" onclick="const el = document.getElementById('${transId}'); if(el.style.display==='none'){el.style.display='block';}else{el.style.display='none';}" style="cursor: pointer; -webkit-tap-highlight-color: transparent;">${quoteHtml}<div style="word-break: break-word; width: 100%;">${originalText}</div><div id="${transId}" style="display: none; width: 100%; margin-top: 8px;"><div style="height: 1px; width: 100%; background-color: ${msg.sender === 'me' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)'}; margin-bottom: 8px;"></div><div style="font-size: 14px; word-break: break-word; color: ${msg.sender === 'me' ? '#CCCCCC' : '#888888'};">${translatedText}</div></div></div>`;
             } else {
                 contentHtml = `<div class="wc-bubble ${msg.sender === 'me' ? 'me' : 'them'}">${quoteHtml}${msg.content}</div>`;
@@ -5201,12 +5201,11 @@ function wcHandleEdit() {
         initialText = titleMatch ? titleMatch[1] : "未知地点";
     } else {
         // 检测是否为双语翻译格式
-        const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
-        const match = msg.content.match(bilingualRegex);
-        if (match) {
+        const hasTranslation = /<span[^>]*>([\s\S]*?)<\/span>/i.test(msg.content);
+        if (hasTranslation) {
             currentType = 'translate';
-            const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
-            const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+            const originalText = msg.content.replace(/(?:<br\s*\/?>|\n)*\s*<span[^>]*>[\s\S]*?<\/span>\s*/gi, '').replace(/^(<br\s*\/?>|\s)+|(<br\s*\/?>|\s)+$/gi, '');
+            const translatedText = Array.from(msg.content.matchAll(/<span[^>]*>([\s\S]*?)<\/span>/gi)).map(m => m[1]).join('\n');
             initialText = `${originalText}\n${translatedText}`; // 用换行分隔
         }
     }
@@ -12731,20 +12730,21 @@ function renderSimHistory(history, meAvatar, themAvatar, isGroup = false) {
                 bubble.style.border = '1px solid #F0F0F0';
                 bubble.style.borderBottomLeftRadius = '2px';
             }
-            // 检测是否为双语格式
-            const bilingualRegex = /^([\s\S]*?)(?:<br\s*\/?>|\\n|\n|\s)*<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
-            const match = msg.content.match(bilingualRegex);
+            // 检测是否包含 <span> 标签 (支持多段翻译交替)
+            const hasTranslation = /<span[^>]*>([\s\S]*?)<\/span>/i.test(msg.content);
             
-            if (match) {
-                // 深度清理首尾的多余换行和空白
-                const originalText = match[1].replace(/^(<br\s*\/?>|\\n|\n|\s)+|(<br\s*\/?>|\\n|\n|\s)+$/gi, '');
-                const translatedText = match[2].replace(/^(<br\s*\/?>|\\n|\n|\s)+|(<br\s*\/?>|\\n|\n|\s)+$/gi, '');
+            if (hasTranslation) {
+                // 提取原文
+                const originalText = msg.content.replace(/(?:<br\s*\/?>|\n)*\s*<span[^>]*>[\s\S]*?<\/span>\s*/gi, '').replace(/^(<br\s*\/?>|\s)+|(<br\s*\/?>|\s)+$/gi, '');
+                // 提取译文
+                const translatedText = Array.from(msg.content.matchAll(/<span[^>]*>([\s\S]*?)<\/span>/gi)).map(m => m[1]).join('<br>');
+                const transId = 'trans-' + Math.random().toString(36).substr(2, 9);
+
                 bubble.style.cursor = 'pointer';
                 bubble.onclick = function() { 
                     const el = document.getElementById(transId); 
                     if(el.style.display==='none'){el.style.display='block';}else{el.style.display='none';} 
                 };
-                // 核心修复：压缩为单行
                 bubble.innerHTML = `<div style="word-break: break-word; width: 100%;">${originalText}</div><div id="${transId}" style="display: none; width: 100%; margin-top: 8px;"><div style="height: 1px; width: 100%; background-color: ${isMe ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)'}; margin-bottom: 8px;"></div><div style="font-size: 13px; word-break: break-word; color: ${isMe ? '#CCCCCC' : '#888888'};">${translatedText}</div></div>`;
             } else {
                 bubble.innerHTML = msg.content;
@@ -29210,16 +29210,15 @@ function forumRenderPMChatHistory() {
             avatarHtml = `<img src="${forumState.profile.avatar}" class="forum-pm-bubble-avatar">`;
         }
         
-        const bilingualRegex = /^([\s\S]*?)(?:<br>\s*)+<span[^>]*>([\s\S]*?)<\/span>\s*$/i;
-        const match = msg.content.match(bilingualRegex);
+        const hasTranslation = /<span[^>]*>([\s\S]*?)<\/span>/i.test(msg.content);
         
         let bubbleContentHtml = msg.content;
         let onClickAttr = "";
         const isMe = msg.sender === 'me';
 
-        if (match) {
-            const originalText = match[1].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
-            const translatedText = match[2].replace(/^(<br>|\s)+|(<br>|\s)+$/gi, '');
+        if (hasTranslation) {
+            const originalText = msg.content.replace(/(?:<br\s*\/?>|\n)*\s*<span[^>]*>[\s\S]*?<\/span>\s*/gi, '').replace(/^(<br\s*\/?>|\s)+|(<br\s*\/?>|\s)+$/gi, '');
+            const translatedText = Array.from(msg.content.matchAll(/<span[^>]*>([\s\S]*?)<\/span>/gi)).map(m => m[1]).join('<br>');
             const transId = 'pm-trans-' + Math.random().toString(36).substr(2, 9);
             
             onClickAttr = `onclick="const el = document.getElementById('${transId}'); if(el.style.display==='none'){el.style.display='block';}else{el.style.display='none';}" style="cursor: pointer; -webkit-tap-highlight-color: transparent;"`;
