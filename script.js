@@ -9464,17 +9464,10 @@ window.wcSaveMomentProfile = function() {
     const bubble = document.getElementById('wc-moment-edit-bubble').value.trim();
     
     if (name) wcState.user.name = name;
-    wcState.user.bio = bio; // 👈 修改：保存到独立的 bio 字段，不碰 persona
+    wcState.user.bio = bio; 
     wcState.user.bubbleText = bubble; 
     
-    // 同步更新到当前使用的面具，防止切换后丢失
-    if (wcState.user.maskId) {
-        const mask = wcState.masks.find(m => m.id === wcState.user.maskId);
-        if (mask) {
-            if (name) mask.name = name;
-            mask.bio = bio; // 👈 修改：保存到面具的 bio 字段，不碰 prompt
-        }
-    }
+    // 👈 已经删除了同步到面具的代码，朋友圈的修改绝对不会影响面具原本的设定了
     
     wcSaveData();
     wcRenderMoments();
@@ -9532,7 +9525,15 @@ function wcRenderUser() {
         if (wcState.masks && wcState.masks.length > 0) {
             wcState.masks.forEach(m => {
                 // 避免重复渲染当前正在使用的面具
-                if (m.avatar !== wcState.user.avatar || m.name !== wcState.user.name) {
+                // 👈 核心修复：通过专属 maskId 精准判断，即使改了朋友圈名字，也不会多出一个面具
+                let isCurrentMask = false;
+                if (wcState.user.maskId) {
+                    isCurrentMask = (m.id === wcState.user.maskId);
+                } else {
+                    isCurrentMask = (m.avatar === wcState.user.avatar && m.name === wcState.user.name);
+                }
+                
+                if (!isCurrentMask) {
                     const safeName = m.name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
                     const safePrompt = (m.prompt || '暂无设定').replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, '<br>');
                     cardsHtml += `
