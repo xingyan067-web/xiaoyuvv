@@ -14196,11 +14196,16 @@ body.edit-mode-active .widget-remove-btn { display: flex; }
     display: flex; flex-direction: column;
     animation: wcSlideInRight 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
     border-radius: 0 !important; margin: 0 !important; max-width: 100% !important;
+    /* 👇 核心修复：强制固定在屏幕顶部，绝对禁止被键盘推飞到屏幕外 👇 */
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
 }
 
 .mask-edit-nav {
     display: flex; justify-content: space-between; align-items: center;
-    padding: calc(env(safe-area-inset-top, 20px) + 10px) 20px 10px 20px;
+    /* 👇 核心修改：将 + 10px 改为 + 40px，大幅增加顶栏高度并把按钮往下推 👇 */
+    padding: calc(env(safe-area-inset-top, 20px) + 20px) 20px 15px 20px;
     background: #FAFAFA; flex-shrink: 0;
 }
 .mask-edit-back { width: 40px; height: 40px; display: flex; align-items: center; justify-content: flex-start; cursor: pointer; color: #111; }
@@ -14209,9 +14214,10 @@ body.edit-mode-active .widget-remove-btn { display: flex; }
 .mask-edit-save { font-size: 14px; font-weight: 800; color: #111; cursor: pointer; background: #EAEAEA; padding: 6px 16px; border-radius: 16px; transition: background 0.2s; }
 .mask-edit-save:active { background: #D1D1D6; }
 
+/* 恢复原本的 padding，去掉伪元素撑位 */
 .mask-edit-body { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
 
-.mask-edit-profile-section { display: flex; gap: 15px; align-items: flex-start; }
+.mask-edit-profile-section { display: flex; gap: 15px; align-items: flex-start; flex-shrink: 0; }
 .mask-edit-avatar-box { width: 80px; height: 80px; border-radius: 12px; background: #F0F0F0; position: relative; overflow: hidden; cursor: pointer; border: 1px solid #EAEAEA; flex-shrink: 0; }
 .mask-edit-avatar-box img { width: 100%; height: 100%; object-fit: cover; }
 .mask-edit-avatar-hint { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.5); color: #FFF; font-size: 10px; text-align: center; padding: 4px 0; }
@@ -14219,20 +14225,19 @@ body.edit-mode-active .widget-remove-btn { display: flex; }
 .mask-edit-breadcrumbs { font-size: 11px; color: #999; font-family: -apple-system, sans-serif; letter-spacing: 0.5px; }
 /* 带五角星的下划线输入框样式 */
 .mask-edit-input-row { display: flex; align-items: center; border-bottom: 1px solid #EAEAEA; padding-bottom: 6px; margin-bottom: 10px; }
-/* 👇 核心修改：将五角星颜色从 #CCC 加深为 #888 */
 .mask-edit-input-row svg { width: 12px; height: 12px; fill: #888; margin-right: 8px; flex-shrink: 0; }
 .mask-edit-input-row input { flex: 1; border: none; background: transparent; outline: none; font-size: 14px; color: #111; font-family: inherit; padding: 0; }
 .mask-edit-input-row input::placeholder { color: #CCC; }
 
 /* iOS 文本选择菜单装饰样式 */
-.ios-text-menu-decor { position: relative; display: flex; flex-direction: column; align-items: center; margin: 10px 0 20px 0; user-select: none; pointer-events: none; }
+.ios-text-menu-decor { position: relative; display: flex; flex-direction: column; align-items: center; margin: 10px 0 20px 0; user-select: none; pointer-events: none; flex-shrink: 0; }
 .ios-text-menu-items { background: #F9F9F9; border-radius: 8px; display: flex; align-items: center; overflow: hidden; border: 1px solid #EAEAEA; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.08)); }
 .ios-text-menu-items span { padding: 10px 12px; font-size: 13px; color: #111; border-right: 1px solid #EAEAEA; white-space: nowrap; }
 .ios-text-menu-items span:last-child { border-right: none; font-family: monospace; font-weight: bold; font-size: 16px; padding: 8px 12px; }
 .ios-text-menu-arrow-down { width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 8px solid #F9F9F9; margin-top: -1px; position: relative; z-index: 2; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.08)); }
 .ios-text-menu-arrow-down::before { content: ''; position: absolute; top: -9px; left: -9px; border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 9px solid #EAEAEA; z-index: -1; }
 
-/* 👇 新增：完美复刻 iOS 选中文本与拖拽手柄 */
+/* 完美复刻 iOS 选中文本与拖拽手柄 */
 .ios-selected-text-wrapper { position: relative; margin-top: 2px; display: inline-block; }
 .ios-selected-text { background-color: #E5E5EA; color: #333; font-size: 14px; padding: 2px 0; font-family: 'Kaiti', 'STKaiti', serif; letter-spacing: 0.5px; }
 .ios-handle { position: absolute; width: 2px; background-color: #A0A0A0; }
@@ -14242,10 +14247,13 @@ body.edit-mode-active .widget-remove-btn { display: flex; }
 .right-handle { top: 0; bottom: -2px; right: 0; }
 .right-handle::before { bottom: -8px; }
 
-.mask-edit-card { background: #FFFFFF; border-radius: 16px; border: 1px solid #F0F0F0; box-shadow: 0 4px 20px rgba(0,0,0,0.03); overflow: hidden; display: flex; flex-direction: column; }
-.mask-edit-card-header { background: #F9F9F9; padding: 12px 16px; text-align: right; font-size: 12px; font-weight: bold; color: #555; border-bottom: 1px solid #F0F0F0; }
-.mask-edit-card-content { padding: 16px; display: flex; flex-direction: column; flex: 1; }
-.mask-edit-textarea { width: 100%; min-height: 200px; border: none; background: transparent; font-size: 14px; color: #333; line-height: 1.8; outline: none; resize: none; font-family: 'Kaiti', 'STKaiti', serif; }
+/* 👇 核心修复：模仿世界书，让卡片 flex: 1 撑满剩余空间，并设置最小高度 👇 */
+.mask-edit-card { background: #FFFFFF; border-radius: 16px; border: 1px solid #F0F0F0; box-shadow: 0 4px 20px rgba(0,0,0,0.03); overflow: hidden; display: flex; flex-direction: column; flex: 1; min-height: 300px; }
+.mask-edit-card-header { background: #F9F9F9; padding: 12px 16px; text-align: right; font-size: 12px; font-weight: bold; color: #555; border-bottom: 1px solid #F0F0F0; flex-shrink: 0; }
+.mask-edit-card-content { padding: 16px; display: flex; flex-direction: column; flex: 1; position: relative; }
+/* 👇 核心修复：让 textarea 撑满容器，并在内部独立滚动 👇 */
+.mask-edit-textarea { flex: 1; width: 100%; height: 100%; border: none; background: transparent; font-size: 14px; color: #333; line-height: 1.8; outline: none; resize: none; font-family: 'Kaiti', 'STKaiti', serif; overflow-y: auto; }
+.mask-edit-textarea::placeholder { color: #CCC; font-family: -apple-system, sans-serif; }
 .mask-edit-textarea::placeholder { color: #CCC; font-family: -apple-system, sans-serif; }
 /* ========================================== */
 /* 世界书编辑器全新 UI (手账风) */
