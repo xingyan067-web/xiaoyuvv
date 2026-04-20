@@ -2426,11 +2426,21 @@ function renderWbEnvelopeList() {
 
     // 👇 永远在最前面渲染一个“创建分组”的虚线信封
     const createDiv = document.createElement('div');
-    createDiv.className = 'wb-create-envelope';
+    createDiv.className = 'wb-list-envelope'; // 复用信封基础类名，保证大小和动画一致
     createDiv.onclick = () => addNewGroup();
     createDiv.innerHTML = `
-        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-        <div style="font-size: 14px; font-weight: bold;">创建新分组</div>
+        <div class="wb-env-back" style="border: 2px dashed #ccc; background: transparent;"></div>
+        <div class="wb-env-front" style="border: 2px dashed #ccc; border-top: none; background: rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: center; padding: 0;">
+            <div style="font-size: 15px; font-weight: bold; color: #888; display: flex; align-items: center; gap: 6px; margin-top: 20px;">
+                <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                创建世界书分组
+            </div>
+        </div>
+        <div class="wb-env-flap" style="border-top: 2px dashed #ccc; background: transparent;">
+            <div class="wb-env-sticker" style="background: #f5f5f5; box-shadow: none; border: 1px dashed #ccc;">
+                <svg viewBox="0 0 24 24" style="fill: #ccc;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            </div>
+        </div>
     `;
     container.appendChild(createDiv);
 
@@ -22271,9 +22281,9 @@ let currentMusicPlayApi = localStorage.getItem('ins_music_play_api_preference') 
 function getMusicApiBaseUrl() {
     if (currentMusicApi === 'secondary') return 'https://ncmapi.btwoa.com';
     if (currentMusicApi === 'tertiary') return 'https://ncm.zhenxin.me'; 
-    if (currentMusicApi === 'api4') return 'http://110.42.255.106:3000'; // 👉 替换为真实的第四个接口
-    if (currentMusicApi === 'api5') return 'https://www.musicapi.cn'; // 👉 替换为真实的第五个接口
-    return 'https://zm.armoe.cn'; // primary
+    if (currentMusicApi === 'api4') return 'https://api-music.kingcola-icg.cn'; // 👉 替换为真实的第四个接口
+    if (currentMusicApi === 'api5') return 'https://neteaseapi.gksm.store'; // 👉 替换为真实的第五个接口
+    return 'https://zm.wwoyun.cn'; // primary
 }
 
 function getMusicPlayApiBaseUrl() {
