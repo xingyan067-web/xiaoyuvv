@@ -1833,7 +1833,35 @@ function resetWallpaper() {
     document.getElementById('bgUrlInput').value = '';
     saveThemeSettings(); 
 }
+
+// 👇 新增：恢复默认字体函数 (无弹窗) 👇
+function resetFonts() {
+    // 1. 清空全局字体样式
+    const style = document.getElementById('dynamic-font-style');
+    if (style) style.textContent = '';
+    
+    // 2. 清空预览卡片字体样式
+    const previewStyle = document.getElementById('preview-font-style');
+    if (previewStyle) previewStyle.textContent = '';
+    
+    // 3. 清空 URL 输入框
+    const urlInput = document.getElementById('fontUrlInput');
+    if (urlInput) urlInput.value = '';
+    
+    // 4. 恢复默认字体大小 (11px)
+    const sizeSlider = document.getElementById('fontSizeSlider');
+    if (sizeSlider) sizeSlider.value = 11;
+    changeFontSize(11);
+    
+    // 5. 保存设置
+    saveThemeSettings();
+}
+// 👆 新增结束 👆
+
 function resetIcons() {
+    // 👇 新增：弹出确认提示框
+    if (!confirm("确定要恢复所有默认图标和名称吗？")) return;
+    
     // 补全了第9个APP：短信
     const defaultNames = ['App 1', 'App 2', 'App 3', 'App 4', 'Theme', 'Settings', '世界书', 'Wish', '短信'];
     for (let i = 0; i < totalApps; i++) {
@@ -1855,9 +1883,9 @@ function handleFontUpload(input) {
             const base64Font = e.target.result;
             // 将 Base64 填入输入框
             document.getElementById('fontUrlInput').value = base64Font;
-            // 直接应用并保存
-            applyFont(base64Font);
-            alert("本地字体已成功应用并保存！");
+            // 仅触发预览
+            previewFont(base64Font);
+            alert("本地字体已加载，请在上方卡片查看预览效果。确认无误后点击【应用到全局】。");
         };
         reader.readAsDataURL(file);
     }
@@ -2438,21 +2466,27 @@ function renderWbEnvelopeList() {
     const container = document.getElementById('wb-envelope-list');
     container.innerHTML = '';
 
-    // 👇 永远在最前面渲染一个“创建分组”的虚线信封
+    // 👇 永远在最前面渲染一个“创建分组”的实体文件夹
     const createDiv = document.createElement('div');
-    createDiv.className = 'wb-list-envelope'; // 复用信封基础类名，保证大小和动画一致
+    createDiv.className = 'wb-folder-item';
     createDiv.onclick = () => addNewGroup();
     createDiv.innerHTML = `
-        <div class="wb-env-back" style="border: 2px dashed #ccc; background: transparent;"></div>
-        <div class="wb-env-front" style="border: 2px dashed #ccc; border-top: none; background: rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: center; padding: 0;">
-            <div style="font-size: 15px; font-weight: bold; color: #888; display: flex; align-items: center; gap: 6px; margin-top: 20px;">
-                <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                创建世界书分组
-            </div>
+        <div class="wb-folder-back">
+            <div class="wb-folder-tab"></div>
+            <div class="wb-folder-back-main"></div>
         </div>
-        <div class="wb-env-flap" style="border-top: 2px dashed #ccc; background: transparent;">
-            <div class="wb-env-sticker" style="background: #f5f5f5; box-shadow: none; border: 1px dashed #ccc;">
-                <svg viewBox="0 0 24 24" style="fill: #ccc;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        <div class="wb-folder-paper-preview" style="align-items: center;">
+            <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; stroke: #CCC; stroke-width: 2; fill: none; margin-bottom: 20px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </div>
+        <div class="wb-folder-front">
+            <div class="wb-folder-header">
+                <div class="wb-folder-title-box">
+                    <div class="wb-folder-title">New Group</div>
+                    <div class="wb-folder-subtitle">Create a new folder</div>
+                </div>
+            </div>
+            <div class="wb-folder-footer">
+                <div class="wb-folder-count">创建世界书分组</div>
             </div>
         </div>
     `;
@@ -2460,8 +2494,6 @@ function renderWbEnvelopeList() {
 
     worldbookGroups.forEach((group, index) => {
         const entries = worldbookEntries.filter(e => e.type === group);
-        const isDark = index % 2 !== 0; // 交替深浅色
-        const darkClass = isDark ? 'dark' : '';
         
         // 提取前几个条目的标题作为描述
         let descText = entries.slice(0, 2).map(e => e.title).join(' / ');
@@ -2469,31 +2501,67 @@ function renderWbEnvelopeList() {
         if (entries.length === 0) descText = '空空如也';
 
         const div = document.createElement('div');
-        div.className = `wb-list-envelope ${darkClass}`;
-        div.onclick = () => openWbEnvelopeModal(group, isDark);
+        div.className = `wb-folder-item`;
+        div.onclick = () => openWbEnvelopeModal(group);
         
         div.innerHTML = `
-            <div class="wb-env-back"></div>
-            <div class="wb-env-front">
-                <div class="wb-env-title">${group}</div>
-                <div class="wb-env-desc">${descText} (${entries.length}个条目)</div>
+            <div class="wb-folder-back">
+                <div class="wb-folder-tab"></div>
+                <div class="wb-folder-back-main"></div>
             </div>
-            <div class="wb-env-flap">
-                <div class="wb-env-sticker">
-                    <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            <div class="wb-folder-paper-preview">
+                <div style="width: 60px; height: 6px; background: #EAEAEA; border-radius: 3px; margin-top: 12px; margin-left: 12px;"></div>
+            </div>
+            <div class="wb-folder-front">
+                <div class="wb-folder-header">
+                    <div class="wb-folder-title-box">
+                        <div class="wb-folder-title">${group}</div>
+                        <div class="wb-folder-subtitle">${descText}</div>
+                    </div>
+                    <div class="wb-folder-actions">
+                        <svg viewBox="0 0 24 24" onclick="event.stopPropagation(); showWbGroupEditMenu(event, '${group}')"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                    </div>
                 </div>
-            </div>
-            <!-- 👇 新增：Edit 按钮 -->
-            <div class="wb-edit-btn" onclick="event.stopPropagation(); showWbGroupEditMenu(event, '${group}')">
-                Edit
-            </div>
-            <div class="wb-check-btn" onclick="event.stopPropagation(); openWbFullscreenView('${group}')">
-                Check 
+                <div class="wb-folder-footer">
+                    <div class="wb-folder-count">${entries.length} entries</div>
+                    <div style="cursor: pointer; display: flex; align-items: center; gap: 4px; color: #007AFF;" onclick="event.stopPropagation(); openWbFullscreenView('${group}')">
+                        Check <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; stroke: currentColor; stroke-width: 2; fill: none;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </div>
+                </div>
             </div>
         `;
         container.appendChild(div);
     });
 }
+
+// 打开屏幕中间的动态信封弹窗
+function openWbEnvelopeModal(groupName) {
+    currentWbGroupName = groupName;
+    currentWbPapers = worldbookEntries.filter(e => e.type === groupName);
+
+    const envelope = document.getElementById('wb-modal-envelope');
+    document.getElementById('wb-modal-title').innerText = groupName;
+    
+    let descText = currentWbPapers.slice(0, 2).map(e => e.title).join(' / ');
+    if (currentWbPapers.length > 2) descText += '...';
+    if (currentWbPapers.length === 0) descText = '空空如也';
+    
+    document.getElementById('wb-modal-desc').innerText = descText;
+    document.getElementById('wb-modal-count').innerText = `${currentWbPapers.length} entries`;
+
+    renderWbPapers();
+
+    const modal = document.getElementById('wb-envelope-modal');
+    modal.style.display = 'flex';
+    
+    setTimeout(() => {
+        modal.classList.add('active');
+        setTimeout(() => {
+            envelope.classList.add('open');
+        }, 100); // 稍微延迟一下，让抽出动画更明显
+    }, 10);
+}
+
 
 // 👇 新增：显示分组编辑菜单 (重命名 / 删除)
 function showWbGroupEditMenu(e, groupName) {
@@ -2581,53 +2649,6 @@ function deleteWbGroup(groupName) {
         saveWorldbookData();
         renderWbEnvelopeList();
     }
-}
-
-
-// 打开屏幕中间的动态信封弹窗
-function openWbEnvelopeModal(groupName, isDark) {
-    currentWbGroupName = groupName;
-    currentWbPapers = worldbookEntries.filter(e => e.type === groupName);
-
-    const envelope = document.getElementById('wb-modal-envelope');
-    document.getElementById('wb-modal-title').innerText = groupName;
-    document.getElementById('wb-modal-desc').innerText = `共 ${currentWbPapers.length} 个条目`;
-
-    const checkBtn = document.getElementById('wb-modal-check-btn');
-
-    if (isDark) {
-        document.getElementById('wb-modal-env-back').style.background = '#222';
-        document.getElementById('wb-modal-env-back').style.borderColor = '#333';
-        document.getElementById('wb-modal-env-front').style.background = '#2a2a2a';
-        document.getElementById('wb-modal-env-front').style.borderColor = '#333';
-        document.getElementById('wb-modal-env-flap').style.background = '#2a2a2a';
-        document.getElementById('wb-modal-env-flap').style.borderTopColor = '#333';
-        document.getElementById('wb-modal-title').style.color = '#fff';
-        checkBtn.style.background = '#fff';
-        checkBtn.style.color = '#111';
-    } else {
-        document.getElementById('wb-modal-env-back').style.background = '#fdfdfd';
-        document.getElementById('wb-modal-env-back').style.borderColor = '#eaeaea';
-        document.getElementById('wb-modal-env-front').style.background = '#fff';
-        document.getElementById('wb-modal-env-front').style.borderColor = '#eaeaea';
-        document.getElementById('wb-modal-env-flap').style.background = '#fdfdfd';
-        document.getElementById('wb-modal-env-flap').style.borderTopColor = '#eaeaea';
-        document.getElementById('wb-modal-title').style.color = '#333';
-        checkBtn.style.background = '#111';
-        checkBtn.style.color = '#fff';
-    }
-
-    renderWbPapers();
-
-    const modal = document.getElementById('wb-envelope-modal');
-    modal.style.display = 'flex';
-    
-    setTimeout(() => {
-        modal.classList.add('active');
-        setTimeout(() => {
-            envelope.classList.add('open');
-        }, 200);
-    }, 10);
 }
 
 // 渲染交叠的信纸
@@ -2743,13 +2764,14 @@ window.filterWbEntries = function(keyword) {
     const searchRes = document.getElementById('wb-search-results');
     
     if (!keyword.trim()) {
-        envList.style.display = 'flex';
+        envList.style.display = 'grid'; /* 👈 核心修复：恢复为 grid 网格布局，防止挤成一排 */
         searchRes.style.display = 'none';
         return;
     }
     
     envList.style.display = 'none';
     searchRes.style.display = 'flex';
+
     
     const lowerKw = keyword.toLowerCase();
     const filtered = worldbookEntries.filter(e => 
@@ -3596,12 +3618,35 @@ function applyFontPreset(idx) {
     }
 }
 
+// 👇 新增：仅在预览卡片中生效的函数 👇
+function previewFont(url) {
+    const finalUrl = url || document.getElementById('fontUrlInput').value;
+    let previewStyle = document.getElementById('preview-font-style');
+    
+    if (!previewStyle) {
+        previewStyle = document.createElement('style');
+        previewStyle.id = 'preview-font-style';
+        document.head.appendChild(previewStyle);
+    }
+    
+    if (finalUrl) {
+        previewStyle.textContent = `
+            @font-face { font-family: 'PreviewFont'; src: url('${finalUrl}'); } 
+            #fontPreviewText { font-family: 'PreviewFont', sans-serif !important; }
+        `;
+    }
+}
+
+// 修改：点击“应用到全局”时才真正生效
 function applyFont(url) {
     const finalUrl = url || document.getElementById('fontUrlInput').value;
     const style = document.getElementById('dynamic-font-style');
     if (finalUrl) {
         style.textContent = `@font-face { font-family: 'CustomFont'; src: url('${finalUrl}'); } body, input, textarea, button, select { font-family: 'CustomFont', sans-serif !important; }`;
         saveThemeSettings();
+        alert("字体已成功应用到全局！");
+    } else {
+        alert("请先输入字体 URL 或上传本地字体哦~");
     }
 }
 
@@ -3613,6 +3658,14 @@ function changeFontSize(val) {
     // 2. 计算缩放比例 (以默认的 11px 为基准)
     const scale = val / 11;
     
+    // 👇 新增：动态更新预览卡片的字体大小 👇
+    const previewText = document.getElementById('fontPreviewText');
+    if (previewText) {
+        // 基础大小设为 18px，跟随比例缩放
+        previewText.style.fontSize = (18 * scale) + 'px';
+    }
+    // 👆 新增结束 👆
+        
     // 3. 动态生成全局字体缩放样式
     let styleTag = document.getElementById('global-font-size-style');
     if (!styleTag) {
@@ -3674,14 +3727,37 @@ function renderAppEditors() {
         const div = document.createElement('div');
         div.className = 'app-edit-item';
         div.innerHTML = `
-            <!-- 👇 重点修改这一行：把 style 外面的双引号改成单引号 👇 -->
-            <div class="app-edit-preview" style='background-image:${bg}' onclick="triggerAppIconUpload(${i})">
-                <svg class="camera-icon" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            <!-- 左侧：图标与标题 -->
+            <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 6px; flex-shrink: 0;">
+                <span style="font-size: 9px; font-weight: 800; color: #CCC; letter-spacing: 1px; margin-left: 2px;">APP ICON</span>
+                <div class="app-edit-preview" style='background-image:${bg}' onclick="triggerAppIconUpload(${i})">
+                    <!-- 默认的占位图标 -->
+                    <svg class="camera-icon" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    
+                    <!-- 👇 真正的照相机小徽标 (背景已改为高级灰) 👇 -->
+                    <div style="position: absolute; bottom: -4px; right: -4px; width: 22px; height: 22px; background: #999; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #FFF; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: #FFF;"><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.65 0-3 1.35-3 3s1.35 3 3 3 3-1.35 3-3-1.35-3-3-3z"/></svg>
+                    </div>
+                </div>
             </div>
-            <div class="app-edit-inputs">
-                <input type="text" value="${name}" oninput="updateAppName(${i}, this.value)" placeholder="App Name">
-                <input type="text" placeholder="图标 URL (粘贴后点击空白处)" onblur="updateAppIconUrl(${i}, this.value)">
-                <button class="action-btn secondary" style="padding:6px; font-size:12px; margin:0;" onclick="resetSingleApp(${i})">重置</button>
+            
+            <!-- 中间：输入框区域 -->
+            <div class="app-edit-inputs" style="flex: 1; display: flex; flex-direction: column; gap: 10px; justify-content: center; margin-left: 10px;">
+                <!-- NAME 行 (去掉了五角星，底边框改为虚线) -->
+                <div style="display: flex; align-items: center; gap: 8px; border-bottom: 1px dashed #EAEAEA; padding-bottom: 6px;">
+                    <span style="font-size: 10px; font-weight: 800; color: #CCC; letter-spacing: 1px; width: 32px;">NAME</span>
+                    <input type="text" value="${name}" oninput="updateAppName(${i}, this.value)" placeholder="App Name" style="background: transparent !important; border: none !important; padding: 0 !important; font-size: 15px !important; font-weight: 600 !important; color: #333 !important; box-shadow: none !important; flex: 1;">
+                </div>
+                <!-- URL 行 -->
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 10px; font-weight: 800; color: #CCC; letter-spacing: 1px; width: 32px;">URL</span>
+                    <input type="text" placeholder="图标 URL" onfocus="this.placeholder=''" onblur="this.placeholder='图标 URL '; updateAppIconUrl(${i}, this.value)" style="background: transparent !important; border: none !important; padding: 0 !important; font-size: 12px !important; color: #999 !important; box-shadow: none !important; flex: 1;">
+                </div>
+            </div>
+            
+            <!-- 右侧：重置按钮 -->
+            <div onclick="resetSingleApp(${i})" style="cursor: pointer; padding: 10px; color: #999; display: flex; align-items: center; justify-content: center; transition: color 0.2s;" title="重置图标">
+                <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
             </div>
             <input type="file" id="appIconInput-${i}" class="hidden-file-input" accept="image/*" onchange="handleAppIconUpload(${i}, this)">
         `;
@@ -3756,6 +3832,19 @@ function resetSingleApp(id) {
     }
 }
 
+// 👇 新增：壁纸库编辑模式状态变量
+let isWallpaperEditMode = false;
+
+function toggleWallpaperEditMode() {
+    isWallpaperEditMode = !isWallpaperEditMode;
+    const btn = document.getElementById('wp-edit-btn');
+    if (btn) {
+        btn.innerText = isWallpaperEditMode ? 'Done' : 'Edit';
+        btn.style.color = isWallpaperEditMode ? '#FF3B30' : '#007AFF';
+    }
+    renderWallpaperGrid(); // 刷新网格以显示/隐藏删除按钮
+}
+
 function renderWallpaperGrid() {
     const grid = document.getElementById('wallpaperGrid');
     grid.innerHTML = '';
@@ -3767,20 +3856,36 @@ function renderWallpaperGrid() {
         const item = document.createElement('div');
         item.className = 'wallpaper-item';
         item.style.backgroundImage = `url('${url}')`;
-        item.onclick = () => { // ✅ 正确写法
-            document.getElementById('mainScreen').style.backgroundImage = `url('${url}')`;
-            saveThemeSettings();
+        
+        // 如果处于编辑模式，让图片微微抖动提示可删除
+        if (isWallpaperEditMode) {
+            item.style.animation = 'shake 0.3s infinite';
+        }
+        
+        item.onclick = () => { 
+            // 非编辑模式下才允许点击应用壁纸
+            if (!isWallpaperEditMode) {
+                document.getElementById('mainScreen').style.backgroundImage = `url('${url}')`;
+                saveThemeSettings();
+            }
         }; 
-        const del = document.createElement('div');
-        del.className = 'wallpaper-delete';
-        del.innerText = '×';
-        del.onclick = (e) => {
-            e.stopPropagation();
-            wallpaperPresets.splice(idx, 1);
-            savePresetsData();
-            renderWallpaperGrid();
-        };
-        item.appendChild(del);
+        
+        // 仅在编辑模式下渲染删除按钮
+        if (isWallpaperEditMode) {
+            const del = document.createElement('div');
+            // 带有白色描边的红色圆形 SVG 删除按钮，定位在右上角偏外一点
+            del.style.cssText = 'position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; background: #FF3B30; color: #FFF; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10; border: 2px solid #FFF;';
+            del.innerHTML = '<svg viewBox="0 0 24 24" style="width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            
+            del.onclick = (e) => {
+                e.stopPropagation();
+                wallpaperPresets.splice(idx, 1);
+                savePresetsData();
+                renderWallpaperGrid();
+            };
+            item.appendChild(del);
+        }
+        
         grid.appendChild(item);
     });
 }

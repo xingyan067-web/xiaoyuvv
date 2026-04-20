@@ -1208,7 +1208,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .preset-name { padding: 8px 12px; cursor: pointer; display: flex; align-items: center; }
 .preset-delete { background: rgba(0,0,0,0.15); width: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; font-weight: bold; border-left: 1px solid rgba(255,255,255,0.1); }
 
-.app-edit-item { display: flex; align-items: center; gap: 15px; padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
+.app-edit-item { display: flex; align-items: center; gap: 15px; padding: 16px 0; margin-bottom: 10px; border-bottom: none; }
 .hidden-file-input { display: none; }
 .app-edit-preview { width: 54px; height: 54px; background-color: #f0f0f0; border-radius: 12px; background-size: cover; background-position: center; flex-shrink: 0; cursor: pointer; position: relative; border: 1px solid #e5e5e5; display: flex; align-items: center; justify-content: center; }
 .camera-icon { width: 24px; height: 24px; fill: #999; opacity: 0.5; }
@@ -1277,7 +1277,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
 .legend-value { color: #8e8e93; }
 
 /* ========================================== */
-/* 世界书 (Worldbook) 新版信封 UI */
+/* 世界书 (Worldbook) 新版文件夹 UI */
 /* ========================================== */
 .wb-nav-bar {
     display: flex; justify-content: space-between; align-items: center;
@@ -1338,118 +1338,196 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     align-items: center; gap: 30px; overflow-y: auto; padding-bottom: 60px;
 }
 
-/* 列表中的静态信封 */
-.wb-list-envelope {
-    width: 100%; max-width: 300px; height: 140px; position: relative;
-    cursor: pointer; transition: transform 0.2s; filter: drop-shadow(0 8px 15px rgba(0,0,0,0.05));
-    flex-shrink: 0; /* 👈 核心修复：绝对禁止信封被压缩变扁！ */
-}
-.wb-list-envelope:active { transform: scale(0.96); }
-.wb-env-back { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #fdfdfd; border-radius: 8px; border: 1px solid #eaeaea; }
-.wb-env-front {
-    position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
-    background: #fff; border-radius: 8px;
-    background-image: linear-gradient(115deg, transparent 49%, rgba(0,0,0,0.02) 50%, transparent 51%),
-                      linear-gradient(-115deg, transparent 49%, rgba(0,0,0,0.02) 50%, transparent 51%);
-    border: 1px solid #eaeaea; display: flex; flex-direction: column; justify-content: flex-end; padding: 15px; box-sizing: border-box;
-}
-.wb-env-flap {
-    position: absolute; top: 0; left: 0; width: 100%; height: 70px;
-    background: #fdfdfd; border-radius: 8px 8px 0 0;
-    clip-path: polygon(0 0, 100% 0, 50% 100%); border-top: 1px solid #eaeaea;
-    display: flex; justify-content: center; padding-top: 15px;
-}
-.wb-env-sticker {
-    width: 20px; height: 20px; background: #fff0f5; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.wb-env-sticker svg { width: 10px; height: 10px; fill: #ffb6c1; }
-.wb-env-title { 
-    font-family: 'Georgia', serif; font-size: 14px; font-weight: bold; color: #333; margin-bottom: 4px; 
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* 👈 修复：防止标题过长换行破坏布局 */
-}
-.wb-env-desc { 
-    font-size: 10px; color: #999; 
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; /* 👈 修复：防止描述过长换行破坏布局 */
+/* ========================================== */
+/* 核心：高级黑白灰毛玻璃文件夹样式 (1:1 还原图片) */
+/* ========================================== */
+/* 文件夹网格：一行两个 */
+.wb-folder-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px 16px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
-/* 深色信封 */
-.wb-list-envelope.dark .wb-env-back { background: #222; border-color: #333; }
-.wb-list-envelope.dark .wb-env-front { background: #2a2a2a; border-color: #333; }
-.wb-list-envelope.dark .wb-env-flap { background: #2a2a2a; border-top-color: #333; }
-.wb-list-envelope.dark .wb-env-sticker { background: #111; }
-.wb-list-envelope.dark .wb-env-title { color: #fff; }
-
-/* Check 按钮 */
-.wb-check-btn {
-    position: absolute; bottom: 12px; right: 12px; background: #111; color: #fff;
-    padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: bold;
-    cursor: pointer; z-index: 10; display: flex; align-items: center; gap: 4px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: transform 0.2s, background 0.2s;
+.wb-folder-item {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1.15 / 1; /* 调整比例，更贴近原图 */
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
-.wb-check-btn:active { transform: scale(0.95); background: #333; }
-.wb-list-envelope.dark .wb-check-btn { background: #fff; color: #111; }
-/* Edit 按钮 (位于右上角) */
-.wb-edit-btn {
-    position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,0.05); color: #555;
-    padding: 6px 12px; border-radius: 16px; font-size: 11px; font-weight: bold;
-    cursor: pointer; z-index: 10; display: flex; align-items: center; gap: 4px;
-    transition: transform 0.2s, background 0.2s; backdrop-filter: blur(5px);
-}
-.wb-edit-btn:active { transform: scale(0.95); background: rgba(0,0,0,0.1); }
-.wb-list-envelope.dark .wb-edit-btn { background: rgba(255,255,255,0.1); color: #fff; }
-.wb-list-envelope.dark .wb-edit-btn:active { background: rgba(255,255,255,0.2); }
+.wb-folder-item:active { transform: scale(0.95); }
 
-/* 创建分组的虚线信封 */
-.wb-create-envelope {
-    width: 100%; max-width: 300px; height: 140px; position: relative;
-    cursor: pointer; transition: transform 0.2s; 
-    border: 2px dashed #ccc; border-radius: 8px; background: transparent;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: #888; flex-shrink: 0;
+/* 后背板容器 */
+.wb-folder-back {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.15));
 }
-.wb-create-envelope:active { transform: scale(0.96); background: rgba(0,0,0,0.05); }
-.wb-create-envelope svg { width: 32px; height: 32px; stroke: currentColor; stroke-width: 2; fill: none; margin-bottom: 8px; }
+/* 左上角的 Tab 凸起 (带斜坡 + 毛玻璃) */
+.wb-folder-tab {
+    position: absolute; top: 0; left: 0; width: 45%; height: 20%;
+    background: rgba(58, 58, 60, 0.85); /* 半透明中度灰 */
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    border-radius: 12px 12px 0 0;
+    clip-path: polygon(0 0, 75% 0, 100% 100%, 0 100%);
+}
+/* 后背板主体 (毛玻璃) */
+.wb-folder-back-main {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 85%;
+    background: rgba(58, 58, 60, 0.85);
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    border-radius: 0 12px 12px 12px;
+}
 
-/* 屏幕中间动态弹窗 */
+/* 夹在中间的白纸预览 */
+.wb-folder-paper-preview {
+    position: absolute;
+    bottom: 15%; left: 6%;
+    width: 88%; height: 80%;
+    background: #FFFFFF;
+    border-radius: 8px 8px 0 0;
+    z-index: 2;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}
+.wb-folder-paper-preview img {
+    width: 100%; height: 100%; object-fit: cover;
+}
+
+/* 前挡板 (渐变毛玻璃) */
+.wb-folder-front {
+    position: absolute;
+    bottom: 0; left: 0;
+    width: 100%; height: 75%;
+    background: linear-gradient(180deg, rgba(44, 44, 46, 0.85) 0%, rgba(28, 28, 30, 0.95) 100%);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-radius: 12px;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 14px;
+    box-sizing: border-box;
+    /* 顶部极细高光，区分前后层次 */
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.2);
+}
+
+/* 文件夹内部排版 (1:1 还原图片) */
+.wb-folder-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+.wb-folder-title-box {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    overflow: hidden;
+}
+.wb-folder-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #FFFFFF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.3px;
+}
+.wb-folder-subtitle {
+    font-size: 10px;
+    color: #8E8E93;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.wb-folder-actions {
+    display: flex;
+    gap: 8px;
+    color: #EBEBF5;
+    opacity: 0.8;
+}
+.wb-folder-actions svg { width: 16px; height: 16px; fill: currentColor; cursor: pointer; }
+
+.wb-folder-footer {
+    font-size: 11px;
+    color: #EBEBF5;
+    font-weight: 500;
+    opacity: 0.9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* ========================================== */
+/* 屏幕中间动态打开的弹窗 (向上抽出信纸) */
+/* ========================================== */
 .wb-modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    background: rgba(242, 242, 247, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
     z-index: 2000; display: none; align-items: center; justify-content: center;
     opacity: 0; transition: opacity 0.3s ease;
 }
 .wb-modal-overlay.active { display: flex; opacity: 1; }
 
 .wb-modal-envelope {
-    position: relative; width: 320px; height: 200px; perspective: 1000px;
-    transform: translateY(50px); transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+    position: relative; width: 320px; height: 260px; perspective: 1000px;
+    transform: translateY(40px) scale(0.9); transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.wb-modal-envelope .wb-env-back { box-shadow: 0 20px 40px rgba(0,0,0,0.1); z-index: 1; }
-.wb-modal-envelope .wb-env-front { z-index: 4; pointer-events: none; }
-.wb-modal-envelope .wb-env-flap { 
-    height: 100px; z-index: 5; transform-origin: top center; 
-    transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1), z-index 0s 0.3s;
-}
-.wb-modal-envelope.open .wb-env-flap { transform: rotateX(180deg); z-index: 1; }
+.wb-modal-overlay.active .wb-modal-envelope { transform: translateY(80px) scale(1); }
 
-/* 信纸交叠 */
+/* 弹窗里的文件夹后背板 (毛玻璃) */
+.wb-modal-folder-back {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;
+    filter: drop-shadow(0 20px 40px rgba(0,0,0,0.25));
+}
+.wb-modal-folder-back .wb-folder-tab { background: rgba(44, 44, 46, 0.85); }
+.wb-modal-folder-back .wb-folder-back-main { background: rgba(44, 44, 46, 0.85); }
+
+/* 弹窗里的文件夹前挡板 (带 3D 下翻动画 + 毛玻璃) */
+.wb-modal-folder-front {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 75%;
+    background: linear-gradient(180deg, rgba(28, 28, 30, 0.85) 0%, rgba(0, 0, 0, 0.95) 100%);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-radius: 16px; z-index: 4;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex; flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box;
+    transform-origin: bottom center;
+    transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.wb-modal-envelope.open .wb-modal-folder-front {
+    transform: rotateX(-25deg); /* 产生打开的立体感 */
+    box-shadow: 0 20px 30px rgba(0,0,0,0.5);
+}
+
+/* 弹窗里的信纸 (向上抽出) */
 .wb-papers-container {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    position: absolute; bottom: 15%; left: 5%; width: 90%; height: 100%;
     z-index: 2; touch-action: pan-y;
 }
 .wb-paper-item {
-    position: absolute; bottom: 10px; left: 15px; right: 15px; height: 240px;
-    background: #fff; border-radius: 8px; box-shadow: 0 -4px 15px rgba(0,0,0,0.08);
-    border: 1px solid #eaeaea; padding: 20px 20px 20px 45px; box-sizing: border-box;
-    cursor: pointer; transform: translateY(0) scale(0.9) rotate(0deg) translateX(0);
-    opacity: 0; pointer-events: none; transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
-    display: flex; flex-direction: column;
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 280px;
+    background: #fff; border-radius: 12px; box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    border: 1px solid #eaeaea; padding: 24px 20px 20px 45px; box-sizing: border-box;
+    transform-origin: bottom center; transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     background-image: repeating-linear-gradient(transparent, transparent 29px, #f5f5f5 29px, #f5f5f5 30px);
-    background-position: 0 10px; transform-origin: bottom center;
+    background-position: 0 10px; cursor: pointer;
 }
-.wb-modal-envelope.open .wb-paper-item[data-index="0"] { transform: translateY(-120px) scale(1) rotate(0deg) translateX(0); opacity: 1; z-index: 3; pointer-events: auto; }
-.wb-modal-envelope.open .wb-paper-item[data-index="1"] { transform: translateY(-130px) scale(0.95) rotate(6deg) translateX(20px); opacity: 0.9; z-index: 2; filter: brightness(0.95); pointer-events: auto; }
-.wb-modal-envelope.open .wb-paper-item[data-index="2"] { transform: translateY(-140px) scale(0.9) rotate(-5deg) translateX(-15px); opacity: 0.8; z-index: 1; filter: brightness(0.9); pointer-events: auto; }
+
+/* 初始状态藏在文件夹里 */
+.wb-paper-item[data-index="0"] { transform: translateY(0); z-index: 3; opacity: 0; pointer-events: none; }
+.wb-paper-item[data-index="1"] { transform: translateY(0); z-index: 2; filter: brightness(0.95); opacity: 0; pointer-events: none; }
+.wb-paper-item[data-index="2"] { transform: translateY(0); z-index: 1; filter: brightness(0.9); opacity: 0; pointer-events: none; }
+
+/* 打开状态：向上抽出并散开 (只露出一小半) */
+.wb-modal-envelope.open .wb-paper-item[data-index="0"] { transform: translateY(-100px) scale(1) rotate(0deg); opacity: 1; pointer-events: auto; }
+.wb-modal-envelope.open .wb-paper-item[data-index="1"] { transform: translateY(-115px) scale(0.95) rotate(4deg) translateX(15px); opacity: 0.9; pointer-events: auto; }
+.wb-modal-envelope.open .wb-paper-item[data-index="2"] { transform: translateY(-130px) scale(0.9) rotate(-3deg) translateX(-10px); opacity: 0.8; pointer-events: auto; }
 
 .wb-clip-tag {
     position: absolute; top: -10px; left: 15px; background: #222; color: #fff;
@@ -1462,15 +1540,15 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     content: ''; position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
     width: 10px; height: 24px; border: 2px solid #ccc; border-radius: 10px; z-index: 11;
 }
-.wb-paper-title { font-size: 16px; font-weight: 800; color: #111; margin-bottom: 10px; line-height: 1.4; }
-.wb-paper-desc { font-size: 13px; color: #555; line-height: 30px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.wb-paper-title { font-size: 18px; font-weight: 800; color: #111; margin-bottom: 12px; line-height: 1.4; }
+.wb-paper-desc { font-size: 14px; color: #555; line-height: 30px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 
 .wb-close-modal-btn {
     position: absolute; top: 30px; right: 30px; width: 40px; height: 40px;
-    background: #f5f5f5; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    cursor: pointer; color: #888; transition: all 0.2s; z-index: 2010;
+    background: #E5E5EA; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: #333; transition: all 0.2s; z-index: 2010;
 }
-.wb-close-modal-btn:active { background: #eaeaea; color: #111; transform: scale(0.9); }
+.wb-close-modal-btn:active { background: #D1D1D6; transform: scale(0.9); }
 .wb-close-modal-btn svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2; fill: none; }
 
 /* 全屏查看页面 */

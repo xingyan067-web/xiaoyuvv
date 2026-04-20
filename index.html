@@ -2064,32 +2064,58 @@
             <div class="settings-content">
                 <!-- Tab 1: 壁纸 -->
                 <div id="tab-wallpaper" class="tab-content active">
-                    <div class="settings-title">更换壁纸</div>
-                    <div class="settings-group">
-                        <div class="settings-row">
-                            <div class="row-label">图片 URL</div>
-                            <input type="text" id="bgUrlInput" placeholder="https://example.com/image.jpg">
-                            <button class="action-btn" onclick="setWallpaperFromUrl()">应用并保存</button>
+                    <div class="settings-group" style="padding: 16px; margin-top: 20px;">
+                        <!-- 卡片内部顶栏：更换壁纸 -->
+                        <div style="margin-bottom: 24px;">
+                            <div style="font-size: 12px; font-weight: 800; color: #888; letter-spacing: 1px;">壁纸（Wallpaper）</div>
                         </div>
-                        <div class="settings-row">
-                            <div class="row-label">本地相册</div>
-                            <!-- 就在下面这行加上了 onchange="handleWallpaperUpload(this)" -->
+
+                        <!-- 居中的上传图标 -->
+
+                        <div style="display: flex; justify-content: center; margin-bottom: 24px;">
+                            <div style="width: 84px; height: 84px; background-color: #F5F5F5; border-radius: 18px; position: relative; cursor: pointer; display: flex; align-items: center; justify-content: center; border: 1px solid #EAEAEA; transition: transform 0.2s;" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'" onclick="document.getElementById('bgFileInput').click()">
+                                <!-- 内部图片壁纸 SVG -->
+                                <svg viewBox="0 0 24 24" style="width: 32px; height: 32px; fill: none; stroke: #CCC; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                
+                                <!-- 右下角灰色小相机徽标 -->
+                                <div style="position: absolute; bottom: -6px; right: -6px; width: 24px; height: 24px; background: #999; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #FFF; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                    <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: #FFF;"><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.65 0-3 1.35-3 3s1.35 3 3 3 3-1.35 3-3-1.35-3-3-3z"/></svg>
+                                </div>
+                            </div>
                             <input type="file" id="bgFileInput" accept="image/*" style="display:none" onchange="handleWallpaperUpload(this)">
-                            <button class="action-btn secondary" onclick="document.getElementById('bgFileInput').click()">选择图片...</button>
                         </div>
-                        <div class="settings-row">
-                            <button class="action-btn destructive" onclick="resetWallpaper()">恢复默认壁纸</button>
-                        </div>
-                    </div>
-                    <div class="settings-title">壁纸库 (点击应用)</div>
-                    <div class="settings-group">
-                        <div class="settings-row">
-                            <div class="wallpaper-grid" id="wallpaperGrid">
-                                <div style="color:#999; font-size:13px; grid-column:span 3; text-align:center; padding:20px;">暂无保存的壁纸</div>
+
+                        <!-- URL 与 恢复默认 行 (极简无边框风格) -->
+                        <div style="display: flex; align-items: center; gap: 8px; border-bottom: 1px dashed #EAEAEA; padding-bottom: 10px; margin-bottom: 20px;">
+                            <!-- 五角星 SVG -->
+                            <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: none; stroke: #CCC; stroke-width: 2; flex-shrink: 0;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                            <span style="font-size: 10px; font-weight: 800; color: #CCC; letter-spacing: 1px; width: 32px;">URL</span>
+                            
+                            <input type="text" id="bgUrlInput" placeholder="请输入壁纸 URL" style="background: transparent !important; border: none !important; padding: 0 !important; font-size: 14px !important; color: #333 !important; box-shadow: none !important; flex: 1; outline: none;">
+                            
+                            <!-- 恢复默认 SVG 按钮 -->
+                            <div onclick="resetWallpaper()" style="cursor: pointer; color: #999; display: flex; align-items: center; justify-content: center; transition: color 0.2s; padding-left: 12px; border-left: 1px solid #EAEAEA;" title="恢复默认壁纸" onmousedown="this.style.color='#111'" onmouseup="this.style.color='#999'" onmouseleave="this.style.color='#999'">
+                                <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
                             </div>
                         </div>
+
+                        <!-- 应用按钮 -->
+                        <button class="action-btn" style="background: #111; color: #FFF; border-radius: 12px; padding: 14px; font-size: 15px; font-weight: bold; width: 100%; border: none; cursor: pointer; transition: transform 0.1s;" onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'" onclick="setWallpaperFromUrl()">正在应用壁纸...</button>
                     </div>
-                </div>
+
+                    <!-- 壁纸库卡片 -->
+                    <div class="settings-group" style="margin-top: 20px; padding: 16px;">
+                        <!-- 卡片内部顶栏 -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <div style="font-size: 12px; font-weight: 800; color: #888; letter-spacing: 1px;">Wallpapers Gallery</div>
+                            <div id="wp-edit-btn" onclick="toggleWallpaperEditMode()" style="font-size: 13px; font-weight: bold; color: #007AFF; cursor: pointer; transition: opacity 0.2s;" onmousedown="this.style.opacity=0.5" onmouseup="this.style.opacity=1">Edit</div>
+                        </div>
+                        <!-- 壁纸网格 -->
+                        <div class="wallpaper-grid" id="wallpaperGrid" style="padding: 0;">
+                            <div style="color:#999; font-size:13px; grid-column:span 3; text-align:center; padding:20px;">暂无保存的壁纸</div>
+                        </div>
+                    </div>
+                 </div>
 
                 <!-- Tab 2: 图标 -->
                 <div id="tab-icons" class="tab-content">
@@ -2138,9 +2164,10 @@
                     <div class="settings-group" id="appEditorList"></div>
                     
                     <!-- 移至底部的恢复默认按钮 -->
-                    <div class="settings-group" style="margin-top: 20px;">
-                        <div class="settings-row">
-                            <button class="action-btn destructive" onclick="resetIcons()">恢复默认图标</button>
+                    <div style="display: flex; justify-content: flex-end; padding: 10px 16px; margin-top: 5px;">
+                        <div onclick="resetIcons()" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #8E8E93; transition: color 0.2s;" onmousedown="this.style.color='#111'" onmouseup="this.style.color='#8E8E93'" onmouseleave="this.style.color='#8E8E93'">
+                            <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
+                            <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.5px;">恢复默认(Restore Default)</span>
                         </div>
                     </div>
                 </div>
@@ -2188,34 +2215,73 @@
                         </div>
                     </div>
 
-                    <div class="settings-group">
-                        <div class="settings-row">
-                            <div class="row-label" style="display:flex; justify-content:space-between;">
-                                <span>字体大小</span>
-                                <span id="fontSizeDisplay" style="color:#888; font-weight:normal;">11px</span>
+                    <!-- 👇 新增：高级感 INS 风字体预览卡片 👇 -->
+                    <div class="settings-group" style="padding: 24px 20px 16px 20px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; background: #FFFFFF; border: 1px solid #F0F0F0; box-shadow: 0 8px 24px rgba(0,0,0,0.04); border-radius: 16px; margin-bottom: 20px; position: relative;">
+                        <div style="font-size: 18px; color: #111; line-height: 1.5; font-weight: 500; margin-bottom: 16px; width: 100%; word-break: break-word;" id="fontPreviewText">
+                            回忆就像一遍遍地给 素胚上釉
+                        </div>
+                        <div style="width: 100%; height: 1px; background: #F5F5F5; margin-bottom: 12px;"></div>
+                        
+                        <!-- 替换为输入框 -->
+                        <div style="display: flex; align-items: center; width: 100%; gap: 8px;">
+                            <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: #CCC;"><path d="M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z"/></svg>
+                            <input type="text" value="回忆就像一遍遍地给 素胚上釉" oninput="document.getElementById('fontPreviewText').innerText = this.value || '请输入预览文本'" style="flex: 1; background: transparent !important; border: none !important; padding: 0 !important; font-size: 13px !important; color: #888 !important; box-shadow: none !important; outline: none;">
+                        </div>
+                    </div>
+                    <!-- 👆 新增结束 👆 -->
+
+                    <div class="settings-group" style="padding: 20px;">
+                        <!-- 字体大小滑块 -->
+                        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+                            <div style="display:flex; justify-content:space-between; align-items: center;">
+                                <span style="font-size: 11px; font-weight: 800; color: #888; letter-spacing: 1px;">SIZE</span>
+                                <span id="fontSizeDisplay" style="color:#111; font-weight:bold; font-size: 14px; font-family: monospace;">11px</span>
                             </div>
-                            <input type="range" id="fontSizeSlider" min="9" max="16" step="0.5" value="11" oninput="changeFontSize(this.value)">
+                            <input type="range" id="fontSizeSlider" min="9" max="16" step="0.5" value="11" oninput="changeFontSize(this.value)" style="margin: 0;">
                         </div>
-                        <div class="settings-row">
-                            <div class="row-label">字体 URL (WOFF/TTF)</div>
-                            <input type="text" id="fontUrlInput" placeholder="https://.../font.woff2">
-                            <button class="action-btn" onclick="applyFont()">应用字体</button>
+
+                        <!-- Global Font 标题与 URL 输入 -->
+                        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; border-bottom: 1px dashed #EAEAEA; padding-bottom: 16px;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: none; stroke: #111; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                <span style="font-size: 12px; font-weight: 800; color: #111; letter-spacing: 1px; text-transform: uppercase;">Global Font</span>
+                            </div>
+                            <!-- 注意：onblur 改成了 previewFont() -->
+                            <input type="text" id="fontUrlInput" placeholder="字体 URL (WOFF/TTF)" onblur="previewFont()" style="background: transparent !important; border: none !important; padding: 0 !important; font-size: 14px !important; color: #333 !important; box-shadow: none !important; width: 100%; outline: none;">
                         </div>
-                        <!-- 👇 新增：本地字体上传 👇 -->
-                        <div class="settings-row">
-                            <div class="row-label">本地字体上传</div>
+
+                        <!-- 本地字体上传 (仿 APP 图标上传) -->
+                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+                            <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 6px; flex-shrink: 0;">
+                                <span style="font-size: 9px; font-weight: 800; color: #CCC; letter-spacing: 1px; margin-left: 2px;">LOCAL FONT</span>
+                                <div class="app-edit-preview" onclick="document.getElementById('fontFileInput').click()" style="width: 54px; height: 54px; background-color: #f0f0f0; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 1px solid #e5e5e5; position: relative;">
+                                    <!-- 字体图标 (Aa) -->
+                                    <svg class="camera-icon" viewBox="0 0 24 24" style="width: 24px; height: 24px; fill: #999; opacity: 0.5;"><path d="M9 4v3h5v12h3V7h5V4H9zm-6 8h3v7h3v-7h3V9H3v3z"/></svg>
+                                    <!-- 右下角小加号徽标 -->
+                                    <div style="position: absolute; bottom: -4px; right: -4px; width: 22px; height: 22px; background: #999; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #FFF; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                        <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; stroke: #FFF; stroke-width: 3; fill: none; stroke-linecap: round;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+                                <div style="font-size: 14px; font-weight: 600; color: #111; margin-bottom: 4px;">上传本地字体</div>
+                                <div style="font-size: 11px; color: #999;">支持 TTF / WOFF / OTF 格式</div>
+                            </div>
                             <input type="file" id="fontFileInput" accept=".ttf,.woff,.woff2,.otf" style="display:none" onchange="handleFontUpload(this)">
-                            <button class="action-btn secondary" onclick="document.getElementById('fontFileInput').click()">选择字体文件...</button>
                         </div>
-                        <!-- 👆 新增结束 👆 -->
+
+                        <!-- 新增：应用到全局按钮 -->
+                        <button class="action-btn" style="background: #111; color: #FFF; border-radius: 14px; padding: 14px; font-size: 15px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" onclick="applyFont()">正在应用字体...</button>
                     </div>
                     
-                    <!-- 移至底部的恢复默认按钮 -->
-                    <div class="settings-group" style="margin-top: 20px;">
-                        <div class="settings-row">
-                            <button class="action-btn destructive" onclick="resetFonts()">恢复默认字体</button>
+                    <!-- 👇 修改：移至底部的恢复默认按钮 (极简文字风) 👇 -->
+                    <div style="display: flex; justify-content: flex-end; padding: 10px 16px; margin-top: 5px;">
+                        <div onclick="resetFonts()" style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #8E8E93; transition: color 0.2s;" onmousedown="this.style.color='#111'" onmouseup="this.style.color='#8E8E93'" onmouseleave="this.style.color='#8E8E93'">
+                            <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
+                            <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.5px;">恢复默认(Restore Default)</span>
                         </div>
                     </div>
+                    <!-- 👆 修改结束 👆 -->
                 </div>
             </div>
 
@@ -2843,9 +2909,9 @@
                     <input type="text" id="wb-search-input" placeholder="Search worldbook entries..." oninput="filterWbEntries(this.value)">
                 </div>
                 
-                <!-- 信封列表容器 -->
-                <div id="wb-envelope-list" style="width: 100%; display: flex; flex-direction: column; align-items: center; gap: 30px;">
-                    <!-- JS 动态注入信封 -->
+                <!-- 文件夹列表容器 (网格布局) -->
+                <div id="wb-envelope-list" class="wb-folder-grid">
+                    <!-- JS 动态注入文件夹 -->
                 </div>
                 
                 <!-- 👇 新增：搜索结果容器 -->
@@ -2855,33 +2921,39 @@
             </div>
         </div>
 
-        <!-- 屏幕中间动态信封弹窗 -->
+        <!-- 屏幕中间动态文件夹弹窗 -->
         <div id="wb-envelope-modal" class="wb-modal-overlay" onclick="closeWbEnvelopeModal(event)">
             <div class="wb-close-modal-btn" onclick="closeWbEnvelopeModal(event, true)">
                 <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </div>
 
             <div class="wb-modal-envelope" id="wb-modal-envelope" onclick="event.stopPropagation()">
-                <div class="wb-env-back" id="wb-modal-env-back"></div>
+                <!-- 弹窗里的后背板 -->
+                <div class="wb-modal-folder-back">
+                    <div class="wb-folder-tab"></div>
+                    <div class="wb-folder-back-main"></div>
+                </div>
                 
                 <!-- 交叠的信纸容器 (绑定滑动事件) -->
                 <div class="wb-papers-container" id="wb-papers-container">
                     <!-- JS 动态注入信纸 -->
                 </div>
 
-                <div class="wb-env-front" id="wb-modal-env-front">
-                    <div class="wb-env-title" id="wb-modal-title">Group Name</div>
-                    <div class="wb-env-desc" id="wb-modal-desc">Description</div>
-                </div>
-                <div class="wb-env-flap" id="wb-modal-env-flap">
-                    <div class="wb-env-sticker">
-                        <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                <!-- 弹窗里的前挡板 (带 3D 下翻效果) -->
+                <div class="wb-modal-folder-front">
+                    <div class="wb-folder-header">
+                        <div class="wb-folder-title-box">
+                            <div class="wb-folder-title" id="wb-modal-title">Group Name</div>
+                            <div class="wb-folder-subtitle" id="wb-modal-desc">Description</div>
+                        </div>
                     </div>
-                </div>
-                
-                <!-- 弹窗内的 Check 按钮 -->
-                <div class="wb-check-btn" id="wb-modal-check-btn" onclick="event.stopPropagation(); openWbFullscreenView()">
-                    Check
+                    <div class="wb-folder-footer">
+                        <div class="wb-folder-count" id="wb-modal-count">0 entries</div>
+                        <!-- 弹窗内的 Check 按钮 -->
+                        <div style="cursor: pointer; display: flex; align-items: center; gap: 4px; color: #007AFF;" onclick="event.stopPropagation(); openWbFullscreenView()">
+                            Check <svg viewBox="0 0 24 24" style="width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
