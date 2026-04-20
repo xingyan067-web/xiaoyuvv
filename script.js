@@ -22397,20 +22397,25 @@ function syncDreamChatHistory() {
 // 👆 新增结束 👆
 
 async function dreamLoadData() {
-    const data = await idb.get('dream_space_data');
-    if (data) {
-        if (data.cards) dreamState.cards = data.cards;
-        if (data.presets) dreamState.presets = data.presets;
-        if (data.selectedWbIds) dreamState.selectedWbIds = data.selectedWbIds;
-        if (data.selectedPresetId) dreamState.selectedPresetId = data.selectedPresetId;
-        if (data.ext) dreamState.ext = { ...dreamState.ext, ...data.ext };
-        if (data.fontSize) dreamState.fontSize = data.fontSize;
-        if (data.fontUrl !== undefined) dreamState.fontUrl = data.fontUrl;
-        if (data.fontColor !== undefined) dreamState.fontColor = data.fontColor;
-        if (data.offlineContextLimit !== undefined) dreamState.offlineContextLimit = data.offlineContextLimit;
+    try {
+        const data = await idb.get('dream_space_data');
+        if (data) {
+            if (data.cards) dreamState.cards = data.cards;
+            if (data.presets) dreamState.presets = data.presets;
+            if (data.selectedWbIds) dreamState.selectedWbIds = data.selectedWbIds;
+            if (data.selectedPresetId) dreamState.selectedPresetId = data.selectedPresetId;
+            // 增加安全校验，防止 data.ext 为 undefined 时报错
+            if (data.ext) dreamState.ext = { ...dreamState.ext, ...data.ext };
+            if (data.fontSize) dreamState.fontSize = data.fontSize;
+            if (data.fontUrl !== undefined) dreamState.fontUrl = data.fontUrl;
+            if (data.fontColor !== undefined) dreamState.fontColor = data.fontColor;
+            if (data.offlineContextLimit !== undefined) dreamState.offlineContextLimit = data.offlineContextLimit;
+        }
+        applyDreamCss(); // 加载时自动应用全局 CSS
+        applyDreamFontSettings(); // 加载时应用字体设置
+    } catch (e) {
+        console.error("加载梦境数据失败", e);
     }
-    applyDreamCss(); // 加载时自动应用全局 CSS
-    applyDreamFontSettings(); // 加载时应用字体设置
 }
 
 async function dreamSaveData() {
@@ -22429,14 +22434,37 @@ async function dreamSaveData() {
 
 // --- 页面导航 ---
 async function openDreamMainPage() {
+    // 1. 强制收起键盘，防止 iOS 视口高度计算冲突导致闪退
+    if (document.activeElement) {
+        document.activeElement.blur();
+    }
+    
     wcCloseAllPanels(); // 关闭微信的更多面板
-    await dreamLoadData();
-    document.getElementById('dream-main-page').classList.add('active');
-    dreamRenderCards();
+    
+    // 2. 核心修复：隐藏底层的聊天界面，释放 iOS GPU 内存，防止叠加渲染导致闪退
+    const chatDetail = document.getElementById('wc-view-chat-detail');
+    if (chatDetail) chatDetail.style.display = 'none';
+
+    // 3. 增加 try...catch 防止数据读取异常中断程序
+    try {
+        await dreamLoadData();
+    } catch (e) {
+        console.error("加载梦境数据失败", e);
+    }
+    
+    // 4. 延迟 150ms 显示，避开键盘收起和面板关闭的动画期
+    setTimeout(() => {
+        document.getElementById('dream-main-page').classList.add('active');
+        dreamRenderCards();
+    }, 150);
 }
 
 function closeDreamMainPage() {
     document.getElementById('dream-main-page').classList.remove('active');
+    
+    // 核心修复：退出梦境时，恢复底层聊天界面的显示
+    const chatDetail = document.getElementById('wc-view-chat-detail');
+    if (chatDetail) chatDetail.style.display = ''; // 清除内联样式，交回给 CSS 控制
 }
 
 // --- 渲染主页卡片 ---
@@ -23869,11 +23897,15 @@ function applyDreamCss() {
         document.head.appendChild(styleTag);
     }
     
-    if (dreamState.ext.activeCssId) {
+    let newCss = '';
+    if (dreamState.ext && dreamState.ext.activeCssId) {
         const activeCss = dreamState.ext.css.find(c => c.id === dreamState.ext.activeCssId);
-        styleTag.innerHTML = activeCss ? activeCss.content : '';
-    } else {
-        styleTag.innerHTML = '';
+        newCss = activeCss ? activeCss.content : '';
+    }
+    
+    // 🌟 核心修复：比对新旧内容，防止重复注入导致重绘闪退
+    if (styleTag.innerHTML.trim() !== newCss.trim()) {
+        styleTag.innerHTML = newCss;
     }
 }
 // ==========================================
@@ -24093,13 +24125,19 @@ function applyDreamFontSettings() {
         document.head.appendChild(styleTag);
     }
     
+    let newCss = '';
     if (dreamState.fontUrl) {
-        styleTag.innerHTML = `
+        newCss = `
             @font-face { font-family: 'DreamCustomFont'; src: url('${dreamState.fontUrl}'); }
             :root { --dream-font-family: 'DreamCustomFont', 'Kaiti', 'STKaiti', '楷体', serif; }
         `;
     } else {
-        styleTag.innerHTML = `:root { --dream-font-family: 'Kaiti', 'STKaiti', '楷体', serif; }`;
+        newCss = `:root { --dream-font-family: 'Kaiti', 'STKaiti', '楷体', serif; }`;
+    }
+    
+    // 🌟 核心修复：比对新旧内容，防止重复注入庞大的 Base64 字体导致 iOS 内存溢出闪退
+    if (styleTag.innerHTML.trim() !== newCss.trim()) {
+        styleTag.innerHTML = newCss;
     }
 }
 
@@ -31392,7 +31430,6 @@ function wcSubmitSendLocation() {
         isVirtual = true;
     }
 
-// 找到这段代码：
     const mapClass = isVirtual ? "wc-bubble-location-map virtual" : "wc-bubble-location-map";
     const markerClass = isVirtual ? "ins-loc-marker virtual-marker" : "ins-loc-marker";
     
