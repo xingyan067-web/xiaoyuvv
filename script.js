@@ -2356,13 +2356,21 @@ function makeWidgetDraggable(el, instanceId) {
 }
 
 // --- 界面交互 ---
-function switchTab(tabName, element) {
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+function switchTab(tabName) {
+    // 1. 隐藏所有内容页
+    document.querySelectorAll('#settingsModal .tab-content').forEach(el => el.classList.remove('active'));
+    
+    // 2. 显示目标内容页
     document.getElementById('tab-' + tabName).classList.add('active');
-    element.classList.add('active');
-    const titles = { 'wallpaper': '壁纸设置', 'icons': '图标与名称', 'fonts': '字体设置' };
-    document.getElementById('headerTitle').innerText = titles[tabName];
+    
+    // 3. 更新菜单高亮状态 (移除所有 active，给当前点击的加上 active)
+    document.querySelectorAll('.ts-ios-menu-items span').forEach(el => {
+        el.classList.remove('active');
+    });
+    const activeMenu = document.getElementById('menu-' + tabName);
+    if (activeMenu) {
+        activeMenu.classList.add('active');
+    }
 }
 
 function openSettings() {
@@ -2374,238 +2382,448 @@ function openIOSSettings() { document.getElementById('iosSettingsModal').classLi
 function closeIOSSettings() { document.getElementById('iosSettingsModal').classList.remove('open'); }
 function openApiSettings() { document.getElementById('apiSettingsModal').classList.add('open'); }
 function closeApiSettings() { document.getElementById('apiSettingsModal').classList.remove('open'); }
-// --- 世界书逻辑 ---
+// --- 世界书逻辑 (信封版) ---
+let currentWbPapers = [];
+let currentWbGroupName = '';
+
 function openWorldbook() {
-    switchWorldbookView('all'); 
     document.getElementById('worldbookModal').classList.add('open');
-}
-function closeWorldbook() { document.getElementById('worldbookModal').classList.remove('open'); }
-
-function switchWorldbookView(view) {
-    const container = document.getElementById('wbViewContainer');
-    const tabAll = document.getElementById('tab-wb-all');
-    const tabGroup = document.getElementById('tab-wb-group');
-    const title = document.getElementById('wbHeaderTitle');
-    const rightBtnContainer = document.getElementById('wbHeaderRightContainer');
-
-    if (view === 'all') {
-        container.style.transform = 'translateX(0)';
-        tabAll.classList.add('active');
-        tabGroup.classList.remove('active');
-        title.innerText = "所有条目";
-        // 👇 核心修复：在这里动态注入导入按钮和添加按钮 👇
-        if(rightBtnContainer) rightBtnContainer.innerHTML = `
-            <button class="nav-btn" onclick="document.getElementById('wbImportInput').click()" style="margin-right: 15px;" title="导入世界书">
-                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
-            </button>
-            <button class="nav-btn" onclick="openWorldbookEditor()">
-                <svg class="svg-icon" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-            </button>
-        `;
-        renderWorldbookList();
-    } else {
-        container.style.transform = 'translateX(-50%)'; 
-        tabAll.classList.remove('active');
-        tabGroup.classList.add('active');
-        title.innerText = "分组视图";
-        if(rightBtnContainer) rightBtnContainer.innerHTML = `<button class="nav-btn" onclick="addNewGroup()" style="font-size: 15px; font-weight: 600;">创建分组</button>`;
-        renderGroupView();
-    }
+    renderWbEnvelopeList();
 }
 
+function closeWorldbook() {
+    document.getElementById('worldbookModal').classList.remove('open');
+}
 
-function renderWorldbookList() {
-    // 动态注入折叠栏所需的 CSS (仅注入一次)
-    if (!document.getElementById('wb-all-group-style')) {
-        const style = document.createElement('style');
-        style.id = 'wb-all-group-style';
-        style.innerHTML = `
-            .wb-all-group-container { margin-bottom: 12px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.02); border: 1px solid #E5E5EA; }
-            .wb-all-group-header { padding: 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: #F9F9F9; border-bottom: 1px solid #E5E5EA; user-select: none; }
-            .wb-all-group-header:active { background: #F0F0F0; }
-            .wb-all-group-header .chevron { width: 20px; height: 20px; stroke: #CCC; fill: none; stroke-width: 2; transition: transform 0.3s ease; }
-            .wb-all-group-container.expanded .chevron { transform: rotate(180deg); }
-            .wb-all-group-content { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
-            .wb-all-group-container.expanded .wb-all-group-content { max-height: 5000px; }
-            .wb-all-group-content .wb-list-item-wrapper:last-child { border-bottom: none; }
-        `;
-        document.head.appendChild(style);
-    }
-
-    const container = document.getElementById('worldbookList');
+// 渲染信封列表
+function renderWbEnvelopeList() {
+    const container = document.getElementById('wb-envelope-list');
     container.innerHTML = '';
-    if (worldbookEntries.length === 0) {
-        container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">暂无条目，点击右上角添加</div>';
-        return;
-    }
 
-    // 按分组 (type) 归类
-    const groups = {};
-    worldbookEntries.forEach(entry => {
-        const groupName = entry.type || 'Default';
-        if (!groups[groupName]) groups[groupName] = [];
-        groups[groupName].push(entry);
-    });
-
-    // 排序分组名
-    const sortedGroupNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
-
-    sortedGroupNames.forEach(groupName => {
-        const entries = groups[groupName].sort((a, b) => a.title.localeCompare(b.title));
-        
-        const groupDiv = document.createElement('div');
-        // 👇 核心修改：去掉了 expanded，现在默认是折叠状态啦 👇
-        groupDiv.className = 'wb-all-group-container'; 
-        
-        const header = document.createElement('div');
-        header.className = 'wb-all-group-header';
-        header.onclick = () => groupDiv.classList.toggle('expanded');
-        header.innerHTML = `
-            <div style="font-size: 16px; font-weight: bold; color: #111;">${groupName} <span style="font-size: 12px; color: #888; font-weight: normal; margin-left: 8px;">(${entries.length})</span></div>
-            <svg viewBox="0 0 24 24" class="chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
-        `;
-        
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'wb-all-group-content';
-        
-        entries.forEach(entry => {
-            contentDiv.appendChild(createEntryElement(entry));
-        });
-        
-        groupDiv.appendChild(header);
-        groupDiv.appendChild(contentDiv);
-        container.appendChild(groupDiv);
-    });
-}
-
-function renderGroupView() {
-    const container = document.getElementById('worldbookGroupList');
-    container.innerHTML = '';
-    
-    // 隐藏旧的底部添加按钮
-    const oldAddBtn = document.querySelector('.wb-add-group-btn');
-    if(oldAddBtn) oldAddBtn.style.display = 'none';
-
-    if (worldbookGroups.length === 0) {
-        container.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">暂无分组，请点击右上角创建</div>';
-        return;
-    }
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'ins-group-container';
-
-    // 韩系/日系低饱和度日记本颜色库
-    const notebookColors = [
-        { bg: '#FDFBF7', text: '#4A413E', border: '#EAEAEA' }, // 奶白
-        { bg: '#F4E8E8', text: '#5D4A45', border: '#EADCDC' }, // 灰粉
-        { bg: '#E8EEF2', text: '#4A5568', border: '#DCE4EA' }, // 雾霾蓝
-        { bg: '#E6EBE0', text: '#4A554A', border: '#DCE0D6' }, // 鼠尾草绿
-        { bg: '#F0EBE1', text: '#5D534A', border: '#E6DFD3' }, // 奶茶
-        { bg: '#EBE6F0', text: '#4A415D', border: '#DFD8E6' }  // 浅紫
-    ];
+    // 👇 永远在最前面渲染一个“创建分组”的虚线信封
+    const createDiv = document.createElement('div');
+    createDiv.className = 'wb-create-envelope';
+    createDiv.onclick = () => addNewGroup();
+    createDiv.innerHTML = `
+        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <div style="font-size: 14px; font-weight: bold;">创建新分组</div>
+    `;
+    container.appendChild(createDiv);
 
     worldbookGroups.forEach((group, index) => {
-        const groupEntries = worldbookEntries.filter(e => e.type === group);
+        const entries = worldbookEntries.filter(e => e.type === group);
+        const isDark = index % 2 !== 0; // 交替深浅色
+        const darkClass = isDark ? 'dark' : '';
         
-        // 顺序循环获取颜色
-        const colorTheme = notebookColors[index % notebookColors.length];
+        // 提取前几个条目的标题作为描述
+        let descText = entries.slice(0, 2).map(e => e.title).join(' / ');
+        if (entries.length > 2) descText += '...';
+        if (entries.length === 0) descText = '空空如也';
 
-        const card = document.createElement('div');
-        card.className = 'ins-group-card';
-        card.style.backgroundColor = colorTheme.bg;
-        card.style.borderColor = colorTheme.border;
-        card.onclick = () => openGroupDetailModal(group);
-
-        card.innerHTML = `
-            <div class="ins-notebook-binding"></div>
-            <div class="ins-notebook-label" style="background: ${colorTheme.text};"></div>
-            <div class="ins-group-title" style="color: ${colorTheme.text}">${group}</div>
-            <div class="ins-group-count" style="color: ${colorTheme.text}; opacity: 0.6;">${groupEntries.length} entries</div>
-            <div class="ins-group-delete" onclick="event.stopPropagation(); deleteGroup('${group}')">
-                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        const div = document.createElement('div');
+        div.className = `wb-list-envelope ${darkClass}`;
+        div.onclick = () => openWbEnvelopeModal(group, isDark);
+        
+        div.innerHTML = `
+            <div class="wb-env-back"></div>
+            <div class="wb-env-front">
+                <div class="wb-env-title">${group}</div>
+                <div class="wb-env-desc">${descText} (${entries.length}个条目)</div>
+            </div>
+            <div class="wb-env-flap">
+                <div class="wb-env-sticker">
+                    <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                </div>
+            </div>
+            <!-- 👇 新增：Edit 按钮 -->
+            <div class="wb-edit-btn" onclick="event.stopPropagation(); showWbGroupEditMenu(event, '${group}')">
+                Edit
+            </div>
+            <div class="wb-check-btn" onclick="event.stopPropagation(); openWbFullscreenView('${group}')">
+                Check 
             </div>
         `;
-        
-        wrapper.appendChild(card);
+        container.appendChild(div);
     });
+}
 
-    container.appendChild(wrapper);
-} // 👈 宝宝，就是少了这个大括号导致报错！
-    // --- 补回丢失的分组详情弹窗逻辑 ---
-// --- 日记本目录分页全局变量 ---
-let currentNotebookEntries = [];
-let currentNotebookPage = 1;
-const NOTEBOOK_ITEMS_PER_PAGE = 9; // 每页显示9条，刚好贴合横线
+// 👇 新增：显示分组编辑菜单 (重命名 / 删除)
+function showWbGroupEditMenu(e, groupName) {
+    let menu = document.getElementById('wb-group-edit-menu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'wb-group-edit-menu';
+        menu.style.cssText = 'position: absolute; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); z-index: 3000; display: none; flex-direction: column; min-width: 140px; overflow: hidden;';
+        document.body.appendChild(menu);
+    }
 
-function openGroupDetailModal(groupName) {
-    document.getElementById('wbGroupDetailTitle').innerText = groupName;
+    const editSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+    const deleteSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;margin-right:10px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+
+    menu.innerHTML = `
+        <div style="padding: 12px 16px; font-size: 15px; color: #000; border-bottom: 0.5px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center;" onclick="renameWbGroup('${groupName}')">
+            ${editSvg} 修改名称
+        </div>
+        <div style="padding: 12px 16px; font-size: 15px; color: #FF3B30; cursor: pointer; display: flex; align-items: center;" onclick="deleteWbGroup('${groupName}')">
+            ${deleteSvg} 删除分组
+        </div>
+    `;
+
+    let x = e.clientX;
+    let y = e.clientY;
+    const menuWidth = 140;
+    const menuHeight = 90;
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    if (x + menuWidth > screenW) x = screenW - menuWidth - 10;
+    if (y + menuHeight > screenH) y = screenH - menuHeight - 10;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'flex';
     
-    // 获取该分组下的所有条目
-    currentNotebookEntries = worldbookEntries.filter(e => e.type === groupName);
-    currentNotebookPage = 1; // 重置为第一页
+    // 点击其他地方隐藏菜单
+    setTimeout(() => {
+        const hideMenu = (evt) => {
+            if (!evt.target.closest('#wb-group-edit-menu')) {
+                menu.style.display = 'none';
+                document.removeEventListener('click', hideMenu);
+            }
+        };
+        document.addEventListener('click', hideMenu);
+    }, 10);
+}
+
+// 👇 新增：重命名分组逻辑
+function renameWbGroup(oldName) {
+    document.getElementById('wb-group-edit-menu').style.display = 'none';
+    if (oldName === 'Default') return alert("默认分组不可重命名");
     
-    renderNotebookPage(currentNotebookPage);
+    openTextEditModal("重命名分组", "请输入新的分组名称", oldName, (newName) => {
+        if (newName && newName.trim() !== "" && newName !== oldName) {
+            const trimmedName = newName.trim();
+            if (worldbookGroups.includes(trimmedName)) {
+                return alert("该分组名称已存在！");
+            }
+            
+            // 更新分组列表
+            const idx = worldbookGroups.indexOf(oldName);
+            if (idx !== -1) worldbookGroups[idx] = trimmedName;
+            
+            // 更新条目所属分组
+            worldbookEntries.forEach(e => {
+                if (e.type === oldName) e.type = trimmedName;
+            });
+            
+            saveWorldbookData();
+            renderWbEnvelopeList();
+        }
+    });
+}
+
+// 👇 新增：删除分组逻辑
+function deleteWbGroup(groupName) {
+    document.getElementById('wb-group-edit-menu').style.display = 'none';
+    if (groupName === 'Default') return alert("默认分组不可删除");
     
-    // 显示弹窗
-    const modal = document.getElementById('worldbookGroupDetailModal');
+    if (confirm(`确定要删除分组 "${groupName}" 吗？\n该分组下的所有条目也将被一并删除！`)) {
+        worldbookGroups = worldbookGroups.filter(g => g !== groupName);
+        worldbookEntries = worldbookEntries.filter(e => e.type !== groupName);
+        saveWorldbookData();
+        renderWbEnvelopeList();
+    }
+}
+
+
+// 打开屏幕中间的动态信封弹窗
+function openWbEnvelopeModal(groupName, isDark) {
+    currentWbGroupName = groupName;
+    currentWbPapers = worldbookEntries.filter(e => e.type === groupName);
+
+    const envelope = document.getElementById('wb-modal-envelope');
+    document.getElementById('wb-modal-title').innerText = groupName;
+    document.getElementById('wb-modal-desc').innerText = `共 ${currentWbPapers.length} 个条目`;
+
+    const checkBtn = document.getElementById('wb-modal-check-btn');
+
+    if (isDark) {
+        document.getElementById('wb-modal-env-back').style.background = '#222';
+        document.getElementById('wb-modal-env-back').style.borderColor = '#333';
+        document.getElementById('wb-modal-env-front').style.background = '#2a2a2a';
+        document.getElementById('wb-modal-env-front').style.borderColor = '#333';
+        document.getElementById('wb-modal-env-flap').style.background = '#2a2a2a';
+        document.getElementById('wb-modal-env-flap').style.borderTopColor = '#333';
+        document.getElementById('wb-modal-title').style.color = '#fff';
+        checkBtn.style.background = '#fff';
+        checkBtn.style.color = '#111';
+    } else {
+        document.getElementById('wb-modal-env-back').style.background = '#fdfdfd';
+        document.getElementById('wb-modal-env-back').style.borderColor = '#eaeaea';
+        document.getElementById('wb-modal-env-front').style.background = '#fff';
+        document.getElementById('wb-modal-env-front').style.borderColor = '#eaeaea';
+        document.getElementById('wb-modal-env-flap').style.background = '#fdfdfd';
+        document.getElementById('wb-modal-env-flap').style.borderTopColor = '#eaeaea';
+        document.getElementById('wb-modal-title').style.color = '#333';
+        checkBtn.style.background = '#111';
+        checkBtn.style.color = '#fff';
+    }
+
+    renderWbPapers();
+
+    const modal = document.getElementById('wb-envelope-modal');
     modal.style.display = 'flex';
-    setTimeout(() => modal.classList.add('active'), 10);
-}
-
-function closeGroupDetailModal() {
-    const modal = document.getElementById('worldbookGroupDetailModal');
-    modal.classList.remove('active');
-    setTimeout(() => modal.style.display = 'none', 300);
-    renderGroupView(); // 关闭时刷新一下背后的贴纸视图
-}
-
-function renderNotebookPage(page) {
-    const list = document.getElementById('wbGroupDetailList');
-    list.innerHTML = ''; 
     
-    // 强制重绘以触发 CSS 动画
-    void list.offsetWidth;
+    setTimeout(() => {
+        modal.classList.add('active');
+        setTimeout(() => {
+            envelope.classList.add('open');
+        }, 200);
+    }, 10);
+}
 
-    if (currentNotebookEntries.length === 0) {
-        list.innerHTML = '<div style="text-align: center; color: #999; padding-top: 50px; font-style: italic;">该分组下暂无条目</div>';
-        document.getElementById('notebook-page-info').innerText = `Page 1 / 1`;
-        document.getElementById('notebook-prev-btn').disabled = true;
-        document.getElementById('notebook-next-btn').disabled = true;
+// 渲染交叠的信纸
+function renderWbPapers() {
+    const container = document.getElementById('wb-papers-container');
+    container.innerHTML = '';
+
+    if (currentWbPapers.length === 0) {
+        container.innerHTML = '<div style="text-align:center; color:#999; padding-top:50px; font-size:12px;">空空如也</div>';
         return;
     }
 
-    const totalPages = Math.ceil(currentNotebookEntries.length / NOTEBOOK_ITEMS_PER_PAGE);
-    const start = (page - 1) * NOTEBOOK_ITEMS_PER_PAGE;
-    const end = start + NOTEBOOK_ITEMS_PER_PAGE;
-    const pageItems = currentNotebookEntries.slice(start, end);
-
-    pageItems.forEach(entry => {
-        const div = document.createElement('div');
-        div.className = 'toc-item';
-        div.onclick = () => {
-            closeGroupDetailModal(); // 点击后先关闭目录
-            setTimeout(() => openWorldbookEditor(entry.id), 300); // 等待动画结束后打开编辑器
+    currentWbPapers.forEach((entry, index) => {
+        const paper = document.createElement('div');
+        paper.className = 'wb-paper-item';
+        paper.setAttribute('data-index', index);
+        
+        // 点击后面的信纸，将其切换到最前面
+        paper.onclick = (e) => {
+            e.stopPropagation();
+            if (index !== 0) {
+                const clickedPaper = currentWbPapers.splice(index, 1)[0];
+                currentWbPapers.unshift(clickedPaper);
+                renderWbPapers();
+            } else {
+                // 点击最前面的信纸，打开编辑器
+                openWorldbookEditor(entry.id);
+            }
         };
-        div.innerHTML = `
-            <div class="toc-title">${entry.title}</div>
-            <div class="toc-dots"></div>
-            <div class="toc-action">Edit</div>
-        `;
-        list.appendChild(div);
-    });
 
-    // 更新翻页器状态
-    document.getElementById('notebook-page-info').innerText = `Page ${page} / ${totalPages}`;
-    document.getElementById('notebook-prev-btn').disabled = page === 1;
-    document.getElementById('notebook-next-btn').disabled = page === totalPages;
+        paper.innerHTML = `
+            <div class="wb-clip-tag">
+                ${currentWbGroupName}
+            </div>
+            <div class="wb-paper-title">${entry.title}</div>
+            <div class="wb-paper-desc">${entry.desc}</div>
+        `;
+        container.appendChild(paper);
+    });
 }
 
-function changeNotebookPage(dir) {
-    const totalPages = Math.ceil(currentNotebookEntries.length / NOTEBOOK_ITEMS_PER_PAGE);
-    currentNotebookPage += dir;
-    if (currentNotebookPage < 1) currentNotebookPage = 1;
-    if (currentNotebookPage > totalPages) currentNotebookPage = totalPages;
-    renderNotebookPage(currentNotebookPage);
+// 左右滑动切换信纸逻辑
+let wbTouchStartX = 0;
+let wbTouchEndX = 0;
+
+document.addEventListener('DOMContentLoaded', () => {
+    const papersContainer = document.getElementById('wb-papers-container');
+    if (!papersContainer) return;
+
+    papersContainer.addEventListener('touchstart', e => {
+        wbTouchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+
+    papersContainer.addEventListener('touchend', e => {
+        wbTouchEndX = e.changedTouches[0].screenX;
+        handleWbSwipe();
+    });
+
+    function handleWbSwipe() {
+        const swipeThreshold = 40;
+        if (currentWbPapers.length <= 1) return;
+
+        if (wbTouchEndX < wbTouchStartX - swipeThreshold) {
+            // 向左滑：把第一张放到最后
+            const first = currentWbPapers.shift();
+            currentWbPapers.push(first);
+            renderWbPapers();
+        }
+        if (wbTouchEndX > wbTouchStartX + swipeThreshold) {
+            // 向右滑：把最后一张放到最前
+            const last = currentWbPapers.pop();
+            currentWbPapers.unshift(last);
+            renderWbPapers();
+        }
+    }
+});
+
+// 关闭弹窗
+function closeWbEnvelopeModal(e, force = false) {
+    if (!force && e.target.id !== 'wb-envelope-modal') return;
+    
+    const envelope = document.getElementById('wb-modal-envelope');
+    const modal = document.getElementById('wb-envelope-modal');
+    
+    envelope.classList.remove('open');
+    
+    setTimeout(() => {
+        modal.classList.remove('active');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
+    }, 500);
+}
+
+// 👇 新增：生成条目卡片的通用函数
+function createWbEntryCard(entry) {
+    const card = document.createElement('div');
+    card.className = 'wb-fs-card';
+    card.onclick = () => openWorldbookEditor(entry.id);
+    card.innerHTML = `
+        <div class="wb-fs-card-header">
+            <div class="wb-fs-card-title">${entry.title} <span style="font-size:10px; color:#999; font-weight:normal; margin-left:6px; background:#F5F5F5; padding:2px 6px; border-radius:4px;">${entry.type}</span></div>
+            <div class="wb-fs-card-edit" onclick="event.stopPropagation(); showWbEntryEditMenu(event, ${entry.id})">Edit</div>
+        </div>
+        <div class="wb-fs-card-desc">${entry.desc}</div>
+    `;
+    return card;
+}
+
+// 👇 新增：搜索世界书条目逻辑
+window.filterWbEntries = function(keyword) {
+    const envList = document.getElementById('wb-envelope-list');
+    const searchRes = document.getElementById('wb-search-results');
+    
+    if (!keyword.trim()) {
+        envList.style.display = 'flex';
+        searchRes.style.display = 'none';
+        return;
+    }
+    
+    envList.style.display = 'none';
+    searchRes.style.display = 'flex';
+    
+    const lowerKw = keyword.toLowerCase();
+    const filtered = worldbookEntries.filter(e => 
+        e.title.toLowerCase().includes(lowerKw) || 
+        e.keys.toLowerCase().includes(lowerKw) || 
+        e.desc.toLowerCase().includes(lowerKw)
+    );
+    
+    searchRes.innerHTML = '';
+    if (filtered.length === 0) {
+        searchRes.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px;">未找到相关条目</div>';
+    } else {
+        filtered.forEach(entry => {
+            searchRes.appendChild(createWbEntryCard(entry));
+        });
+    }
+};
+
+// 👇 新增：条目右上角 Edit 菜单
+window.showWbEntryEditMenu = function(e, entryId) {
+    let menu = document.getElementById('wb-entry-edit-menu');
+    if (!menu) {
+        menu = document.createElement('div');
+        menu.id = 'wb-entry-edit-menu';
+        menu.style.cssText = 'position: absolute; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); z-index: 4000; display: none; flex-direction: column; min-width: 120px; overflow: hidden;';
+        document.body.appendChild(menu);
+    }
+
+    const editSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;margin-right:8px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+    const deleteSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;margin-right:8px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+
+    menu.innerHTML = `
+        <div style="padding: 12px 16px; font-size: 14px; color: #000; border-bottom: 0.5px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center;" onclick="document.getElementById('wb-entry-edit-menu').style.display='none'; openWorldbookEditor(${entryId})">
+            ${editSvg} 编辑条目
+        </div>
+        <div style="padding: 12px 16px; font-size: 14px; color: #FF3B30; cursor: pointer; display: flex; align-items: center;" onclick="document.getElementById('wb-entry-edit-menu').style.display='none'; deleteWorldbookEntry(${entryId})">
+            ${deleteSvg} 删除条目
+        </div>
+    `;
+
+    let x = e.clientX;
+    let y = e.clientY;
+    const menuWidth = 120;
+    const menuHeight = 90;
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    if (x + menuWidth > screenW) x = screenW - menuWidth - 10;
+    if (y + menuHeight > screenH) y = screenH - menuHeight - 10;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'flex';
+    
+    setTimeout(() => {
+        const hideMenu = (evt) => {
+            if (!evt.target.closest('#wb-entry-edit-menu')) {
+                menu.style.display = 'none';
+                document.removeEventListener('click', hideMenu);
+            }
+        };
+        document.addEventListener('click', hideMenu);
+    }, 10);
+};
+
+// 全屏查看页面逻辑
+function openWbFullscreenView(groupName = null) {
+    const targetGroup = groupName || currentWbGroupName;
+    if (!targetGroup) return;
+
+    document.getElementById('wb-fs-title').innerText = targetGroup;
+    const content = document.getElementById('wb-fs-content');
+    content.innerHTML = '';
+
+    const entries = worldbookEntries.filter(e => e.type === targetGroup);
+
+    if (entries.length === 0) {
+        content.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0;">暂无条目</div>';
+    } else {
+        entries.forEach(entry => {
+            content.appendChild(createWbEntryCard(entry));
+        });
+    }
+
+    const fsView = document.getElementById('wb-fullscreen-view');
+    fsView.style.display = 'flex';
+    setTimeout(() => fsView.classList.add('active'), 10);
+}
+
+// 修复：删除条目时同步刷新搜索结果
+function deleteWorldbookEntry(id) {
+    if (confirm("确定要删除这个条目吗？")) {
+        worldbookEntries = worldbookEntries.filter(e => e.id !== id);
+        saveWorldbookData();
+        
+        renderWbEnvelopeList(); // 刷新信封列表
+        
+        // 如果搜索框有内容，刷新搜索结果
+        const searchInput = document.getElementById('wb-search-input');
+        if (searchInput && searchInput.value.trim() !== '') {
+            filterWbEntries(searchInput.value);
+        }
+        
+        // 如果动态信封弹窗开着，同步刷新它
+        const envModal = document.getElementById('wb-envelope-modal');
+        if (envModal && envModal.classList.contains('active')) {
+            currentWbPapers = worldbookEntries.filter(e => e.type === currentWbGroupName);
+            renderWbPapers();
+        }
+
+        // 如果全屏查看页面开着，同步刷新它
+        const fsView = document.getElementById('wb-fullscreen-view');
+        if (fsView && fsView.classList.contains('active')) {
+            openWbFullscreenView(currentWbGroupName);
+        }
+    }
+}
+
+function closeWbFullscreenView() {
+    const fsView = document.getElementById('wb-fullscreen-view');
+    fsView.classList.remove('active');
+    setTimeout(() => fsView.style.display = 'none', 300);
 }
 
 
@@ -2686,59 +2904,77 @@ function openWorldbookEditor(id = null) {
     currentEditingId = id;
     const modal = document.getElementById('worldbookEditorModal');
     const titleInput = document.getElementById('wbTitleInput');
-    const typeInput = document.getElementById('wbTypeInput');
+    const typeInput = document.getElementById('wbTypeInput'); // 隐藏的真实值
+    const typeDisplay = document.getElementById('wbTypeDisplay'); // 显示的按钮
     const keyInput = document.getElementById('wbKeyInput');
     const descInput = document.getElementById('wbDescInput');
 
-    typeInput.innerHTML = '';
     if (worldbookGroups.length === 0) worldbookGroups = ['Default'];
-    worldbookGroups.forEach(g => {
-        const opt = document.createElement('option');
-        opt.value = g;
-        opt.innerText = g;
-        typeInput.appendChild(opt);
-    });
-    const newOpt = document.createElement('option');
-    newOpt.value = '__NEW__';
-    newOpt.innerText = '+ 新建分组...';
-    typeInput.appendChild(newOpt);
-
-    typeInput.onchange = () => {
-        if (typeInput.value === '__NEW__') {
-            const newGroup = prompt("请输入新分组名称");
-            if (newGroup) {
-                if (!worldbookGroups.includes(newGroup)) {
-                    worldbookGroups.push(newGroup);
-                    const opt = document.createElement('option');
-                    opt.value = newGroup;
-                    opt.innerText = newGroup;
-                    typeInput.insertBefore(opt, newOpt);
-                }
-                typeInput.value = newGroup;
-            } else {
-                typeInput.value = worldbookGroups[0];
-            }
-        }
-    };
 
     if (id) {
         const entry = worldbookEntries.find(e => e.id === id);
         if (entry) {
-            document.getElementById('wbEditorTitle').innerText = "编辑条目";
             titleInput.value = entry.title;
             typeInput.value = entry.type;
+            typeDisplay.innerText = entry.type;
             keyInput.value = entry.keys;
             descInput.value = entry.desc;
         }
     } else {
-        document.getElementById('wbEditorTitle').innerText = "新建条目";
         titleInput.value = '';
         typeInput.value = worldbookGroups[0];
+        typeDisplay.innerText = worldbookGroups[0];
         keyInput.value = '';
         descInput.value = '';
     }
     modal.classList.add('open');
 }
+
+// 👇 新增：打开自定义分组选择弹窗
+window.openWbTypeSelectModal = function() {
+    const list = document.getElementById('wb-type-select-list');
+    const currentType = document.getElementById('wbTypeInput').value;
+    list.innerHTML = '';
+
+    // 渲染已有分组
+    worldbookGroups.forEach(g => {
+        const isActive = g === currentType;
+        const div = document.createElement('div');
+        div.className = `wb-type-item ${isActive ? 'active' : ''}`;
+        div.innerHTML = `<span>${g}</span> ${isActive ? '<svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}`;
+        div.onclick = () => {
+            document.getElementById('wbTypeInput').value = g;
+            document.getElementById('wbTypeDisplay').innerText = g;
+            wcCloseModal('wc-modal-wb-type-select');
+        };
+        list.appendChild(div);
+    });
+
+    // 渲染新建分组按钮
+    const newDiv = document.createElement('div');
+    newDiv.className = 'wb-type-item new-group';
+    newDiv.innerHTML = '+ 新建分组...';
+    newDiv.onclick = () => {
+        wcCloseModal('wc-modal-wb-type-select');
+        setTimeout(() => {
+            openTextEditModal("新建分组", "请输入新分组名称", "", (newGroup) => {
+                if (newGroup && newGroup.trim() !== "") {
+                    const trimmedName = newGroup.trim();
+                    if (!worldbookGroups.includes(trimmedName)) {
+                        worldbookGroups.push(trimmedName);
+                        saveWorldbookData(); // 保存一下分组列表
+                    }
+                    document.getElementById('wbTypeInput').value = trimmedName;
+                    document.getElementById('wbTypeDisplay').innerText = trimmedName;
+                }
+            });
+        }, 300); // 等待底部弹窗收起后再弹出输入框
+    };
+    list.appendChild(newDiv);
+
+    wcOpenModal('wc-modal-wb-type-select');
+};
+
 
 function closeWorldbookEditor() { document.getElementById('worldbookEditorModal').classList.remove('open'); }
 
@@ -2765,17 +3001,19 @@ function saveWorldbookEntry() {
     // 修复：加入 150ms 延迟，防止点击穿透导致误触列表项
     setTimeout(() => {
         closeWorldbookEditor();
-        if (document.getElementById('tab-wb-all').classList.contains('active')) {
-            renderWorldbookList();
-        } else {
-            renderGroupView();
-        }
+        renderWbEnvelopeList(); // 刷新信封列表
         
-        // 如果分组详情弹窗开着，同步刷新它
-        const detailModal = document.getElementById('worldbookGroupDetailModal');
-        if (detailModal && detailModal.classList.contains('active')) {
-            const currentGroup = document.getElementById('wbGroupDetailTitle').innerText;
-            openGroupDetailModal(currentGroup);
+        // 如果动态信封弹窗开着，同步刷新它
+        const envModal = document.getElementById('wb-envelope-modal');
+        if (envModal && envModal.classList.contains('active')) {
+            currentWbPapers = worldbookEntries.filter(e => e.type === currentWbGroupName);
+            renderWbPapers();
+        }
+
+        // 如果全屏查看页面开着，同步刷新它
+        const fsView = document.getElementById('wb-fullscreen-view');
+        if (fsView && fsView.classList.contains('active')) {
+            openWbFullscreenView(currentWbGroupName);
         }
     }, 150);
 }
@@ -2784,21 +3022,21 @@ function deleteWorldbookEntry(id) {
     if (confirm("确定要删除这个条目吗？")) {
         worldbookEntries = worldbookEntries.filter(e => e.id !== id);
         saveWorldbookData();
-        if (document.getElementById('tab-wb-all').classList.contains('active')) {
-            renderWorldbookList();
-        } else {
-            renderGroupView();
-        }
         
-        // 如果分组详情弹窗开着，同步刷新它
-        const detailModal = document.getElementById('worldbookGroupDetailModal');
-        if (detailModal && detailModal.classList.contains('active')) {
-            const currentGroup = document.getElementById('wbGroupDetailTitle').innerText;
-            openGroupDetailModal(currentGroup);
+        renderWbEnvelopeList(); // 刷新信封列表
+        
+        // 如果动态信封弹窗开着，同步刷新它
+        const envModal = document.getElementById('wb-envelope-modal');
+        if (envModal && envModal.classList.contains('active')) {
+            currentWbPapers = worldbookEntries.filter(e => e.type === currentWbGroupName);
+            renderWbPapers();
         }
-    } else {
-        const items = document.querySelectorAll('.wb-swipe-box');
-        items.forEach(el => el.style.transform = 'translateX(0)');
+
+        // 如果全屏查看页面开着，同步刷新它
+        const fsView = document.getElementById('wb-fullscreen-view');
+        if (fsView && fsView.classList.contains('active')) {
+            openWbFullscreenView(currentWbGroupName);
+        }
     }
 }
 function addNewGroup() {
@@ -2808,7 +3046,7 @@ function addNewGroup() {
             if (!worldbookGroups.includes(trimmedName)) {
                 worldbookGroups.push(trimmedName);
                 saveWorldbookData();
-                renderGroupView();
+                renderWbEnvelopeList(); // 👈 修复：调用新版的信封渲染函数
             } else {
                 alert("该分组名称已存在！");
             }
@@ -3194,19 +3432,66 @@ function deletePreset(type, idx) {
     }
     savePresetsData();
 }
+// ==========================================
+// 🌟 INS 电脑视窗预设库逻辑 🌟
+// ==========================================
+
+// 记录编辑模式状态
+let presetEditState = { icon: false, font: false };
+
+// 切换编辑模式 (渐入删除按钮)
+window.togglePresetEditMode = function(type) {
+    presetEditState[type] = !presetEditState[type];
+    const listId = type === 'icon' ? 'iconPresetList' : 'fontPresetList';
+    const listEl = document.getElementById(listId);
+    
+    if (listEl) {
+        if (presetEditState[type]) {
+            listEl.classList.add('edit-mode');
+        } else {
+            listEl.classList.remove('edit-mode');
+        }
+    }
+};
+
+// 清空全部预设
+window.clearAllPresets = function(type) {
+    if (confirm("确定要清空所有预设吗？此操作不可恢复！")) {
+        if (type === 'icon') {
+            iconPresets = [];
+            renderIconPresets();
+        } else if (type === 'font') {
+            fontPresets = [];
+            renderFontPresets();
+        }
+        savePresetsData();
+    }
+};
+
 
 function renderIconPresets() {
     const list = document.getElementById('iconPresetList');
     list.innerHTML = '';
     if (iconPresets.length === 0) {
-        list.innerHTML = '<div style="color:#999; font-size:13px; padding:5px;">暂无预设</div>';
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px; font-style:italic;">No presets available.</div>';
         return;
     }
     iconPresets.forEach((p, idx) => {
-        const tag = document.createElement('div');
-        tag.className = 'preset-tag';
-        tag.innerHTML = `<span class="preset-name" onclick="applyIconPreset(${idx})">${p.name}</span><span class="preset-delete" onclick="deletePreset('icon', ${idx})">×</span>`;
-        list.appendChild(tag);
+        const item = document.createElement('div');
+        item.className = 'ins-preset-item';
+        item.onclick = () => {
+            if (!presetEditState.icon) {
+                applyIconPreset(idx);
+                alert(`已应用图标预设: ${p.name}`);
+            }
+        };
+        item.innerHTML = `
+            <div class="ins-preset-name">${p.name}</div>
+            <div class="ins-preset-delete" onclick="event.stopPropagation(); deletePreset('icon', ${idx});">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </div>
+        `;
+        list.appendChild(item);
     });
 }
 
@@ -3229,18 +3514,27 @@ function applyIconPreset(idx) {
 
 function renderFontPresets() {
     const list = document.getElementById('fontPresetList');
-    const container = document.getElementById('fontPresetsContainer');
     list.innerHTML = '';
     if (fontPresets.length === 0) {
-        container.style.display = 'none';
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:40px 0; font-size:13px; font-style:italic;">No presets available.</div>';
         return;
     }
-    container.style.display = 'block';
     fontPresets.forEach((p, idx) => {
-        const tag = document.createElement('div');
-        tag.className = 'preset-tag';
-        tag.innerHTML = `<span class="preset-name" onclick="applyFontPreset(${idx})">${p.name}</span><span class="preset-delete" onclick="deletePreset('font', ${idx})">×</span>`;
-        list.appendChild(tag);
+        const item = document.createElement('div');
+        item.className = 'ins-preset-item';
+        item.onclick = () => {
+            if (!presetEditState.font) {
+                applyFontPreset(idx);
+                alert(`已应用字体预设: ${p.name}`);
+            }
+        };
+        item.innerHTML = `
+            <div class="ins-preset-name">${p.name}</div>
+            <div class="ins-preset-delete" onclick="event.stopPropagation(); deletePreset('font', ${idx});">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </div>
+        `;
+        list.appendChild(item);
     });
 }
 
@@ -3742,6 +4036,8 @@ const wcDb = {
 
 // --- WeChat State ---
 const wcState = {
+    globalConfig: { customCss: '', pinText: 'ㅠㅅㅠ', pinCss: '' }, // 👈 新增：全局配置
+    globalCssPresets: [], // 👈 新增：全局专属 CSS 预设
     relationships: [], // 新增：角色关系网数据
     chatGroups: [], // 新增：自定义分组列表
     activeChatGroup: 'All', // 新增：当前选中的分组
@@ -3853,7 +4149,12 @@ async function wcLoadData() {
 
         const presets = await safeGet('kv_store', 'css_presets');
         if (presets) wcState.cssPresets = presets;
+                const globalCfg = await safeGet('kv_store', 'global_config');
+        if (globalCfg) wcState.globalConfig = { ...wcState.globalConfig, ...globalCfg };
         
+        const globalPresets = await safeGet('kv_store', 'global_css_presets'); // 👈 加载全局预设
+        if (globalPresets) wcState.globalCssPresets = globalPresets;
+
         const chatBgs = await safeGet('kv_store', 'chat_bg_presets');
         if (chatBgs) wcState.chatBgPresets = chatBgs;
         
@@ -3928,6 +4229,8 @@ async function wcSaveData() {
         // 1. 保存 kv_store
         await saveStore('kv_store', (store) => {
             store.put(wcState.myFavorites || [], 'my_favorites');
+            store.put(wcState.globalConfig, 'global_config'); // 👈 保存全局配置            
+            store.put(wcState.globalCssPresets || [], 'global_css_presets'); // 👈 保存全局预设
             store.put(wcState.chatGroups || [], 'chat_groups');
             store.put(wcState.calendarEvents || [], 'calendar_events');
             store.put(wcState.user || { name: 'User', avatar: '' }, 'user');
@@ -3979,6 +4282,14 @@ async function wcSaveData() {
         console.error("WeChat Save 整体流程失败", e);
     }
 }
+
+// 在 wcLoadData 完成后调用，应用全局样式
+const originalWcLoadData = wcLoadData;
+wcLoadData = async function() {
+
+    await originalWcLoadData();
+    wcApplyGlobalCssToDom(); // 👈 新增：加载完数据后立即应用全局 CSS
+};
 
 function wcCompressImage(file) {
     return new Promise((resolve, reject) => {
@@ -9176,9 +9487,251 @@ function wcClearTransactionHistory() {
     }
 }
 
-// --- WeChat Settings (New) ---
+// --- WeChat Settings (New Fullscreen Card Stack) ---
+let wcGsCurrentCardIndex = 0;
+let wcGsIsDragging = false;
+let wcGsStartX = 0;
+let wcGsStartY = 0;
+
 function wcOpenWechatSettings() {
+    // 1. 填充当前编辑卡片的数据
+    document.getElementById('wc-global-css-input').value = wcState.globalConfig.customCss || '';
+    document.getElementById('wc-global-pin-text').value = wcState.globalConfig.pinText || 'ㅠㅅㅠ';
+    document.getElementById('wc-global-pin-css').value = wcState.globalConfig.pinCss || '';
+
+    // 2. 渲染预设卡片
+    wcRenderGlobalCssPresetCards();
+
+    // 3. 初始化交互
+    wcGsCurrentCardIndex = 0;
+    wcUpdateGsCards();
+    wcInitGsCardSwipe();
+
     wcOpenModal('wc-modal-wechat-settings');
+}
+
+function wcCloseWechatSettings() {
+    wcCloseModal('wc-modal-wechat-settings');
+}
+
+function wcClearGlobalCssEdit() {
+    document.getElementById('wc-global-css-input').value = '';
+    document.getElementById('wc-global-pin-text').value = '';
+    document.getElementById('wc-global-pin-css').value = '';
+}
+
+function wcApplyGlobalCss() {
+    wcState.globalConfig.customCss = document.getElementById('wc-global-css-input').value;
+    wcState.globalConfig.pinText = document.getElementById('wc-global-pin-text').value || 'ㅠㅅㅠ';
+    wcState.globalConfig.pinCss = document.getElementById('wc-global-pin-css').value;
+    
+    wcSaveData();
+    wcApplyGlobalCssToDom(); // 立即应用样式
+    wcRenderChats(); // 刷新聊天列表以应用置顶字样
+    alert("全局样式已应用！");
+}
+
+function wcSaveGlobalCssPreset() {
+    const css = document.getElementById('wc-global-css-input').value;
+    const pinText = document.getElementById('wc-global-pin-text').value;
+    const pinCss = document.getElementById('wc-global-pin-css').value;
+    
+    if (!css && !pinCss) return alert("内容为空，无法保存");
+    
+    const name = prompt("请输入预设名称：");
+    if (name) {
+        wcState.globalCssPresets.push({ name, css, pinText, pinCss });
+        wcSaveData();
+        wcRenderGlobalCssPresetCards();
+        alert("预设已保存");
+    }
+}
+
+function wcDeleteGlobalCssPreset(idx) {
+    if (confirm("确定删除该预设吗？")) {
+        wcState.globalCssPresets.splice(idx, 1);
+        wcSaveData();
+        // 如果删除的是当前显示的卡片，索引回退
+        if (wcGsCurrentCardIndex > wcState.globalCssPresets.length) {
+            wcGsCurrentCardIndex = wcState.globalCssPresets.length;
+        }
+        wcRenderGlobalCssPresetCards();
+    }
+}
+// 👇 新增：点击重命名预设
+function wcRenameGlobalCssPreset(idx) {
+    const preset = wcState.globalCssPresets[idx];
+    if (!preset) return;
+    
+    const newName = prompt("请输入新的预设名称：", preset.name);
+    if (newName && newName.trim() !== "" && newName !== preset.name) {
+        preset.name = newName.trim();
+        wcSaveData();
+        wcRenderGlobalCssPresetCards(); // 刷新卡片显示新名字
+    }
+}
+
+function wcLoadGlobalCssPreset(idx) {
+    const preset = wcState.globalCssPresets[idx];
+    if (preset) {
+        document.getElementById('wc-global-css-input').value = preset.css || '';
+        document.getElementById('wc-global-pin-text').value = preset.pinText || 'ㅠㅅㅠ';
+        document.getElementById('wc-global-pin-css').value = preset.pinCss || '';
+        
+        // 自动切回第一张卡片
+        wcGsCurrentCardIndex = 0;
+        wcUpdateGsCards();
+    }
+}
+
+function wcRenderGlobalCssPresetCards() {
+    const stack = document.getElementById('wc-gs-card-stack');
+    // 保留第一张卡片 (Current Edit)，移除其他
+    Array.from(stack.children).forEach((child, index) => {
+        if (index > 0) child.remove();
+    });
+
+    wcState.globalCssPresets.forEach((p, idx) => {
+        const card = document.createElement('div');
+        card.className = 'wc-gs-css-card';
+        // 初始位置先随便设，后面 updateCards 会重置
+        card.setAttribute('data-pos', 'hidden'); 
+        
+        card.innerHTML = `
+            <div class="wc-gs-card-header">
+                <span class="wc-gs-card-tag" style="background: #F2F2F7; color: #555; cursor: pointer;" onclick="event.stopPropagation(); wcRenameGlobalCssPreset(${idx})" title="点击修改名称">${p.name} </span>
+                <span class="wc-gs-card-action danger" onclick="event.stopPropagation(); wcDeleteGlobalCssPreset(${idx})">删除</span>
+            </div>
+            <div class="wc-gs-input-group">
+                <label class="wc-gs-input-label">全局 CSS 预览</label>
+                <textarea class="wc-gs-custom-textarea large" readonly>${p.css || '无'}</textarea>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <div class="wc-gs-input-group" style="flex: 1;">
+                    <label class="wc-gs-input-label">置顶字样</label>
+                    <input type="text" class="wc-gs-custom-input" value="${p.pinText || '无'}" readonly>
+                </div>
+                <div class="wc-gs-input-group" style="flex: 2;">
+                    <label class="wc-gs-input-label">置顶 CSS</label>
+                    <input type="text" class="wc-gs-custom-input" value="${p.pinCss || '无'}" readonly>
+                </div>
+            </div>
+            <div class="wc-gs-card-btn-row">
+                <button class="wc-gs-card-btn black" onclick="event.stopPropagation(); wcLoadGlobalCssPreset(${idx})">加载此预设</button>
+            </div>
+        `;
+        
+        // 点击后面的卡片将其抽到前面
+        card.onclick = (e) => {
+            if (card.getAttribute('data-pos') !== '0' && !e.target.closest('input, textarea, button, .wc-gs-card-action')) {
+                wcGsCurrentCardIndex = idx + 1; // +1 因为第一张是 Current Edit
+                wcUpdateGsCards();
+            }
+        };
+        
+        stack.appendChild(card);
+    });
+
+    // 渲染小圆点
+    const dotsContainer = document.getElementById('wc-gs-pagination-dots');
+    dotsContainer.innerHTML = '';
+    const totalCards = wcState.globalCssPresets.length + 1;
+    for (let i = 0; i < totalCards; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'wc-gs-dot';
+        dotsContainer.appendChild(dot);
+    }
+    
+    wcUpdateGsCards();
+}
+
+function wcUpdateGsCards() {
+    const stack = document.getElementById('wc-gs-card-stack');
+    const cards = Array.from(stack.querySelectorAll('.wc-gs-css-card'));
+    const dots = document.querySelectorAll('.wc-gs-dot');
+
+    cards.forEach((card, i) => {
+        let diff = i - wcGsCurrentCardIndex;
+        if (diff < 0) diff += cards.length; // 循环处理
+
+        if (diff === 0) {
+            card.setAttribute('data-pos', '0');
+        } else if (diff === 1) {
+            card.setAttribute('data-pos', '1');
+        } else if (diff === 2) {
+            card.setAttribute('data-pos', '2');
+        } else {
+            card.setAttribute('data-pos', 'hidden');
+        }
+    });
+
+    dots.forEach((dot, i) => {
+        dot.classList.toggle('active', i === wcGsCurrentCardIndex);
+    });
+}
+
+function wcInitGsCardSwipe() {
+    const stack = document.getElementById('wc-gs-card-stack');
+    
+    // 防止重复绑定
+    if (stack.dataset.swipeBound === 'true') return;
+    stack.dataset.swipeBound = 'true';
+
+    stack.addEventListener('touchstart', (e) => {
+        if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+        wcGsStartX = e.touches[0].clientX;
+        wcGsStartY = e.touches[0].clientY;
+        wcGsIsDragging = true;
+    }, { passive: true });
+
+    stack.addEventListener('touchmove', (e) => {
+        if (!wcGsIsDragging) return;
+        const dx = e.touches[0].clientX - wcGsStartX;
+        const dy = e.touches[0].clientY - wcGsStartY;
+        
+        // 如果是水平滑动，阻止默认滚动
+        if (Math.abs(dx) > Math.abs(dy)) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    stack.addEventListener('touchend', (e) => {
+        if (!wcGsIsDragging) return;
+        wcGsIsDragging = false;
+        const endX = e.changedTouches[0].clientX;
+        const diffX = endX - wcGsStartX;
+        const totalCards = wcState.globalCssPresets.length + 1;
+
+        if (diffX < -40) {
+            // 向左滑，看下一张
+            wcGsCurrentCardIndex = (wcGsCurrentCardIndex + 1) % totalCards;
+            wcUpdateGsCards();
+        } else if (diffX > 40) {
+            // 向右滑，看上一张
+            wcGsCurrentCardIndex = (wcGsCurrentCardIndex - 1 + totalCards) % totalCards;
+            wcUpdateGsCards();
+        }
+    });
+}
+
+// 注入全局 CSS 到页面
+function wcApplyGlobalCssToDom() {
+    let styleTag = document.getElementById('wc-global-custom-css-inject');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'wc-global-custom-css-inject';
+        document.head.appendChild(styleTag);
+    }
+    
+    let cssContent = wcState.globalConfig.customCss || '';
+    
+    // 注入置顶专属 CSS
+    if (wcState.globalConfig.pinCss) {
+        // 将用户写的 CSS 包装在 .wc-pinned-chat 选择器下
+        cssContent += `\n.wc-pinned-chat { ${wcState.globalConfig.pinCss} }\n`;
+    }
+    
+    styleTag.innerHTML = cssContent;
 }
 
 async function wcExportData() {
@@ -9385,6 +9938,13 @@ function wcRenderChats() {
         div.className = 'wc-chat-swipe-container';
         const pinClass = char.isPinned ? "wc-pinned-chat" : "";
         
+        // 👇 新增：获取自定义置顶字样
+        let pinTagHtml = '';
+        if (char.isPinned) {
+            const pinText = wcState.globalConfig.pinText || 'ㅠㅅㅠ';
+            pinTagHtml = `<span class="wc-custom-pin-tag">${pinText}</span>`;
+        }
+        
         const unreadCount = wcState.unreadCounts[char.id] || 0;
         const badgeHtml = unreadCount > 0 ? `<div class="wc-unread-badge">${unreadCount > 99 ? '99+' : unreadCount}</div>` : '';
 
@@ -9396,7 +9956,7 @@ function wcRenderChats() {
                     ${badgeHtml}
                 </div>
                 <div class="wc-item-content">
-                    <div class="wc-item-title">${char.note || char.name}${char.isGroup && char.members ? ` (${char.members.length})` : ''}</div>
+                    <div class="wc-item-title">${char.note || char.name}${char.isGroup && char.members ? ` (${char.members.length})` : ''}${pinTagHtml}</div>
                     <div class="wc-item-subtitle">${subtitle}</div>
                 </div>
                 <div class="wc-chat-time">${timeStr}</div>
@@ -9730,8 +10290,20 @@ function wcRenderUser() {
         // 渲染当前身份 (状态为 LINKED)
         cardsHtml += `
             <div class="id-card-item" onclick="wcShowPersona('当前身份: ${safeCurrentName}', '${safeCurrentPrompt}')">
+                <div class="id-card-pendant">
+                    <div class="pendant-hole"></div>
+                    <div class="pendant-chain"></div>
+                    <div class="pendant-star">
+                        <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    </div>
+                </div>
                 <div class="id-card-top">
-                    <img src="${wcState.user.avatar}" class="id-card-avatar">
+                    <div class="id-card-avatar-wrapper">
+                        <img src="${wcState.user.avatar}" class="id-card-avatar">
+                        <svg class="id-card-star star-1" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        <svg class="id-card-star star-2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        <svg class="id-card-star star-3" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    </div>
                     <div class="id-card-info">
                         <div class="id-card-label">SUBJECT NAME</div>
                         <div class="id-card-name">${safeCurrentName}</div>
@@ -9749,7 +10321,6 @@ function wcRenderUser() {
         if (wcState.masks && wcState.masks.length > 0) {
             wcState.masks.forEach(m => {
                 // 避免重复渲染当前正在使用的面具
-                // 👈 核心修复：通过专属 maskId 精准判断，即使改了朋友圈名字，也不会多出一个面具
                 let isCurrentMask = false;
                 if (wcState.user.maskId) {
                     isCurrentMask = (m.id === wcState.user.maskId);
@@ -9762,8 +10333,17 @@ function wcRenderUser() {
                     const safePrompt = (m.prompt || '暂无设定').replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, '<br>');
                     cardsHtml += `
                         <div class="id-card-item" onclick="wcShowPersona('面具: ${safeName}', '${safePrompt}')">
+                            <div class="id-card-pendant">
+                                <div class="pendant-hole"></div>
+                                <!-- 备用面具没有链子和星星挂坠 -->
+                            </div>
                             <div class="id-card-top">
-                                <img src="${m.avatar}" class="id-card-avatar">
+                                <div class="id-card-avatar-wrapper">
+                                    <img src="${m.avatar}" class="id-card-avatar">
+                                    <svg class="id-card-star star-1" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                    <svg class="id-card-star star-2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                    <svg class="id-card-star star-3" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                </div>
                                 <div class="id-card-info">
                                     <div class="id-card-label">SUBJECT NAME</div>
                                     <div class="id-card-name">${safeName}</div>
@@ -10464,11 +11044,7 @@ async function handleWorldbookImport(event) {
         await saveWorldbookData();
         
         // 刷新世界书视图
-        if (document.getElementById('tab-wb-all').classList.contains('active')) {
-            renderWorldbookList();
-        } else {
-            renderGroupView();
-        }
+        renderWbEnvelopeList();
         
         wcShowSuccess(`成功导入 ${importedCount} 个世界书条目`);
     } catch (e) {
@@ -11272,6 +11848,10 @@ async function wcGeneratePhonePrivacy() {
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(${userName})设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; // 新增
+        if (chatConfig.bilingualEnabled) {
+            const targetLang = chatConfig.bilingualTarget || '中文';
+            prompt += `\n【语言强制要求】：虽然聊天记录中包含外语，但你生成的手机内部所有数据（如状态、动作、感受等）必须全部使用 ${targetLang}！绝对不要使用双语格式！\n`;
+        }
         prompt += `【核心场景设定】：我（${userName}）现在正在偷偷查看你（${char.name}）手机上的私密记录APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
@@ -11467,6 +12047,10 @@ async function wcGenerateCharWallet() {
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(User)设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; 
+        if (chatConfig.bilingualEnabled) {
+            const targetLang = chatConfig.bilingualTarget || '中文';
+            prompt += `\n【语言强制要求】：虽然聊天记录中包含外语，但你生成的手机内部所有数据（如备注、明细等）必须全部使用 ${targetLang}！绝对不要使用双语格式！\n`;
+        }
         prompt += `【最近聊天记录】：\n${recentMsgs}\n\n`;
         
         prompt += `请根据角色的人设、当前生活状态以及聊天记录，生成该角色的微信钱包数据。\n`;
@@ -12069,6 +12653,11 @@ async function wcGeneratePhoneChats() {
         let prompt = `你扮演角色：${char.name}。\n人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【当前时间】：${timeString}\n`;
         prompt += `【重要：用户身份】\n用户(${userName})的名字是：${userName}。\n用户在你的生活中的角色/人设是：${userPersona}。\n`;
+        if (chatConfig.bilingualEnabled) {
+            const sourceLang = chatConfig.bilingualSource || '英语';
+            const targetLang = chatConfig.bilingualTarget || '中文';
+            prompt += `\n【语言强制要求】：请在 "history" 的 "content" 字段中，继续使用双语格式（上面是${sourceLang}，下面是${targetLang}，用 <br><span style='font-size: 0.85em; opacity: 0.7;'> 包裹译文）。\n`;
+        }
         prompt += `【最近你与User的聊天记录】：\n${recentMsgs}\n\n`;
         prompt += `${contactsInfo}\n\n`;
         
@@ -12079,7 +12668,7 @@ async function wcGeneratePhoneChats() {
         prompt += `3. 其他会话必须从【通讯录NPC列表】中挑选人物/群聊生成，isGroup 表示是否为群聊。\n`;
         prompt += `4. 【最重要：独立社交指令】：你和 NPC 的聊天内容必须是真实的社交日常！例如：吐槽奇葩老板、聊游戏开黑、拼单点外卖、借钱、分享搞笑视频等。**绝对不要在每个群里都聊 ${userName}！你的世界不是只有 ${userName}！**同时要确保 ${userName} 可以隐秘体现在你的社交圈和你的生活里面！\n`;
         prompt += `5. 每个会话必须包含一个 "history" 数组，里面必须包含 8 到 15 条具体的聊天记录！绝对不能少于8条！\n`;
-        prompt += `6. history 中的消息，sender 为 "me" 代表手机主人(${char.name})发出的，sender 为 "them" 代表对方发出的。\n`;
+        prompt += `6. history 中的消息，sender 为 "me" 代表手机主人(${char.name})发出的，sender 为 "them" 代表对方发出的。如果是群聊(isGroup为true)，必须在 history 的每条消息中加上 "name" 字段标明发言人！\n`;
         prompt += `【内在逻辑要求】：在生成 JSON 之前，请确保你的内部推演包含：\n`;
         prompt += `1. 结合当前时间、地点和心情，推断你最近在和谁聊天，聊些什么（工作、八卦、游戏、求助等）。\n`;
         prompt += `2. 构思如何体现你独立的生活社交圈，同时也要保证 User 隐秘体现在你的社交圈和你的生活。\n`;
@@ -12090,16 +12679,16 @@ async function wcGeneratePhoneChats() {
   {
     "name": "${userName}的备注名", "isUser": true, "isGroup": false, "lastMsg": "最近的一条消息", "time": "10:30",
     "history": [
-      {"sender": "them", "content": "在干嘛？"},
-      {"sender": "me", "content": "刚吃完饭"}
+      {"sender": "them", "name": "${userName}", "content": "在干嘛？"},
+      {"sender": "me", "name": "${char.name}", "content": "刚吃完饭"}
       // ... 确保这里有 8-15 条
     ]
   },
   {
-    "name": "张三", "isUser": false, "isGroup": false, "lastMsg": "好的老板", "time": "星期二",
+    "name": "工作群", "isUser": false, "isGroup": true, "lastMsg": "收到", "time": "星期二",
     "history": [
-      {"sender": "them", "content": "这份文件看一下"},
-      {"sender": "me", "content": "好的老板"}
+      {"sender": "them", "name": "老板", "content": "这份文件看一下"},
+      {"sender": "me", "name": "${char.name}", "content": "收到"}
       // ... 确保这里有 8-15 条
     ]
   }
@@ -12826,6 +13415,10 @@ async function wcGeneratePhoneContacts() {
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【重要：用户身份】\n用户(User)的名字是：${userName}。\n用户在你的生活中的角色/人设是：${userPersona}。\n`;
         prompt += groupCharsPrompt; // 注入强指令
+        if (chatConfig.bilingualEnabled) {
+            const targetLang = chatConfig.bilingualTarget || '中文';
+            prompt += `\n【语言强制要求】：虽然聊天记录中包含外语，但你生成的通讯录所有数据（如给用户的备注名、好友的备注名、好友描述等）必须全部使用 ${targetLang}！绝对不要使用双语格式！\n`;
+        }
         
         prompt += `请生成你的微信通讯录数据。总人数在 ${min} 到 ${max} 之间。\n`;
         prompt += `【要求】：\n`;
@@ -13608,18 +14201,6 @@ async function wcSaveChatSettings() {
     wcCloseModal('wc-modal-chat-settings');
 }
 
-async function wcClearData() {
-    if (confirm("警告：此操作将永久删除 WeChat 的所有数据！确定要继续吗？")) {
-        const stores = ['kv_store', 'characters', 'chats', 'moments', 'masks'];
-        for (const store of stores) {
-            await wcClearStore(store);
-        }
-        await wcClearCharactersPersistentSnapshot();
-        alert("WeChat 数据已清空，页面将重置。");
-        location.reload();
-    }
-}
-
 async function wcClearAllCssBeautification() {
     if (confirm("确定要清空所有角色的 CSS 美化代码吗？\n（仅清空当前应用的 CSS，不影响预设库和其他聊天设置）")) {
         let clearedCount = 0;
@@ -13710,18 +14291,73 @@ function wcApplyCssPreset(idx) {
 }
 
 // --- WeChat Masks ---
-function wcOpenMasksModal() { wcOpenModal('wc-modal-masks'); wcRenderMasks(); }
+// 1. 打开旧版弹窗 (用于快速切换)
+function wcOpenQuickMaskSelect() { 
+    wcOpenModal('wc-modal-masks'); 
+    wcRenderMasks(); 
+}
+
+// 2. 打开新版全屏页 (用于管理)
+function wcOpenFullScreenMasks() {
+    document.getElementById('wc-view-masks-fullscreen').classList.add('active');
+    if (typeof wcRenderFullScreenMasks === 'function') {
+        wcRenderFullScreenMasks();
+    }
+}
+
+// 3. 关闭全屏页
+window.wcCloseMasksFullscreen = function() {
+    document.getElementById('wc-view-masks-fullscreen').classList.remove('active');
+};
+
+// 4. 渲染旧版弹窗列表 (去除了删除按钮，只保留使用)
 function wcRenderMasks() {
     const list = document.getElementById('wc-masks-list');
+    if (!list) return;
     list.innerHTML = '';
     wcState.masks.forEach(mask => {
         const div = document.createElement('div');
         div.className = 'wc-list-item';
-        div.innerHTML = `<img src="${mask.avatar}" class="wc-avatar"><div class="wc-item-content"><div class="wc-item-title">${mask.name}</div><div class="wc-item-subtitle">${mask.prompt.substring(0, 20)}...</div></div><button class="wc-nav-btn" style="margin-right:10px" onclick="wcApplyMask(${mask.id})">使用</button><button class="wc-nav-btn" style="color:red" onclick="wcDeleteMask(${mask.id})">删除</button>`;
-        div.onclick = (e) => { if(e.target.tagName !== 'BUTTON') wcOpenEditMask(mask.id); };
+        div.innerHTML = `
+            <img src="${mask.avatar}" class="wc-avatar">
+            <div class="wc-item-content">
+                <div class="wc-item-title">${mask.name}</div>
+                <div class="wc-item-subtitle">${mask.prompt.substring(0, 20)}...</div>
+            </div>
+            <button class="wc-nav-btn" style="color:#007AFF; font-weight:bold;" onclick="wcApplyMask(${mask.id})">使用</button>
+        `;
         list.appendChild(div);
     });
 }
+
+// 5. 覆盖旧的 wcApplyMask，确保同时关闭两个视图
+const originalWcApplyMask = wcApplyMask;
+window.wcApplyMask = function(id) {
+    originalWcApplyMask(id);
+    wcCloseMasksFullscreen();
+    wcCloseModal('wc-modal-masks');
+};
+
+// 6. 覆盖旧的 wcSaveMask，保存后刷新两个视图
+const originalWcSaveMask = wcSaveMask;
+window.wcSaveMask = function() {
+    originalWcSaveMask();
+    wcRenderMasks();
+    if (typeof wcRenderFullScreenMasks === 'function') {
+        wcRenderFullScreenMasks();
+    }
+};
+
+// 7. 覆盖旧的 wcDeleteMask，删除后刷新两个视图
+const originalWcDeleteMask = wcDeleteMask;
+window.wcDeleteMask = function(id) {
+    originalWcDeleteMask(id);
+    wcRenderMasks();
+    if (typeof wcRenderFullScreenMasks === 'function') {
+        wcRenderFullScreenMasks();
+    }
+};
+
 function wcOpenEditMask(id = null) {
     wcState.editingMaskId = id;
     wcState.tempImage = '';
@@ -16319,6 +16955,10 @@ async function wcGeneratePhoneFavorites() {
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(${userName})设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; // 新增
+        if (chatConfig.bilingualEnabled) {
+            const targetLang = chatConfig.bilingualTarget || '中文';
+            prompt += `\n【语言强制要求】：虽然聊天记录中包含外语，但你生成的手机内部所有数据（如备忘录、日记等）必须全部使用 ${targetLang}！绝对不要使用双语格式！\n`;
+        }
         prompt += `【核心场景设定】：我（${userName}）现在正在偷偷查看你（${char.name}）手机上的微信“我的收藏”。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;               
         prompt += `请基于你的人设、当前生活状态，以及我们**最近的聊天上下文**，生成你的微信收藏内容。\n`;       
@@ -16591,6 +17231,10 @@ async function wcGeneratePhoneBrowser() {
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(${userName})设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; 
+        if (chatConfig.bilingualEnabled) {
+            const targetLang = chatConfig.bilingualTarget || '中文';
+            prompt += `\n【语言强制要求】：虽然聊天记录中包含外语，但你生成的手机内部所有数据（如浏览记录、帖子等）必须全部使用 ${targetLang}！绝对不要使用双语格式！\n`;
+        }
         prompt += `【核心场景设定】：我（${userName}）现在正在偷偷查看你（${char.name}）手机上的浏览器APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
@@ -18146,6 +18790,10 @@ async function wcGeneratePhoneCart() {
         prompt += `人设：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(${userName})设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; 
+        if (chatConfig.bilingualEnabled) {
+            const targetLang = chatConfig.bilingualTarget || '中文';
+            prompt += `\n【语言强制要求】：虽然聊天记录中包含外语，但你生成的手机内部所有数据（如商品名、内心OS等）必须全部使用 ${targetLang}！绝对不要使用双语格式！\n`;
+        }
         prompt += `【核心场景设定】：我（${userName}）现在正在偷偷查看你（${char.name}）手机上的购物APP。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         
@@ -35864,7 +36512,7 @@ function makeMainWidgetDraggable(el) {
 // 新增：一键生成查手机所有内容 (除通讯录和歌单)
 // ==========================================================================
 function wcConfirmGenerateAllPhoneData() {
-    if (confirm("是否一键生成查手机所有内容？\n（将覆盖现有的手机状态、浏览器、隐私、购物车、钱包和聊天记录，不包含通讯录和歌单）\n\n注意：生成内容较多，可能需要等待较长时间。")) {
+    if (confirm("是否一键生成查手机所有内容？\n（将覆盖现有的抖音，文件管理，手机状态、浏览器、隐私、购物车、钱包和聊天记录，不包含通讯录和歌单）\n\n注意：生成内容较多，可能需要等待较长时间。")) {
         wcGenerateAllPhoneData();
     }
 }
@@ -35930,20 +36578,27 @@ async function wcGenerateAllPhoneData() {
         prompt += `【你的人设】：${char.prompt}\n${wbInfo}\n`;
         prompt += `【用户(${userName})设定】：${userPersona}\n`;
         prompt += lifeStatusPrompt; 
+        if (chatConfig.bilingualEnabled) {
+            const sourceLang = chatConfig.bilingualSource || '英语';
+            const targetLang = chatConfig.bilingualTarget || '中文';
+            prompt += `\n【语言强制要求】：除了 "chats" (聊天记录) 里的 "content" 可以继续使用双语格式（${sourceLang}和${targetLang}）外，你生成的其他所有手机内部数据（如备忘录、浏览记录、账单、私密记录等）必须全部使用 ${targetLang}！绝对不要在非聊天记录的地方使用双语格式！\n`;
+        }
         prompt += `【核心场景设定】：我（${userName}）现在正在偷偷查看你（${char.name}）的手机。\n`;
         prompt += `【最近我们的聊天记录（20-30条）】：\n${recentMsgs}\n\n`;
         prompt += `${contactsInfo}\n\n`;
         
         prompt += `请基于你的人设、世界观背景、当前生活状态，以及我们**最近的聊天上下文**，一次性生成你手机里的各项数据（不包含通讯录和歌单）。\n`;
         prompt += `【核心要求（极具活人感与强因果逻辑）】：\n`;
-        prompt += `0. 【最高警告】：所有生成的内容（浏览记录、私密日记、购物车、聊天记录等）必须严格符合【世界观背景】和【你的人设】，并且必须是对【最近聊天记录】的延伸、复盘或吐槽！绝对不要生成毫无关联的模板化内容！\n`;
-        prompt += `1. 手机状态 (settings)：包含 battery(电量数字), screenTime(屏幕使用时间), appUsage(3-6个APP使用时长), locations(3-6个今日行程记录)。\n`;
-        prompt += `2. 浏览器 (browser)：包含 history(3-6条浏览记录，带内心批注), posts(2-4个论坛帖子，带评论)。\n`;
+        prompt += `0. 【最高警告】：所有生成的内容必须严格符合【世界观背景】和【你的人设】，并且必须是对【最近聊天记录】的延伸、复盘或吐槽！\n`;
+        prompt += `1. 手机状态 (settings)：包含 battery(电量), screenTime(屏幕时间), appUsage(3-6个APP时长), locations(3-6个今日行程)。\n`;
+        prompt += `2. 浏览器 (browser)：包含 history(3-6条浏览记录,带内心批注), posts(2-4个论坛帖子,带评论)。\n`;
         prompt += `3. 私密记录 (privacy)：包含 masturbation(自慰记录) 和 wetDream(春梦记录)。\n`;
         prompt += `4. 购物车 (cartApp)：包含 cart(3-6条购物车商品) 和 history(3-6条购买记录)。\n`;
-        prompt += `5. 钱包 (wallet)：包含 balance(余额数字) 和 transactions(4-8条交易记录，type为income或expense)。\n`;
-        prompt += `6. 聊天记录 (chats)：生成 3-6 个聊天会话。必须包含一个与用户(${userName})的会话(isUser为true)。其他会话从【通讯录NPC列表】中挑选。每个会话的 history 数组包含 5-10 条具体聊天记录(sender为me或them)。\n`;
-        prompt += `【内在逻辑要求】：所有数据必须相互呼应！例如行程里去了便利店，钱包里就该有支出；聊天里提到了某物，浏览器或购物车里就该有相关记录。\n`;
+        prompt += `5. 钱包 (wallet)：包含 balance(余额) 和 transactions(4-8条交易记录)。\n`;
+        prompt += `6. 聊天记录 (chats)：生成 3-6 个聊天会话。必须包含一个与用户(${userName})的会话。如果是群聊(isGroup为true)，history里的每条消息必须带上 "name" 字段标明发言人！\n`;
+        prompt += `7. 短视频 (videoApp)：包含 homeFeed(3个推荐视频), profile(个人主页数据,含posts/likedPosts/privatePosts), inbox(2条私信), discover(3个热搜), drafts(1个草稿)。\n`;
+        prompt += `8. 文件管理 (filesApp)：包含 homeCards(3个最近文件), photos(3张照片描述), audios(2条录音), docs(2个文档)。\n`;
+        prompt += `【极度精简警告】：由于生成数据量极大，请务必精简每个字段的字数，不要长篇大论，确保能一次性输出完整的 JSON！\n`;
         prompt += `推演结束后，直接返回纯 JSON 对象，格式如下：\n`;
         prompt += `{
   "settings": {
@@ -35969,13 +36624,30 @@ async function wcGenerateAllPhoneData() {
   },
   "chats": [
     {
-      "name": "${userName}的备注名", "isUser": true, "isGroup": false, "lastMsg": "最近的一条消息", "time": "10:30",
+      "name": "工作群", "isUser": false, "isGroup": true, "lastMsg": "收到", "time": "10:30",
       "history": [
-        {"sender": "them", "content": "在干嘛？"},
-        {"sender": "me", "content": "刚吃完饭"}
+        {"sender": "them", "name": "老板", "content": "开会"},
+        {"sender": "me", "name": "${char.name}", "content": "收到"}
       ]
     }
-  ]
+  ],
+  "videoApp": {
+    "homeFeed": [{"author": "@网友", "imageDesc": "[画面]猫", "desc": "可爱", "likes": "10k", "commentCount": "1k", "saves": "1k", "shares": "1k", "comments": [{"name": "A", "text": "萌"}]}],
+    "profile": {
+      "followers": "10K", "following": "10", "likes": "1M",
+      "posts": [{"imageDesc": "[画面]风景", "desc": "今天天气真好", "views": "1K", "likes": "100", "commentCount": "10", "saves": "5", "shares": "2", "comments": []}],
+      "likedPosts": [], "privatePosts": []
+    },
+    "inbox": [{"name": "路人", "msg": "你好", "time": "1h"}],
+    "discover": [{"title": "热搜事件", "views": "1M"}],
+    "drafts": []
+  },
+  "filesApp": {
+    "homeCards": [{"type": "image", "title": "1.jpg", "desc": "照片描述", "meta": "地点", "size": "1MB"}],
+    "photos": [{"desc": "照片描述"}],
+    "audios": [{"title": "录音", "duration": "01:00", "date": "今天", "content": "转写内容"}],
+    "docs": [{"title": "文档.pdf", "size": "1MB", "date": "今天", "type": "pdf", "content": "正文"}]
+  }
 }\n`;
 
         const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
@@ -36019,6 +36691,49 @@ async function wcGenerateAllPhoneData() {
         if (resultData.cartApp) char.phoneData.cartApp = resultData.cartApp;
         if (resultData.wallet) char.phoneData.wallet = resultData.wallet;
         
+        // 👇 新增：保存短视频和文件管理数据 👇
+        if (resultData.videoApp) {
+            // 为短视频注入随机头像
+            if (resultData.videoApp.homeFeed) {
+                resultData.videoApp.homeFeed.forEach(v => {
+                    v.avatar = getRandomNpcAvatar();
+                    if (v.comments) v.comments.forEach(c => c.avatar = getRandomNpcAvatar());
+                });
+            }
+            if (resultData.videoApp.inbox) {
+                resultData.videoApp.inbox.forEach(msg => msg.avatar = getRandomNpcAvatar());
+            }
+            if (resultData.videoApp.profile) {
+                if (resultData.videoApp.profile.posts) {
+                    resultData.videoApp.profile.posts.forEach(p => {
+                        if (p.comments) p.comments.forEach(c => c.avatar = getRandomNpcAvatar());
+                    });
+                }
+                if (resultData.videoApp.profile.likedPosts) {
+                    resultData.videoApp.profile.likedPosts.forEach(p => {
+                        p.avatar = getRandomNpcAvatar();
+                        if (p.comments) p.comments.forEach(c => c.avatar = getRandomNpcAvatar());
+                    });
+                }
+                if (resultData.videoApp.profile.privatePosts) {
+                    resultData.videoApp.profile.privatePosts.forEach(p => {
+                        if (p.comments) p.comments.forEach(c => c.avatar = getRandomNpcAvatar());
+                    });
+                }
+            }
+            if (resultData.videoApp.drafts) {
+                resultData.videoApp.drafts.forEach(p => {
+                    if (p.comments) p.comments.forEach(c => c.avatar = getRandomNpcAvatar());
+                });
+            }
+            char.phoneData.videoApp = resultData.videoApp;
+        }
+        
+        if (resultData.filesApp) {
+            char.phoneData.filesApp = resultData.filesApp;
+        }
+        // 👆 新增结束 👆
+
         // 处理聊天记录
         if (resultData.chats) {
             const formattedChats = resultData.chats.map(c => ({
@@ -36043,6 +36758,15 @@ async function wcGenerateAllPhoneData() {
         if (document.getElementById('wc-phone-app-cart').style.display === 'flex') wcRenderPhoneCartContent();
         if (document.getElementById('wc-phone-app-wallet').style.display === 'flex') wcRenderPhoneWalletContent();
         if (document.getElementById('wc-phone-app-message').style.display === 'flex') wcRenderPhoneChats();
+        
+        // 👇 新增：刷新短视频和文件管理页面 👇
+        if (document.getElementById('videoApp') && document.getElementById('videoApp').classList.contains('active')) {
+            if (typeof wcRenderVideoApp === 'function') wcRenderVideoApp();
+        }
+        if (document.getElementById('wc-phone-app-files') && document.getElementById('wc-phone-app-files').style.display === 'flex') {
+            if (typeof wcRenderPhoneFilesContent === 'function') wcRenderPhoneFilesContent();
+        }
+        // 👆 新增结束 👆
 
         wcShowSuccess("一键生成成功");
 
@@ -37708,6 +38432,10 @@ window.wcGeneratePhoneFiles = async function() {
         let prompt = `你现在是一个手机文件管理系统的后台数据引擎。我（${userName}）正在偷偷查看【${char.name}】的手机文件。\n`;
         prompt += `【${char.name} 的人设】：${char.prompt}\n${wbInfo}\n`;
         prompt += `【我(${userName}) 的设定】：${userPersona}\n`;
+        if (chatConfig.bilingualEnabled) {
+            const targetLang = chatConfig.bilingualTarget || '中文';
+            prompt += `\n【语言强制要求】：虽然聊天记录中包含外语，但你生成的手机内部所有数据（如文档内容、录音转写等）必须全部使用 ${targetLang}！绝对不要使用双语格式！\n`;
+        }
         prompt += `【最近我们的聊天记录】：\n${recentMsgs}\n\n`;
         
         prompt += `请根据 ${char.name} 的人设和我们最近的聊天记录，生成 Ta 手机里的私密文件数据。\n`;
@@ -37869,4 +38597,59 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'Enter') wcPerformChatSearch();
         });
     }
+});
+// ==========================================
+// 悬浮视窗菜单显示/隐藏逻辑
+// ==========================================
+window.toggleRetroMenu = function(menuId, event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    // 先关闭所有可能打开的悬浮窗
+    document.querySelectorAll('.ins-window-card').forEach(el => {
+        if (el.id !== menuId) {
+            el.classList.remove('show');
+        }
+    });
+    
+    // 切换当前点击的悬浮窗
+    const menu = document.getElementById(menuId);
+    if (menu) {
+        menu.classList.toggle('show');
+        
+        // 同步五角星的高亮状态
+        const starBtn = event.currentTarget;
+        if (menu.classList.contains('show')) {
+            starBtn.classList.add('active');
+        } else {
+            starBtn.classList.remove('active');
+            // 关闭时自动退出编辑模式
+            const type = menuId.includes('icon') ? 'icon' : 'font';
+            presetEditState[type] = false;
+            const listEl = document.getElementById(type + 'PresetList');
+            if (listEl) listEl.classList.remove('edit-mode');
+        }
+    }
+};
+
+// 全局点击事件：点击空白处隐藏悬浮窗
+document.addEventListener('click', (e) => {
+    document.querySelectorAll('.ins-window-card').forEach(menu => {
+        if (menu.classList.contains('show')) {
+            // 如果点击的不是菜单内部，也不是五角星按钮，就关闭菜单
+            if (!e.target.closest('.ins-window-card') && !e.target.closest('.ts-star-btn')) {
+                menu.classList.remove('show');
+                
+                // 移除五角星高亮
+                document.querySelectorAll('.ts-star-btn').forEach(btn => btn.classList.remove('active'));
+                
+                // 关闭时自动退出编辑模式
+                presetEditState.icon = false;
+                presetEditState.font = false;
+                document.querySelectorAll('.ins-window-body').forEach(body => body.classList.remove('edit-mode'));
+            }
+        }
+    });
 });

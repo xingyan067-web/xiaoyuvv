@@ -151,11 +151,8 @@ function smsRenderRoot() {
                         <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: currentColor;"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
                     </div>
                     <input type="text" id="sms-chat-input" placeholder="iMessage" onkeypress="if(event.key==='Enter') smsSendMessage()" style="flex: 1; height: 36px; border-radius: 18px; border: 1px solid #F0F0F0; padding: 0 16px; font-size: 15px; outline: none; background: #F9F9F9;">
-                    <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
-                        <div style="width: 32px; height: 32px; background: #111; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FFF; font-weight: bold; font-family: sans-serif; font-size: 14px;">in</div>
-                        <div onclick="smsSendMessage()" style="width: 32px; height: 32px; background: #111; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #FFF; cursor: pointer;">
-                            <svg viewBox="0 0 24 24" style="width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path><line x1="12" y1="8" x2="12" y2="14"></line><line x1="9" y1="11" x2="15" y2="11"></line></svg>
-                        </div>
+                    <div onclick="smsSendMessage()" style="background: #111; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #FFF; font-weight: bold; font-size: 14px; cursor: pointer; padding: 0 16px; height: 36px; flex-shrink: 0;">
+                        Endit
                     </div>
                 </div>
             </div>
@@ -880,3 +877,62 @@ async function smsLoadData() {
 window.addEventListener('load', async () => {
     await smsLoadData();
 });
+// ==========================================
+// 新版全屏面具 (Masks) 渲染逻辑
+// ==========================================
+window.wcRenderFullScreenMasks = function() {
+    const list = document.getElementById('wc-masks-fullscreen-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!wcState.masks || wcState.masks.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; margin-top:50px; font-size:14px;">暂无面具，点击右上角 ＋ 添加吧</div>';
+        return;
+    }
+
+    wcState.masks.forEach(mask => {
+        const isCurrent = wcState.user.maskId === mask.id || (wcState.user.name === mask.name && wcState.user.avatar === mask.avatar);
+        const currentTag = isCurrent ? '<span style="color:#007AFF; font-size:10px; margin-left:4px;">(当前)</span>' : '';
+
+        const card = document.createElement('div');
+        card.className = 'mask-card';
+        
+        card.innerHTML = `
+            <div class="mask-card-tabs">
+                <div class="mask-tab-main" onclick="wcApplyMask(${mask.id})" title="点击应用此面具">
+                    ${mask.name} ${currentTag}
+                </div>
+                <div class="mask-tab-edit" onclick="wcOpenEditMask(${mask.id})">Edit</div>
+                <div class="mask-tab-delete" onclick="wcDeleteMask(${mask.id})">Delete</div>
+            </div>
+            <div class="mask-card-body">
+                <div class="mask-card-left">
+                    <div class="mask-avatar-wrapper">
+                        <svg class="mask-star star-tl" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        <svg class="mask-star star-tr" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        <svg class="mask-star star-bl" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        <svg class="mask-star star-br" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                        <img src="${mask.avatar}" class="mask-avatar-img">
+                    </div>
+                    <div class="mask-char-name">${mask.name}</div>
+                </div>
+                <div class="mask-card-right">
+                    <div class="mask-gender-box">
+                        <span class="mask-gender-label">GENDER</span>
+                        <span class="mask-gender-value">${mask.gender || '保密'}</span>
+                    </div>
+                    <div class="mask-prompt-box">
+                        <div class="mask-prompt-label">
+                            <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                            PROMPT
+                        </div>
+                        <div class="mask-prompt-text">
+                            ${mask.prompt || '暂无设定...'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+};
