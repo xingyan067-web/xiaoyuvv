@@ -2790,7 +2790,7 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     width: 100%;
     height: calc(60px + env(safe-area-inset-top, 20px)); 
     background: #F2F2F7; 
-    z-index: 9999; /* 👈 核心修复：提高到 9999，绝对在最上层 */
+    z-index: 20000; /* 👈 核心修复：提高到 20000，确保盖过双头像顶栏 */
     display: none; 
     justify-content: space-between;
     align-items: flex-end; 
@@ -2798,7 +2798,22 @@ button.action-btn.destructive { background-color: #ff3b30; color: white; margin-
     box-sizing: border-box;
     border-bottom: 0.5px solid #C6C6C8;
 }
+
+/* 👇 新增：多选模式下的顶栏覆盖与留白修复 👇 */
+/* 1. 多选模式下，强制隐藏原有的微信顶栏（包括双头像） */
+body.multi-select-active .wc-navbar {
+    display: none !important;
+}
+
+/* 2. 多选模式下，强制重置聊天区域的 padding-top，无视双头像的加宽 */
+body.multi-select-active #wc-view-chat-detail .wc-chat-scroll-area,
+body.multi-select-active #wc-view-chat-detail.with-avatars .wc-chat-scroll-area {
+    padding-top: calc(60px + env(safe-area-inset-top, 20px) + 10px) !important;
+}
+/* 👆 新增结束 👆 */
+
 .wc-multi-select-header.active {
+
     display: flex;
 }
 .wc-multi-header-btn {

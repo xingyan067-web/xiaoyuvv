@@ -762,6 +762,21 @@ updateAppViewportVars();
             }, 300); // 延迟等待键盘完全弹出
         });
     }
+
+    // 👇 新增：修复新建/编辑角色、面具时，人设输入框被键盘遮挡的问题 👇
+    const promptInputs = ['wc-input-char-prompt', 'wc-edit-char-prompt', 'wc-input-mask-prompt'];
+    promptInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('focus', function() {
+                setTimeout(() => {
+                    // 键盘弹出后，强制将输入框滚动到屏幕中央
+                    this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 300); // 延迟 300ms 等待 iOS 键盘完全弹起
+            });
+        }
+    });
+    // 👆 新增结束 👆
          
     // 延迟 1.5 秒检查并弹出系统更新日志
     setTimeout(checkSystemUpdate, 1500); 
@@ -5707,6 +5722,9 @@ function wcHandleMultiSelect() {
         wcMultiSelectBackupChat = JSON.parse(JSON.stringify(wcState.chats[charId]));
     }
     
+    // 👇 新增：给 body 添加多选模式的专属类名 👇
+    document.body.classList.add('multi-select-active');
+    
     wcHideContextMenu();
     wcRenderMessages(wcState.activeChatId);
     document.getElementById('wc-multi-select-footer').style.display = 'flex';
@@ -5941,6 +5959,9 @@ function wcExitMultiSelectMode() {
 
     wcState.isMultiSelectMode = false;
     wcState.multiSelectedIds = [];
+    
+    // 👇 新增：退出多选模式时，移除专属类名 👇
+    document.body.classList.remove('multi-select-active');
     
     const footer = document.getElementById('wc-multi-select-footer');
     if (footer) footer.style.display = 'none';
