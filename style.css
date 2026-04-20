@@ -14192,7 +14192,7 @@ body.edit-mode-active .widget-remove-btn { display: flex; }
 }
 
 .mask-edit-fullscreen {
-    width: 100%; height: 100%; background: #FAFAFA;
+    width: 100%; height: 100%; max-height: var(--app-height, 100vh); background: #FAFAFA;
     display: flex; flex-direction: column;
     animation: wcSlideInRight 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
     border-radius: 0 !important; margin: 0 !important; max-width: 100% !important;

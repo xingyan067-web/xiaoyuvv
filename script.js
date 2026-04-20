@@ -763,16 +763,39 @@ updateAppViewportVars();
         });
     }
 
-    // 👇 新增：修复新建/编辑角色、面具时，人设输入框被键盘遮挡的问题 👇
+    // 👇 新增：修复新建/编辑角色、面具时，人设输入框被 iOS 键盘遮挡的问题 👇
     const promptInputs = ['wc-input-char-prompt', 'wc-edit-char-prompt', 'wc-input-mask-prompt'];
     promptInputs.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener('focus', function() {
+                const textarea = this;
+                // 🍎 iOS 专属：延迟等待键盘完全弹出，然后手动滚动父容器
                 setTimeout(() => {
-                    // 键盘弹出后，强制将输入框滚动到屏幕中央
-                    this.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 300); // 延迟 300ms 等待 iOS 键盘完全弹起
+                    const scrollContainer = textarea.closest('.mask-edit-body, .wc-modal-body');
+                    if (scrollContainer) {
+                        // 计算输入框相对于滚动容器的位置
+                        const containerRect = scrollContainer.getBoundingClientRect();
+                        const textareaRect = textarea.getBoundingClientRect();
+                        // 目标：将输入框滚动到容器可视区域的中间偏上位置
+                        const targetScrollTop = scrollContainer.scrollTop + (textareaRect.top - containerRect.top) - (containerRect.height * 0.3);
+                        scrollContainer.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'smooth' });
+                    } else {
+                        // 兜底：如果找不到滚动容器，用原生 scrollIntoView
+                        textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 400); // 延迟 400ms 等待 iOS 键盘完全弹起
+            });
+            
+            // 👇 核心修复：失去焦点（键盘收起）时，让父容器平滑滚动回顶部
+            el.addEventListener('blur', function() {
+                setTimeout(() => {
+                    // 兼容新版手账风容器和旧版弹窗容器
+                    const scrollContainer = this.closest('.mask-edit-body, .wc-modal-body');
+                    if (scrollContainer) {
+                        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                }, 100); // 稍微延迟一下，等键盘完全收起
             });
         }
     });
