@@ -2916,22 +2916,40 @@
                 </div>
             </div>
             <div class="wb-editor-content">
-                <div class="wb-editor-card">
-                    <div class="wb-editor-card-header">
-                        <div class="wb-editor-title-area">
-                            <div class="wb-editor-input-row">
-                                <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
-                                <input type="text" id="wbTitleInput" class="wb-editor-line-input" placeholder="条目名称 (Title)">
-                            </div>
-                            <div class="wb-editor-input-row">
-                                <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
-                                <input type="text" id="wbKeyInput" class="wb-editor-line-input" placeholder="触发词 (Keys, 逗号分隔)">
-                            </div>
+                <!-- 顶部标题和触发词卡片 -->
+                <div class="wb-editor-card top-card">
+                    <div class="wb-editor-title-area">
+                        <div class="wb-editor-input-row">
+                            <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                            <input type="text" id="wbTitleInput" class="wb-editor-line-input" placeholder="条目名称 (Title)">
+                        </div>
+                        <div class="wb-editor-input-row" style="border-bottom: none; padding-bottom: 0; margin-bottom: 0;">
+                            <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                            <input type="text" id="wbKeyInput" class="wb-editor-line-input" placeholder="触发词 (Keys, 逗号分隔)">
                         </div>
                     </div>
-                    <textarea id="wbDescInput" class="wb-editor-textarea" placeholder="在此输入详细设定..."></textarea>
+                </div>
+                
+                <!-- 下方详细设定输入框 (仿图片样式，独立卡片) -->
+                <div class="wb-custom-textarea-container">
+                    <div class="wb-custom-textarea-header">
+                        <div class="wb-custom-header-left">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"></path></svg>
+                        </div>
+                        <div class="wb-custom-header-right">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                            <span>Memo</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                        </div>
+                    </div>
+                    <div class="wb-custom-textarea-body">
+                        <textarea id="wbDescInput" class="wb-editor-textarea" placeholder="在此输入详细设定..."></textarea>
+                    </div>
                 </div>
             </div>
+
             <!-- 👇 新增：右下角悬浮保存按钮 -->
             <div class="wb-editor-fab-save" onclick="saveWorldbookEntry()">Save</div>
         </div>
