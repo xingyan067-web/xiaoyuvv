@@ -601,12 +601,26 @@ window.onload = async function() {
         console.error("WeChat Data bootstrap failed", e);
     }
     
-    // WeChat 全局点击隐藏菜单
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.wc-bubble') && !e.target.closest('#wc-context-menu')) {
-            wcHideContextMenu();
-        }
-    });
+            // WeChat 全局点击隐藏菜单
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.wc-bubble') && !e.target.closest('#wc-context-menu')) {
+                    wcHideContextMenu();
+                }
+            });
+
+            // 👇 新增：数据全部加载并渲染完毕后，再显示整个页面，彻底解决图标闪烁和乱跑的问题
+            requestAnimationFrame(() => {
+                const appRoot = document.getElementById('app-root');
+                if (appRoot) appRoot.style.opacity = '1';
+                
+                // 隐藏全局 Loading 动画
+                const loadingScreen = document.getElementById('global-initial-loading');
+                if (loadingScreen) {
+                    loadingScreen.style.opacity = '0';
+                    setTimeout(() => loadingScreen.style.display = 'none', 400);
+                }
+            });
+            // 👆 新增结束 👆
 
 // iOS / PWA 全屏与键盘自适应最终版 (兼容安卓防黑屏)
 function updateAppViewportVars() {
@@ -1040,8 +1054,8 @@ async function loadAllData() {
 
 // --- 恢复桌面布局 ---
 function restoreGridLayout(layout) {
-    const grid = document.getElementById('homeGrid');
-    const cells = Array.from(grid.children); 
+    // 获取所有页面的格子
+    const cells = Array.from(document.querySelectorAll('.home-grid .grid-cell')); 
     
     for (const [cellIndex, appId] of Object.entries(layout)) {
         const cell = cells.find(c => c.dataset.index == cellIndex);
@@ -1818,12 +1832,22 @@ function resetIcons() {
     renderAppEditors();
     saveAppsData(); 
 }
-function resetFonts() {
-    document.getElementById('dynamic-font-style').textContent = '';
-    changeFontSize(11);
-    document.getElementById('fontSizeSlider').value = 11;
-    document.getElementById('fontUrlInput').value = '';
-    saveThemeSettings(); 
+// --- 新增：本地字体上传逻辑 (无大小限制) ---
+function handleFontUpload(input) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64Font = e.target.result;
+            // 将 Base64 填入输入框
+            document.getElementById('fontUrlInput').value = base64Font;
+            // 直接应用并保存
+            applyFont(base64Font);
+            alert("本地字体已成功应用并保存！");
+        };
+        reader.readAsDataURL(file);
+    }
+    input.value = ''; // 清空 input，允许重复上传同一个文件
 }
 
 // --- 网格与拖拽 ---
@@ -1966,8 +1990,8 @@ function cancelHomeEdit() {
 }
 
 function getCurrentGridLayout() {
-    const grid = document.getElementById('homeGrid');
-    const cells = grid.querySelectorAll('.grid-cell');
+    // 获取所有页面的格子
+    const cells = document.querySelectorAll('.home-grid .grid-cell');
     const layout = {};
     cells.forEach(cell => {
         const app = cell.querySelector('.app-item');

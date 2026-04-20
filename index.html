@@ -32,6 +32,15 @@
     
 </head>
 <body> <!-- 加上这一行 -->
+    
+    <!-- 👇 新增：全局初始加载动画 (高级黑白灰) 👇 -->
+    <div id="global-initial-loading" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #FFFFFF; z-index: 9999999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.4s ease;">
+        <div style="width: 36px; height: 36px; border: 3px solid #F0F0F0; border-top-color: #111; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
+        <div style="font-size: 13px; color: #888; font-weight: 600; letter-spacing: 2px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">正在加载ing...</div>
+        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+    </div>
+    <!-- 👆 新增结束 👆 -->
+
     <div id="activation-overlay">
         <div class="activation-box">
             <h2>WELCOME</h2>
@@ -74,8 +83,7 @@
     </script>
 
     <!-- 核心应用容器 -->
-    <div id="app-root">
-        
+    <div id="app-root" style="opacity: 0; transition: opacity 0.4s ease;">      
         <!-- 隐藏的文件输入框 -->
         <input type="file" id="widgetBgInput" class="hidden-file-input" accept="image/*" onchange="handleWidgetBgUpload(this)">
         <input type="file" id="appleAvatarInput" class="hidden-file-input" accept="image/*" onchange="handleAppleAvatarUpload(this)">
@@ -2193,6 +2201,13 @@
                             <input type="text" id="fontUrlInput" placeholder="https://.../font.woff2">
                             <button class="action-btn" onclick="applyFont()">应用字体</button>
                         </div>
+                        <!-- 👇 新增：本地字体上传 👇 -->
+                        <div class="settings-row">
+                            <div class="row-label">本地字体上传</div>
+                            <input type="file" id="fontFileInput" accept=".ttf,.woff,.woff2,.otf" style="display:none" onchange="handleFontUpload(this)">
+                            <button class="action-btn secondary" onclick="document.getElementById('fontFileInput').click()">选择字体文件...</button>
+                        </div>
+                        <!-- 👆 新增结束 👆 -->
                     </div>
                     
                     <!-- 移至底部的恢复默认按钮 -->
@@ -2236,12 +2251,15 @@
                 <!-- 增加圆角和边距的列表组 -->
                 <div class="ios-list-group" style="margin: 0 20px 20px 20px; border-radius: 12px; border: none; overflow: hidden;">
                     <div class="ios-list-item" onclick="openApiSettings()">
-                        <div class="ios-icon-box" style="background:#007aff"><svg viewBox="0 0 24 24" fill="white"><path d="M12 18c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-4.24-4.24c2.34-2.34 6.14-2.34 8.49 0 .39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41-3.12-3.12-8.19-3.12-11.31 0-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0zm-4.24-4.24c4.68-4.68 12.28-4.68 16.97 0 .39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41-5.46-5.46-14.33-5.46-19.79 0-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0zm-4.24-4.24c7.02-7.02 18.42-7.02 25.46 0 .39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41-7.8-7.8-20.48-7.8-28.28 0-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0z"/></svg></div>
+                        <div class="ios-icon-box" style="background:#007aff">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+                        </div>
                         <div class="ios-item-content">
                             <span class="ios-item-label">无限局域网（Wi-Fi）</span>
                             <div class="ios-item-right">API 配置<svg class="chevron-right" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg></div>
                         </div>
-                    </div>                 
+                    </div>
+                 
                       <!-- 新增：声音与触感 -->
                     <div class="ios-list-item" onclick="openSoundSettings()">
                         <div class="ios-icon-box" style="background:#ff2d55">
@@ -4810,6 +4828,9 @@
                                     <textarea id="wc-input-mask-prompt" class="mask-edit-textarea" placeholder="请输入详细的人设与性格描述 ₍ᐢ⎚⩊⎚ᐢ₎..."></textarea>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Memory Actions Modal -->
                 <div id="wc-modal-memory-actions" class="wc-modal hidden" style="z-index: 2200; align-items: flex-end;">
