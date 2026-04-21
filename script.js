@@ -6523,7 +6523,26 @@ ${timeGapPrompt ? timeGapPrompt + '\n' : ''}`;
             let groupMembersInfo = (char.members || []).map(id => {
                 if (id === 'user') return `${config.userName || wcState.user.name}: ${config.userPersona || wcState.user.persona}`;
                 const m = wcState.characters.find(c => c.id === id);
-                return m ? `${m.name}: ${m.prompt}` : '';
+                
+                // 👇 新增：提取该成员与 User 的最近私聊记录和记忆，作为该成员的专属记忆注入
+                let privateChatContext = "";
+                if (m) {
+                    if (wcState.chats[m.id]) {
+                        // 提取最近10条私聊记录
+                        const pMsgs = wcState.chats[m.id].filter(msg => !msg.isError && msg.type !== 'system').slice(-10);
+                        if (pMsgs.length > 0) {
+                            const pChatStr = pMsgs.map(msg => `${msg.sender === 'me' ? 'User' : m.name}: ${msg.content}`).join(' | ');
+                            privateChatContext += `\n  [该成员与User的最近私聊记录]: ${pChatStr}`;
+                        }
+                    }
+                    if (m.memories && m.memories.length > 0) {
+                        // 提取最近3条核心记忆
+                        const recentMemories = m.memories.slice(0, 3).map(mem => mem.content.replace(/^\[.*?\]\s*/, '')).join(' | ');
+                        privateChatContext += `\n  [该成员的近期核心记忆]: ${recentMemories}`;
+                    }
+                }
+                
+                return m ? `${m.name}: ${m.prompt}${privateChatContext}` : '';
             }).filter(Boolean).join('\n');
 
             groupPrompt = `\n【群聊模式强制指令 (最高优先级)】\n`;
@@ -10061,10 +10080,16 @@ function wcRenderChats() {
     const list = document.getElementById('wc-chat-list');
     list.innerHTML = '';
     
-    // 过滤当前分组的角色
+    const searchInput = document.getElementById('wc-chat-list-search');
+    const keyword = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    
+    // 过滤当前分组的角色及搜索关键词
     const filteredChars = wcState.characters.filter(c => {
-        if (wcState.activeChatGroup === 'All') return true;
-        return c.groupName === wcState.activeChatGroup;
+        if (wcState.activeChatGroup !== 'All' && c.groupName !== wcState.activeChatGroup) return false;
+        if (keyword) {
+            return c.name.toLowerCase().includes(keyword) || (c.note && c.note.toLowerCase().includes(keyword));
+        }
+        return true;
     });
 
     const pinnedChars = filteredChars.filter(c => c.isPinned);
@@ -11481,13 +11506,33 @@ function wcShowCharDetail(id) {
     const char = wcState.characters.find(c => c.id === id);
     if (!char) return;
     wcState.editingCharId = id;
+    
     document.getElementById('wc-detail-char-avatar').src = char.avatar;
     document.getElementById('wc-detail-char-name').innerText = char.name;
     document.getElementById('wc-detail-char-note').innerText = char.note || "暂无备注";
     
+    // 格式化创建时间 (因为角色的 ID 就是创建时的时间戳)
+    const d = new Date(char.id);
+    const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+    
+    // 计算陪伴天数
+    const now = Date.now();
+    const days = Math.max(1, Math.ceil((now - char.id) / (1000 * 60 * 60 * 24))); 
+    
+    // 👈 核心修改：将天数拼接到 ID 后面
+    const idEl = document.getElementById('wc-detail-char-id');
+    if (idEl) {
+        idEl.innerText = `ID No.${dateStr}-${days}`;
+    }
+
+    // 获取该角色的聊天记录数组长度
+    const msgsCount = wcState.chats[id] ? wcState.chats[id].length : 0;
+    const msgsEl = document.getElementById('wc-detail-char-msgs');
+    if (msgsEl) msgsEl.innerText = msgsCount;
+    
     const checkPhoneBtn = document.getElementById('wc-detail-check-phone-btn');
     if (checkPhoneBtn) {
-        checkPhoneBtn.style.display = char.isGroup ? 'none' : 'block';
+        checkPhoneBtn.style.display = char.isGroup ? 'none' : 'flex';
     }
     
     wcOpenModal('wc-modal-char-detail');
@@ -22659,8 +22704,24 @@ function viewDreamChatHistory(id) {
     
     if (card.chatHistory && card.chatHistory.length > 0) {
         currentDreamCardId = id; // 👇 新增：记录当前打开的卡片ID
+        
+        // 👇 核心修复：恢复当时的模式 (梦境 or 线下)
+        // 兼容旧数据：如果没有 mode 字段，通过 content 判断
+        if (card.mode) {
+            dreamState.currentMode = card.mode;
+        } else {
+            dreamState.currentMode = card.content.includes('[线下见面]') ? 'offline' : 'dream';
+        }
+
         // 恢复当时的聊天记录
         dreamState.currentChat = JSON.parse(JSON.stringify(card.chatHistory));
+        
+        // 恢复顶栏标题
+        const titleEl = document.getElementById('dream-chat-title');
+        if (titleEl) {
+            titleEl.innerText = dreamState.currentMode === 'offline' ? 'IN REALITY...' : 'IN THE DREAM...';
+        }
+
         // 打开梦境聊天界面
         document.getElementById('dream-chat-page').classList.add('active');
         dreamRenderChatWithHTML();
@@ -22741,13 +22802,26 @@ async function endDreamAndSummarize() {
         summary = summary.replace(/<thinking>[\s\S]*?<\/thinking>/g, '').trim();
 
         // 1. 保存到卡片列表 (梦境和线下都保存，方便回看聊天记录)
-        dreamState.cards.push({
-            id: Date.now(),
-            time: Date.now(),
-            content: `${summaryPrefix} ${summary}`,
-            chatHistory: JSON.parse(JSON.stringify(dreamState.currentChat)),
-            charId: wcState.activeChatId // 👈 新增：绑定当前角色ID，防止串线
-        });
+        if (currentDreamCardId) {
+            // 👇 核心修复：如果是从已有记录点进来的，直接更新原卡片，不创建新卡片
+            const card = dreamState.cards.find(c => c.id === currentDreamCardId);
+            if (card) {
+                card.content = `${summaryPrefix} ${summary}`;
+                card.chatHistory = JSON.parse(JSON.stringify(dreamState.currentChat));
+                card.time = Date.now();
+                card.mode = dreamState.currentMode;
+            }
+        } else {
+            // 如果是全新的，才创建新卡片
+            dreamState.cards.push({
+                id: Date.now(),
+                time: Date.now(),
+                content: `${summaryPrefix} ${summary}`,
+                chatHistory: JSON.parse(JSON.stringify(dreamState.currentChat)),
+                charId: wcState.activeChatId, // 👈 新增：绑定当前角色ID，防止串线
+                mode: dreamState.currentMode  // 👈 新增：记录模式
+            });
+        }
         await dreamSaveData();
 
         // 2. 如果是线下模式，直接强行注入到微信的“回忆总结”中！
@@ -24285,7 +24359,8 @@ function saveAndExitDreamChat() {
                 time: Date.now(),
                 content: `${summaryPrefix} ${previewText} (未总结)`,
                 chatHistory: JSON.parse(JSON.stringify(dreamState.currentChat)),
-                charId: wcState.activeChatId
+                charId: wcState.activeChatId,
+                mode: dreamState.currentMode // 👈 核心修复：暂存退出时，记录当前的模式 (mode)
             };
             dreamState.cards.push(newCard);
             currentDreamCardId = newCard.id;

@@ -3729,10 +3729,10 @@
                     
                     <!-- Chat List Page -->
                     <div id="wc-view-chat" class="wc-page active">
-                        <!-- 新增：搜索栏占位 -->
-                        <div class="wc-search-bar-placeholder">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                            <span>搜索</span>
+                        <!-- 修改：真实的搜索栏 (细长圆角 INS 风) -->
+                        <div class="wc-search-bar-container">
+                            <svg class="wc-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            <input type="text" id="wc-chat-list-search" placeholder="Searching" oninput="wcRenderChats()">
                         </div>
                         
                         <!-- 新增：横向角色头像列表 -->
@@ -4662,25 +4662,77 @@
                     </div>
                 </div>
 
-                <!-- 中间的详情卡片保持不变 (Character Detail Card) -->
-                <div id="wc-modal-char-detail" class="wc-modal-overlay">
-                    <div class="wc-modal-content">
-                        <div class="wc-contact-card-header">
-                            <img id="wc-detail-char-avatar" src="" class="wc-contact-card-img">
-                            <div class="wc-contact-card-close-btn" onclick="wcCloseModal('wc-modal-char-detail')">
-                                <svg class="wc-icon" style="width: 20px; height: 20px;" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </div>
-                            <div class="wc-contact-card-edit-btn" onclick="wcOpenEditCharSettings()">
-                                <svg class="wc-icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                <!-- 中间的详情卡片 (档案证件风) -->
+                <div id="wc-modal-char-detail" class="wc-modal-overlay" onclick="wcCloseModal('wc-modal-char-detail')">
+                    <div class="id-card-wrapper" onclick="event.stopPropagation()">
+                        <!-- 1. 后方倾斜的黑色档案底卡 -->
+                        <div class="id-card-bg">
+                            <div class="id-card-bg-text">CHAR<br>FILE</div>
+                            <div class="id-card-bg-sub">
+                                This profile is strictly<br>
+                                used for internal records.<br>
+                                copy right ©<br>
+                                honey network.
                             </div>
                         </div>
-                        <div class="wc-contact-card-info">
-                            <div class="wc-contact-card-name" id="wc-detail-char-name">Name</div>
-                            <div class="wc-contact-card-note" id="wc-detail-char-note">Note</div>
-                            <button class="wc-ios-btn-block" id="wc-detail-check-phone-btn" onclick="wcCheckPhoneAction()">查看对方手机</button>
+
+                        <!-- 2. 前方主证件卡片 -->
+                        <div class="id-card-main">
+                            <!-- 顶部挂绳夹子 -->
+                            <div class="lanyard-clip">
+                                <div class="clip-strap"></div>
+                                <div class="clip-metal-ring"><div class="clip-metal-inner"></div></div>
+                                <div class="clip-base"></div>
+                            </div>
+
+                            <!-- 磨砂塑料卡套 -->
+                            <div class="badge-holder">
+                                <div class="rivet tl"></div><div class="rivet tr"></div>
+                                <div class="rivet bl"></div><div class="rivet br"></div>
+
+                                <!-- 内部白色纸质卡片 -->
+                                <div class="badge-paper">
+                                    <!-- 顶部 ID 编号 (角色创建时间-陪伴天数) -->
+                                    <div class="badge-id-text" id="wc-detail-char-id">ID No.20231024-1</div>
+                                    <div class="badge-decor-line-top"></div>
+
+                                    <!-- 照片相框与周边星星装饰 -->
+                                    <div class="badge-photo-wrapper">
+                                        <div class="badge-photo-frame">
+                                            <img id="wc-detail-char-avatar" src="" alt="Avatar" onclick="wcOpenEditCharSettings()" style="cursor: pointer;">
+                                        </div>
+                                        <!-- 散落的实心五角星 -->
+                                        <svg class="badge-star star-tl" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                        <svg class="badge-star star-tr" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                        <svg class="badge-star star-bl" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                    </div>
+
+                                    <!-- 姓名与身份信息 -->
+                                    <div class="badge-info">
+                                        <div class="info-label">Name</div>
+                                        <div class="info-name" id="wc-detail-char-name">Name</div>
+                                        <div class="info-role" id="wc-detail-char-note">Note</div>
+                                        
+                                        <!-- 聊天记录总数 (同一行) -->
+                                        <div class="badge-msg-stat">
+                                            <span class="stat-label">MESSAGES:</span>
+                                            <span class="stat-value" id="wc-detail-char-msgs">0</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- 底部：查手机按钮 (伪装成权限印章，无阴影) -->
+                                    <div class="badge-action-area" id="wc-detail-check-phone-btn" onclick="wcCheckPhoneAction()">
+                                        <div class="action-text">查看Ta的设备</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 卡套底部的深灰色凹槽横线 -->
+                                <div class="badge-decor-line-bottom"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
+
 
                 <!-- 弹窗 2：编辑已有角色 (Edit Modal for Character) -->
                 <div id="wc-modal-edit-char-settings" class="wc-modal-overlay">
