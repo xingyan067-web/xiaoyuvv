@@ -969,7 +969,12 @@ async function loadAllData() {
             document.getElementById('fontSizeSlider').value = themeData.fontSize;
         }
         if (themeData.fontUrl) {
-            document.getElementById('fontUrlInput').value = themeData.fontUrl;
+            window.currentLoadedFontUrl = themeData.fontUrl;
+            if (themeData.fontUrl.startsWith('data:')) {
+                document.getElementById('fontUrlInput').value = '已加载本地字体 (Local Font)';
+            } else {
+                document.getElementById('fontUrlInput').value = themeData.fontUrl;
+            }
             applyFont(themeData.fontUrl);
         }
 
@@ -1159,10 +1164,16 @@ async function saveWorldbookData() {
 }
 
 async function saveThemeSettings() {
+    let fUrl = document.getElementById('fontUrlInput').value;
+    if (fUrl === '已加载本地字体 (Local Font)') {
+        fUrl = window.currentLoadedFontUrl;
+    } else {
+        window.currentLoadedFontUrl = fUrl;
+    }
     const data = {
         wallpaper: document.getElementById('mainScreen').style.backgroundImage,
         fontSize: document.getElementById('fontSizeSlider').value,
-        fontUrl: document.getElementById('fontUrlInput').value
+        fontUrl: fUrl
     };
     await idb.set('ios_theme_settings', data);
 }
@@ -1847,6 +1858,7 @@ function resetFonts() {
     // 3. 清空 URL 输入框
     const urlInput = document.getElementById('fontUrlInput');
     if (urlInput) urlInput.value = '';
+    window.currentLoadedFontUrl = '';
     
     // 4. 恢复默认字体大小 (11px)
     const sizeSlider = document.getElementById('fontSizeSlider');
@@ -1855,6 +1867,7 @@ function resetFonts() {
     
     // 5. 保存设置
     saveThemeSettings();
+    alert("已恢复默认字体！");
 }
 // 👆 新增结束 👆
 
@@ -1873,23 +1886,6 @@ function resetIcons() {
     }
     renderAppEditors();
     saveAppsData(); 
-}
-// --- 新增：本地字体上传逻辑 (无大小限制) ---
-function handleFontUpload(input) {
-    const file = input.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const base64Font = e.target.result;
-            // 将 Base64 填入输入框
-            document.getElementById('fontUrlInput').value = base64Font;
-            // 仅触发预览
-            previewFont(base64Font);
-            alert("本地字体已加载，请在上方卡片查看预览效果。确认无误后点击【应用到全局】。");
-        };
-        reader.readAsDataURL(file);
-    }
-    input.value = ''; // 清空 input，允许重复上传同一个文件
 }
 
 // --- 网格与拖拽 ---
@@ -3618,9 +3614,31 @@ function applyFontPreset(idx) {
     }
 }
 
+// --- 新增：本地字体上传逻辑 (无大小限制) ---
+window.currentLoadedFontUrl = '';
+function handleFontUpload(input) {
+    const file = input.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64Font = e.target.result;
+            window.currentLoadedFontUrl = base64Font;
+            document.getElementById('fontUrlInput').value = '已加载本地字体 (Local Font)';
+            previewFont(base64Font);
+            alert("本地字体已加载，请在上方卡片查看预览效果。确认无误后点击【应用到全局】。");
+        };
+        reader.readAsDataURL(file);
+    }
+    input.value = ''; // 清空 input，允许重复上传同一个文件
+}
+
 // 👇 新增：仅在预览卡片中生效的函数 👇
 function previewFont(url) {
-    const finalUrl = url || document.getElementById('fontUrlInput').value;
+    let finalUrl = url;
+    if (!finalUrl) {
+        const inputVal = document.getElementById('fontUrlInput').value;
+        finalUrl = (inputVal === '已加载本地字体 (Local Font)') ? window.currentLoadedFontUrl : inputVal;
+    }
     let previewStyle = document.getElementById('preview-font-style');
     
     if (!previewStyle) {
@@ -3638,17 +3656,32 @@ function previewFont(url) {
 }
 
 // 修改：点击“应用到全局”时才真正生效
-function applyFont(url) {
-    const finalUrl = url || document.getElementById('fontUrlInput').value;
-    const style = document.getElementById('dynamic-font-style');
-    if (finalUrl) {
-        style.textContent = `@font-face { font-family: 'CustomFont'; src: url('${finalUrl}'); } body, input, textarea, button, select { font-family: 'CustomFont', sans-serif !important; }`;
+window.applyFont = function(url) {
+    let finalUrl = url;
+    if (!finalUrl) {
+        const inputVal = document.getElementById('fontUrlInput').value;
+        finalUrl = (inputVal === '已加载本地字体 (Local Font)') ? window.currentLoadedFontUrl : inputVal;
+    }
+    
+    const fontStyle = document.getElementById('dynamic-font-style');
+    if (finalUrl && fontStyle) {
+        fontStyle.textContent = `
+            @font-face { font-family: 'CustomFont'; src: url('${finalUrl}'); } 
+            body, input, textarea, button, select, 
+            .ls-view, #wechat-root, #wc-view-phone-sim, .wc-page, .wc-bubble, 
+            .ls-feed-text, .ls-widget-note-text, .wc-system-msg-text,
+            .ins-forum-root, .ins-forum-view, .ins-forum-post-text, .ins-forum-story-text,
+            .ins-forum-profile-name, .ins-forum-profile-bio, .ins-forum-comment-text { 
+                font-family: 'CustomFont', sans-serif !important; 
+            }
+        `;
+        window.currentLoadedFontUrl = finalUrl;
         saveThemeSettings();
         alert("字体已成功应用到全局！");
     } else {
         alert("请先输入字体 URL 或上传本地字体哦~");
     }
-}
+};
 
 function changeFontSize(val) {
     // 1. 更新桌面图标的字体大小
@@ -19314,23 +19347,6 @@ function wcBuyCharCartItem(index) {
     `;
     document.body.appendChild(editBar);
 
-    window.applyFont = function(url) {
-        const finalUrl = url || document.getElementById('fontUrlInput').value;
-        const fontStyle = document.getElementById('dynamic-font-style');
-        if (finalUrl && fontStyle) {
-            fontStyle.textContent = `
-                @font-face { font-family: 'CustomFont'; src: url('${finalUrl}'); } 
-                body, input, textarea, button, select, 
-                .ls-view, #wechat-root, #wc-view-phone-sim, .wc-page, .wc-bubble, 
-                .ls-feed-text, .ls-widget-note-text, .wc-system-msg-text,
-                .ins-forum-root, .ins-forum-view, .ins-forum-post-text, .ins-forum-story-text,
-                .ins-forum-profile-name, .ins-forum-profile-bio, .ins-forum-comment-text { 
-                    font-family: 'CustomFont', sans-serif !important; 
-                }
-            `;
-            saveThemeSettings();
-        }
-    };
 })();
 // --- 快捷进入手机的 iOS 风格通用弹窗 ---
 window.wcPromptEnterPhone = function(charId, charName) {
