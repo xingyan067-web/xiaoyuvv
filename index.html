@@ -52,7 +52,10 @@
             </div>
             
             <div class="input-group">
-                <label for="code-input">激活码</label>
+                <label for="code-input" style="display: flex; align-items: center; gap: 6px;">
+                    激活码
+                    <span onclick="showVpnModal()" style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid #7d5a5e; font-size: 10px; cursor: pointer; color: #7d5a5e;" title="无法连接网络？">?</span>
+                </label>
                 <input type="text" id="code-input" placeholder="输入激活验证码">
             </div>
             
@@ -75,12 +78,25 @@
             </div>
         </div>
     </div>
+    <!-- VPN 快捷登录弹窗 -->
+    <div id="vpn-modal" class="wc-modal hidden" style="z-index: 100000; align-items: center; justify-content: center;">
+        <div class="wc-modal-content" style="width: 80%; max-width: 300px; border-radius: 16px; padding: 20px; background: #FFF; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+            <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 18px; color: #111;">快捷登录</h3>
+            <p style="font-size: 14px; color: #666; margin-bottom: 20px; line-height: 1.5;">登陆失败的可以尝试这个哦₍^˶ ╸𖥦  ╸˵^₎⟆</p>
+            <div style="display: flex; gap: 10px;">
+                <button class="wc-btn-secondary" style="flex: 1; margin: 0; border-radius: 12px; padding: 10px; font-weight: bold;" onclick="hideVpnModal()">取消</button>
+                <button class="wc-btn-primary" style="flex: 1; margin: 0; border-radius: 12px; padding: 10px; background: #111; font-weight: bold;" onclick="quickLogin()">快捷登录</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 【修复】：立即执行脚本，兼容 V2 新密钥，彻底解决刷新闪烁 -->
     <script>
         if (localStorage.getItem('ios_theme_activation_v2_fallback') === 'true' || localStorage.getItem('isActivated_qq_bound_v1') === 'true') {
             document.getElementById('activation-overlay').style.display = 'none';
         }
     </script>
+
 
     <!-- 核心应用容器 -->
     <div id="app-root" style="opacity: 0; transition: opacity 0.4s ease;">      

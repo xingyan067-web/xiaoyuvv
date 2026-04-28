@@ -347,6 +347,53 @@ function verifyActivation() {
     }
 }
 
+// 👇 新增：无梯子快捷登录逻辑 👇
+function showVpnModal() {
+    const modal = document.getElementById('vpn-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('active');
+    }
+}
+
+function hideVpnModal() {
+    const modal = document.getElementById('vpn-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        modal.classList.add('hidden');
+    }
+}
+
+async function quickLogin() {
+    const qq = document.getElementById('qq-input').value.trim();
+    const userCode = document.getElementById('code-input').value.trim();
+
+    if (!qq || !userCode) {
+        alert('请输入QQ号和激活码。');
+        return;
+    }
+
+    // 直接写入激活状态，跳过网络验证
+    localStorage.setItem('ios_theme_activation_v2_fallback', 'true');
+    localStorage.setItem('current_bound_qq', qq);
+    localStorage.setItem('current_activation_code', userCode);
+    
+    const overlay = document.getElementById('activation-overlay');
+    if (overlay) overlay.style.display = 'none';
+    
+    hideVpnModal();
+    alert('快捷登录成功！欢迎使用。');
+
+    try {
+        await idb.set('ios_theme_activation_v2_status', {
+            activated: true,
+            qq: qq,
+            activationTime: new Date().toISOString()
+        });
+    } catch (dbError) {}
+}
+// 👆 新增结束 👆
+
 // 新增：退出登录与解绑函数 (已修复无法退出的Bug)
 async function unbindDevice() {
     const qq = localStorage.getItem('current_bound_qq');
